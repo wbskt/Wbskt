@@ -4,6 +4,14 @@
 * text=auto
 
 ###############################################################################
+# Shell scripts must always check out with LF, including on Windows. They only
+# ever run on Linux - inside the container images and on the deploy VM - and a
+# CRLF line ending breaks the shebang outright:
+#   /usr/bin/env: 'bash\r': No such file or directory
+###############################################################################
+*.sh text eol=lf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
