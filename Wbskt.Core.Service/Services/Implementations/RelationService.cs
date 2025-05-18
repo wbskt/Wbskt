@@ -46,10 +46,12 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
     {
         var servers = serverInfoProvider.GetAllSocketServerInfo();
         var channels = channelsProvider.GetAll();
+
+        // todo: channels are mapped in db but not fetched
         var clients = clientProvider.GetAll();
-        MapAllServerChannels(servers);
         MapAllChannelClients(channels, clients);
         MapAllClientServers(clients, servers);
+        MapAllServerChannels(servers);
     }
 
     public void AssignClientToServer(int clientId, int serverId)
@@ -83,9 +85,15 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
 
     public void SetClientChannels(int clientId, int[] channelIds)
     {
+        var serverId = clientServerMap[clientId];
         foreach (var channelId in channelIds)
         {
             channelClientsMap[channelId].Add(clientId);
+            channelServersMap.AddOrUpdate(channelId, new ConcurrentKeys<int>([serverId]), (_, serverIds) =>
+            {
+                serverIds.Add(serverId);
+                return serverIds;
+            });
         }
     }
 
@@ -115,6 +123,17 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
         }
     }
 
+    public int[] GetServersForChannels(int[] channelIds)
+    {
+        var serverIds = new List<int>();
+        foreach (var channelId in channelIds)
+        {
+            serverIds.AddRange(channelServersMap[channelId].GetKeys());
+        }
+
+        return serverIds.ToArray();
+    }
+
     #region Initialization
     private void MapAllServerChannels(IReadOnlyCollection<ServerInfo> servers)
     {
@@ -123,17 +142,18 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
         foreach (var server in servers)
         {
             var channelIds = new ConcurrentKeys<int>();
-            foreach (var channel in channelsProvider.GetAllByServerIds([server.ServerId]))
+            var clientsIds = serverClientsMap[server.ServerId];
+            foreach (var channelId in channelClientsMap.Where(ccm => ccm.Value.GetKeys().Intersect(clientsIds.GetKeys()).Any()).Select(c => c.Key))
             {
-                channelIds.Add(channel.ChannelId);
+                channelIds.Add(channelId);
 
-                if (channelServersMap.TryGetValue(channel.ChannelId, out var serverIds))
+                if (channelServersMap.TryGetValue(channelId, out var serverIds))
                 {
                     serverIds.Add(server.ServerId);
                 }
                 else
                 {
-                    if (!channelServersMap.TryAdd(channel.ChannelId, new ConcurrentKeys<int>([server.ServerId])))
+                    if (!channelServersMap.TryAdd(channelId, new ConcurrentKeys<int>([server.ServerId])))
                     {
                         logger.LogError("couldn't add value to 'channelServersMap'");
                     }

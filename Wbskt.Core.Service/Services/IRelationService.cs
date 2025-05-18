@@ -1,4 +1,6 @@
-﻿namespace Wbskt.Core.Service.Services;
+﻿using System.Collections;
+
+namespace Wbskt.Core.Service.Services;
 
 public interface IRelationService
 {
@@ -7,4 +9,5 @@ public interface IRelationService
     void AssignClientToServer(int clientId, int serverId);
     void SetClientChannels(int clientId, int[] channelIds);
     void RemoveServerMappings(int serverId);
+    int[] GetServersForChannels(int[] channelIds);
 }

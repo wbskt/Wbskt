@@ -7,16 +7,6 @@ namespace Wbskt.Core.Service.Services.Implementations;
 
 public class ServerInfoService(ILogger<ServerInfoService> logger, ICachedServerInfoProvider serverInfoProvider, ICachedChannelsProvider channelsService, IAuthService authService, IRelationService relationService) : IServerInfoService
 {
-    /// <summary>
-    /// Map of each S.S with the list of channels assigned to it.
-    /// </summary>
-    private readonly IDictionary<int, HashSet<int>> serverChannelMap = new Dictionary<int, HashSet<int>>();
-    private IDictionary<int, ServerInfo> allServers = new Dictionary<int, ServerInfo>();
-    private readonly ILogger<ServerInfoService> logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly ICachedServerInfoProvider serverInfoProvider = serverInfoProvider ?? throw new ArgumentNullException(nameof(serverInfoProvider));
-    private readonly ICachedChannelsProvider channelsService = channelsService ?? throw new ArgumentNullException(nameof(channelsService));
-    private readonly IAuthService authService = authService ?? throw new ArgumentNullException(nameof(authService));
-
     public async Task<bool> DispatchPayload(ClientPayload payload)
     {
         var publisherId = payload.PublisherId;
@@ -31,17 +21,10 @@ public class ServerInfoService(ILogger<ServerInfoService> logger, ICachedServerI
             return false;
         }
 
-        foreach (var serverChannel in serverChannelMap)
+        foreach (var serverId in relationService.GetServersForChannels(channelIds))
         {
-            // Faster overlap check without creating a new collection
-            // `channelIds` is the array of channels where payload needs to be dispatched
-            // `serverChannel.Value` is the list of channels that the given S.S has
-            // we just need to find if there is an overlap. if yes, dispatch
-            if (serverChannel.Value.Any(channel => channelIds.Contains(channel)))
-            {
-                logger.LogDebug("Dispatcher task queued for socket server: {serverId}, publisherId: {publisherId}", serverChannel.Key, payload);
-                tasks.Add(DispatchPayloadToServer(serverChannel.Key, payload));
-            }
+            logger.LogDebug("Dispatcher task queued for socket server: {serverId}, publisherId: {publisherId}", serverId, payload);
+            tasks.Add(DispatchPayloadToServer(serverId, payload));
         }
         await Task.WhenAll(tasks);
         return true;
@@ -62,7 +45,7 @@ public class ServerInfoService(ILogger<ServerInfoService> logger, ICachedServerI
     {
         var token = authService.CreateCoreServerToken();
         var authHeader = new AuthenticationHeaderValue(JwtBearerDefaults.AuthenticationScheme, token);
-        var server = allServers[serverId];
+        var server = serverInfoProvider.GetById(serverId);
 
         var httpClient = new HttpClient
         {
