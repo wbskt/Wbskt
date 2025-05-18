@@ -184,7 +184,7 @@ internal sealed class ClientProvider(ILogger<ClientProvider> logger, IConnection
 
         using var command = connection.CreateCommand();
         command.CommandType = CommandType.StoredProcedure;
-        command.CommandText = "dbo.Clients_Upsert";
+        command.CommandText = "dbo.ClientConnections_Upsert";
 
         command.Parameters.Add(new SqlParameter("@UserId", ProviderExtensions.ReplaceDbNulls(clientConnection.UserId)));
         command.Parameters.Add(new SqlParameter("@ServerId", ProviderExtensions.ReplaceDbNulls(clientConnection.ServerId)));
