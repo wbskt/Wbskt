@@ -16,12 +16,6 @@ internal sealed class CachedChannelsProvider(ILogger<CachedChannelsProvider> log
         return [.. channels.Where(c => c.ChannelPublisherId == channelPublisherId)];
     }
 
-    public IReadOnlyCollection<ChannelDetails> GetAllByServerIds(int[] serverIds)
-    {
-        // todo: cache
-        return channelsProvider.GetAllByServerIds(serverIds);
-    }
-
     public IReadOnlyCollection<ChannelDetails> GetAllByChannelUserId(int userId)
     {
         return [.. channels.Where(c => c.UserId == userId)];

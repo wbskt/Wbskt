@@ -6,8 +6,6 @@ public interface IChannelsProvider
 {
     IReadOnlyCollection<ChannelDetails> GetAllByChannelPublisherId(Guid channelPublisherId);
 
-    IReadOnlyCollection<ChannelDetails> GetAllByServerIds(int[] serverIds);
-
     IReadOnlyCollection<ChannelDetails> GetAllByChannelUserId(int userId);
 
     IReadOnlyCollection<ChannelDetails> GetAll();

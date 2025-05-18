@@ -34,32 +34,6 @@ internal sealed class ChannelsProvider(ILogger<ChannelsProvider> logger, IConnec
         return result;
     }
 
-    public IReadOnlyCollection<ChannelDetails> GetAllByServerIds(int[] serverIds)
-    {
-        logger.LogTrace("DB operation: {functionName}", nameof(GetAllByServerIds));
-        using var connection = new SqlConnection(connectionStringProvider.ConnectionString);
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandType = CommandType.StoredProcedure;
-        command.CommandText = "dbo.Channels_GetAll_ServerIds";
-
-        var param = command.Parameters.AddWithValue("@Ids", serverIds.ToDataTable());
-        param.SqlDbType = SqlDbType.Structured;
-        param.TypeName = "dbo.IdListTableType";
-
-        var result = new List<ChannelDetails>();
-        using var reader = command.ExecuteReader();
-        var mapping = GetColumnMapping(reader);
-
-        while (reader.Read())
-        {
-            result.Add(ParseData(reader, mapping));
-        }
-
-        return result;
-    }
-
     public IReadOnlyCollection<ChannelDetails> GetAllByChannelUserId(int userId)
     {
         logger.LogTrace("DB operation: {functionName}", nameof(GetAllByChannelUserId));
