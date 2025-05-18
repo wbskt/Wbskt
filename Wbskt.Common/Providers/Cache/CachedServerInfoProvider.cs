@@ -48,7 +48,7 @@ internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider>
             return;
         }
 
-        if (GetAll().All(s => s.ServerId == id))
+        if (GetAll().Any(s => s.ServerId == id) == false)
         {
             logger.LogError("server with id: {serverId} does not exists", id);
             throw WbsktExceptions.UnknownSocketServer(id);
@@ -73,10 +73,10 @@ internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider>
             throw WbsktExceptions.InvalidId(id, "Server");
         }
 
-        if (GetAll().All(s => s.ServerId == id))
+        if (GetAll().Any(s => s.ServerId == id) == false)
         {
             RefreshCache();
-            if (GetAll().All(s => s.ServerId == id))
+            if (GetAll().Any(s => s.ServerId == id) == false)
             {
                 logger.LogError("server with id: {serverId} does not exists", id);
                 throw WbsktExceptions.UnknownSocketServer(id);
