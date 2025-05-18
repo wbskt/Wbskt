@@ -20,6 +20,8 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
             throw WbsktExceptions.UnauthorizedAccessToChannels();
         }
 
+        var userId = channels.FirstOrDefault()?.UserId ?? 0;
+
         ClientConnection? conn = null;
 
         // check if this client exists
@@ -60,7 +62,8 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
         {
             ClientName = req.ClientName,
             ClientUniqueId = req.ClientUniqueId,
-            ServerId = relationService.GetAvailableServerId()
+            ServerId = relationService.GetAvailableServerId(),
+            UserId = userId
         };
 
         var channelIds = channels.Select(c => c.ChannelId).ToArray();
