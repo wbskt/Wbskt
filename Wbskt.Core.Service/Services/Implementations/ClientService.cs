@@ -47,7 +47,7 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
             {
                 logger.LogWarning("mismatch between the name of the client in the DB({dbName}) and the request({reqName}). (name in the DB will be updated)", exConn.ClientName, req.ClientName);
                 conn.ClientName = req.ClientName;
-                Upsert(conn); // updates only the name. todo: remove upsert, use dedicated sp for name updation
+                Upsert(conn); // updates only the name. todo: remove upsert, use dedicated sp for name update
             }
 
             // todo: get available servers

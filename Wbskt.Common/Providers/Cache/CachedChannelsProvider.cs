@@ -78,24 +78,4 @@ internal sealed class CachedChannelsProvider(ILogger<CachedChannelsProvider> log
     {
         return [..channels.Where(c => channelSubscriberIds.Contains(c.ChannelSubscriberId))];
     }
-
-    // public void UpdateServerIds((int Id, int ServerId)[] updates)
-    // {
-    //     if (ServerType != Constants.ServerType.CoreServer.ToString())
-    //     {
-    //         logger.LogError("only core server perform this operation: {operationName}", nameof(UpdateServerIds));
-    //         return;
-    //     }
-    //
-    //     var dict = updates.ToDictionary(u => u.Id, u => u.ServerId);
-    //     foreach (var channel in channels)
-    //     {
-    //         if (dict.TryGetValue(channel.ChannelId, out var value))
-    //         {
-    //             channel.ServerId = value;
-    //         }
-    //     }
-    //
-    //     // channelsProvider.UpdateServerIds(updates);
-    // }
 }
