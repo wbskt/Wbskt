@@ -13,10 +13,8 @@ BEGIN
 
     SELECT  Id,
             ChannelName,
-            ChannelPublisherId,
             ChannelSubscriberId,
-            UserId,
-            ChannelSecret
+            UserId
     FROM    dbo.Channels C INNER JOIN dbo.ServersChannels SC on C.Id = SC.ChannelId
     WHERE   SC.ServerId IN (SELECT Id FROM @Ids);
 END;

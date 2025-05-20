@@ -13,10 +13,8 @@ BEGIN
 
     SELECT Id
        , ChannelName
-       , ChannelPublisherId
        , ChannelSubscriberId
        , UserId
-       , ChannelSecret
     FROM dbo.Channels
     WHERE UserId = @UserId
 END;

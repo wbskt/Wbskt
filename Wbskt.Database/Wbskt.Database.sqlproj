@@ -59,17 +59,16 @@
   <ItemGroup>
     <Folder Include="Properties" />
     <Folder Include="dbo\" />
-    <Folder Include="dbo\Tables\" />
     <Folder Include="dbo\Types\" />
     <Folder Include="dbo\Stored Procedures\" />
   </ItemGroup>
   <ItemGroup>
+    <Build Include="dbo\Tables\PublisherChannels.sql" />
     <Build Include="dbo\Types\IdListTableType.sql" />
     <Build Include="dbo\Types\IdIntValueTableType.sql" />
     <Build Include="dbo\Tables\Users.sql" />
     <Build Include="dbo\Tables\Servers.sql" />
     <Build Include="dbo\Tables\Channels.sql" />
-    <Build Include="dbo\Tables\ServersChannels.sql" />
     <Build Include="dbo\Tables\ClientConnections.sql" />
     <Build Include="dbo\Tables\ClientConnectionsChannels.sql" />
     <Build Include="dbo\Stored Procedures\Users_Insert.sql" />
@@ -92,11 +91,14 @@
     <Build Include="dbo\Stored Procedures\Channels_GetBy_Id.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll_UserId.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll_ServerIds.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetAll_ChannelPublisherId.sql" />
+    <Build Include="dbo\Stored Procedures\Channels_GetAll_PublisherIdRef.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetBy_ChannelSubscriberId.sql" />
     <Build Include="dbo\Stored Procedures\Servers_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Servers_GetAll.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdateStatus.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdatePublicDomainName.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="dbo\Tables\Publishers.sql" />
   </ItemGroup>
 </Project>
