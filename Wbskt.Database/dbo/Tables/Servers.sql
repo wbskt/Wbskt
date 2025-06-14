@@ -5,6 +5,6 @@
     [Port]              INT             NOT NULL,
     [Type]              INT             NOT NULL,
     [Active]            BIT             NOT NULL,
-    CONSTRAINT [Pk_Servers]     PRIMARY KEY     CLUSTERED       ([Id]           ASC),
-    CONSTRAINT [Unq_Servers]    UNIQUE          NONCLUSTERED    ([IPAddress]    ASC,    [Port]  ASC)
+    CONSTRAINT [Pk_Servers]     PRIMARY KEY CLUSTERED       ([Id]           ASC),
+    CONSTRAINT [Unq_Servers]    UNIQUE      NONCLUSTERED    ([IPAddress]    ASC,    [Port]  ASC)
 );
