@@ -12,8 +12,8 @@ BEGIN
   SET NOCOUNT ON;
 
   SELECT Id
-       , ChannelName
-       , ChannelSubscriberId
+       , Name
+       , SubscriptionRef
        , UserId
     FROM dbo.Channels
    WHERE Id = @Id

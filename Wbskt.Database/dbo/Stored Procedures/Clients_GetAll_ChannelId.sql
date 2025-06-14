@@ -12,10 +12,10 @@ BEGIN
   SET NOCOUNT ON;
 
   SELECT Id
-       , ClientName
-       , ClientUniqueId
+       , Name
+       , UniqueRef
        , ServerId
        , UserId
-    FROM dbo.ClientConnections C INNER JOIN ClientConnectionsChannels CCC ON C.Id = CCC.ChannelId
-   WHERE CCC.ChannelId = @ChannelId
+    FROM dbo.Clients C INNER JOIN ClientsChannels CC ON C.Id = CC.ChannelId
+   WHERE CC.ChannelId = @ChannelId
 END;

@@ -1,21 +1,19 @@
 ﻿/* -------------------------------- */
-/* ClientConnections_GetBy_Id       */
+/* Clients_GetAll         */
 /* Author: Richard Joy              */
 /* Updated by: Richard Joy          */
-/* Create date: 26-Aug-2024         */
+/* Create date: 25-Aug-2024         */
 /* Description: Self explanatory    */
 /* -------------------------------- */
-CREATE PROCEDURE dbo.ClientConnections_GetBy_Id
-  @Id INT
+CREATE PROCEDURE dbo.Clients_GetAll
 AS
 BEGIN
   SET NOCOUNT ON;
 
   SELECT Id
-       , ClientName
-       , ClientUniqueId
+       , Name
+       , UniqueRef
        , ServerId
        , UserId
-    FROM dbo.ClientConnections
-   WHERE Id = @Id
+    FROM dbo.Clients
 END;

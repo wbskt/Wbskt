@@ -61,44 +61,44 @@
     <Folder Include="dbo\" />
     <Folder Include="dbo\Types\" />
     <Folder Include="dbo\Stored Procedures\" />
+    <Folder Include="dbo\Tables\" />
   </ItemGroup>
   <ItemGroup>
-    <Build Include="dbo\Tables\PublisherChannels.sql" />
+    <Build Include="dbo\Stored Procedures\PublishersChannels_Insert.sql" />
+    <Build Include="dbo\Stored Procedures\Publishers_Insert.sql" />
+    <Build Include="dbo\Tables\PublishersChannels.sql" />
     <Build Include="dbo\Types\IdListTableType.sql" />
     <Build Include="dbo\Types\IdIntValueTableType.sql" />
     <Build Include="dbo\Tables\Users.sql" />
     <Build Include="dbo\Tables\Servers.sql" />
     <Build Include="dbo\Tables\Channels.sql" />
-    <Build Include="dbo\Tables\ClientConnections.sql" />
-    <Build Include="dbo\Tables\ClientConnectionsChannels.sql" />
+    <Build Include="dbo\Tables\Clients.sql" />
+    <Build Include="dbo\Tables\ClientsChannels.sql" />
+    <Build Include="dbo\Tables\Publishers.sql" />
     <Build Include="dbo\Stored Procedures\Users_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Users_GetBy_Id.sql" />
     <Build Include="dbo\Stored Procedures\Users_GetBy_EmailId.sql" />
     <Build Include="dbo\Stored Procedures\Users_FindBy_EmailId.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_Upsert.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_GetBy_Id.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_GetAll.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_GetAll_Ids.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_GetAll_UserId.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_GetAll_ChannelId.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_FindBy_ClientUniqueId.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnections_FindBy_ClientName_UserId.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnectionsChannels_Add.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnectionsChannels_Remove.sql" />
-    <Build Include="dbo\Stored Procedures\ClientConnectionsChannels_SetForClient.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_Upsert.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetBy_Id.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetAll.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetAll_Ids.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetAll_UserId.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetAll_ChannelId.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_FindBy_UniqueRef.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_FindBy_Name_UserId.sql" />
+    <Build Include="dbo\Stored Procedures\ClientsChannels_Add.sql" />
+    <Build Include="dbo\Stored Procedures\ClientsChannels_Remove.sql" />
+    <Build Include="dbo\Stored Procedures\ClientsChannels_SetForClient.sql" />
     <Build Include="dbo\Stored Procedures\Channels_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetBy_Id.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll_UserId.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetAll_ServerIds.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetAll_PublisherIdRef.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetBy_ChannelSubscriberId.sql" />
+    <Build Include="dbo\Stored Procedures\Channels_GetAll_PublisherRef.sql" />
+    <Build Include="dbo\Stored Procedures\Channels_GetBy_ChannelSubscriptionRef.sql" />
     <Build Include="dbo\Stored Procedures\Servers_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Servers_GetAll.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdateStatus.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdatePublicDomainName.sql" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="dbo\Tables\Publishers.sql" />
   </ItemGroup>
 </Project>

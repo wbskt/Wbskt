@@ -1,16 +1,16 @@
 ﻿/* ---------------------------------------------------------------- */
-/* ClientConnections_Upsert                                         */
+/* Clients_Upsert                                         */
 /* Author: Richard Joy                                              */
 /* Updated by: Richard Joy                                          */
 /* Create date: 25-Apr-2025                                         */
 /* Description: Insert or update a client based on ClientUniqueId   */
 /* ---------------------------------------------------------------- */
-CREATE PROCEDURE dbo.ClientConnections_Upsert
-    @Id                     INT                 OUTPUT,
-    @ClientName             VARCHAR(100),
-    @ClientUniqueId         UNIQUEIDENTIFIER,
-    @UserId                 INT,
-    @ServerId               INT
+CREATE PROCEDURE dbo.Clients_Upsert
+    @Id         INT                 OUTPUT,
+    @Name       VARCHAR(100),
+    @UniqueRef  UNIQUEIDENTIFIER,
+    @UserId     INT,
+    @ServerId   INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -18,32 +18,32 @@ BEGIN
     DECLARE @ExistingId INT;
 
     SELECT @ExistingId = Id
-    FROM dbo.ClientConnections
-    WHERE ClientUniqueId = @ClientUniqueId;
+    FROM dbo.Clients
+    WHERE UniqueRef = @UniqueRef;
 
     IF @ExistingId IS NOT NULL
         BEGIN
             -- Update existing client; only name can be updated
-            UPDATE dbo.ClientConnections
-            SET ClientName          = @ClientName,
-                ServerId            = @ServerId
+            UPDATE dbo.Clients
+            SET Name        = @Name,
+                ServerId    = @ServerId
             WHERE
-                Id                  = @ExistingId;
+                Id          = @ExistingId;
 
             SET @Id = @ExistingId;
         END
     ELSE
         BEGIN
             -- Insert new client
-            INSERT INTO dbo.ClientConnections
-            ( ClientName
+            INSERT INTO dbo.Clients
+            ( Name
             , ServerId
-            , ClientUniqueId
+            , UniqueRef
             , UserId)
             VALUES
-                (@ClientName
+                ( @Name
                 , @ServerId
-                , @ClientUniqueId
+                , @UniqueRef
                 , @UserId);
 
             SET @Id = SCOPE_IDENTITY();
