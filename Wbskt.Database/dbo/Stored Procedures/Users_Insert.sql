@@ -7,7 +7,7 @@
 /* -------------------------------- */
 CREATE PROCEDURE dbo.Users_Insert
   @Id			INT OUTPUT
-, @UserName		VARCHAR(100)
+, @Name         VARCHAR(100)
 , @EmailId		VARCHAR(100)
 , @PasswordHash VARCHAR(512)
 , @PasswordSalt VARCHAR(50)
@@ -16,13 +16,13 @@ BEGIN
     SET NOCOUNT ON;
 
     INSERT INTO dbo.Users
-    ( UserName
+    ( Name
     , EmailId
     , PasswordHash
     , PasswordSalt
     )
     VALUES
-        ( @UserName
+        ( @Name
         , @EmailId
         , @PasswordHash
         , @PasswordSalt

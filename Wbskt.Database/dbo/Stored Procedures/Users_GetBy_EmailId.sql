@@ -12,10 +12,10 @@ BEGIN
   SET NOCOUNT ON;
 
   SELECT Id
-       , UserName
+       , Name
        , EmailId
        , PasswordHash
        , PasswordSalt
-    FROM dbo.Users 
+    FROM dbo.Users
    WHERE EmailId = @EmailId
 END;
