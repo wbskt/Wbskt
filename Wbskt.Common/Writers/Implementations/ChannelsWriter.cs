@@ -2,11 +2,12 @@
 using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Common.Extensions;
+using Wbskt.Common.Providers;
 using Wbskt.Common.Records;
 
-namespace Wbskt.Common.Providers.Writers.Implementations;
+namespace Wbskt.Common.Writers.Implementations;
 
-internal class ChannelsWriter(ILogger<ChannelsWriter> logger, IConnectionStringProvider connectionStringProvider) : IChannelsWriter
+internal sealed class ChannelsWriter(ILogger<ChannelsWriter> logger, IConnectionStringProvider connectionStringProvider) : IChannelsWriter
 {
     public int InsertChannel(ChannelRecord record)
     {

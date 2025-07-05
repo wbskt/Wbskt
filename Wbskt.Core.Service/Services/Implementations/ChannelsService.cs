@@ -1,7 +1,7 @@
 ﻿using Wbskt.Common.Exceptions;
-using Wbskt.Common.Providers.Readers;
-using Wbskt.Common.Providers.Writers;
+using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
+using Wbskt.Common.Writers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 

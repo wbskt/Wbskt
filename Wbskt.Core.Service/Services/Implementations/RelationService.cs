@@ -2,7 +2,7 @@
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Providers;
-using Wbskt.Common.Providers.Readers;
+using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 using Wbskt.Common.Utilities;
 

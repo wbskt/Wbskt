@@ -1,6 +1,6 @@
 ﻿using Wbskt.Common.Records;
 
-namespace Wbskt.Common.Providers.Writers;
+namespace Wbskt.Common.Writers;
 
 public interface IChannelsWriter
 {

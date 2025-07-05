@@ -6,7 +6,7 @@ using Wbskt.Common;
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Providers;
-using Wbskt.Common.Providers.Readers;
+using Wbskt.Common.Readers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 

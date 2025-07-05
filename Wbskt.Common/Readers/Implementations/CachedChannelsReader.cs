@@ -4,9 +4,9 @@ using Microsoft.Extensions.Logging;
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Records;
 
-namespace Wbskt.Common.Providers.Readers.Implementations;
+namespace Wbskt.Common.Readers.Implementations;
 
-internal class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChannelsDatabaseReader channelsReader) : IChannelsReader, IDatabaseChangeListener
+internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChannelsDatabaseReader channelsReader) : IChannelsReader, IDatabaseChangeListener
 {
     private static DateTime _lastModified = DateTime.MinValue;
     private readonly ConcurrentDictionary<int, ChannelReadRecord> channelsCache = [];

@@ -1,4 +1,4 @@
-﻿namespace Wbskt.Common.Providers.Readers;
+﻿namespace Wbskt.Common.Readers;
 
 public interface IDatabaseChangeListener
 {
