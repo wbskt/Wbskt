@@ -20,7 +20,7 @@ public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter ch
         return id;
     }
 
-    public IEnumerable<ChannelRecord> GetChannelsForUser(int userId)
+    public IReadOnlyCollection<ChannelRecord> GetChannelsForUser(int userId)
     {
         return channelsReader.GetAllByUserId(userId);
     }

@@ -13,6 +13,7 @@ internal class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChann
 
     public ChannelReadRecord GetByChannelId(int channelId)
     {
+        RefreshCacheIfEmpty();
         if (channelsCache.TryGetValue(channelId, out var record))
         {
             return record;
@@ -23,16 +24,19 @@ internal class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChann
 
     public IReadOnlyCollection<ChannelReadRecord> GetAll()
     {
+        RefreshCacheIfEmpty();
         return [.. channelsCache.Values];
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAllByUserId(int userId)
     {
+        RefreshCacheIfEmpty();
         return [.. channelsCache.Values.Where(c => c.UserId == userId)];
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAllByPublisherId(Guid publisherId)
     {
+        RefreshCacheIfEmpty();
         throw new NotImplementedException();
     }
 
@@ -50,6 +54,14 @@ internal class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChann
 
         RefreshCache();
         RegisterDatabaseListener(); // re-register after change
+    }
+
+    private void RefreshCacheIfEmpty()
+    {
+        if (channelsCache.IsEmpty)
+        {
+            RefreshCache();
+        }
     }
 
     private void RefreshCache()

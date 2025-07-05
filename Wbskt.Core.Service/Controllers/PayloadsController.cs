@@ -19,7 +19,7 @@ public class PayloadsController(ILogger<PayloadsController> logger, IPayloadDisp
             PublisherId = publisherId
         };
 
-        return await Dispatch(payload);
+        return await DispatchInternal(payload) ? Ok() : BadRequest($"no channels with publisherId: {payload.PublisherId}");
     }
 
     [HttpPost("/dispatch")]
@@ -32,6 +32,7 @@ public class PayloadsController(ILogger<PayloadsController> logger, IPayloadDisp
     private async Task<bool> DispatchInternal(ClientPayload payload)
     {
         payload.PayloadId = Guid.NewGuid();
+        logger.LogDebug("payloadRef is: {ref}", payload.PayloadId);
         var payloadSend = await payloadDispatcher.DispatchPayload(payload);
         return payloadSend;
     }

@@ -4,6 +4,8 @@ using Wbskt.Common.Providers.Cache;
 using Wbskt.Common.Providers.Implementations;
 using Wbskt.Common.Providers.Readers;
 using Wbskt.Common.Providers.Readers.Implementations;
+using Wbskt.Common.Providers.Writers;
+using Wbskt.Common.Providers.Writers.Implementations;
 
 namespace Wbskt.Common;
 
@@ -19,8 +21,8 @@ public static class DependencyInjection
         serviceCollection.AddSingleton<ICachedServerInfoProvider, CachedServerInfoProvider>();
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();
 
-        //-------------------------
         serviceCollection.AddSingleton<IChannelsReader, CachedChannelsReader>();
+        serviceCollection.AddSingleton<IChannelsWriter, ChannelsWriter>();
         serviceCollection.AddSingleton<IDatabaseChangeListener, CachedChannelsReader>();
         serviceCollection.AddSingleton<IChannelsDatabaseReader, ChannelsDatabaseReader>();
     }

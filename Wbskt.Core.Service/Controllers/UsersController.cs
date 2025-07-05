@@ -8,26 +8,24 @@ namespace Wbskt.Core.Service.Controllers;
 [ApiController]
 public class UsersController(ILogger<UsersController> logger, IUsersService usersService, IAuthService authService) : ControllerBase
 {
-    private readonly ILogger<UsersController> logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IUsersService usersService = usersService ?? throw new ArgumentNullException(nameof(usersService));
-    private readonly IAuthService authService = authService ?? throw new ArgumentNullException(nameof(authService));
-
     [HttpPost("login")]
     public IActionResult UserLogin(UserLoginRequest request)
     {
         if (usersService.FindUserIdByEmailId(request.EmailId) <= 0)
         {
-            return Unauthorized("user does not exist");
+            logger.LogInformation("user {email} does not exist", request.EmailId);
+            return Unauthorized($"user {request.EmailId} does not exist");
         }
 
-        bool valid = authService.ValidatePassword(request);
+        var valid = authService.ValidatePassword(request);
         if (!valid)
         {
+            logger.LogInformation("credentials are incorrect");
             return Unauthorized("credentials are incorrect");
         }
 
-        User user = usersService.GetUserByEmailId(request.EmailId);
-        string token = authService.GenerateToken(user);
+        var user = usersService.GetUserByEmailId(request.EmailId);
+        var token = authService.GenerateToken(user);
         return Ok(token);
     }
 
@@ -40,7 +38,7 @@ public class UsersController(ILogger<UsersController> logger, IUsersService user
         }
 
         // todo: verify email is unique
-        User user = authService.RegisterUser(request);
+        var user = authService.RegisterUser(request);
         // string token = authService.GenerateToken(user);
         return Ok("User created. Please login");
     }
