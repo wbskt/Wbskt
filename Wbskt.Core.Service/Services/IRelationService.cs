@@ -1,6 +1,4 @@
-﻿using System.Collections;
-
-namespace Wbskt.Core.Service.Services;
+﻿namespace Wbskt.Core.Service.Services;
 
 public interface IRelationService
 {

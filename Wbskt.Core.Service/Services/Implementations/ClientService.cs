@@ -6,15 +6,16 @@ using Wbskt.Common;
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Providers;
+using Wbskt.Common.Providers.Readers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class ClientService(ILogger<ClientService> logger, IClientProvider clientProvider, IConfiguration configuration, ICachedChannelsProvider channelsProvider, ICachedServerInfoProvider serverInfoProvider, IRelationService relationService) : IClientService
+public class ClientService(ILogger<ClientService> logger, IClientProvider clientProvider, IConfiguration configuration, IChannelsReader channelsReader, ICachedServerInfoProvider serverInfoProvider, IRelationService relationService) : IClientService
 {
     public string AddClientConnection(ClientConnectionRequest req)
     {
         var reqSubIds = req.Channels.Select(c => c.ChannelSubscriberId).ToArray();
-        var channels = channelsProvider.GetAllByChannelSubscriberIds(reqSubIds);
+        var channels = channelsReader.GetAllBySubscriberRefs(reqSubIds);
         if (channels.Select(c => c.UserId).Distinct().Count() > 1)
         {
             throw WbsktExceptions.UnauthorizedAccessToChannels();
@@ -36,7 +37,7 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
             var exSubIds = exConn.Channels.Select(c => c.ChannelSubscriberId).ToArray();
             var union = reqSubIds.Union(exSubIds).ToArray();
 
-            var ids = channelsProvider.GetAllByChannelSubscriberIds(union).Select(c => c.ChannelId).ToArray();
+            var ids = channelsReader.GetAllBySubscriberRefs(union).Select(c => c.Id).ToArray();
             if (union.Length != exSubIds.Length)
             {
                 SetClientChannels(exConn.ClientId, ids);
@@ -66,7 +67,7 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
             UserId = userId
         };
 
-        var channelIds = channels.Select(c => c.ChannelId).ToArray();
+        var channelIds = channels.Select(c => c.Id).ToArray();
 
         Upsert(conn);
         SetClientChannels(conn.ClientId, channelIds);
@@ -104,7 +105,7 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
         var key = Encoding.UTF8.GetBytes(configurationKey!);
         var tokenDescriptor = new SecurityTokenDescriptor
         {
-            Subject = new ClaimsIdentity(new Claim[]
+            Subject = new ClaimsIdentity(new[]
             {
                 new Claim(Constants.Claims.TokenId, tokenId.ToString()),
                 new Claim(Constants.Claims.ChannelIds, string.Join(",", channelIds)),

@@ -34,10 +34,22 @@ internal class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChann
         return [.. channelsCache.Values.Where(c => c.UserId == userId)];
     }
 
-    public IReadOnlyCollection<ChannelReadRecord> GetAllByPublisherId(Guid publisherId)
+    public IReadOnlyCollection<ChannelReadRecord> GetAllByPublisherRef(Guid publisherRef)
     {
         RefreshCacheIfEmpty();
         throw new NotImplementedException();
+    }
+
+    public ChannelReadRecord GetByChannelSubscriberRef(Guid subscriberRef)
+    {
+        RefreshCacheIfEmpty();
+        return channelsCache.Values.FirstOrDefault(c => c.SubscriptionRef == subscriberRef) ?? throw WbsktExceptions.ChannelSubscriberIdNotExists(subscriberRef);
+    }
+
+    public IReadOnlyCollection<ChannelReadRecord> GetAllBySubscriberRefs(Guid[] subscriberRefs)
+    {
+        RefreshCacheIfEmpty();
+        return [.. channelsCache.Values.Where(c => subscriberRefs.Contains(c.SubscriptionRef))];
     }
 
     public void RegisterDatabaseListener()

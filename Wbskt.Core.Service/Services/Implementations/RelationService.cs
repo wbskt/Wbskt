@@ -2,11 +2,13 @@
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Providers;
+using Wbskt.Common.Providers.Readers;
+using Wbskt.Common.Records;
 using Wbskt.Common.Utilities;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class RelationService(ILogger<RelationService> logger, IClientProvider clientProvider, ICachedServerInfoProvider serverInfoProvider, ICachedChannelsProvider channelsProvider) : IRelationService
+public class RelationService(ILogger<RelationService> logger, IClientProvider clientProvider, ICachedServerInfoProvider serverInfoProvider, IChannelsReader channelsReader) : IRelationService
 {
     // server - [channels]
     // used for: re-balancing when a particulate server becomes offline
@@ -45,7 +47,7 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
     public void InitializeRelations()
     {
         var servers = serverInfoProvider.GetAllSocketServerInfo();
-        var channels = channelsProvider.GetAll();
+        var channels = channelsReader.GetAll();
 
         // todo: channels are mapped in db but not fetched
         var clients = clientProvider.GetAll();
@@ -164,18 +166,18 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
         }
     }
 
-    private void MapAllChannelClients(IReadOnlyCollection<ChannelDetails> channels, IReadOnlyCollection<ClientConnection> clients)
+    private void MapAllChannelClients(IReadOnlyCollection<ChannelReadRecord> channels, IReadOnlyCollection<ClientConnection> clients)
     {
         channelClientsMap.Clear();
         foreach (var channel in channels)
         {
             var clientIds = new ConcurrentKeys<int>();
-            foreach (var client in clients.Where(c => c.Channels.Select(chan => chan.ChannelSubscriberId).Contains(channel.ChannelSubscriberId)))
+            foreach (var client in clients.Where(c => c.Channels.Select(chan => chan.ChannelSubscriberId).Contains(channel.SubscriptionRef)))
             {
                 clientIds.Add(client.ClientId);
             }
 
-            channelClientsMap.TryAdd(channel.ChannelId, clientIds);
+            channelClientsMap.TryAdd(channel.Id, clientIds);
         }
     }
 

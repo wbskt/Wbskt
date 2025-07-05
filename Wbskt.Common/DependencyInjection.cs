@@ -15,15 +15,14 @@ public static class DependencyInjection
     {
         serviceCollection.AddSingleton<IUsersProvider, UsersProvider>();
         serviceCollection.AddSingleton<IClientProvider, ClientProvider>();
-        serviceCollection.AddSingleton<IChannelsProvider, ChannelsProvider>();
         serviceCollection.AddSingleton<IServerInfoProvider, ServerInfoProvider>();
-        serviceCollection.AddSingleton<ICachedChannelsProvider, CachedChannelsProvider>();
         serviceCollection.AddSingleton<ICachedServerInfoProvider, CachedServerInfoProvider>();
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();
 
-        serviceCollection.AddSingleton<IChannelsReader, CachedChannelsReader>();
+        // Channel
         serviceCollection.AddSingleton<IChannelsWriter, ChannelsWriter>();
-        serviceCollection.AddSingleton<IDatabaseChangeListener, CachedChannelsReader>();
+        serviceCollection.AddSingleton<IChannelsReader, CachedChannelsReader>();
         serviceCollection.AddSingleton<IChannelsDatabaseReader, ChannelsDatabaseReader>();
+        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedChannelsReader>(nameof(CachedChannelsReader));
     }
 }

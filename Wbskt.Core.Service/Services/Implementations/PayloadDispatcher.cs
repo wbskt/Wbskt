@@ -12,7 +12,7 @@ public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerI
     {
         var publisherId = payload.PublisherId;
 
-        var channelIds = channelsReader.GetAllByPublisherId(publisherId).Select(c => c.Id).ToArray();
+        var channelIds = channelsReader.GetAllByPublisherRef(publisherId).Select(c => c.Id).ToArray();
 
         var tasks = new List<Task>();
 
@@ -47,7 +47,7 @@ public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerI
         try
         {
             logger.LogDebug("post: {url}/dispatch with publisher id: {publisherId}", httpClient.BaseAddress, payload.PublisherId);
-            var result = await httpClient.PostAsync($"dispatch", JsonContent.Create(payload));
+            var result = await httpClient.PostAsync("dispatch", JsonContent.Create(payload));
             if (!result.IsSuccessStatusCode)
             {
                 logger.LogError("dispatch to {server} Id:({serverId}) failed with: {reason}", server.GetAddressWithFallback(), server.ServerId, result.ReasonPhrase);
@@ -55,7 +55,7 @@ public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerI
         }
         catch(Exception ex)
         {
-            logger.LogWarning("error while request to {url}/dispatch/{publisher}, error: {details}", httpClient.BaseAddress, payload.PublisherId, ex.Message);
+            logger.LogWarning("error while request to {url}/dispatch, error: {details}", httpClient.BaseAddress, ex.Message);
         }
     }
 }
