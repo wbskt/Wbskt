@@ -5,7 +5,7 @@ using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter channelsWriter, IChannelsDatabaseReader channelsReader) : IChannelsService
+public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter channelsWriter, IChannelsReader channelsReader) : IChannelsService
 {
     public int CreateChannel(ChannelRecord channelRecord)
     {
@@ -16,12 +16,13 @@ public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter ch
 
         channelRecord.SubscriptionRef = Guid.NewGuid();
         var id = channelsWriter.InsertChannel(channelRecord);
+        logger.LogDebug("channel created with SubscriptionRef: {SubscriptionRef}", channelRecord.SubscriptionRef);
         return id;
     }
 
     public IEnumerable<ChannelRecord> GetChannelsForUser(int userId)
     {
-        return channelsReader.GetAllByUserId(DateTime.MinValue, userId);
+        return channelsReader.GetAllByUserId(userId);
     }
 
     private bool CheckIfUserHasSameChannelName(int userId, string channelName)

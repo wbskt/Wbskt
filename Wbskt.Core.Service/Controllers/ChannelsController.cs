@@ -10,7 +10,7 @@ namespace Wbskt.Core.Service.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ChannelsController(ILogger<ChannelsController> logger, IChannelsService channelsService, IClientService clientService, IPayloadDispatcher payloadDispatcher) : ControllerBase
+public class ChannelsController(ILogger<ChannelsController> logger, IChannelsService channelsService, IClientService clientService) : ControllerBase
 {
     [HttpGet]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
@@ -42,31 +42,5 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
 
         var clientToken = clientService.AddClientConnection(request);
         return Ok(clientToken);
-    }
-
-    [HttpGet("{publisherId:guid}/dispatch")]
-    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public async Task<IActionResult> Dispatch(Guid publisherId)
-    {
-        var payload = new ClientPayload
-        {
-            PublisherId = publisherId
-        };
-
-        return await Dispatch(payload);
-    }
-
-    [HttpPost("/dispatch")]
-    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public async Task<IActionResult> Dispatch(ClientPayload payload)
-    {
-        return await DispatchInternal(payload) ? Ok() : BadRequest($"no channels with publisherId: {payload.PublisherId}");
-    }
-
-    private async Task<bool> DispatchInternal(ClientPayload payload)
-    {
-        payload.PayloadId = Guid.NewGuid();
-        var payloadSend = await payloadDispatcher.DispatchPayload(payload);
-        return payloadSend;
     }
 }
