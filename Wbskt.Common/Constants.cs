@@ -2,6 +2,10 @@
 
 public static class Constants
 {
+    public static class Application
+    {
+        public const string AppFolderName = "Wbskt";
+    }
     public static class JwtKeyNames
     {
         public const string UserTokenKey = "Jwt:UserTokenKey";

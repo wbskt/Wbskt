@@ -1,20 +1,17 @@
-﻿/* -------------------------------- */
-/* Channels_GetAll_UserId            */
-/* Author: Richard Joy              */
-/* Updated by: Richard Joy          */
-/* Create date: 24-Aug-2024         */
-/* Description: Self explanatory    */
-/* -------------------------------- */
-CREATE PROCEDURE dbo.Channels_GetAll_UserId
-    @UserId INT
+﻿CREATE PROCEDURE dbo.Channels_GetAll_UserId
+@LastModified   DATETIME,
+@UserId         INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    SELECT  Id,
-            Name,
-            SubscriptionRef,
-            UserId
-    FROM dbo.Channels
-    WHERE UserId = @UserId
+    SELECT
+        Id,
+        Name,
+        SubscriptionRef,
+        UserId,
+        LastModified
+    FROM    dbo.Channels
+    WHERE
+            UserId          =   @UserId
+    AND     LastModified    >=  @LastModified
 END;

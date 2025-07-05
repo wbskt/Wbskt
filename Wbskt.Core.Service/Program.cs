@@ -13,7 +13,7 @@ namespace Wbskt.Core.Service;
 
 public static class Program
 {
-    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Wbskt");
+    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Constants.Application.AppFolderName);
 
     public static async Task Main(string[] args)
     {
@@ -51,6 +51,7 @@ public static class Program
         builder.Services.AddSingleton<IClientService, ClientService>();
         builder.Services.AddSingleton<IRelationService, RelationService>();
         builder.Services.AddSingleton<IChannelsService, ChannelsService>();
+        builder.Services.AddSingleton<IPayloadDispatcher, PayloadDispatcher>();
         builder.Services.AddSingleton<IServerInfoService, ServerInfoService>();
         builder.Services.AddSingleton<ICancellationService, CancellationService>();
 

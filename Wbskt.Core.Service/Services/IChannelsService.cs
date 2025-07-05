@@ -1,18 +1,13 @@
 ﻿
 
 using Wbskt.Common.Contracts;
+using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services;
 
 public interface IChannelsService
 {
-    ChannelDetails CreateChannel(ChannelCreationRequest channelCreation);
+    int CreateChannel(ChannelRecord channelRecord);
 
-    IReadOnlyCollection<ChannelDetails> GetAll();
-
-    IEnumerable<ChannelDetails> GetChannelsForUser(int userId);
-
-    ChannelDetails GetChannelSubscriberId(Guid channelSubscriberId);
-
-    bool VerifyChannel(ClientChannel[] channels);
+    IEnumerable<ChannelRecord> GetChannelsForUser(int userId);
 }

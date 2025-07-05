@@ -64,6 +64,7 @@
     <Folder Include="dbo\Tables\" />
   </ItemGroup>
   <ItemGroup>
+    <Build Include="dbo\Stored Procedures\Channels_Insert_Seq.sql" />
     <Build Include="dbo\Stored Procedures\PublishersChannels_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Publishers_Insert.sql" />
     <Build Include="dbo\Tables\PublishersChannels.sql" />
@@ -92,10 +93,7 @@
     <Build Include="dbo\Stored Procedures\ClientsChannels_SetForClient.sql" />
     <Build Include="dbo\Stored Procedures\Channels_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetBy_Id.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll_UserId.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetAll_PublisherRef.sql" />
-    <Build Include="dbo\Stored Procedures\Channels_GetBy_ChannelSubscriptionRef.sql" />
     <Build Include="dbo\Stored Procedures\Servers_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Servers_GetAll.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdateStatus.sql" />

@@ -1,64 +1,32 @@
-﻿using Wbskt.Common.Contracts;
-using Wbskt.Common.Exceptions;
-using Wbskt.Common.Providers;
+﻿using Wbskt.Common.Exceptions;
+using Wbskt.Common.Providers.Readers;
+using Wbskt.Common.Providers.Writers;
+using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class ChannelsService(ILogger<ChannelsService> logger, ICachedChannelsProvider channelsProvider) : IChannelsService
+public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter channelsWriter, IChannelsDatabaseReader channelsReader) : IChannelsService
 {
-    public ChannelDetails CreateChannel(ChannelCreationRequest channelCreation)
+    public int CreateChannel(ChannelRecord channelRecord)
     {
-        if (CheckIfUserHasSameChannelName(channelCreation.UserId, channelCreation.ChannelName))
+        if (CheckIfUserHasSameChannelName(channelRecord.UserId, channelRecord.Name))
         {
-            throw WbsktExceptions.ChannelExists(channelCreation.ChannelName);
+            throw WbsktExceptions.ChannelExists(channelRecord.Name);
         }
 
-        var details = new ChannelDetails
-        {
-            UserId = channelCreation.UserId,
-            ChannelName = channelCreation.ChannelName,
-            ChannelSecret = channelCreation.ChannelSecret,
-            ChannelPublisherId = channelCreation.ChannelPublisherId == Guid.Empty ? Guid.NewGuid() : channelCreation.ChannelPublisherId,
-            ChannelSubscriberId = Guid.NewGuid(),
-        };
-
-        details.ChannelId = channelsProvider.CreateChannel(details);
-        return details;
+        channelRecord.SubscriptionRef = Guid.NewGuid();
+        var id = channelsWriter.InsertChannel(channelRecord);
+        return id;
     }
 
-    public IReadOnlyCollection<ChannelDetails> GetAll()
+    public IEnumerable<ChannelRecord> GetChannelsForUser(int userId)
     {
-        return channelsProvider.GetAll();
-    }
-
-    public IEnumerable<ChannelDetails> GetChannelsForUser(int userId)
-    {
-        return channelsProvider.GetAllByChannelUserId(userId);
-    }
-
-    public ChannelDetails GetChannelSubscriberId(Guid channelSubscriberId)
-    {
-        return channelsProvider.GetByChannelSubscriberId(channelSubscriberId)!;
-    }
-
-    public bool VerifyChannel(ClientChannel[] channels)
-    {
-        foreach (var channel in channels)
-        {
-            if (GetChannelSubscriberId(channel.ChannelSubscriberId).ChannelSecret.Equals(channel.ChannelSecret))
-            {
-                continue;
-            }
-
-            logger.LogWarning("channel subscription id: '{subId}' does not match the secret", channel.ChannelSubscriberId);
-            return false;
-        }
-        return true;
+        return channelsReader.GetAllByUserId(DateTime.MinValue, userId);
     }
 
     private bool CheckIfUserHasSameChannelName(int userId, string channelName)
     {
-        var channels = GetAll();
-        return channels.Any(c => c.UserId == userId && c.ChannelName == channelName);
+        var channels = GetChannelsForUser(userId);
+        return channels.Any(c => c.UserId == userId && c.Name == channelName);
     }
 }

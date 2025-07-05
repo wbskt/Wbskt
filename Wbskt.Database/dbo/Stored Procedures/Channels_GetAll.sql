@@ -1,18 +1,15 @@
-﻿/* -------------------------------- */
-/* Channels_GetAll                  */
-/* Author: Richard Joy              */
-/* Updated by: Richard Joy          */
-/* Create date: 26-Aug-2024         */
-/* Description: Self explanatory    */
-/* -------------------------------- */
-CREATE PROCEDURE dbo.Channels_GetAll
+﻿CREATE PROCEDURE dbo.Channels_GetAll
+@LastModified   DATETIME
 AS
 BEGIN
-  SET NOCOUNT ON;
-
-  SELECT Id
-       , Name
-       , SubscriptionRef
-       , UserId
-    FROM dbo.Channels
+    SET NOCOUNT ON;
+    SELECT
+        Id,
+        Name,
+        SubscriptionRef,
+        UserId,
+        LastModified
+    FROM    dbo.Channels
+    WHERE
+            LastModified >= @LastModified
 END;
