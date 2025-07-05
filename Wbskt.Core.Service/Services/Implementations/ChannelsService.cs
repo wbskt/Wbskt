@@ -7,7 +7,7 @@ namespace Wbskt.Core.Service.Services.Implementations;
 
 public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter channelsWriter, IChannelsReader channelsReader) : IChannelsService
 {
-    public int CreateChannel(ChannelRecord channelRecord)
+    public int Create(ChannelRecord channelRecord)
     {
         if (CheckIfUserHasSameChannelName(channelRecord.UserId, channelRecord.Name))
         {
@@ -20,14 +20,14 @@ public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter ch
         return id;
     }
 
-    public IReadOnlyCollection<ChannelRecord> GetChannelsForUser(int userId)
+    public IReadOnlyCollection<ChannelReadRecord> GetAllForUser(int userId)
     {
         return channelsReader.GetAllByUserId(userId);
     }
 
     private bool CheckIfUserHasSameChannelName(int userId, string channelName)
     {
-        var channels = GetChannelsForUser(userId);
+        var channels = GetAllForUser(userId);
         return channels.Any(c => c.UserId == userId && c.Name == channelName);
     }
 }

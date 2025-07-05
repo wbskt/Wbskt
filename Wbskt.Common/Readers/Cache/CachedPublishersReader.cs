@@ -1,0 +1,83 @@
+﻿using System.Collections.Concurrent;
+using System.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using Wbskt.Common.Exceptions;
+using Wbskt.Common.Readers.Database;
+using Wbskt.Common.Readers.Database.Implementation;
+using Wbskt.Common.Records;
+
+namespace Wbskt.Common.Readers.Cache;
+
+internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> logger, IPublishersDatabaseReader publishersReader) : IDatabaseChangeListener, IPublishersReader
+{
+    private static DateTime _lastModified = DateTime.MinValue;
+    private readonly ConcurrentDictionary<int, PublisherReadRecord> publishersCache = [];
+
+    public PublisherReadRecord GetById(int id)
+    {
+        RefreshCacheIfEmpty();
+        if (publishersCache.TryGetValue(id, out var record))
+        {
+            return record;
+        }
+
+        throw WbsktExceptions.PublisherIdNotExists(id);
+    }
+
+    public IReadOnlyCollection<PublisherReadRecord> GetAll()
+    {
+        RefreshCacheIfEmpty();
+        return [.. publishersCache.Values];
+    }
+
+    public IReadOnlyCollection<PublisherReadRecord> GetAllByUserId(int userId)
+    {
+        RefreshCacheIfEmpty();
+        return [.. publishersCache.Values.Where(c => c.UserId == userId)];
+    }
+
+    public void RegisterDatabaseListener()
+    {
+        if (publishersReader is PublishersDatabaseReader publishersReaderImp)
+        {
+            publishersReaderImp.RegisterSqlDependency(OnDatabaseChange);
+        }
+    }
+
+    private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
+    {
+        logger.LogInformation("database change detected: {Info}", e.Info);
+
+        RefreshCache();
+        RegisterDatabaseListener(); // re-register after change
+    }
+
+    private void RefreshCacheIfEmpty()
+    {
+        if (publishersCache.IsEmpty)
+        {
+            RefreshCache();
+        }
+    }
+
+    private void RefreshCache()
+    {
+        var latestChannels = publishersReader.GetAll(_lastModified);
+        foreach (var record in latestChannels)
+        {
+            if (publishersCache.TryGetValue(record.Id, out _))
+            {
+                publishersCache[record.Id] = record;
+            }
+            else
+            {
+                publishersCache[record.Id] = record;
+            }
+
+            if (record.LastModified > _lastModified)
+            {
+                _lastModified = record.LastModified;
+            }
+        }
+    }
+}

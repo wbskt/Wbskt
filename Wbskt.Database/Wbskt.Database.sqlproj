@@ -66,6 +66,8 @@
   <ItemGroup>
     <Build Include="dbo\Stored Procedures\Channels_Insert_Seq.sql" />
     <Build Include="dbo\Stored Procedures\PublishersChannels_Insert.sql" />
+    <Build Include="dbo\Stored Procedures\Publishers_GetAll.sql" />
+    <Build Include="dbo\Stored Procedures\Publishers_GetAll_UserId.sql" />
     <Build Include="dbo\Stored Procedures\Publishers_Insert.sql" />
     <Build Include="dbo\Tables\PublishersChannels.sql" />
     <Build Include="dbo\Types\IdListTableType.sql" />

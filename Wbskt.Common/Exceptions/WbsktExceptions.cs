@@ -13,6 +13,11 @@ public static class WbsktExceptions
         return new ValidationException($"channel: '{channelName}' already exists");
     }
 
+    public static InvalidOperationException PublisherIdNotExists(int publisherId)
+    {
+        return new InvalidOperationException($"publisher with id: '{publisherId}' does not exists");
+    }
+
     public static InvalidOperationException ChannelIdNotExists(int channelId)
     {
         return new InvalidOperationException($"channel with id: '{channelId}' does not exists");

@@ -1,6 +1,6 @@
 ﻿using Wbskt.Common.Records;
 
-namespace Wbskt.Common.Readers;
+namespace Wbskt.Common.Readers.Database;
 
 public interface IChannelsDatabaseReader
 {

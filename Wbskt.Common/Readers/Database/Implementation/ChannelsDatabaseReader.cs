@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Wbskt.Common.Providers;
 using Wbskt.Common.Records;
 
-namespace Wbskt.Common.Readers.Implementations;
+namespace Wbskt.Common.Readers.Database.Implementation;
 
 internal sealed class ChannelsDatabaseReader(ILogger<ChannelsDatabaseReader> logger, IConnectionStringProvider connectionStringProvider) : IChannelsDatabaseReader
 {

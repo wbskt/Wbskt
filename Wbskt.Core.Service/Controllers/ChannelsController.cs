@@ -13,20 +13,20 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
 {
     [HttpGet]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IActionResult GetAll()
+    public IReadOnlyCollection<ChannelRecord> GetAll()
     {
         var userId = User.GetUserId();
-        var details = channelsService.GetChannelsForUser(userId);
+        var details = channelsService.GetAllForUser(userId);
         logger.LogDebug("retrieved {count} channels", details.Count);
-        return Ok(details);
+        return details;
     }
 
     [HttpPost]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IActionResult CreateChannel(ChannelRecord channelRecord)
+    public ChannelRecord CreateChannel(ChannelRecord channelRecord)
     {
         channelRecord.UserId = User.GetUserId();
-        channelsService.CreateChannel(channelRecord);
-        return Ok(channelRecord);
+        channelsService.Create(channelRecord);
+        return channelRecord;
     }
 }

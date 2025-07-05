@@ -2,9 +2,11 @@
 using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Common.Exceptions;
+using Wbskt.Common.Readers.Database;
+using Wbskt.Common.Readers.Database.Implementation;
 using Wbskt.Common.Records;
 
-namespace Wbskt.Common.Readers.Implementations;
+namespace Wbskt.Common.Readers.Cache;
 
 internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChannelsDatabaseReader channelsReader) : IChannelsReader, IDatabaseChangeListener
 {

@@ -1,25 +1,33 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Wbskt.Common.Extensions;
+using Wbskt.Common.Records;
+using Wbskt.Core.Service.Services;
 
 namespace Wbskt.Core.Service.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class PublishersController : ControllerBase
+public class PublishersController(ILogger<PublishersController> logger, IPublisherService publisherService) : ControllerBase
 {
     [HttpGet]
-    public IActionResult GetAll()
+    public IReadOnlyCollection<PublisherRecord> GetAll()
     {
-        return Ok();
+        var userId = User.GetUserId();
+        var details = publisherService.GetAllForUser(userId);
+        logger.LogDebug("retrieved {count} channels", details.Count);
+        return details;
     }
 
     [HttpPost]
-    public IActionResult CreatePublisher()
+    public PublisherRecord CreatePublisher(PublisherRecord publisherRecord)
     {
-        return Ok();
+        publisherRecord.UserId = User.GetUserId();
+        publisherService.Create(publisherRecord);
+        return publisherRecord;
     }
 
     [HttpPut("{publisherId:guid}")]
-    public IActionResult UpdatePublisher(Guid publisherId)
+    public PublisherRecord UpdatePublisher(Guid publisherId)
     {
         return Ok();
     }

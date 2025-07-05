@@ -3,7 +3,9 @@ using Wbskt.Common.Providers;
 using Wbskt.Common.Providers.Cache;
 using Wbskt.Common.Providers.Implementations;
 using Wbskt.Common.Readers;
-using Wbskt.Common.Readers.Implementations;
+using Wbskt.Common.Readers.Cache;
+using Wbskt.Common.Readers.Database;
+using Wbskt.Common.Readers.Database.Implementation;
 using Wbskt.Common.Writers;
 using Wbskt.Common.Writers.Implementations;
 
@@ -27,5 +29,8 @@ public static class DependencyInjection
 
         // Publisher
         serviceCollection.AddSingleton<IPublishersWriter, PublishersWriter>();
+        serviceCollection.AddSingleton<IPublishersDatabaseReader, PublishersDatabaseReader>();
+        serviceCollection.AddSingleton<IPublishersDatabaseReader, PublishersDatabaseReader>();
+        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedPublishersReader>(nameof(CachedPublishersReader));
     }
 }

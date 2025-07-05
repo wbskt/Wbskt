@@ -4,7 +4,7 @@ namespace Wbskt.Core.Service.Services;
 
 public interface IChannelsService
 {
-    int CreateChannel(ChannelRecord channelRecord);
+    int Create(ChannelRecord channelRecord);
 
-    IReadOnlyCollection<ChannelRecord> GetChannelsForUser(int userId);
+    IReadOnlyCollection<ChannelReadRecord> GetAllForUser(int userId);
 }
