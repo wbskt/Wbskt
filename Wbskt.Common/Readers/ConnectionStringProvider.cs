@@ -1,7 +1,7 @@
 ﻿
 using Microsoft.Extensions.Configuration;
 
-namespace Wbskt.Common.Providers.Implementations;
+namespace Wbskt.Common.Readers;
 
 internal sealed class ConnectionStringProvider : IConnectionStringProvider
 {

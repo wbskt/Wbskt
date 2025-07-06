@@ -1,7 +1,6 @@
 ﻿using System.Data;
 using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-using Wbskt.Common.Providers;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Database.Implementation;

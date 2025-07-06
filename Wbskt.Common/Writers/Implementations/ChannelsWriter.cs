@@ -2,7 +2,7 @@
 using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Common.Extensions;
-using Wbskt.Common.Providers;
+using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Writers.Implementations;
@@ -23,7 +23,7 @@ internal sealed class ChannelsWriter(ILogger<ChannelsWriter> logger, IConnection
 
         command.Parameters.Add(new SqlParameter("@Name", ProviderExtensions.ReplaceDbNulls(record.Name)));
         command.Parameters.Add(new SqlParameter("@UserId", ProviderExtensions.ReplaceDbNulls(record.UserId)));
-        command.Parameters.Add(new SqlParameter("@SubscriptionRef", ProviderExtensions.ReplaceDbNulls(record.SubscriptionRef)));
+        command.Parameters.Add(new SqlParameter("@ChannelRef", ProviderExtensions.ReplaceDbNulls(record.ChannelRef)));
 
         var id = new SqlParameter("@Id", SqlDbType.Int) { Size = int.MaxValue };
         id.Direction = ParameterDirection.Output;

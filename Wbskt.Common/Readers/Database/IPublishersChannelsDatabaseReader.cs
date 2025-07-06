@@ -2,7 +2,7 @@ using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Database;
 
-public interface IPublishersChannelsDatabaseReader
+internal interface IPublishersChannelsDatabaseReader
 {
     IReadOnlyCollection<PublisherChannelReadRecord> GetAll(DateTime lastModified);
-} 
+}

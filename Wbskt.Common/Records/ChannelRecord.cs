@@ -15,7 +15,7 @@ public record ChannelRecord
     /// <summary>
     /// Used for a client to connect to a channel
     /// </summary>
-    public Guid SubscriptionRef { get; set; }
+    public Guid ChannelRef { get; set; }
 }
 
 public record ChannelReadRecord : ChannelRecord

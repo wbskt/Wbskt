@@ -14,8 +14,8 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
 {
     public string AddClientConnection(ClientConnectionRequest req)
     {
-        var reqSubIds = req.Channels.Select(c => c.ChannelSubscriberId).ToArray();
-        var channels = channelsReader.GetAllBySubscriberRefs(reqSubIds);
+        var reqSubIds = req.Channels.Select(c => c.ChannelRef).ToArray();
+        var channels = channelsReader.GetAllByRefs(reqSubIds);
         if (channels.Select(c => c.UserId).Distinct().Count() > 1)
         {
             throw WbsktExceptions.UnauthorizedAccessToChannels();
@@ -34,10 +34,10 @@ public class ClientService(ILogger<ClientService> logger, IClientProvider client
             var exConn = clientProvider.GetByClientId(clientId)!;
             conn = exConn;
 
-            var exSubIds = exConn.Channels.Select(c => c.ChannelSubscriberId).ToArray();
+            var exSubIds = exConn.Channels.Select(c => c.ChannelRef).ToArray();
             var union = reqSubIds.Union(exSubIds).ToArray();
 
-            var ids = channelsReader.GetAllBySubscriberRefs(union).Select(c => c.Id).ToArray();
+            var ids = channelsReader.GetAllByRefs(union).Select(c => c.Id).ToArray();
             if (union.Length != exSubIds.Length)
             {
                 SetClientChannels(exConn.ClientId, ids);

@@ -33,9 +33,9 @@ public static class WbsktExceptions
         return new InvalidOperationException($"invalid id provided: '{id}' for resource: {resource}");
     }
 
-    public static ValidationException ChannelSubscriberIdNotExists(Guid channelSubscriberId)
+    public static InvalidOperationException ChannelRefNotExists(Guid channelRef)
     {
-        return new ValidationException($"channel with subscriberId: '{channelSubscriberId}' does not exists");
+        return new InvalidOperationException($"channel with ref: '{channelRef}' does not exists");
     }
 
     public static InvalidOperationException UnknownSocketServer(int id)

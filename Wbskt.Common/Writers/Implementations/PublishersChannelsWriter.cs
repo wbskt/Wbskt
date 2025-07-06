@@ -1,7 +1,8 @@
 using System.Data;
 using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-using Wbskt.Common.Providers;
+using Wbskt.Common.Extensions;
+using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Writers.Implementations;
@@ -57,7 +58,7 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
 
         if (pairs.Count == 0)
         {
-            logger.LogDebug("No publisher-channel pairs provided for bulk upsert");
+            logger.LogDebug("no publisher-channel pairs provided for bulk upsert");
             return;
         }
 
@@ -68,21 +69,14 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
         command.CommandType = CommandType.StoredProcedure;
         command.CommandText = "dbo.PublishersChannels_BulkUpsert";
 
-        var dataTable = new DataTable();
-        dataTable.Columns.Add("PublisherId", typeof(int));
-        dataTable.Columns.Add("ChannelId", typeof(int));
-
-        foreach (var pair in pairs)
-        {
-            dataTable.Rows.Add(pair.PublisherId, pair.ChannelId);
-        }
+        var dataTable = ProviderExtensions.PublisherChannelPairsToDataTable(pairs);
 
         var parameter = command.Parameters.AddWithValue("@PublisherChannelData", dataTable);
         parameter.SqlDbType = SqlDbType.Structured;
-        parameter.TypeName = "dbo.IdIntValueTableType";
+        parameter.TypeName = "dbo.PublisherChannelTableType";
 
         command.ExecuteNonQuery();
-        logger.LogDebug("Successfully bulk upserted {count} publisher-channel relations", pairs.Count);
+        logger.LogDebug("successfully bulk upserted {count} publisher-channel relations", pairs.Count);
     }
 
     public void BulkDeletePublisherChannels(IReadOnlyCollection<PublisherChannelRecord> pairs)
@@ -92,7 +86,7 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
 
         if (pairs.Count == 0)
         {
-            logger.LogDebug("No publisher-channel pairs provided for bulk delete");
+            logger.LogDebug("no publisher-channel pairs provided for bulk delete");
             return;
         }
 
@@ -103,20 +97,13 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
         command.CommandType = CommandType.StoredProcedure;
         command.CommandText = "dbo.PublishersChannels_BulkDelete";
 
-        var dataTable = new DataTable();
-        dataTable.Columns.Add("PublisherId", typeof(int));
-        dataTable.Columns.Add("ChannelId", typeof(int));
-
-        foreach (var pair in pairs)
-        {
-            dataTable.Rows.Add(pair.PublisherId, pair.ChannelId);
-        }
+        var dataTable = ProviderExtensions.PublisherChannelPairsToDataTable(pairs);
 
         var parameter = command.Parameters.AddWithValue("@PublisherChannelData", dataTable);
         parameter.SqlDbType = SqlDbType.Structured;
-        parameter.TypeName = "dbo.IdIntValueTableType";
+        parameter.TypeName = "dbo.PublisherChannelTableType";
 
         var rowsAffected = command.ExecuteNonQuery();
-        logger.LogDebug("Successfully bulk deleted {count} publisher-channel relations, {rowsAffected} rows affected", pairs.Count, rowsAffected);
+        logger.LogDebug("successfully bulk deleted {count} publisher-channel relations, {rowsAffected} rows affected", pairs.Count, rowsAffected);
     }
 }

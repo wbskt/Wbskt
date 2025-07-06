@@ -29,12 +29,12 @@ public static class Constants
         public const string TokenId = "TokenId";
         public const string UserData = "UserData";
         public const string ClientId = "ClientId";
+        public const string ChannelRef = "ChannelRef";
         public const string CoreServer = "CoreServer";
         public const string ChannelIds = "ChannelIds";
         public const string ClientName = "ClientName";
         public const string SocketServer = "SocketServer";
         public const string ClientUniqueId = "ClientUniqueId";
-        public const string ChannelSubscriberId = "ChannelSubscriberId";
     }
 
     public static class ExpiryTimes // in minutes

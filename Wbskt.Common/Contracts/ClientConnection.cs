@@ -41,7 +41,7 @@ public class ClientChannel
     /// <summary>
     /// Used for a client to connect to a channel
     /// </summary>
-    public Guid ChannelSubscriberId { get; set; }
+    public Guid ChannelRef { get; set; }
 
     /// <summary>
     /// This is a secret string provided by the user while creation of a channel

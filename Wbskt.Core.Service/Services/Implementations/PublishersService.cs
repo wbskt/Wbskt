@@ -10,7 +10,7 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
 {
     public int Create(PublisherRecord publisherRecord)
     {
-        logger.LogDebug("Creating publisher with name: {Name}", publisherRecord.Name);
+        logger.LogDebug("creating publisher with name: {Name}", publisherRecord.Name);
         
         // Check if user already has a publisher with the same name
         var existingPublishers = GetAllForUser(publisherRecord.UserId);
@@ -20,7 +20,7 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
         }
 
         var id = publishersWriter.InsertPublisher(publisherRecord);
-        logger.LogDebug("Successfully created publisher with ID: {Id}", id);
+        logger.LogDebug("successfully created publisher with ID: {Id}", id);
         return id;
     }
 

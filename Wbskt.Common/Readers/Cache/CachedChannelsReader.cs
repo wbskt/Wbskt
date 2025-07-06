@@ -25,15 +25,15 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         throw WbsktExceptions.ChannelIdNotExists(channelId);
     }
 
-    public ChannelReadRecord GetByRef(Guid subscriberRef)
+    public ChannelReadRecord GetByRef(Guid channelRef)
     {
         RefreshCacheIfEmpty();
-        if (channelsByGuidCache.TryGetValue(subscriberRef, out var record))
+        if (channelsByGuidCache.TryGetValue(channelRef, out var record))
         {
             return record;
         }
 
-        throw WbsktExceptions.ChannelSubscriberIdNotExists(subscriberRef);
+        throw WbsktExceptions.ChannelRefNotExists(channelRef);
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAll()
@@ -51,7 +51,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
     public IReadOnlyCollection<ChannelReadRecord> GetAllByIds(int[] ids)
     {
         RefreshCacheIfEmpty();
-        var result = new List<ChannelReadRecord>();
+        var result = new List<ChannelReadRecord>(ids.Length);
 
         foreach (var id in ids)
         {
@@ -64,14 +64,14 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         return result.AsReadOnly();
     }
 
-    public IReadOnlyCollection<ChannelReadRecord> GetAllByRefs(Guid[] subscriberRefs)
+    public IReadOnlyCollection<ChannelReadRecord> GetAllByRefs(Guid[] channelRefs)
     {
         RefreshCacheIfEmpty();
-        var result = new List<ChannelReadRecord>();
+        var result = new List<ChannelReadRecord>(channelRefs.Length);
 
-        foreach (var subscriberRef in subscriberRefs)
+        foreach (var channelRef in channelRefs)
         {
-            if (channelsByGuidCache.TryGetValue(subscriberRef, out var record))
+            if (channelsByGuidCache.TryGetValue(channelRef, out var record))
             {
                 result.Add(record);
             }
@@ -110,7 +110,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         foreach (var record in latestChannels)
         {
             channelsCache[record.Id] = record;
-            channelsByGuidCache[record.SubscriptionRef] = record;
+            channelsByGuidCache[record.ChannelRef] = record;
 
             if (record.LastModified > _lastModified)
             {

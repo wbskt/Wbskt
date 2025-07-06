@@ -1,7 +1,6 @@
 ﻿using System.Data;
 using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-using Wbskt.Common.Providers;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Database.Implementation;
@@ -84,7 +83,7 @@ internal sealed class ChannelsDatabaseReader(ILogger<ChannelsDatabaseReader> log
             Name = reader.GetString(mapping.Name),
             UserId = reader.GetInt32(mapping.UserId),
             LastModified = reader.GetDateTime(mapping.LastModified),
-            SubscriptionRef = reader.GetGuid(mapping.SubscriptionRef)
+            ChannelRef = reader.GetGuid(mapping.ChannelRef)
         };
 
         return data;
@@ -98,7 +97,7 @@ internal sealed class ChannelsDatabaseReader(ILogger<ChannelsDatabaseReader> log
             Name = reader.GetOrdinal("Name"),
             UserId = reader.GetOrdinal("UserId"),
             LastModified = reader.GetOrdinal("LastModified"),
-            SubscriptionRef = reader.GetOrdinal("SubscriptionRef")
+            ChannelRef = reader.GetOrdinal("ChannelRef")
         };
 
         return mapping;
@@ -110,6 +109,6 @@ internal sealed class ChannelsDatabaseReader(ILogger<ChannelsDatabaseReader> log
         public int Name;
         public int UserId;
         public int LastModified;
-        public int SubscriptionRef;
+        public int ChannelRef;
     }
 }

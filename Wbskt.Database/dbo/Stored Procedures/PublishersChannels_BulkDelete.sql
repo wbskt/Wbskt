@@ -1,5 +1,5 @@
 CREATE PROCEDURE dbo.PublishersChannels_BulkDelete
-    @PublisherChannelData IdIntValueTableType READONLY
+    @PublisherChannelData PublisherChannelTableType READONLY
 AS
 BEGIN
     SET NOCOUNT ON;

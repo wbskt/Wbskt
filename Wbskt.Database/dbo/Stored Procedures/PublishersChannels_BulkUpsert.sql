@@ -1,12 +1,12 @@
 CREATE PROCEDURE dbo.PublishersChannels_BulkUpsert
-    @PublisherChannelData IdIntValueTableType READONLY
+    @PublisherChannelData PublisherChannelTableType READONLY
 AS
 BEGIN
     SET NOCOUNT ON;
 
     -- Use MERGE statement for efficient bulk "upsert" operation
     MERGE INTO dbo.PublishersChannels AS Target
-    USING @PublisherChannelData AS Source (PublisherId, ChannelId)
+    USING @PublisherChannelData AS Source
     ON (Target.PublisherId = Source.PublisherId AND Target.ChannelId = Source.ChannelId)
     WHEN MATCHED THEN
         -- If a matching record exists, update the 'Deleted' column to 0

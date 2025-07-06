@@ -2,7 +2,7 @@
   @Id               INT             OUTPUT
 , @Name             VARCHAR(100)
 , @UserId           INT
-, @SubscriptionRef  UNIQUEIDENTIFIER
+, @ChannelRef  UNIQUEIDENTIFIER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -10,13 +10,13 @@ BEGIN
     INSERT INTO dbo.Channels(
         Name,
         UserId,
-        SubscriptionRef,
+        ChannelRef,
         LastModified
     )
     VALUES(
         @Name,
         @UserId,
-        @SubscriptionRef,
+        @ChannelRef,
         CURRENT_TIMESTAMP
         );
     SELECT @Id = SCOPE_IDENTITY();

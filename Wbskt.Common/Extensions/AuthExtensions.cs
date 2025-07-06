@@ -102,9 +102,9 @@ public static class AuthExtensions
         return Guid.Parse(claim);
     }
 
-    public static Guid GetChannelSubscriberId(this IPrincipal principal)
+    public static Guid GetChannelChannelRef(this IPrincipal principal)
     {
-        var claim = principal.GetClaim(Constants.Claims.ChannelSubscriberId);
+        var claim = principal.GetClaim(Constants.Claims.ChannelRef);
         return Guid.Parse(claim);
     }
 

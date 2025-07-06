@@ -75,6 +75,7 @@
     <Build Include="dbo\Tables\PublishersChannels.sql" />
     <Build Include="dbo\Types\IdListTableType.sql" />
     <Build Include="dbo\Types\IdIntValueTableType.sql" />
+    <Build Include="dbo\Types\PublisherChannelTableType.sql" />
     <Build Include="dbo\Tables\Users.sql" />
     <Build Include="dbo\Tables\Servers.sql" />
     <Build Include="dbo\Tables\Channels.sql" />

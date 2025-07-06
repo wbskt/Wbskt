@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Extensions;
 
@@ -34,6 +35,24 @@ public static class ProviderExtensions
         {
             var row = dataTable.NewRow();
             row["Id"] = id;
+            dataTable.Rows.Add(row);
+        }
+
+        return dataTable;
+    }
+
+    public static DataTable PublisherChannelPairsToDataTable(IEnumerable<PublisherChannelRecord> pairs)
+    {
+        var dataTable = new DataTable();
+
+        dataTable.Columns.Add(new DataColumn("PublisherId", typeof(int)) { AllowDBNull = false });
+        dataTable.Columns.Add(new DataColumn("ChannelId", typeof(int)) { AllowDBNull = false });
+
+        foreach (var pair in pairs)
+        {
+            var row = dataTable.NewRow();
+            row["PublisherId"] = pair.PublisherId;
+            row["ChannelId"] = pair.ChannelId;
             dataTable.Rows.Add(row);
         }
 

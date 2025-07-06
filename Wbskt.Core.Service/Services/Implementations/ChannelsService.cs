@@ -14,67 +14,15 @@ public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter ch
             throw WbsktExceptions.ChannelExists(channelRecord.Name);
         }
 
-        channelRecord.SubscriptionRef = Guid.NewGuid();
+        channelRecord.ChannelRef = Guid.NewGuid();
         var id = channelsWriter.InsertChannel(channelRecord);
-        logger.LogDebug("channel created with SubscriptionRef: {SubscriptionRef}", channelRecord.SubscriptionRef);
+        logger.LogDebug("channel created with ChannelRef: {ChannelRef}", channelRecord.ChannelRef);
         return id;
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAllForUser(int userId)
     {
         return channelsReader.GetAllByUserId(userId);
-    }
-
-    public ChannelReadRecord GetByRef(Guid subscriptionRef)
-    {
-        var channel = channelsReader.GetByRef(subscriptionRef);
-        return channel;
-    }
-
-    public ChannelReadRecord GetById(int channelId)
-    {
-        var channel = channelsReader.GetById(channelId);
-        return channel;
-    }
-
-    public IReadOnlyCollection<int> GetChannelIdsBySubscriptionRefs(Guid[] subscriptionRefs)
-    {
-        var channelIds = new List<int>();
-
-        foreach (var subscriptionRef in subscriptionRefs)
-        {
-            try
-            {
-                var channel = GetByRef(subscriptionRef);
-                channelIds.Add(channel.Id);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Channel with subscription ref '{SubscriptionRef}' not found", subscriptionRef);
-            }
-        }
-
-        return channelIds.AsReadOnly();
-    }
-
-    public IReadOnlyCollection<Guid> GetChannelSubscriptionRefsByIds(int[] channelIds)
-    {
-        var subscriptionRefs = new List<Guid>();
-
-        foreach (var channelId in channelIds)
-        {
-            try
-            {
-                var channel = GetById(channelId);
-                subscriptionRefs.Add(channel.SubscriptionRef);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Channel with ID '{ChannelId}' not found", channelId);
-            }
-        }
-
-        return subscriptionRefs.AsReadOnly();
     }
 
     private bool CheckIfUserHasSameChannelName(int userId, string channelName)

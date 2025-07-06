@@ -2,7 +2,7 @@
 
 namespace Wbskt.Common.Readers.Database;
 
-public interface IChannelsDatabaseReader
+internal interface IChannelsDatabaseReader
 {
     IReadOnlyCollection<ChannelReadRecord> GetAll(DateTime lastModified);
 

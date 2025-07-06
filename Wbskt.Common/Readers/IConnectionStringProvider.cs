@@ -1,4 +1,4 @@
-﻿namespace Wbskt.Common.Providers;
+﻿namespace Wbskt.Common.Readers;
 
 public interface IConnectionStringProvider
 {

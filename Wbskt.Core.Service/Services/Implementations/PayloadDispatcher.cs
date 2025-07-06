@@ -6,13 +6,13 @@ using Wbskt.Common.Readers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerInfoProvider serverInfoProvider, IChannelsReader channelsReader, IAuthService authService, IRelationService relationService) : IPayloadDispatcher
+public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerInfoProvider serverInfoProvider, IPublishersChannelsService publishersChannelsService, IAuthService authService, IRelationService relationService) : IPayloadDispatcher
 {
     public async Task<bool> DispatchPayload(ClientPayload payload)
     {
-        var publisherId = payload.PublisherId;
+        var publisherId = payload.PublisherRef;
 
-        var channelIds = channelsReader.GetAllByPublisherRef(publisherId).Select(c => c.Id).ToArray();
+        var channelIds = publishersChannelsService.GetChannelsForPublisherRef(publisherId).Select(c => c.Id).ToArray();
 
         var tasks = new List<Task>();
 
@@ -46,7 +46,7 @@ public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerI
 
         try
         {
-            logger.LogDebug("post: {url}/dispatch with publisher id: {publisherId}", httpClient.BaseAddress, payload.PublisherId);
+            logger.LogDebug("post: {url}/dispatch with publisher id: {publisherId}", httpClient.BaseAddress, payload.PublisherRef);
             var result = await httpClient.PostAsync("dispatch", JsonContent.Create(payload));
             if (!result.IsSuccessStatusCode)
             {

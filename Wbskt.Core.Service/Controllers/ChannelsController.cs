@@ -35,7 +35,7 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
     public IEnumerable<PublisherRecord> GetPublishersForChannel(Guid channelRef)
     {
         var publishers = publishersChannelsService.GetPublishersForChannelRef(channelRef);
-        logger.LogDebug("retrieved {count} publishers for channel {subscriptionRef}", publishers.Count, channelRef);
+        logger.LogDebug("retrieved {count} publishers for channel {channelRef}", publishers.Count, channelRef);
         return publishers;
     }
 
@@ -46,7 +46,7 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
         var success = publishersChannelsService.AddPublishersToChannel(publisherRefs, channelRef);
         if (success)
         {
-            logger.LogDebug("added {count} publishers to channel {subscriptionRef}", publisherRefs.Length, channelRef);
+            logger.LogDebug("added {count} publishers to channel {channelRef}", publisherRefs.Length, channelRef);
             return Ok();
         }
 
@@ -61,7 +61,7 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
 
         if (success)
         {
-            logger.LogDebug("removed {count} publishers from channel {subscriptionRef}", publisherRefs.Length, channelRef);
+            logger.LogDebug("removed {count} publishers from channel {channelRef}", publisherRefs.Length, channelRef);
             return Ok();
         }
 

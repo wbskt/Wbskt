@@ -12,7 +12,7 @@ public interface IChannelsReader
 
     IReadOnlyCollection<ChannelReadRecord> GetAllByIds(int[] ids);
 
-    IReadOnlyCollection<ChannelReadRecord> GetAllByRefs(Guid[] subscriberRefs);
+    IReadOnlyCollection<ChannelReadRecord> GetAllByRefs(Guid[] channelRefs);
 
-    ChannelReadRecord GetByRef(Guid subscriberRef);
+    ChannelReadRecord GetByRef(Guid channelRef);
 }

@@ -16,17 +16,17 @@ public class PayloadsController(ILogger<PayloadsController> logger, IPayloadDisp
     {
         var payload = new ClientPayload
         {
-            PublisherId = publisherId
+            PublisherRef = publisherId
         };
 
-        return await DispatchInternal(payload) ? Ok() : BadRequest($"no channels with publisherId: {payload.PublisherId}");
+        return await DispatchInternal(payload) ? Ok() : BadRequest($"no channels with publisherId: {payload.PublisherRef}");
     }
 
     [HttpPost("/dispatch")]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public async Task<IActionResult> Dispatch(ClientPayload payload)
     {
-        return await DispatchInternal(payload) ? Ok() : BadRequest($"no channels with publisherId: {payload.PublisherId}");
+        return await DispatchInternal(payload) ? Ok() : BadRequest($"no channels with publisherId: {payload.PublisherRef}");
     }
 
     private async Task<bool> DispatchInternal(ClientPayload payload)

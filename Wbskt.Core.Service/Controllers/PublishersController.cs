@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Wbskt.Common;
 using Wbskt.Common.Extensions;
 using Wbskt.Common.Records;
 using Wbskt.Core.Service.Services;
@@ -10,6 +12,7 @@ namespace Wbskt.Core.Service.Controllers;
 public class PublishersController(ILogger<PublishersController> logger, IPublishersService publishersService, IPublishersChannelsService publishersChannelsService) : ControllerBase
 {
     [HttpGet]
+    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public IReadOnlyCollection<PublisherRecord> GetAll()
     {
         var userId = User.GetUserId();
@@ -19,6 +22,7 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
     }
 
     [HttpPost]
+    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public PublisherRecord CreatePublisher(PublisherRecord publisherRecord)
     {
         publisherRecord.UserId = User.GetUserId();
@@ -27,6 +31,7 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
     }
 
     [HttpGet("{publisherRef:guid}/channels")]
+    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public IEnumerable<ChannelRecord> GetChannelsForPublisher(Guid publisherRef)
     {
         var channels = publishersChannelsService.GetChannelsForPublisherRef(publisherRef);
@@ -35,6 +40,7 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
     }
 
     [HttpPost("{publisherRef:guid}/channels")]
+    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public IActionResult AddChannelsToPublisher(Guid publisherRef, [FromBody] Guid[] channelRefs)
     {
         var success = publishersChannelsService.AddChannelsToPublisher(channelRefs, publisherRef);
@@ -48,6 +54,7 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
     }
 
     [HttpDelete("{publisherRef:guid}/channels")]
+    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public IActionResult RemoveChannelsFromPublisher(Guid publisherRef, [FromBody] Guid[] channelRefs)
     {
         var success = publishersChannelsService.RemoveChannelsFromPublisher(channelRefs, publisherRef);
@@ -61,6 +68,7 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
     }
 
     [HttpPost("channels")]
+    [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
     public IEnumerable<PublisherChannels> GetChannelsForPublishers([FromBody] Guid[] publisherRefs)
     {
         var channels = publishersChannelsService.GetChannelsForPublishers(publisherRefs);

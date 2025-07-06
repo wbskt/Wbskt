@@ -2,7 +2,7 @@
   @Id               INT             OUTPUT
 , @Name             VARCHAR(100)
 , @UserId           INT
-, @SubscriptionRef  UNIQUEIDENTIFIER
+, @ChannelRef  UNIQUEIDENTIFIER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -11,14 +11,14 @@ BEGIN
         @Id                 = @Id OUTPUT,
         @Name               = @Name,
         @UserId             = @UserId,
-        @SubscriptionRef    = @SubscriptionRef
+        @ChannelRef         = @ChannelRef
 
     DECLARE @PublisherId INT;
 
     EXEC dbo.Publishers_Insert
          @Id                = @PublisherId OUTPUT,
          @UserId            = @UserId,
-         @PublisherRef      = @SubscriptionRef,
+         @PublisherRef      = @ChannelRef,
          @Name              = @Name;
 
     EXEC dbo.PublishersChannels_Upsert

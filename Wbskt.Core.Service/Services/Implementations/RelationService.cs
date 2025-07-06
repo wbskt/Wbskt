@@ -172,7 +172,7 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
         foreach (var channel in channels)
         {
             var clientIds = new ConcurrentKeys<int>();
-            foreach (var client in clients.Where(c => c.Channels.Select(chan => chan.ChannelSubscriberId).Contains(channel.SubscriptionRef)))
+            foreach (var client in clients.Where(c => c.Channels.Select(chan => chan.ChannelRef).Contains(channel.ChannelRef)))
             {
                 clientIds.Add(client.ClientId);
             }

@@ -51,7 +51,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
     public IReadOnlyCollection<PublisherReadRecord> GetAllByIds(int[] ids)
     {
         RefreshCacheIfEmpty();
-        var result = new List<PublisherReadRecord>();
+        var result = new List<PublisherReadRecord>(ids.Length);
 
         foreach (var id in ids)
         {
@@ -67,7 +67,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
     public IReadOnlyCollection<PublisherReadRecord> GetAllByRefs(Guid[] publisherRefs)
     {
         RefreshCacheIfEmpty();
-        var result = new List<PublisherReadRecord>();
+        var result = new List<PublisherReadRecord>(publisherRefs.Length);
 
         foreach (var publisherRef in publisherRefs)
         {

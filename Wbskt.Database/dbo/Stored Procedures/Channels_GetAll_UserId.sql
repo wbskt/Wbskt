@@ -7,7 +7,7 @@ BEGIN
     SELECT
         Id,
         Name,
-        SubscriptionRef,
+        ChannelRef,
         UserId,
         LastModified
     FROM    dbo.Channels

@@ -7,7 +7,7 @@ using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Cache;
 
-public sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChannelsReader> logger, IPublishersChannelsDatabaseReader publishersChannelsReader) : IDatabaseChangeListener, IPublishersChannelsReader
+internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChannelsReader> logger, IPublishersChannelsDatabaseReader publishersChannelsReader) : IDatabaseChangeListener, IPublishersChannelsReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
     private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> publisherToChannels = [];

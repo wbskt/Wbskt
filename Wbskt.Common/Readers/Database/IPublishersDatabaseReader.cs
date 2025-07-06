@@ -2,7 +2,7 @@
 
 namespace Wbskt.Common.Readers.Database;
 
-public interface IPublishersDatabaseReader
+internal interface IPublishersDatabaseReader
 {
     IReadOnlyCollection<PublisherReadRecord> GetAll(DateTime lastModified);
 
