@@ -84,6 +84,7 @@
     <Build Include="dbo\Tables\Clients.sql" />
     <Build Include="dbo\Tables\ClientsChannels.sql" />
     <Build Include="dbo\Tables\Publishers.sql" />
+    <Build Include="dbo\Tables\EnrollmentPolicies.sql" />
     <Build Include="dbo\Stored Procedures\Users_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Users_GetBy_Id.sql" />
     <Build Include="dbo\Stored Procedures\Users_GetBy_EmailId.sql" />
@@ -102,5 +103,9 @@
     <Build Include="dbo\Stored Procedures\Servers_GetAll.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdateStatus.sql" />
     <Build Include="dbo\Stored Procedures\Servers_UpdatePublicDomainName.sql" />
+    <Build Include="dbo\Stored Procedures\EnrollmentPolicies_Insert.sql" />
+    <Build Include="dbo\Stored Procedures\EnrollmentPolicies_GetAll.sql" />
+    <Build Include="dbo\Stored Procedures\EnrollmentPolicies_IncrementUsage.sql" />
+    <Build Include="dbo\Stored Procedures\EnrollmentPolicies_CleanupExpired.sql" />
   </ItemGroup>
 </Project>

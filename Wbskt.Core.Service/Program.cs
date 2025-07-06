@@ -53,6 +53,7 @@ public static class Program
         builder.Services.AddSingleton<IPublishersService, PublishersService>();
         builder.Services.AddSingleton<IPublishersChannelsService, PublishersChannelsService>();
         builder.Services.AddSingleton<IClientsManagementService, ClientsManagementService>();
+        builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
         builder.Services.AddSingleton<IPayloadDispatcher, PayloadDispatcher>();
         builder.Services.AddSingleton<IServerInfoService, ServerInfoService>();
         builder.Services.AddSingleton<ICancellationService, CancellationService>();
