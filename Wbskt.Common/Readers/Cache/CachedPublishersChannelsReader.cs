@@ -10,8 +10,8 @@ namespace Wbskt.Common.Readers.Cache;
 public sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChannelsReader> logger, IPublishersChannelsDatabaseReader publishersChannelsReader) : IDatabaseChangeListener, IPublishersChannelsReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, List<PublisherChannelRecord>> publisherToChannels = [];
-    private readonly ConcurrentDictionary<int, List<PublisherChannelRecord>> channelToPublishers = [];
+    private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> publisherToChannels = [];
+    private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> channelToPublishers = [];
 
     public IReadOnlyCollection<int> GetChannelIdsForPublisher(int publisherId)
     {
@@ -31,6 +31,44 @@ public sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChann
             return [.. publishers.Where(pc => !pc.Deleted).Select(pc => pc.PublisherId)];
         }
         return [];
+    }
+
+    public IReadOnlyCollection<int> GetChannelIdsForPublishers(int[] publisherIds)
+    {
+        RefreshCacheIfEmpty();
+        var allChannelIds = new HashSet<int>();
+
+        foreach (var publisherId in publisherIds)
+        {
+            if (publisherToChannels.TryGetValue(publisherId, out var channels))
+            {
+                foreach (var channel in channels.Where(pc => !pc.Deleted))
+                {
+                    allChannelIds.Add(channel.ChannelId);
+                }
+            }
+        }
+
+        return allChannelIds.ToList().AsReadOnly();
+    }
+
+    public IReadOnlyCollection<int> GetPublisherIdsForChannels(int[] channelIds)
+    {
+        RefreshCacheIfEmpty();
+        var allPublisherIds = new HashSet<int>();
+
+        foreach (var channelId in channelIds)
+        {
+            if (channelToPublishers.TryGetValue(channelId, out var publishers))
+            {
+                foreach (var publisher in publishers.Where(pc => !pc.Deleted))
+                {
+                    allPublisherIds.Add(publisher.PublisherId);
+                }
+            }
+        }
+
+        return allPublisherIds.ToList().AsReadOnly();
     }
 
     public void RegisterDatabaseListener()

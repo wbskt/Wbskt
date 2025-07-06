@@ -8,7 +8,7 @@ namespace Wbskt.Common.Readers.Database.Implementation;
 
 internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannelsDatabaseReader> logger, IConnectionStringProvider connectionStringProvider) : IPublishersChannelsDatabaseReader
 {
-    public IReadOnlyCollection<PublisherChannelRecord> GetAll(DateTime lastModified)
+    public IReadOnlyCollection<PublisherChannelReadRecord> GetAll(DateTime lastModified)
     {
         logger.LogTrace("DB operation: {functionName}", nameof(GetAll));
         using var connection = new SqlConnection(connectionStringProvider.ConnectionString);
@@ -20,7 +20,7 @@ internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannel
 
         command.Parameters.Add(new SqlParameter("@LastModified", lastModified));
 
-        var result = new List<PublisherChannelRecord>();
+        var result = new List<PublisherChannelReadRecord>();
         using var reader = command.ExecuteReader();
         var mapping = GetColumnMapping(reader);
 
@@ -51,9 +51,9 @@ internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannel
         }
     }
 
-    private static PublisherChannelRecord ParseData(SqlDataReader reader, OrdinalColumnMapping mapping)
+    private static PublisherChannelReadRecord ParseData(SqlDataReader reader, OrdinalColumnMapping mapping)
     {
-        var data = new PublisherChannelRecord
+        var data = new PublisherChannelReadRecord
         {
             Deleted = reader.GetBoolean(mapping.Deleted),
             ChannelId = reader.GetInt32(mapping.ChannelId),

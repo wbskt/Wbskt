@@ -36,6 +36,7 @@ public static class DependencyInjection
         // Publishers-Channels
         serviceCollection.AddSingleton<IPublishersChannelsDatabaseReader, PublishersChannelsDatabaseReader>();
         serviceCollection.AddSingleton<IPublishersChannelsReader, CachedPublishersChannelsReader>();
+        serviceCollection.AddSingleton<IPublishersChannelsWriter, PublishersChannelsWriter>();
         serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedPublishersChannelsReader>(nameof(CachedPublishersChannelsReader));
     }
 }

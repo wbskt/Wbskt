@@ -51,6 +51,7 @@ public static class Program
         builder.Services.AddSingleton<IClientService, ClientService>();
         builder.Services.AddSingleton<IRelationService, RelationService>();
         builder.Services.AddSingleton<IChannelsService, ChannelsService>();
+        builder.Services.AddSingleton<IPublishersChannelsService, PublishersChannelsService>();
         builder.Services.AddSingleton<IPayloadDispatcher, PayloadDispatcher>();
         builder.Services.AddSingleton<IServerInfoService, ServerInfoService>();
         builder.Services.AddSingleton<ICancellationService, CancellationService>();

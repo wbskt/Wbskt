@@ -4,5 +4,5 @@ namespace Wbskt.Common.Readers.Database;
 
 public interface IPublishersChannelsDatabaseReader
 {
-    IReadOnlyCollection<PublisherChannelRecord> GetAll(DateTime lastModified);
+    IReadOnlyCollection<PublisherChannelReadRecord> GetAll(DateTime lastModified);
 } 
