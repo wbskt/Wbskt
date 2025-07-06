@@ -15,33 +15,8 @@ internal sealed class ClientsDatabaseReader(ILogger<ClientsDatabaseReader> logge
 
         using var command = connection.CreateCommand();
         command.CommandType = CommandType.StoredProcedure;
-        command.CommandText = "dbo.Clients_GetAll_LastModified";
+        command.CommandText = "dbo.Clients_GetAll";
 
-        command.Parameters.Add(new SqlParameter("@LastModified", lastModified));
-
-        var result = new List<ClientReadRecord>();
-        using var reader = command.ExecuteReader();
-        var mapping = GetColumnMapping(reader);
-
-        while (reader.Read())
-        {
-            result.Add(ParseData(reader, mapping));
-        }
-
-        return result.AsReadOnly();
-    }
-
-    public IReadOnlyCollection<ClientReadRecord> GetAllByUserId(DateTime lastModified, int userId)
-    {
-        logger.LogTrace("DB operation: {functionName}", nameof(GetAllByUserId));
-        using var connection = new SqlConnection(connectionStringProvider.ConnectionString);
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandType = CommandType.StoredProcedure;
-        command.CommandText = "dbo.Clients_GetAll_UserId_LastModified";
-
-        command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@LastModified", lastModified));
 
         var result = new List<ClientReadRecord>();
@@ -110,4 +85,4 @@ internal sealed class ClientsDatabaseReader(ILogger<ClientsDatabaseReader> logge
         public int UniqueRef;
         public int LastModified;
     }
-} 
+}

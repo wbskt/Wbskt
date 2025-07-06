@@ -15,7 +15,7 @@ internal sealed class ClientsChannelsDatabaseReader(ILogger<ClientsChannelsDatab
 
         using var command = connection.CreateCommand();
         command.CommandType = CommandType.StoredProcedure;
-        command.CommandText = "dbo.ClientsChannels_GetAll_LastModified";
+        command.CommandText = "dbo.ClientsChannels_GetAll";
 
         command.Parameters.Add(new SqlParameter("@LastModified", lastModified));
 
@@ -79,4 +79,4 @@ internal sealed class ClientsChannelsDatabaseReader(ILogger<ClientsChannelsDatab
         public int LastModified;
         public int Deleted;
     }
-} 
+}

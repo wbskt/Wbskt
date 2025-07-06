@@ -1,9 +1,9 @@
-CREATE PROCEDURE dbo.Clients_GetAll_LastModified
+CREATE PROCEDURE dbo.Clients_GetAll
     @LastModified DATETIME
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     SELECT
         Id,
         Name,
@@ -14,4 +14,4 @@ BEGIN
     FROM dbo.Clients
     WHERE LastModified >= @LastModified
     ORDER BY Id;
-END; 
+END;

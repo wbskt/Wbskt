@@ -1,9 +1,9 @@
-CREATE PROCEDURE dbo.ClientsChannels_GetAll_LastModified
+CREATE PROCEDURE dbo.ClientsChannels_GetAll
     @LastModified DATETIME
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     SELECT
         ClientId,
         ChannelId,
@@ -12,4 +12,4 @@ BEGIN
     FROM dbo.ClientsChannels
     WHERE LastModified >= @LastModified
     ORDER BY ClientId, ChannelId;
-END; 
+END;
