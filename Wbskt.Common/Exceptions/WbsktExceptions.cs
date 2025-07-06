@@ -38,6 +38,16 @@ public static class WbsktExceptions
         return new InvalidOperationException($"channel with ref: '{channelRef}' does not exists");
     }
 
+    public static InvalidOperationException ClientIdNotExists(int clientId)
+    {
+        return new InvalidOperationException($"client with id: '{clientId}' does not exists");
+    }
+
+    public static InvalidOperationException ClientRefNotExists(Guid clientRef)
+    {
+        return new InvalidOperationException($"client with ref: '{clientRef}' does not exists");
+    }
+
     public static InvalidOperationException UnknownSocketServer(int id)
     {
         return new InvalidOperationException($"the socket server with id: '{id}' is not present in the registered servers");

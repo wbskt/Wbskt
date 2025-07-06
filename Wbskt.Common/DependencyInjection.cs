@@ -38,5 +38,17 @@ public static class DependencyInjection
         serviceCollection.AddSingleton<IPublishersChannelsReader, CachedPublishersChannelsReader>();
         serviceCollection.AddSingleton<IPublishersChannelsWriter, PublishersChannelsWriter>();
         serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedPublishersChannelsReader>(nameof(CachedPublishersChannelsReader));
+
+        // Clients
+        serviceCollection.AddSingleton<IClientsWriter, ClientsWriter>();
+        serviceCollection.AddSingleton<IClientsDatabaseReader, ClientsDatabaseReader>();
+        serviceCollection.AddSingleton<IClientsReader, CachedClientsReader>();
+        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedClientsReader>(nameof(CachedClientsReader));
+
+        // Clients-Channels
+        serviceCollection.AddSingleton<IClientsChannelsDatabaseReader, ClientsChannelsDatabaseReader>();
+        serviceCollection.AddSingleton<IClientsChannelsReader, CachedClientsChannelsReader>();
+        serviceCollection.AddSingleton<IClientsChannelsWriter, ClientsChannelsWriter>();
+        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedClientsChannelsReader>(nameof(CachedClientsChannelsReader));
     }
 }

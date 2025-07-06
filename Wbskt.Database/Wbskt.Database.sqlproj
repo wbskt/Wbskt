@@ -76,6 +76,7 @@
     <Build Include="dbo\Types\IdListTableType.sql" />
     <Build Include="dbo\Types\IdIntValueTableType.sql" />
     <Build Include="dbo\Types\PublisherChannelTableType.sql" />
+    <Build Include="dbo\Types\ClientChannelTableType.sql" />
     <Build Include="dbo\Tables\Users.sql" />
     <Build Include="dbo\Tables\Servers.sql" />
     <Build Include="dbo\Tables\Channels.sql" />
@@ -91,11 +92,16 @@
     <Build Include="dbo\Stored Procedures\Clients_GetAll.sql" />
     <Build Include="dbo\Stored Procedures\Clients_GetAll_Ids.sql" />
     <Build Include="dbo\Stored Procedures\Clients_GetAll_UserId.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetAll_LastModified.sql" />
+    <Build Include="dbo\Stored Procedures\Clients_GetAll_UserId_LastModified.sql" />
     <Build Include="dbo\Stored Procedures\Clients_GetAll_ChannelId.sql" />
     <Build Include="dbo\Stored Procedures\Clients_FindBy_UniqueRef.sql" />
     <Build Include="dbo\Stored Procedures\Clients_FindBy_Name_UserId.sql" />
     <Build Include="dbo\Stored Procedures\ClientsChannels_Add.sql" />
     <Build Include="dbo\Stored Procedures\ClientsChannels_Remove.sql" />
+    <Build Include="dbo\Stored Procedures\ClientsChannels_GetAll_LastModified.sql" />
+    <Build Include="dbo\Stored Procedures\ClientsChannels_BulkUpsert.sql" />
+    <Build Include="dbo\Stored Procedures\ClientsChannels_BulkDelete.sql" />
     <Build Include="dbo\Stored Procedures\ClientsChannels_SetForClient.sql" />
     <Build Include="dbo\Stored Procedures\Channels_Insert.sql" />
     <Build Include="dbo\Stored Procedures\Channels_GetAll.sql" />

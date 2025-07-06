@@ -58,4 +58,22 @@ public static class ProviderExtensions
 
         return dataTable;
     }
+
+    public static DataTable ClientChannelPairsToDataTable(IEnumerable<ClientChannelRecord> pairs)
+    {
+        var dataTable = new DataTable();
+
+        dataTable.Columns.Add(new DataColumn("ClientId", typeof(int)) { AllowDBNull = false });
+        dataTable.Columns.Add(new DataColumn("ChannelId", typeof(int)) { AllowDBNull = false });
+
+        foreach (var pair in pairs)
+        {
+            var row = dataTable.NewRow();
+            row["ClientId"] = pair.ClientId;
+            row["ChannelId"] = pair.ChannelId;
+            dataTable.Rows.Add(row);
+        }
+
+        return dataTable;
+    }
 }
