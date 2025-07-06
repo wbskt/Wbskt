@@ -12,6 +12,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
 {
     private static DateTime _lastModified = DateTime.MinValue;
     private readonly ConcurrentDictionary<int, PublisherReadRecord> publishersCache = [];
+    private readonly ConcurrentDictionary<Guid, PublisherReadRecord> publishersByGuidCache = [];
 
     public PublisherReadRecord GetById(int id)
     {
@@ -24,6 +25,17 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
         throw WbsktExceptions.PublisherIdNotExists(id);
     }
 
+    public PublisherReadRecord GetByPublisherRef(Guid publisherRef)
+    {
+        RefreshCacheIfEmpty();
+        if (publishersByGuidCache.TryGetValue(publisherRef, out var record))
+        {
+            return record;
+        }
+
+        throw WbsktExceptions.PublisherRefNotExists(publisherRef);
+    }
+
     public IReadOnlyCollection<PublisherReadRecord> GetAll()
     {
         RefreshCacheIfEmpty();
@@ -34,6 +46,38 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
     {
         RefreshCacheIfEmpty();
         return [.. publishersCache.Values.Where(c => c.UserId == userId)];
+    }
+
+    public IReadOnlyCollection<PublisherReadRecord> GetAllByIds(int[] ids)
+    {
+        RefreshCacheIfEmpty();
+        var result = new List<PublisherReadRecord>();
+        
+        foreach (var id in ids)
+        {
+            if (publishersCache.TryGetValue(id, out var record))
+            {
+                result.Add(record);
+            }
+        }
+        
+        return result.AsReadOnly();
+    }
+
+    public IReadOnlyCollection<PublisherReadRecord> GetAllByPublisherRefs(Guid[] publisherRefs)
+    {
+        RefreshCacheIfEmpty();
+        var result = new List<PublisherReadRecord>();
+        
+        foreach (var publisherRef in publisherRefs)
+        {
+            if (publishersByGuidCache.TryGetValue(publisherRef, out var record))
+            {
+                result.Add(record);
+            }
+        }
+        
+        return result.AsReadOnly();
     }
 
     public void RegisterDatabaseListener()
@@ -73,6 +117,9 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
             {
                 publishersCache[record.Id] = record;
             }
+
+            // Update GUID cache
+            publishersByGuidCache[record.PublisherRef] = record;
 
             if (record.LastModified > _lastModified)
             {

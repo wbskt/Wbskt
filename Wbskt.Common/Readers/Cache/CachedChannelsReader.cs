@@ -12,6 +12,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
 {
     private static DateTime _lastModified = DateTime.MinValue;
     private readonly ConcurrentDictionary<int, ChannelReadRecord> channelsCache = [];
+    private readonly ConcurrentDictionary<Guid, ChannelReadRecord> channelsByGuidCache = [];
 
     public ChannelReadRecord GetByChannelId(int channelId)
     {
@@ -22,6 +23,17 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         }
 
         throw WbsktExceptions.ChannelIdNotExists(channelId);
+    }
+
+    public ChannelReadRecord GetByChannelSubscriberRef(Guid subscriberRef)
+    {
+        RefreshCacheIfEmpty();
+        if (channelsByGuidCache.TryGetValue(subscriberRef, out var record))
+        {
+            return record;
+        }
+
+        throw WbsktExceptions.ChannelSubscriberIdNotExists(subscriberRef);
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAll()
@@ -36,16 +48,36 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         return [.. channelsCache.Values.Where(c => c.UserId == userId)];
     }
 
-    public ChannelReadRecord GetByChannelSubscriberRef(Guid subscriberRef)
+    public IReadOnlyCollection<ChannelReadRecord> GetAllByIds(int[] ids)
     {
         RefreshCacheIfEmpty();
-        return channelsCache.Values.FirstOrDefault(c => c.SubscriptionRef == subscriberRef) ?? throw WbsktExceptions.ChannelSubscriberIdNotExists(subscriberRef);
+        var result = new List<ChannelReadRecord>();
+        
+        foreach (var id in ids)
+        {
+            if (channelsCache.TryGetValue(id, out var record))
+            {
+                result.Add(record);
+            }
+        }
+        
+        return result.AsReadOnly();
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAllBySubscriberRefs(Guid[] subscriberRefs)
     {
         RefreshCacheIfEmpty();
-        return [.. channelsCache.Values.Where(c => subscriberRefs.Contains(c.SubscriptionRef))];
+        var result = new List<ChannelReadRecord>();
+        
+        foreach (var subscriberRef in subscriberRefs)
+        {
+            if (channelsByGuidCache.TryGetValue(subscriberRef, out var record))
+            {
+                result.Add(record);
+            }
+        }
+        
+        return result.AsReadOnly();
     }
 
     public void RegisterDatabaseListener()
@@ -85,6 +117,9 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
             {
                 channelsCache[record.Id] = record;
             }
+
+            // Update GUID cache
+            channelsByGuidCache[record.SubscriptionRef] = record;
 
             if (record.LastModified > _lastModified)
             {

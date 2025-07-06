@@ -25,6 +25,58 @@ public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter ch
         return channelsReader.GetAllByUserId(userId);
     }
 
+    public int GetChannelIdBySubscriptionRef(Guid subscriptionRef)
+    {
+        var channel = channelsReader.GetByChannelSubscriberRef(subscriptionRef);
+        return channel.Id;
+    }
+
+    public Guid GetChannelSubscriptionRefById(int channelId)
+    {
+        var channel = channelsReader.GetByChannelId(channelId);
+        return channel.SubscriptionRef;
+    }
+
+    public IReadOnlyCollection<int> GetChannelIdsBySubscriptionRefs(Guid[] subscriptionRefs)
+    {
+        var channelIds = new List<int>();
+        
+        foreach (var subscriptionRef in subscriptionRefs)
+        {
+            try
+            {
+                var channelId = GetChannelIdBySubscriptionRef(subscriptionRef);
+                channelIds.Add(channelId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Channel with subscription ref '{SubscriptionRef}' not found", subscriptionRef);
+            }
+        }
+        
+        return channelIds.AsReadOnly();
+    }
+
+    public IReadOnlyCollection<Guid> GetChannelSubscriptionRefsByIds(int[] channelIds)
+    {
+        var subscriptionRefs = new List<Guid>();
+        
+        foreach (var channelId in channelIds)
+        {
+            try
+            {
+                var subscriptionRef = GetChannelSubscriptionRefById(channelId);
+                subscriptionRefs.Add(subscriptionRef);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Channel with ID '{ChannelId}' not found", channelId);
+            }
+        }
+        
+        return subscriptionRefs.AsReadOnly();
+    }
+
     private bool CheckIfUserHasSameChannelName(int userId, string channelName)
     {
         var channels = GetAllForUser(userId);

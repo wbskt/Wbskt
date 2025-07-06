@@ -18,6 +18,11 @@ public static class WbsktExceptions
         return new InvalidOperationException($"publisher with id: '{publisherId}' does not exists");
     }
 
+    public static InvalidOperationException PublisherRefNotExists(Guid publisherRef)
+    {
+        return new InvalidOperationException($"publisher with ref: '{publisherRef}' does not exists");
+    }
+
     public static InvalidOperationException ChannelIdNotExists(int channelId)
     {
         return new InvalidOperationException($"channel with id: '{channelId}' does not exists");
