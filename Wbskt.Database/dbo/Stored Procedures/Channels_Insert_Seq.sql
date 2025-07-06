@@ -21,7 +21,7 @@ BEGIN
          @PublisherRef      = @SubscriptionRef,
          @Name              = @Name;
 
-    EXEC dbo.PublishersChannels_Insert
+    EXEC dbo.PublishersChannels_Upsert
          @ChannelId         = @Id,
          @PublisherId       = @PublisherId
 

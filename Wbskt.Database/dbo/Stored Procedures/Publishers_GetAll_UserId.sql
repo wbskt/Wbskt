@@ -1,4 +1,4 @@
-﻿CREATE PROCEDURE dbo.Channels_GetAll_UserId
+﻿CREATE PROCEDURE dbo.Publishers_GetAll_UserId
 @LastModified   DATETIME,
 @UserId         INT
 AS
