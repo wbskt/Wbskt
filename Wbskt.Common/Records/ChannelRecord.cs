@@ -26,3 +26,9 @@ public record ChannelReadRecord : ChannelRecord
     [JsonIgnore]
     public DateTime LastModified { get; init; }
 }
+
+public record ChannelPublishers
+{
+    public Guid ChannelRef { get; set; }
+    public Guid[] PublisherRefs { get; set; } = [];
+}

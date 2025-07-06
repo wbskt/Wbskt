@@ -4,7 +4,7 @@ namespace Wbskt.Common.Readers;
 
 public interface IChannelsReader
 {
-    ChannelReadRecord GetByChannelId(int channelId);
+    ChannelReadRecord GetById(int channelId);
 
     IReadOnlyCollection<ChannelReadRecord> GetAll();
 
@@ -12,7 +12,7 @@ public interface IChannelsReader
 
     IReadOnlyCollection<ChannelReadRecord> GetAllByIds(int[] ids);
 
-    IReadOnlyCollection<ChannelReadRecord> GetAllBySubscriberRefs(Guid[] subscriberRefs);
+    IReadOnlyCollection<ChannelReadRecord> GetAllByRefs(Guid[] subscriberRefs);
 
-    ChannelReadRecord GetByChannelSubscriberRef(Guid subscriberRef);
+    ChannelReadRecord GetByRef(Guid subscriberRef);
 }

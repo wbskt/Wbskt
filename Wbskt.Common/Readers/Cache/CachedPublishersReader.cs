@@ -25,7 +25,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
         throw WbsktExceptions.PublisherIdNotExists(id);
     }
 
-    public PublisherReadRecord GetByPublisherRef(Guid publisherRef)
+    public PublisherReadRecord GetByRef(Guid publisherRef)
     {
         RefreshCacheIfEmpty();
         if (publishersByGuidCache.TryGetValue(publisherRef, out var record))
@@ -52,7 +52,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
     {
         RefreshCacheIfEmpty();
         var result = new List<PublisherReadRecord>();
-        
+
         foreach (var id in ids)
         {
             if (publishersCache.TryGetValue(id, out var record))
@@ -60,15 +60,15 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
                 result.Add(record);
             }
         }
-        
+
         return result.AsReadOnly();
     }
 
-    public IReadOnlyCollection<PublisherReadRecord> GetAllByPublisherRefs(Guid[] publisherRefs)
+    public IReadOnlyCollection<PublisherReadRecord> GetAllByRefs(Guid[] publisherRefs)
     {
         RefreshCacheIfEmpty();
         var result = new List<PublisherReadRecord>();
-        
+
         foreach (var publisherRef in publisherRefs)
         {
             if (publishersByGuidCache.TryGetValue(publisherRef, out var record))
@@ -76,7 +76,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
                 result.Add(record);
             }
         }
-        
+
         return result.AsReadOnly();
     }
 
@@ -109,16 +109,8 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
         var latestPublishers = publishersReader.GetAll(_lastModified);
         foreach (var record in latestPublishers)
         {
-            if (publishersCache.TryGetValue(record.Id, out _))
-            {
-                publishersCache[record.Id] = record;
-            }
-            else
-            {
-                publishersCache[record.Id] = record;
-            }
+            publishersCache[record.Id] = record;
 
-            // Update GUID cache
             publishersByGuidCache[record.PublisherRef] = record;
 
             if (record.LastModified > _lastModified)

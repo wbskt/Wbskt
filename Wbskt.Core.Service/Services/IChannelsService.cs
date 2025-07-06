@@ -8,9 +8,9 @@ public interface IChannelsService
 
     IReadOnlyCollection<ChannelReadRecord> GetAllForUser(int userId);
 
-    int GetChannelIdBySubscriptionRef(Guid subscriptionRef);
+    ChannelReadRecord GetByRef(Guid subscriptionRef);
 
-    Guid GetChannelSubscriptionRefById(int channelId);
+    ChannelReadRecord GetById(int channelId);
 
     IReadOnlyCollection<int> GetChannelIdsBySubscriptionRefs(Guid[] subscriptionRefs);
 

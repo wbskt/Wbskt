@@ -20,3 +20,9 @@ public record PublisherReadRecord : PublisherRecord
     [JsonIgnore]
     public DateTime LastModified { get; init; }
 }
+
+public record PublisherChannels
+{
+    public Guid PublisherRef { get; set; }
+    public Guid[] ChannelRefs { get; set; } = [];
+}

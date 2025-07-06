@@ -25,55 +25,55 @@ public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter ch
         return channelsReader.GetAllByUserId(userId);
     }
 
-    public int GetChannelIdBySubscriptionRef(Guid subscriptionRef)
+    public ChannelReadRecord GetByRef(Guid subscriptionRef)
     {
-        var channel = channelsReader.GetByChannelSubscriberRef(subscriptionRef);
-        return channel.Id;
+        var channel = channelsReader.GetByRef(subscriptionRef);
+        return channel;
     }
 
-    public Guid GetChannelSubscriptionRefById(int channelId)
+    public ChannelReadRecord GetById(int channelId)
     {
-        var channel = channelsReader.GetByChannelId(channelId);
-        return channel.SubscriptionRef;
+        var channel = channelsReader.GetById(channelId);
+        return channel;
     }
 
     public IReadOnlyCollection<int> GetChannelIdsBySubscriptionRefs(Guid[] subscriptionRefs)
     {
         var channelIds = new List<int>();
-        
+
         foreach (var subscriptionRef in subscriptionRefs)
         {
             try
             {
-                var channelId = GetChannelIdBySubscriptionRef(subscriptionRef);
-                channelIds.Add(channelId);
+                var channel = GetByRef(subscriptionRef);
+                channelIds.Add(channel.Id);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Channel with subscription ref '{SubscriptionRef}' not found", subscriptionRef);
             }
         }
-        
+
         return channelIds.AsReadOnly();
     }
 
     public IReadOnlyCollection<Guid> GetChannelSubscriptionRefsByIds(int[] channelIds)
     {
         var subscriptionRefs = new List<Guid>();
-        
+
         foreach (var channelId in channelIds)
         {
             try
             {
-                var subscriptionRef = GetChannelSubscriptionRefById(channelId);
-                subscriptionRefs.Add(subscriptionRef);
+                var channel = GetById(channelId);
+                subscriptionRefs.Add(channel.SubscriptionRef);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Channel with ID '{ChannelId}' not found", channelId);
             }
         }
-        
+
         return subscriptionRefs.AsReadOnly();
     }
 

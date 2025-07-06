@@ -9,11 +9,11 @@ namespace Wbskt.Core.Service.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ChannelsController(ILogger<ChannelsController> logger, IChannelsService channelsService, IPublishersChannelsService publishersChannelsService, IPublishersService publishersService) : ControllerBase
+public class ChannelsController(ILogger<ChannelsController> logger, IChannelsService channelsService, IPublishersChannelsService publishersChannelsService) : ControllerBase
 {
     [HttpGet]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IReadOnlyCollection<ChannelRecord> GetAll()
+    public IEnumerable<ChannelRecord> GetAll()
     {
         var userId = User.GetUserId();
         var details = channelsService.GetAllForUser(userId);
@@ -30,47 +30,49 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
         return channelRecord;
     }
 
-    [HttpGet("{subscriptionRef:guid}/publishers")]
+    [HttpGet("{channelRef:guid}/publishers")]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IActionResult GetPublishersForChannel(Guid subscriptionRef)
+    public IEnumerable<PublisherRecord> GetPublishersForChannel(Guid channelRef)
     {
-        var channelId = channelsService.GetChannelIdBySubscriptionRef(subscriptionRef);
-        var publisherIds = publishersChannelsService.GetPublisherIdsForChannel(channelId);
-        var publisherRefs = publishersService.GetPublisherRefsByIds(publisherIds.ToArray());
-        logger.LogDebug("retrieved {count} publishers for channel {subscriptionRef}", publisherRefs.Count, subscriptionRef);
-        return Ok(publisherRefs);
+        var publishers = publishersChannelsService.GetPublishersForChannelRef(channelRef);
+        logger.LogDebug("retrieved {count} publishers for channel {subscriptionRef}", publishers.Count, channelRef);
+        return publishers;
     }
 
-    [HttpPost("{subscriptionRef:guid}/publishers")]
+    [HttpPost("{channelRef:guid}/publishers")]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IActionResult AddPublishersToChannel(Guid subscriptionRef, [FromBody] Guid[] publisherRefs)
+    public IActionResult AddPublishersToChannel(Guid channelRef, [FromBody] Guid[] publisherRefs)
     {
-        var channelId = channelsService.GetChannelIdBySubscriptionRef(subscriptionRef);
-        var publisherIds = publishersService.GetPublisherIdsByRefs(publisherRefs);
-        publishersChannelsService.AddPublishersToChannel(publisherIds.ToArray(), channelId);
-        logger.LogDebug("added {count} publishers to channel {subscriptionRef}", publisherRefs.Length, subscriptionRef);
-        return Ok();
+        var success = publishersChannelsService.AddPublishersToChannel(publisherRefs, channelRef);
+        if (success)
+        {
+            logger.LogDebug("added {count} publishers to channel {subscriptionRef}", publisherRefs.Length, channelRef);
+            return Ok();
+        }
+
+        return BadRequest("could not add publishers to the given channel");
     }
 
-    [HttpDelete("{subscriptionRef:guid}/publishers")]
+    [HttpDelete("{channelRef:guid}/publishers")]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IActionResult RemovePublishersFromChannel(Guid subscriptionRef, [FromBody] Guid[] publisherRefs)
+    public IActionResult RemovePublishersFromChannel(Guid channelRef, [FromBody] Guid[] publisherRefs)
     {
-        var channelId = channelsService.GetChannelIdBySubscriptionRef(subscriptionRef);
-        var publisherIds = publishersService.GetPublisherIdsByRefs(publisherRefs);
-        publishersChannelsService.RemovePublishersFromChannel(publisherIds.ToArray(), channelId);
-        logger.LogDebug("removed {count} publishers from channel {subscriptionRef}", publisherRefs.Length, subscriptionRef);
-        return Ok();
+        var success = publishersChannelsService.RemovePublishersFromChannel(publisherRefs, channelRef);
+
+        if (success)
+        {
+            logger.LogDebug("removed {count} publishers from channel {subscriptionRef}", publisherRefs.Length, channelRef);
+            return Ok();
+        }
+
+        return BadRequest("could not remove publishers from channel");
     }
 
     [HttpPost("publishers")]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IActionResult GetPublishersForChannels([FromBody] Guid[] subscriptionRefs)
+    public IEnumerable<ChannelPublishers> GetPublishersForChannels([FromBody] Guid[] channelRefs)
     {
-        var channelIds = channelsService.GetChannelIdsBySubscriptionRefs(subscriptionRefs);
-        var publisherIds = publishersChannelsService.GetPublisherIdsForChannels(channelIds.ToArray());
-        var publisherRefs = publishersService.GetPublisherRefsByIds(publisherIds.ToArray());
-        logger.LogDebug("retrieved {count} unique publishers for {channelCount} channels", publisherRefs.Count, subscriptionRefs.Length);
-        return Ok(publisherRefs);
+        var publishers = publishersChannelsService.GetPublishersForChannels(channelRefs);
+        return publishers;
     }
 }

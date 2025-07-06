@@ -7,7 +7,7 @@ namespace Wbskt.Core.Service.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class PublishersController(ILogger<PublishersController> logger, IPublishersService publishersService, IPublishersChannelsService publishersChannelsService, IChannelsService channelsService) : ControllerBase
+public class PublishersController(ILogger<PublishersController> logger, IPublishersService publishersService, IPublishersChannelsService publishersChannelsService) : ControllerBase
 {
     [HttpGet]
     public IReadOnlyCollection<PublisherRecord> GetAll()
@@ -27,20 +27,16 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
     }
 
     [HttpGet("{publisherRef:guid}/channels")]
-    public IActionResult GetChannelsForPublisher(Guid publisherRef)
+    public IEnumerable<ChannelRecord> GetChannelsForPublisher(Guid publisherRef)
     {
-        var publisherId = publishersService.GetPublisherIdByRef(publisherRef);
-        var channelIds = publishersChannelsService.GetChannelIdsForPublisher(publisherId);
-        var channelRefs = channelsService.GetChannelSubscriptionRefsByIds(channelIds.ToArray());
-        logger.LogDebug("retrieved {count} channels for publisher {publisherRef}", channelRefs.Count, publisherRef);
-        return Ok(channelRefs);
+        var channels = publishersChannelsService.GetChannelsForPublisherRef(publisherRef);
+        logger.LogDebug("retrieved {count} channels for publisher {publisherRef}", channels.Count, publisherRef);
+        return channels;
     }
 
     [HttpPost("{publisherRef:guid}/channels")]
     public IActionResult AddChannelsToPublisher(Guid publisherRef, [FromBody] Guid[] channelRefs)
     {
-        var publisherId = publishersService.GetPublisherIdByRef(publisherRef);
-        var channelIds = channelsService.GetChannelIdsBySubscriptionRefs(channelRefs);
         publishersChannelsService.AddChannelsToPublisher(channelIds.ToArray(), publisherId);
         logger.LogDebug("added {count} channels to publisher {publisherRef}", channelRefs.Length, publisherRef);
         return Ok();
