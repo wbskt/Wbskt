@@ -9,7 +9,10 @@
     CONSTRAINT [Unq_Channels_ChannelRef]   UNIQUE      NONCLUSTERED    ([ChannelRef]  ASC),
     CONSTRAINT [Unq_Channels_UserId_Name]       UNIQUE      NONCLUSTERED    ([UserId]           ASC, [Name] ASC)
 );
+GO
 
 -- Additional indexes for better performance
 CREATE NONCLUSTERED INDEX [IX_Channels_UserId] ON [dbo].[Channels] ([UserId] ASC);
+GO
+
 CREATE NONCLUSTERED INDEX [IX_Channels_LastModified] ON [dbo].[Channels] ([LastModified] ASC);

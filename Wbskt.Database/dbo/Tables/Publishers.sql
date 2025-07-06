@@ -9,7 +9,10 @@ CREATE TABLE [dbo].[Publishers] (
     CONSTRAINT [Unq_Publishers_PublisherRef]    UNIQUE      NONCLUSTERED    ([PublisherRef] ASC),
     CONSTRAINT [Unq_Publishers_UserId_Name]     UNIQUE      NONCLUSTERED    ([UserId]       ASC,    [Name]  ASC)
 );
+GO
 
 -- Additional indexes for better performance
 CREATE NONCLUSTERED INDEX [IX_Publishers_UserId] ON [dbo].[Publishers] ([UserId] ASC);
+GO
+
 CREATE NONCLUSTERED INDEX [IX_Publishers_LastModified] ON [dbo].[Publishers] ([LastModified] ASC);

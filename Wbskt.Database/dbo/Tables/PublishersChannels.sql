@@ -7,8 +7,13 @@ CREATE TABLE [dbo].[PublishersChannels] (
     CONSTRAINT [Fk_PublishersChannels_Publishers]   FOREIGN KEY             ([PublisherId]) REFERENCES [dbo].[Publishers]   ([Id]),
     CONSTRAINT [Fk_PublishersChannels_Channels]     FOREIGN KEY             ([ChannelId])   REFERENCES [dbo].[Channels]     ([Id])
 );
+GO
 
 -- Additional indexes for better performance
 CREATE NONCLUSTERED INDEX [IX_PublishersChannels_PublisherId_Deleted] ON [dbo].[PublishersChannels] ([PublisherId] ASC, [Deleted] ASC);
+GO
+
 CREATE NONCLUSTERED INDEX [IX_PublishersChannels_ChannelId_Deleted] ON [dbo].[PublishersChannels] ([ChannelId] ASC, [Deleted] ASC);
+GO
+
 CREATE NONCLUSTERED INDEX [IX_PublishersChannels_LastModified] ON [dbo].[PublishersChannels] ([LastModified] ASC);

@@ -8,6 +8,7 @@
     CONSTRAINT [Pk_Users]           PRIMARY KEY     CLUSTERED       ([Id]       ASC),
     CONSTRAINT [Unq_Users_EmailId]  UNIQUE          NONCLUSTERED    ([EmailId]  ASC)
 );
+GO
 
 -- Additional indexes for better performance
 CREATE NONCLUSTERED INDEX [IX_Users_LastModified] ON [dbo].[Users] ([LastModified] ASC);
