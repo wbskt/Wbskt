@@ -7,9 +7,9 @@ public record PublisherRecord
     [JsonIgnore]
     public int UserId { get; set; }
 
-    public Guid PublisherRef { get; set; }
+    public Guid PublisherRef { get; init; }
 
-    public required string Name { get; set; }
+    public required string Name { get; init; }
 }
 
 public record PublisherReadRecord : PublisherRecord

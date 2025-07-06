@@ -10,8 +10,6 @@ public interface IChannelsReader
 
     IReadOnlyCollection<ChannelReadRecord> GetAllByUserId(int userId);
 
-    IReadOnlyCollection<ChannelReadRecord> GetAllByPublisherRef(Guid publisherRef);
-
     IReadOnlyCollection<ChannelReadRecord> GetAllBySubscriberRefs(Guid[] subscriberRefs);
 
     ChannelReadRecord GetByChannelSubscriberRef(Guid subscriberRef);

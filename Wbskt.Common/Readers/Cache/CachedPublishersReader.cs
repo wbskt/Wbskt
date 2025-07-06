@@ -62,8 +62,8 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
 
     private void RefreshCache()
     {
-        var latestChannels = publishersReader.GetAll(_lastModified);
-        foreach (var record in latestChannels)
+        var latestPublishers = publishersReader.GetAll(_lastModified);
+        foreach (var record in latestPublishers)
         {
             if (publishersCache.TryGetValue(record.Id, out _))
             {

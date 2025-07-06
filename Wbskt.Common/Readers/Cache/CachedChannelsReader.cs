@@ -36,12 +36,6 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         return [.. channelsCache.Values.Where(c => c.UserId == userId)];
     }
 
-    public IReadOnlyCollection<ChannelReadRecord> GetAllByPublisherRef(Guid publisherRef)
-    {
-        RefreshCacheIfEmpty();
-        throw new NotImplementedException();
-    }
-
     public ChannelReadRecord GetByChannelSubscriberRef(Guid subscriberRef)
     {
         RefreshCacheIfEmpty();

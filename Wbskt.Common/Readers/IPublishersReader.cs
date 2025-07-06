@@ -2,7 +2,7 @@
 
 namespace Wbskt.Common.Readers;
 
-internal interface IPublishersReader
+public interface IPublishersReader
 {
     PublisherReadRecord GetById(int id);
     IReadOnlyCollection<PublisherReadRecord> GetAll();

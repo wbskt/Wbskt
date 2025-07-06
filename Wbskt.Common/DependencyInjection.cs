@@ -21,16 +21,21 @@ public static class DependencyInjection
         serviceCollection.AddSingleton<ICachedServerInfoProvider, CachedServerInfoProvider>();
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();
 
-        // Channel
+        // Channels
         serviceCollection.AddSingleton<IChannelsWriter, ChannelsWriter>();
         serviceCollection.AddSingleton<IChannelsReader, CachedChannelsReader>();
         serviceCollection.AddSingleton<IChannelsDatabaseReader, ChannelsDatabaseReader>();
         serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedChannelsReader>(nameof(CachedChannelsReader));
 
-        // Publisher
+        // Publishers
         serviceCollection.AddSingleton<IPublishersWriter, PublishersWriter>();
         serviceCollection.AddSingleton<IPublishersDatabaseReader, PublishersDatabaseReader>();
-        serviceCollection.AddSingleton<IPublishersDatabaseReader, PublishersDatabaseReader>();
+        serviceCollection.AddSingleton<IPublishersReader, CachedPublishersReader>();
         serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedPublishersReader>(nameof(CachedPublishersReader));
+
+        // Publishers-Channels
+        serviceCollection.AddSingleton<IPublishersChannelsDatabaseReader, PublishersChannelsDatabaseReader>();
+        serviceCollection.AddSingleton<IPublishersChannelsReader, CachedPublishersChannelsReader>();
+        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedPublishersChannelsReader>(nameof(CachedPublishersChannelsReader));
     }
 }
