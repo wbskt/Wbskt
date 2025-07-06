@@ -26,7 +26,7 @@ BEGIN
     WHERE Id = @Id;
     
     -- Check if policy should be deactivated
-    IF @PolicyType IN (2, 3) AND @MaxClients IS NOT NULL
+    IF @PolicyType IN (2, 4) AND @MaxClients IS NOT NULL
     BEGIN
         IF (@CurrentUsage + 1) >= @MaxClients
         BEGIN

@@ -18,11 +18,17 @@ The enrollment policies feature allows users to create enrollment policies that 
 - **Usage**: Limited to the specified number of client registrations
 - **Example**: A policy that allows up to 10 clients to register
 
-### 3. Single Use
-- **Description**: Policies that can only be used once
+### 3. Unlimited
+- **Description**: Policies with no restrictions on time or number of clients
 - **Required Fields**: `name`, `policyType: 3`
-- **Usage**: Limited to exactly 1 client registration
-- **Example**: A policy that allows only one client to register
+- **Usage**: No limits on time or client registrations
+- **Example**: A policy for permanent team access
+
+### 4. Time and Count
+- **Description**: Policies limited by both time and number of clients
+- **Required Fields**: `name`, `policyType: 4`, `expiryDate`, `maxClients`
+- **Usage**: Limited by both expiry date and maximum client count
+- **Example**: A conference policy that expires in 24 hours and allows max 50 participants
 
 ## API Endpoints
 
@@ -158,6 +164,24 @@ CREATE TABLE [dbo].[EnrollmentPolicies] (
 }
 ```
 
+### Creating an Unlimited Policy
+```json
+{
+  "name": "Permanent Team Access",
+  "policyType": 3
+}
+```
+
+### Creating a Time and Count Policy
+```json
+{
+  "name": "Conference Access",
+  "policyType": 4,
+  "expiryDate": "2025-01-15T18:00:00Z",
+  "maxClients": 50
+}
+```
+
 ### Creating a Policy with Custom GUID
 ```json
 {
@@ -180,10 +204,11 @@ CREATE TABLE [dbo].[EnrollmentPolicies] (
 
 1. **Time Limited**: Must have future expiry date
 2. **Number of Clients**: Must have maxClients > 0
-3. **Single Use**: Automatically sets maxClients to 1
-4. **GUID Generation**: Automatically generates unique GUID references if not provided
-5. **Usage Tracking**: Automatically increments usage and deactivates when limits are reached
-6. **Client Registration**: Automatically assigns the client to the policy owner's user account
+3. **Unlimited**: No restrictions required
+4. **Time and Count**: Must have future expiry date AND maxClients > 0
+5. **GUID Generation**: Automatically generates unique GUID references if not provided
+6. **Usage Tracking**: Automatically increments usage and deactivates when limits are reached
+7. **Client Registration**: Automatically assigns the client to the policy owner's user account
 
 ## Architecture
 
@@ -205,4 +230,4 @@ CREATE TABLE [dbo].[EnrollmentPolicies] (
 - Users can only create and view their own policies
 - Policies are validated server-side before allowing client registration
 - Expired policies are automatically deactivated
-- Client registration automatically uses the policy owner's user ID 
+- Client registration automatically uses the policy owner's user ID

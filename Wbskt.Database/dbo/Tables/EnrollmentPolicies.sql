@@ -3,9 +3,9 @@ CREATE TABLE [dbo].[EnrollmentPolicies] (
     [UserId]            INT                 NOT NULL,
     [PolicyRef]         UNIQUEIDENTIFIER    NOT NULL,
     [Name]              VARCHAR (100)       NOT NULL,
-    [PolicyType]        INT                 NOT NULL, -- 1: TimeLimited, 2: NumberOfClients, 3: SingleUse
-    [MaxClients]        INT                 NULL,     -- For NumberOfClients and SingleUse policies
-    [ExpiryDate]        DATETIME            NULL,     -- For TimeLimited policies
+    [PolicyType]        INT                 NOT NULL, -- 1: TimeLimited, 2: NumberOfClients, 3: Unlimited, 4: TimeAndCount
+    [MaxClients]        INT                 NULL,     -- For NumberOfClients and TimeAndCount policies
+    [ExpiryDate]        DATETIME            NULL,     -- For TimeLimited and TimeAndCount policies
     [CurrentUsage]      INT                 NOT NULL DEFAULT 0,
     [IsActive]          BIT                 NOT NULL DEFAULT 1,
     [LastModified]      DATETIME            DEFAULT CURRENT_TIMESTAMP,
@@ -13,7 +13,7 @@ CREATE TABLE [dbo].[EnrollmentPolicies] (
     CONSTRAINT [Unq_EnrollmentPolicies_PolicyRef] UNIQUE      NONCLUSTERED    ([PolicyRef] ASC),
     CONSTRAINT [Unq_EnrollmentPolicies_UserId_Name] UNIQUE NONCLUSTERED ([UserId] ASC, [Name] ASC),
     CONSTRAINT [Fk_EnrollmentPolicies_Users] FOREIGN KEY ([UserId]) REFERENCES [dbo].[Users] ([Id]),
-    CONSTRAINT [Chk_EnrollmentPolicies_PolicyType] CHECK ([PolicyType] IN (1, 2, 3)),
+    CONSTRAINT [Chk_EnrollmentPolicies_PolicyType] CHECK ([PolicyType] IN (1, 2, 3, 4)),
     CONSTRAINT [Chk_EnrollmentPolicies_MaxClients] CHECK ([MaxClients] IS NULL OR [MaxClients] > 0),
     CONSTRAINT [Chk_EnrollmentPolicies_CurrentUsage] CHECK ([CurrentUsage] >= 0)
 );

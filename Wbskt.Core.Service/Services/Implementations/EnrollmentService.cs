@@ -43,7 +43,22 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 break;
 
             case EnrollmentPolicyType.NumberOfClients:
-            case EnrollmentPolicyType.SingleUse:
+                if (policy.MaxClients.HasValue && policy.CurrentUsage >= policy.MaxClients.Value)
+                {
+                    return false;
+                }
+                break;
+
+            case EnrollmentPolicyType.Unlimited:
+                // No restrictions - always valid
+                break;
+
+            case EnrollmentPolicyType.TimeAndCount:
+                // Check both time and count limits
+                if (policy.ExpiryDate.HasValue && DateTime.UtcNow > policy.ExpiryDate.Value)
+                {
+                    return false;
+                }
                 if (policy.MaxClients.HasValue && policy.CurrentUsage >= policy.MaxClients.Value)
                 {
                     return false;
@@ -53,8 +68,8 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
 
         policyUserId = policy.UserId;
 
-        // Increment usage for NumberOfClients and SingleUse policies
-        if (policy.PolicyType is EnrollmentPolicyType.NumberOfClients or EnrollmentPolicyType.SingleUse)
+        // Increment usage for NumberOfClients and TimeAndCount policies
+        if (policy.PolicyType is EnrollmentPolicyType.NumberOfClients or EnrollmentPolicyType.TimeAndCount)
         {
             policiesWriter.IncrementUsage(policy.Id);
         }
@@ -89,10 +104,22 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 }
                 break;
 
-            case EnrollmentPolicyType.SingleUse:
-                if (record.MaxClients.HasValue && record.MaxClients.Value != 1)
+            case EnrollmentPolicyType.Unlimited:
+                // No restrictions - always valid
+                break;
+
+            case EnrollmentPolicyType.TimeAndCount:
+                if (!record.ExpiryDate.HasValue)
                 {
-                    throw new ArgumentException("MaxClients must be 1 for SingleUse policies", nameof(record));
+                    throw new ArgumentException("Expiry date is required for TimeAndCount policies", nameof(record));
+                }
+                if (record.ExpiryDate.Value <= DateTime.UtcNow)
+                {
+                    throw new ArgumentException("Expiry date must be in the future", nameof(record));
+                }
+                if (record.MaxClients is not > 0)
+                {
+                    throw new ArgumentException("MaxClients must be greater than 0 for TimeAndCount policies", nameof(record));
                 }
                 break;
 

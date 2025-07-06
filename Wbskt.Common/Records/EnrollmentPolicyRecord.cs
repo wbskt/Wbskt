@@ -18,9 +18,14 @@ public enum EnrollmentPolicyType
     NumberOfClients = 2,
 
     /// <summary>
-    /// Single-use policy (max 1 client).
+    /// Unlimited policy with no restrictions.
     /// </summary>
-    SingleUse = 3
+    Unlimited = 3,
+
+    /// <summary>
+    /// Policy limited by both time and number of clients.
+    /// </summary>
+    TimeAndCount = 4
 }
 
 /// <summary>
@@ -50,12 +55,12 @@ public record EnrollmentPolicyRecord
     public required EnrollmentPolicyType PolicyType { get; init; }
 
     /// <summary>
-    /// Maximum number of clients for NumberOfClients and SingleUse policies.
+    /// Maximum number of clients for NumberOfClients and TimeAndCount policies.
     /// </summary>
     public int? MaxClients { get; init; }
 
     /// <summary>
-    /// Expiry date for TimeLimited policies.
+    /// Expiry date for TimeLimited and TimeAndCount policies.
     /// </summary>
     public DateTime? ExpiryDate { get; init; }
 }
