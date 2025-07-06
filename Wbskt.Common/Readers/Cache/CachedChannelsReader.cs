@@ -98,7 +98,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
 
     private void RefreshCacheIfEmpty()
     {
-        if (channelsCache.IsEmpty)
+        if (channelsCache.IsEmpty || channelsByGuidCache.IsEmpty)
         {
             RefreshCache();
         }

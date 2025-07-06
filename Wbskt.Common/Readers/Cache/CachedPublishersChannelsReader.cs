@@ -89,7 +89,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
 
     private void RefreshCacheIfEmpty()
     {
-        if (publisherToChannels.IsEmpty && channelToPublishers.IsEmpty)
+        if (publisherToChannels.IsEmpty || channelToPublishers.IsEmpty)
         {
             RefreshCache();
         }

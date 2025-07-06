@@ -54,7 +54,7 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
 
     private void RefreshCacheIfEmpty()
     {
-        if (policiesCache.IsEmpty)
+        if (policiesCache.IsEmpty || policiesByPolicyRefCache.IsEmpty)
         {
             RefreshCache();
         }
@@ -62,16 +62,29 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
 
     private void RefreshCache()
     {
-        var latestPolicies = enrollmentPoliciesReader.GetAll(_lastModified);
-        foreach (var record in latestPolicies)
+        try
         {
-            policiesCache[record.Id] = record;
-            policiesByPolicyRefCache[record.PolicyRef] = record;
+            var policies = enrollmentPoliciesReader.GetAll(_lastModified);
+            var maxLastModified = _lastModified;
 
-            if (record.LastModified > _lastModified)
+            foreach (var policy in policies)
             {
-                _lastModified = record.LastModified;
+                policiesCache.AddOrUpdate(policy.Id, policy, (_, _) => policy);
+                policiesByPolicyRefCache.AddOrUpdate(policy.PolicyRef, policy, (_, _) => policy);
+
+                if (policy.LastModified > maxLastModified)
+                {
+                    maxLastModified = policy.LastModified;
+                }
             }
+
+            _lastModified = maxLastModified;
+            logger.LogDebug("cache refreshed with {count} policies", policies.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "failed to refresh enrollment policies cache");
+            throw;
         }
     }
 }

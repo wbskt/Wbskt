@@ -98,7 +98,7 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
 
     private void RefreshCacheIfEmpty()
     {
-        if (clientsCache.IsEmpty && clientsByGuidCache.IsEmpty)
+        if (clientsCache.IsEmpty || clientsByGuidCache.IsEmpty)
         {
             RefreshCache();
         }

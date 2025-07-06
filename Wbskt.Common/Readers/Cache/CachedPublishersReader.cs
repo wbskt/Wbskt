@@ -98,7 +98,7 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
 
     private void RefreshCacheIfEmpty()
     {
-        if (publishersCache.IsEmpty)
+        if (publishersCache.IsEmpty || publishersByGuidCache.IsEmpty)
         {
             RefreshCache();
         }
