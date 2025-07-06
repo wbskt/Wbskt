@@ -15,7 +15,7 @@ BEGIN
         SELECT 1 FROM dbo.ClientsChannels WHERE ClientId = @ClientId AND ChannelId = @ChannelId
     )
     BEGIN
-        INSERT INTO dbo.ClientsChannels (ClientId, ChannelId)
-        VALUES (@ClientId, @ChannelId);
+        INSERT INTO dbo.ClientsChannels (ClientId, ChannelId, Deleted)
+        VALUES (@ClientId, @ChannelId, 0);
     END
 END

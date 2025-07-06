@@ -1,5 +1,5 @@
 CREATE TABLE [dbo].[Publishers] (
-    [Id]            INT                 NOT NULL,
+    [Id]            INT                 IDENTITY (1, 1) NOT NULL,
     [UserId]        INT                 NOT NULL,
     [PublisherRef]  UNIQUEIDENTIFIER    NOT NULL,
     [Name]          VARCHAR(200)        NOT NULL,
@@ -9,3 +9,7 @@ CREATE TABLE [dbo].[Publishers] (
     CONSTRAINT [Unq_Publishers_PublisherRef]    UNIQUE      NONCLUSTERED    ([PublisherRef] ASC),
     CONSTRAINT [Unq_Publishers_UserId_Name]     UNIQUE      NONCLUSTERED    ([UserId]       ASC,    [Name]  ASC)
 );
+
+-- Additional indexes for better performance
+CREATE NONCLUSTERED INDEX [IX_Publishers_UserId] ON [dbo].[Publishers] ([UserId] ASC);
+CREATE NONCLUSTERED INDEX [IX_Publishers_LastModified] ON [dbo].[Publishers] ([LastModified] ASC);

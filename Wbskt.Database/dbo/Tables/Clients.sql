@@ -11,3 +11,8 @@
     CONSTRAINT [Fk_Clients_Users]       FOREIGN KEY                 ([UserId])      REFERENCES  [dbo].[Users]   ([Id]),
     CONSTRAINT [Fk_Clients_Servers]     FOREIGN KEY                 ([ServerId])    REFERENCES  [dbo].[Servers] ([Id])
 );
+
+-- Additional indexes for better performance
+CREATE NONCLUSTERED INDEX [IX_Clients_UserId] ON [dbo].[Clients] ([UserId] ASC);
+CREATE NONCLUSTERED INDEX [IX_Clients_ServerId] ON [dbo].[Clients] ([ServerId] ASC);
+CREATE NONCLUSTERED INDEX [IX_Clients_LastModified] ON [dbo].[Clients] ([LastModified] ASC);

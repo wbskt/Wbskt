@@ -7,3 +7,8 @@ CREATE TABLE [dbo].[ClientsChannels] (
     CONSTRAINT [Fk_ClientsChannels_Clients]     FOREIGN KEY             ([ClientId])   REFERENCES [dbo].[Clients]   ([Id]),
     CONSTRAINT [Fk_ClientsChannels_Channels]    FOREIGN KEY             ([ChannelId])  REFERENCES [dbo].[Channels]  ([Id])
 );
+
+-- Additional indexes for better performance
+CREATE NONCLUSTERED INDEX [IX_ClientsChannels_ClientId_Deleted] ON [dbo].[ClientsChannels] ([ClientId] ASC, [Deleted] ASC);
+CREATE NONCLUSTERED INDEX [IX_ClientsChannels_ChannelId_Deleted] ON [dbo].[ClientsChannels] ([ChannelId] ASC, [Deleted] ASC);
+CREATE NONCLUSTERED INDEX [IX_ClientsChannels_LastModified] ON [dbo].[ClientsChannels] ([LastModified] ASC);

@@ -4,6 +4,7 @@ CREATE PROCEDURE dbo.ClientsChannels_Remove
 AS
 BEGIN
     SET NOCOUNT ON;
-    DELETE FROM dbo.ClientsChannels
+    UPDATE dbo.ClientsChannels
+    SET Deleted = 1, LastModified = CURRENT_TIMESTAMP
     WHERE ClientId = @ClientId AND ChannelId = @ChannelId;
 END

@@ -5,11 +5,10 @@ BEGIN
     SET NOCOUNT ON;
 
     -- Soft delete by setting Deleted = 1 for all matching records
-    UPDATE dbo.PublishersChannels 
-    SET Deleted = 1, LastModified = CURRENT_TIMESTAMP 
-    WHERE EXISTS (
-        SELECT 1 FROM @PublisherChannelData AS Source 
-        WHERE PublishersChannels.PublisherId = Source.PublisherId 
-        AND PublishersChannels.ChannelId = Source.ChannelId
-    );
+    UPDATE pc
+    SET pc.Deleted = 1, pc.LastModified = CURRENT_TIMESTAMP 
+    FROM dbo.PublishersChannels pc
+    INNER JOIN @PublisherChannelData AS Source 
+        ON pc.PublisherId = Source.PublisherId 
+        AND pc.ChannelId = Source.ChannelId;
 END 

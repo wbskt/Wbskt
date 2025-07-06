@@ -9,3 +9,7 @@
     CONSTRAINT [Pk_Servers]     PRIMARY KEY CLUSTERED       ([Id]           ASC),
     CONSTRAINT [Unq_Servers]    UNIQUE      NONCLUSTERED    ([IPAddress]    ASC,    [Port]  ASC)
 );
+
+-- Additional indexes for better performance
+CREATE NONCLUSTERED INDEX [IX_Servers_Active] ON [dbo].[Servers] ([Active] ASC);
+CREATE NONCLUSTERED INDEX [IX_Servers_LastModified] ON [dbo].[Servers] ([LastModified] ASC);
