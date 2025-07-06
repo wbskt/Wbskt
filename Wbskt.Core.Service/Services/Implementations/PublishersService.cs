@@ -31,7 +31,7 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
 
     public int GetPublisherIdByRef(Guid publisherRef)
     {
-        var publisher = publishersReader.GetByPublisherRef(publisherRef);
+        var publisher = publishersReader.GetByRef(publisherRef);
         return publisher.Id;
     }
 
@@ -43,7 +43,7 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
 
     public IReadOnlyCollection<int> GetPublisherIdsByRefs(Guid[] publisherRefs)
     {
-        var publishers = publishersReader.GetAllByPublisherRefs(publisherRefs);
+        var publishers = publishersReader.GetAllByRefs(publisherRefs);
         return publishers.Select(p => p.Id).ToList().AsReadOnly();
     }
 

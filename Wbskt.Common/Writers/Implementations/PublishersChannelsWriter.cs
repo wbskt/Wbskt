@@ -55,7 +55,7 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
         logger.LogTrace("DB operation: {functionName} with {count} pairs", nameof(BulkUpsertPublisherChannels), pairs.Count);
         ArgumentNullException.ThrowIfNull(pairs);
 
-        if (!pairs.Any())
+        if (pairs.Count == 0)
         {
             logger.LogDebug("No publisher-channel pairs provided for bulk upsert");
             return;
@@ -90,7 +90,7 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
         logger.LogTrace("DB operation: {functionName} with {count} pairs", nameof(BulkDeletePublisherChannels), pairs.Count);
         ArgumentNullException.ThrowIfNull(pairs);
 
-        if (!pairs.Any())
+        if (pairs.Count == 0)
         {
             logger.LogDebug("No publisher-channel pairs provided for bulk delete");
             return;
