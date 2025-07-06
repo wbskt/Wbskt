@@ -6,5 +6,5 @@ public interface IEnrollmentPoliciesReader
 {
     IReadOnlyCollection<EnrollmentPolicyReadRecord> GetAll();
     IReadOnlyCollection<EnrollmentPolicyReadRecord> GetAllByUserId(int userId);
-    EnrollmentPolicyReadRecord? GetByCode(string code);
-} 
+    EnrollmentPolicyReadRecord? GetByRef(Guid policyRef);
+}

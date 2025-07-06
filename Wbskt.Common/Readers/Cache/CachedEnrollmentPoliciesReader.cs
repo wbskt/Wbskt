@@ -25,15 +25,10 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
         return [.. policiesCache.Values.Where(p => p.UserId == userId)];
     }
 
-    public EnrollmentPolicyReadRecord? GetByCode(string code)
+    public EnrollmentPolicyReadRecord? GetByRef(Guid policyRef)
     {
         RefreshCacheIfEmpty();
-        if (Guid.TryParse(code, out var policyRef) && policiesByPolicyRefCache.TryGetValue(policyRef, out var record))
-        {
-            return record;
-        }
-
-        return null;
+        return policiesByPolicyRefCache.GetValueOrDefault(policyRef);
     }
 
     public void RegisterDatabaseListener()

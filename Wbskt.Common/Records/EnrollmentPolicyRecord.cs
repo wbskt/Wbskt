@@ -32,12 +32,12 @@ public record EnrollmentPolicyRecord
     /// Internal user ID who owns this policy.
     /// </summary>
     [JsonIgnore]
-    public int UserId { get; init; }
+    public int UserId { get; set; }
 
     /// <summary>
     /// Unique policy reference GUID.
     /// </summary>
-    public Guid PolicyRef { get; init; }
+    public Guid PolicyRef { get; set; }
 
     /// <summary>
     /// Human-readable name for the policy.

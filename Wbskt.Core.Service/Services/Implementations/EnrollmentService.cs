@@ -4,30 +4,17 @@ using Wbskt.Common.Writers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-internal sealed class EnrollmentService(IEnrollmentPoliciesReader policiesReader, IEnrollmentPoliciesWriter policiesWriter) : IEnrollmentService
+internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnrollmentPoliciesReader policiesReader, IEnrollmentPoliciesWriter policiesWriter) : IEnrollmentService
 {
-    public EnrollmentPolicyReadRecord CreatePolicy(EnrollmentPolicyRecord record)
+    public int CreatePolicy(EnrollmentPolicyRecord record)
     {
         // Validate request based on policy type
         ValidatePolicyRequest(record);
 
-        // Generate PolicyRef if not provided
-        var policyRecord = record.PolicyRef == Guid.Empty 
-            ? record with { PolicyRef = Guid.NewGuid() }
-            : record;
-
-        var policyId = policiesWriter.InsertPolicy(policyRecord);
-
-        // Get the created policy to return the full record
-        var createdPolicy = policiesReader.GetAllByUserId(record.UserId)
-            .FirstOrDefault(p => p.PolicyRef == policyRecord.PolicyRef);
-
-        if (createdPolicy == null)
-        {
-            throw new InvalidOperationException("Failed to retrieve created enrollment policy");
-        }
-
-        return createdPolicy;
+        record.PolicyRef = Guid.NewGuid();
+        var policyId = policiesWriter.InsertPolicy(record);
+        logger.LogDebug("policy created with PolicyRef: {PolicyRef}", record.PolicyRef);
+        return policyId;
     }
 
     public IReadOnlyCollection<EnrollmentPolicyReadRecord> GetPoliciesByUserId(int userId)
@@ -35,16 +22,11 @@ internal sealed class EnrollmentService(IEnrollmentPoliciesReader policiesReader
         return policiesReader.GetAllByUserId(userId);
     }
 
-    public bool ValidateEnrollmentCode(string policyRef, out int policyUserId)
+    public bool ValidateEnrollmentCode(Guid policyRef, out int policyUserId)
     {
         policyUserId = 0;
 
-        if (string.IsNullOrWhiteSpace(policyRef) || !Guid.TryParse(policyRef, out var guid))
-        {
-            return false;
-        }
-
-        var policy = policiesReader.GetByCode(policyRef);
+        var policy = policiesReader.GetByRef(policyRef);
         if (policy is not { IsActive: true })
         {
             return false;
@@ -70,13 +52,13 @@ internal sealed class EnrollmentService(IEnrollmentPoliciesReader policiesReader
         }
 
         policyUserId = policy.UserId;
-        
+
         // Increment usage for NumberOfClients and SingleUse policies
         if (policy.PolicyType is EnrollmentPolicyType.NumberOfClients or EnrollmentPolicyType.SingleUse)
         {
             policiesWriter.IncrementUsage(policy.Id);
         }
-        
+
         return true;
     }
 

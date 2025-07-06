@@ -22,27 +22,27 @@ public class ClientsController(Logger<ClientsController> logger, IClientsManagem
     public IActionResult Enroll(Guid policyRef, [FromBody] ClientRecord clientRecord)
     {
         logger.LogTrace("enrollment endpoint called with policyRef {policyRef}", policyRef);
-        
+
         try
         {
             // Validate the enrollment policyRef
-            if (!enrollmentService.ValidateEnrollmentCode(policyRef.ToString(), out var policyUserId))
+            if (!enrollmentService.ValidateEnrollmentCode(policyRef, out var policyUserId))
             {
                 return BadRequest(new { error = "Invalid or expired enrollment policy" });
             }
 
             // Set the user ID from the policy for the client record
             var clientRecordWithUserId = clientRecord with { UserId = policyUserId };
-            
+
             // Register the client
             var clientId = clientsService.UpsertClient(clientRecordWithUserId);
-            
+
             logger.LogInformation("client registered successfully with id {clientId} using enrollment policyRef {policyRef}", clientId, policyRef);
-            
-            return Ok(new { 
-                message = "Enrollment successful", 
+
+            return Ok(new {
+                message = "Enrollment successful",
                 clientId = clientId,
-                policyUserId = policyUserId 
+                policyUserId = policyUserId
             });
         }
         catch (Exception ex)

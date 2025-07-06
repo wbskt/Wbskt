@@ -12,12 +12,12 @@ namespace Wbskt.Core.Service.Controllers;
 public class EnrollmentController(IEnrollmentService enrollmentService) : ControllerBase
 {
     [HttpPost("code")]
-    public EnrollmentPolicyRecord CreateEnrollmentCode([FromBody] EnrollmentPolicyRecord request)
+    public EnrollmentPolicyRecord CreateEnrollmentCode([FromBody] EnrollmentPolicyRecord record)
     {
         var userId = User.GetUserId();
-        var policyRecord = request with { UserId = userId };
-        var response = enrollmentService.CreatePolicy(policyRecord);
-        return response;
+        record.UserId = userId;
+        enrollmentService.CreatePolicy(record);
+        return record;
     }
 
     [HttpGet("policies")]
