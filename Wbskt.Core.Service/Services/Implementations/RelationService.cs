@@ -8,7 +8,7 @@ using Wbskt.Common.Utilities;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class RelationService(ILogger<RelationService> logger, IClientProvider clientProvider, ICachedServerInfoProvider serverInfoProvider, IChannelsReader channelsReader) : IRelationService
+public class RelationService(ILogger<RelationService> logger, IClientsReader clientsReader, IClientsChannelsReader clientsChannelsReader, ICachedServerInfoProvider serverInfoProvider, IChannelsReader channelsReader) : IRelationService
 {
     // server - [channels]
     // used for: re-balancing when a particulate server becomes offline
@@ -50,7 +50,7 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
         var channels = channelsReader.GetAll();
 
         // todo: channels are mapped in db but not fetched
-        var clients = clientProvider.GetAll();
+        var clients = clientsReader.GetAll();
         MapAllChannelClients(channels, clients);
         MapAllClientServers(clients, servers);
         MapAllServerChannels(servers);
@@ -166,22 +166,22 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
         }
     }
 
-    private void MapAllChannelClients(IReadOnlyCollection<ChannelReadRecord> channels, IReadOnlyCollection<ClientConnection> clients)
+    private void MapAllChannelClients(IReadOnlyCollection<ChannelReadRecord> channels, IReadOnlyCollection<ClientReadRecord> clients)
     {
         channelClientsMap.Clear();
         foreach (var channel in channels)
         {
             var clientIds = new ConcurrentKeys<int>();
-            foreach (var client in clients.Where(c => c.Channels.Select(chan => chan.ChannelRef).Contains(channel.ChannelRef)))
+            var channelClientIds = clientsChannelsReader.GetClientIdsForChannel(channel.Id);
+            foreach (var clientId in channelClientIds)
             {
-                clientIds.Add(client.ClientId);
+                clientIds.Add(clientId);
             }
-
             channelClientsMap.TryAdd(channel.Id, clientIds);
         }
     }
 
-    private void MapAllClientServers(IReadOnlyCollection<ClientConnection> clients, IReadOnlyCollection<ServerInfo> servers)
+    private void MapAllClientServers(IReadOnlyCollection<ClientReadRecord> clients, IReadOnlyCollection<ServerInfo> servers)
     {
         serverClientsMap.Clear();
         clientServerMap.Clear();
@@ -190,8 +190,8 @@ public class RelationService(ILogger<RelationService> logger, IClientProvider cl
             var clientIds = new ConcurrentKeys<int>();
             foreach (var client in clients.Where(c => c.ServerId == server.ServerId))
             {
-                clientIds.Add(client.ClientId);
-                clientServerMap.TryAdd(client.ClientId, server.ServerId);
+                clientIds.Add(client.Id);
+                clientServerMap.TryAdd(client.Id, server.ServerId);
             }
 
             serverClientsMap.TryAdd(server.ServerId, clientIds);

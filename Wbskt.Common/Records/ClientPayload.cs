@@ -1,8 +1,8 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Wbskt.Common.Contracts;
+namespace Wbskt.Common.Records;
 
-public class ClientPayload
+public record ClientPayload
 {
 
     [JsonIgnore]
@@ -13,7 +13,7 @@ public class ClientPayload
     /// <summary>
     /// The publisher id to which the payload needs to be sent.
     /// </summary>
-    public Guid PublisherRef { get; set; }
+    public Guid PublisherRef { get; init; }
 
     public bool EnsureDelivery { get; set; }
 

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Providers;
+using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 

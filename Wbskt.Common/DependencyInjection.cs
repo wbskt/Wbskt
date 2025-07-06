@@ -16,7 +16,6 @@ public static class DependencyInjection
     public static void ConfigureCommonServices(this IServiceCollection serviceCollection)
     {
         serviceCollection.AddSingleton<IUsersProvider, UsersProvider>();
-        serviceCollection.AddSingleton<IClientProvider, ClientProvider>();
         serviceCollection.AddSingleton<IServerInfoProvider, ServerInfoProvider>();
         serviceCollection.AddSingleton<ICachedServerInfoProvider, CachedServerInfoProvider>();
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();

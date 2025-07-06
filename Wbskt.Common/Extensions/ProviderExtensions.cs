@@ -25,22 +25,6 @@ public static class ProviderExtensions
         return value;
     }
 
-    public static DataTable Int32ListToDataTable(IEnumerable<int> identifiers)
-    {
-        var dataTable = new DataTable();
-
-        dataTable.Columns.Add(new DataColumn("Id", typeof(int)) { AllowDBNull = false });
-
-        foreach (var id in identifiers)
-        {
-            var row = dataTable.NewRow();
-            row["Id"] = id;
-            dataTable.Rows.Add(row);
-        }
-
-        return dataTable;
-    }
-
     public static DataTable PublisherChannelPairsToDataTable(IEnumerable<PublisherChannelRecord> pairs)
     {
         var dataTable = new DataTable();

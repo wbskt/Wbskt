@@ -48,7 +48,6 @@ public static class Program
 
         builder.Services.AddSingleton<IAuthService, AuthService>();
         builder.Services.AddSingleton<IUsersService, UsersService>();
-        builder.Services.AddSingleton<IClientService, ClientService>();
         builder.Services.AddSingleton<IRelationService, RelationService>();
         builder.Services.AddSingleton<IChannelsService, ChannelsService>();
         builder.Services.AddSingleton<IPublishersService, PublishersService>();
