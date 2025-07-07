@@ -33,7 +33,7 @@ public class ClientsController(Logger<ClientsController> logger, IClientsManagem
         clientRecord.UserId = policyUserId;
 
         // Register the client
-        var clientId = clientsService.UpsertClient(clientRecord);
+        var clientId = clientsService.UpsertClient(policyRef, clientRecord);
 
         logger.LogInformation("client registered successfully with id {clientId} using enrollment policyRef {policyRef}", clientId, policyRef);
 

@@ -25,6 +25,12 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
         return [.. policiesCache.Values.Where(p => p.UserId == userId)];
     }
 
+    public EnrollmentPolicyReadRecord? GetById(int policyId)
+    {
+        RefreshCacheIfEmpty();
+        return policiesCache.GetValueOrDefault(policyId);
+    }
+
     public EnrollmentPolicyReadRecord? GetByRef(Guid policyRef)
     {
         RefreshCacheIfEmpty();

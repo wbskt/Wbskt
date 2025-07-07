@@ -10,7 +10,8 @@ CREATE PROCEDURE dbo.Clients_Upsert
     @Name       VARCHAR(100),
     @UniqueRef  UNIQUEIDENTIFIER,
     @UserId     INT,
-    @ServerId   INT
+    @ServerId   INT,
+    @PolicyId   INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -23,10 +24,11 @@ BEGIN
 
     IF @ExistingId IS NOT NULL
         BEGIN
-            -- Update existing client; only name can be updated
+            -- Update existing client; only name, server, and policy can be updated
             UPDATE dbo.Clients
             SET Name        = @Name,
-                ServerId    = @ServerId
+                ServerId    = @ServerId,
+                PolicyId    = @PolicyId
             WHERE
                 Id          = @ExistingId;
 
@@ -39,12 +41,14 @@ BEGIN
             ( Name
             , ServerId
             , UniqueRef
-            , UserId)
+            , UserId
+            , PolicyId)
             VALUES
                 ( @Name
                 , @ServerId
                 , @UniqueRef
-                , @UserId);
+                , @UserId
+                , @PolicyId);
 
             SET @Id = SCOPE_IDENTITY();
         END

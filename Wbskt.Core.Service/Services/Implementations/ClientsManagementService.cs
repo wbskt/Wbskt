@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
@@ -12,35 +11,53 @@ internal sealed class ClientsManagementService(
     IClientsWriter clientsWriter,
     IChannelsReader channelsReader,
     IClientsChannelsReader clientsChannelsReader,
-    IClientsChannelsWriter clientsChannelsWriter) : IClientsManagementService
+    IClientsChannelsWriter clientsChannelsWriter,
+    IEnrollmentPoliciesReader policiesReader) : IClientsManagementService
 {
     public IReadOnlyCollection<ClientReadRecord> GetAll()
     {
         logger.LogTrace("getting all clients");
-        return clientsReader.GetAll();
+        var clients = clientsReader.GetAll();
+        SetPolicyRef(clients);
+        return clients;
     }
 
     public IReadOnlyCollection<ClientReadRecord> GetAllByUserId(int userId)
     {
         logger.LogTrace("getting clients for user {userId}", userId);
-        return clientsReader.GetAllByUserId(userId);
+        var clients = clientsReader.GetAllByUserId(userId);
+        SetPolicyRef(clients);
+        return clients;
     }
 
     public ClientReadRecord GetByRef(Guid clientRef)
     {
         logger.LogTrace("getting client by ref {clientRef}", clientRef);
-        return clientsReader.GetByRef(clientRef);
+        var client = clientsReader.GetByRef(clientRef);
+        if (client == null)
+        {
+            throw WbsktExceptions.ClientRefNotExists(clientRef);
+        }
+        SetPolicyRef(new[] { client });
+        return client;
     }
 
     public IReadOnlyCollection<ClientReadRecord> GetAllByRefs(Guid[] clientRefs)
     {
         logger.LogTrace("getting clients by refs: {count} refs", clientRefs.Length);
-        return clientsReader.GetAllByRefs(clientRefs);
+        var clients = clientsReader.GetAllByRefs(clientRefs);
+        SetPolicyRef(clients);
+        return clients;
     }
 
-    public int UpsertClient(ClientRecord record)
+    public int UpsertClient(Guid policyRef, ClientRecord record)
     {
-        logger.LogTrace("upserting client {name} with ref {ref}", record.Name, record.UniqueRef);
+        var policy = policiesReader.GetByRef(policyRef);
+        if (policy == null)
+        {
+            throw WbsktExceptions.ClientRefNotExists(policyRef);
+        }
+        record.PolicyId = policy.Id;
         return clientsWriter.UpsertClient(record);
     }
 
@@ -99,4 +116,16 @@ internal sealed class ClientsManagementService(
         var clients = clientsReader.GetAllByIds(clientIds.ToArray());
         return clients.Select(c => c.UniqueRef).ToList().AsReadOnly();
     }
-} 
+
+    private void SetPolicyRef(IReadOnlyCollection<ClientReadRecord> clients)
+    {
+        foreach (var client in clients)
+        {
+            var policy = policiesReader.GetById(client.PolicyId);
+            if (policy != null)
+            {
+                client.PolicyRef = policy.PolicyRef;
+            }
+        }
+    }
+}

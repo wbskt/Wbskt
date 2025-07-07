@@ -25,6 +25,7 @@ internal sealed class ClientsWriter(ILogger<ClientsWriter> logger, IConnectionSt
         command.Parameters.Add(new SqlParameter("@UniqueRef", ProviderExtensions.ReplaceDbNulls(record.UniqueRef)));
         command.Parameters.Add(new SqlParameter("@UserId", ProviderExtensions.ReplaceDbNulls(record.UserId)));
         command.Parameters.Add(new SqlParameter("@ServerId", ProviderExtensions.ReplaceDbNulls(record.ServerId)));
+        command.Parameters.Add(new SqlParameter("@PolicyId", ProviderExtensions.ReplaceDbNulls(record.PolicyId)));
 
         var id = new SqlParameter("@Id", SqlDbType.Int) { Size = int.MaxValue };
         id.Direction = ParameterDirection.Output;

@@ -20,6 +20,12 @@ public record ClientRecord
     public int ServerId { get; init; }
 
     /// <summary>
+    /// Internal enrollment policy ID for this client.
+    /// </summary>
+    [JsonIgnore]
+    public int PolicyId { get; set; }
+
+    /// <summary>
     /// Human-readable name for the client.
     /// </summary>
     public required string Name { get; init; }
@@ -28,6 +34,11 @@ public record ClientRecord
     /// Unique identifier for the client used in public APIs.
     /// </summary>
     public Guid UniqueRef { get; init; }
+
+    /// <summary>
+    /// Enrollment policy reference.
+    /// </summary>
+    public Guid PolicyRef { get; set; }
 }
 
 /// <summary>
