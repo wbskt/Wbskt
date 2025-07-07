@@ -5,7 +5,7 @@ using Wbskt.Common.Exceptions;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class PublishersService(ILogger<PublishersService> logger, IPublishersWriter publishersWriter, IPublishersReader publishersReader) : IPublishersService
+internal sealed class PublishersService(ILogger<PublishersService> logger, IPublishersWriter publishersWriter, IPublishersReader publishersReader) : IPublishersService
 {
     public int Create(PublisherRecord publisherRecord)
     {

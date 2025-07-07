@@ -5,7 +5,7 @@ using Wbskt.Common.Writers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter channelsWriter, IChannelsReader channelsReader) : IChannelsService
+internal sealed class ChannelsService(ILogger<ChannelsService> logger, IChannelsWriter channelsWriter, IChannelsReader channelsReader) : IChannelsService
 {
     public int Create(ChannelRecord channelRecord)
     {

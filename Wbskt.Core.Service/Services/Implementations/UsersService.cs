@@ -3,7 +3,7 @@ using Wbskt.Common.Providers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class UsersService(ILogger<UsersService> logger, IUsersProvider usersProvider) : IUsersService
+internal sealed class UsersService(ILogger<UsersService> logger, IUsersProvider usersProvider) : IUsersService
 {
     private readonly ILogger<UsersService> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IUsersProvider usersProvider = usersProvider ?? throw new ArgumentNullException(nameof(usersProvider));

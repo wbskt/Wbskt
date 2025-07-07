@@ -2,7 +2,7 @@
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class ServerInfoService(ILogger<ServerInfoService> logger, ICachedServerInfoProvider serverInfoProvider, IRelationService relationService) : IServerInfoService
+internal sealed class ServerInfoService(ILogger<ServerInfoService> logger, ICachedServerInfoProvider serverInfoProvider, IRelationService relationService) : IServerInfoService
 {
     public void UpdateServerStatus(int serverId, bool active)
     {

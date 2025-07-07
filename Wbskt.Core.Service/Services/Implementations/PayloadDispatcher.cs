@@ -5,7 +5,7 @@ using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class PayloadDispatcher(
+internal sealed class PayloadDispatcher(
     ILogger<ServerInfoService> logger,
     ICachedServerInfoProvider serverInfoProvider,
     IPublishersChannelsService publishersChannelsService,

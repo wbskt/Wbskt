@@ -4,7 +4,7 @@ using Wbskt.Common.Writers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class PublishersChannelsService(
+internal sealed class PublishersChannelsService(
     ILogger<PublishersChannelsService> logger,
     IPublishersChannelsWriter publishersChannelsWriter,
     IPublishersChannelsReader publishersChannelsReader,

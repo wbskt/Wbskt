@@ -8,7 +8,7 @@ using Wbskt.Common.Utilities;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class RelationService(
+internal sealed class RelationService(
     ILogger<RelationService> logger,
     IClientsReader clientsReader,
     IClientsChannelsReader clientsChannelsReader,

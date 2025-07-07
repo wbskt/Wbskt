@@ -10,13 +10,8 @@ using Wbskt.Common.Exceptions;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class AuthService(ILogger<AuthService> logger, IConfiguration configuration, IUsersService usersService, IPasswordHasher<User> passwordHasher) : IAuthService
+internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration configuration, IUsersService usersService, IPasswordHasher<User> passwordHasher) : IAuthService
 {
-    private readonly IConfiguration configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-    private readonly ILogger<AuthService> logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IPasswordHasher<User> passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(passwordHasher));
-    private readonly IUsersService usersService = usersService ?? throw new ArgumentNullException(nameof(usersService));
-
     public string GenerateToken(User userData)
     {
         var tokenHandler = new JsonWebTokenHandler();
