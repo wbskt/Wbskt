@@ -1,3 +1,4 @@
+using Wbskt.Common.Exceptions;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 using Wbskt.Common.Writers;
@@ -85,7 +86,7 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
     {
         if (string.IsNullOrWhiteSpace(record.Name))
         {
-            throw new ArgumentException("Policy name is required", nameof(record));
+            throw WbsktExceptions.PolicyNameRequired(nameof(record));
         }
 
         switch (record.PolicyType)
@@ -93,12 +94,12 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
             case EnrollmentPolicyType.TimeLimited:
                 if (!record.ExpiryDate.HasValue)
                 {
-                    throw new ArgumentException("Expiry date is required for time-limited policies", nameof(record));
+                    throw WbsktExceptions.ExpiryDateRequired(nameof(record), "time-limited");
                 }
 
                 if (record.ExpiryDate.Value <= DateTime.UtcNow)
                 {
-                    throw new ArgumentException("Expiry date must be in the future", nameof(record));
+                    throw WbsktExceptions.ExpiryDateMustBeFuture(nameof(record));
                 }
 
                 break;
@@ -106,7 +107,7 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
             case EnrollmentPolicyType.NumberOfClients:
                 if (record.MaxClients is not > 0)
                 {
-                    throw new ArgumentException("MaxClients must be greater than 0 for NumberOfClients policies", nameof(record));
+                    throw WbsktExceptions.MaxClientsMustBeGreaterThanZero(nameof(record), "NumberOfClients");
                 }
 
                 break;
@@ -118,23 +119,23 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
             case EnrollmentPolicyType.TimeAndCount:
                 if (!record.ExpiryDate.HasValue)
                 {
-                    throw new ArgumentException("Expiry date is required for TimeAndCount policies", nameof(record));
+                    throw WbsktExceptions.ExpiryDateRequired(nameof(record), "TimeAndCount");
                 }
 
                 if (record.ExpiryDate.Value <= DateTime.UtcNow)
                 {
-                    throw new ArgumentException("Expiry date must be in the future", nameof(record));
+                    throw WbsktExceptions.ExpiryDateMustBeFuture(nameof(record));
                 }
 
                 if (record.MaxClients is not > 0)
                 {
-                    throw new ArgumentException("MaxClients must be greater than 0 for TimeAndCount policies", nameof(record));
+                    throw WbsktExceptions.MaxClientsMustBeGreaterThanZero(nameof(record), "TimeAndCount");
                 }
 
                 break;
 
             default:
-                throw new ArgumentException("Invalid policy type", nameof(record));
+                throw WbsktExceptions.InvalidPolicyType(nameof(record));
         }
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Wbskt.Common.Exceptions;
 
 namespace Wbskt.Common.Extensions;
 
@@ -150,13 +151,13 @@ public static class AuthExtensions
     {
         if (principal.Identity is not ClaimsIdentity claimsPrincipal)
         {
-            throw new AuthenticationException($"Unable to get {claimKey}");
+            throw WbsktExceptions.UnableToGetClaim(claimKey);
         }
 
         var claim = claimsPrincipal.Claims.FirstOrDefault(c => c.Type.Equals(claimKey, StringComparison.InvariantCulture));
         if (claim == null)
         {
-            throw new AuthenticationException($"Unable to get {claimKey}");
+            throw WbsktExceptions.UnableToGetClaim(claimKey);
         }
 
         return claim.Value;

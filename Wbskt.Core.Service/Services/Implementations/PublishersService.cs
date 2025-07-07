@@ -1,6 +1,7 @@
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 using Wbskt.Common.Writers;
+using Wbskt.Common.Exceptions;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
@@ -14,7 +15,7 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
         var existingPublishers = GetAllForUser(publisherRecord.UserId);
         if (existingPublishers.Any(p => p.Name == publisherRecord.Name))
         {
-            throw new InvalidOperationException($"Publisher with name '{publisherRecord.Name}' already exists for this user");
+            throw WbsktExceptions.PublisherWithNameExists(publisherRecord.Name);
         }
 
         var id = publishersWriter.InsertPublisher(publisherRecord);

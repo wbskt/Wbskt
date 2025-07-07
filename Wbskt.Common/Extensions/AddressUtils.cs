@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using Microsoft.AspNetCore.Http;
+using Wbskt.Common.Exceptions;
 
 namespace Wbskt.Common.Extensions;
 
@@ -10,7 +11,7 @@ public static class AddressUtils
         var host = await GetIpAddress(isProduction);
         if (addresses == null || addresses.Count == 0)
         {
-            throw new InvalidOperationException("server address feature is not initialized yet");
+            throw WbsktExceptions.ServerAddressNotInitialized();
         }
 
         var ports = addresses.Select(a => new Uri(a).Port).ToArray();

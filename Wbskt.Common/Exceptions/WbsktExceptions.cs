@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Security.Authentication;
 
 namespace Wbskt.Common.Exceptions;
 
@@ -6,71 +7,111 @@ public static class WbsktExceptions
 {
     public static UnauthorizedAccessException EmailIdExists(string emailId)
     {
-        return new UnauthorizedAccessException($"emailId: '{emailId}' already exists");
+        return new UnauthorizedAccessException($"A user with the email address '{emailId}' already exists. Please use a different email or log in.");
     }
 
     public static ValidationException ChannelExists(string channelName)
     {
-        return new ValidationException($"channel: '{channelName}' already exists");
+        return new ValidationException($"A channel named '{channelName}' already exists. Please choose a unique channel name.");
     }
 
     public static InvalidOperationException PublisherIdNotExists(int publisherId)
     {
-        return new InvalidOperationException($"publisher with id: '{publisherId}' does not exists");
+        return new InvalidOperationException($"No publisher found with the internal ID '{publisherId}'. Please verify the publisher reference.");
     }
 
     public static InvalidOperationException PublisherRefNotExists(Guid publisherRef)
     {
-        return new InvalidOperationException($"publisher with ref: '{publisherRef}' does not exists");
+        return new InvalidOperationException($"No publisher found with the reference '{publisherRef}'. Please check the publisher reference ID.");
     }
 
     public static InvalidOperationException ChannelIdNotExists(int channelId)
     {
-        return new InvalidOperationException($"channel with id: '{channelId}' does not exists");
+        return new InvalidOperationException($"No channel found with the internal ID '{channelId}'. Please verify the channel reference.");
     }
 
     public static InvalidOperationException InvalidId(int id, string resource)
     {
-        return new InvalidOperationException($"invalid id provided: '{id}' for resource: {resource}");
+        return new InvalidOperationException($"The provided ID '{id}' is invalid for the resource '{resource}'. Please check your request parameters.");
     }
 
     public static InvalidOperationException ChannelRefNotExists(Guid channelRef)
     {
-        return new InvalidOperationException($"channel with ref: '{channelRef}' does not exists");
+        return new InvalidOperationException($"No channel found with the reference '{channelRef}'. Please check the channel reference ID.");
     }
 
     public static InvalidOperationException ClientIdNotExists(int clientId)
     {
-        return new InvalidOperationException($"client with id: '{clientId}' does not exists");
+        return new InvalidOperationException($"No client found with the internal ID '{clientId}'. Please verify the client reference.");
     }
 
     public static InvalidOperationException ClientRefNotExists(Guid clientRef)
     {
-        return new InvalidOperationException($"client with ref: '{clientRef}' does not exists");
+        return new InvalidOperationException($"No client found with the reference '{clientRef}'. Please check the client reference ID.");
     }
 
     public static InvalidOperationException UnknownSocketServer(int id)
     {
-        return new InvalidOperationException($"the socket server with id: '{id}' is not present in the registered servers");
+        return new InvalidOperationException($"Socket server with ID '{id}' is not registered or available. Please check the server status or configuration.");
     }
 
     public static ValidationException ClientWithSameNameExists(string reqClientName)
     {
-        return new ValidationException($"client with name: '{reqClientName}' already exists in the same channel");
+        return new ValidationException($"A client named '{reqClientName}' already exists in this channel. Please use a unique client name.");
     }
 
     public static UnauthorizedAccessException UnauthorizedAccessToChannels()
     {
-        return new UnauthorizedAccessException("client does not have permission to subscribe to all of the requested channels");
+        return new UnauthorizedAccessException("You do not have permission to subscribe to one or more of the requested channels. Please check your access rights.");
     }
 
     public static InvalidOperationException SocketServerUnavailable()
     {
-        return new InvalidOperationException("the are no socket servers registered");
+        return new InvalidOperationException("No socket servers are currently registered or available. Please try again later or contact support.");
     }
 
     public static InvalidOperationException FailedToInsertOrUpdateClient(Guid clientUniqueId)
     {
-        return new InvalidOperationException($"unexpected error while trying to upsert client with uniqueId: '{clientUniqueId}'");
+        return new InvalidOperationException($"An unexpected error occurred while trying to insert or update the client with unique ID '{clientUniqueId}'. Please try again or contact support.");
+    }
+
+    public static ArgumentException PolicyNameRequired(string paramName)
+    {
+        return new ArgumentException("The policy name is required and cannot be empty.", paramName);
+    }
+
+    public static ArgumentException ExpiryDateRequired(string paramName, string policyType)
+    {
+        return new ArgumentException($"An expiry date is required for '{policyType}' policies. Please provide a valid expiry date.", paramName);
+    }
+
+    public static ArgumentException ExpiryDateMustBeFuture(string paramName)
+    {
+        return new ArgumentException("The expiry date must be set to a future date and time.", paramName);
+    }
+
+    public static ArgumentException MaxClientsMustBeGreaterThanZero(string paramName, string policyType)
+    {
+        return new ArgumentException($"The maximum number of clients for '{policyType}' policies must be greater than zero.", paramName);
+    }
+
+    public static ArgumentException InvalidPolicyType(string paramName)
+    {
+        return new ArgumentException("The specified policy type is invalid. Please use a supported policy type.", paramName);
+    }
+
+    public static AuthenticationException UnableToGetClaim(string claimKey)
+    {
+        return new AuthenticationException($"Unable to retrieve the claim '{claimKey}' from the authentication context. Please ensure you are properly authenticated.");
+    }
+
+    public static InvalidOperationException ServerAddressNotInitialized()
+    {
+        return new InvalidOperationException("The server address feature is not initialized. Please ensure the server is configured correctly.");
+    }
+
+    public static InvalidOperationException PublisherWithNameExists(string publisherName)
+    {
+        return new InvalidOperationException($"A publisher named '{publisherName}' already exists for this user. Please use a unique publisher name.");
     }
 }
