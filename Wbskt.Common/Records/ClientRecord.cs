@@ -11,7 +11,7 @@ public record ClientRecord
     /// Internal user ID who owns this client.
     /// </summary>
     [JsonIgnore]
-    public int UserId { get; init; }
+    public int UserId { get; set; }
 
     /// <summary>
     /// Internal server ID where this client is assigned.

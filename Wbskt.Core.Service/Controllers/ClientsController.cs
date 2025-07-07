@@ -23,33 +23,21 @@ public class ClientsController(Logger<ClientsController> logger, IClientsManagem
     {
         logger.LogTrace("enrollment endpoint called with policyRef {policyRef}", policyRef);
 
-        try
+        // Validate the enrollment policyRef
+        if (!enrollmentService.ValidateEnrollmentCode(policyRef, out var policyUserId))
         {
-            // Validate the enrollment policyRef
-            if (!enrollmentService.ValidateEnrollmentCode(policyRef, out var policyUserId))
-            {
-                return BadRequest(new { error = "Invalid or expired enrollment policy" });
-            }
-
-            // Set the user ID from the policy for the client record
-            var clientRecordWithUserId = clientRecord with { UserId = policyUserId };
-
-            // Register the client
-            var clientId = clientsService.UpsertClient(clientRecordWithUserId);
-
-            logger.LogInformation("client registered successfully with id {clientId} using enrollment policyRef {policyRef}", clientId, policyRef);
-
-            return Ok(new {
-                message = "Enrollment successful",
-                clientId = clientId,
-                policyUserId = policyUserId
-            });
+            return BadRequest("Invalid or expired enrollment policy");
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "error during enrollment with policyRef {policyRef}", policyRef);
-            return StatusCode(500, new { error = "An error occurred during enrollment" });
-        }
+
+        // Set the user ID from the policy for the client record
+        clientRecord.UserId = policyUserId;
+
+        // Register the client
+        var clientId = clientsService.UpsertClient(clientRecord);
+
+        logger.LogInformation("client registered successfully with id {clientId} using enrollment policyRef {policyRef}", clientId, policyRef);
+
+        return Ok("client enrolled successfully");
     }
 
     [HttpPost("connect")]
