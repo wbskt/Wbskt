@@ -1,3 +1,16 @@
+/*
+    Table: dbo.ClientsChannels
+    Purpose: Stores relationships between clients and channels, including deletion status.
+    Columns:
+        - ClientId: INT, foreign key to Clients
+        - ChannelId: INT, foreign key to Channels
+        - LastModified: DATETIME, last modification timestamp
+        - Deleted: BIT, soft delete flag
+    Constraints: unique, FK to Clients and Channels
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE TABLE [dbo].[ClientsChannels] (
     [ClientId]      INT     NOT NULL,
     [ChannelId]     INT     NOT NULL,

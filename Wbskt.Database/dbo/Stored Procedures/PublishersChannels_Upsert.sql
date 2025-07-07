@@ -1,4 +1,15 @@
-﻿CREATE PROCEDURE dbo.PublishersChannels_Upsert
+﻿/*
+    Procedure: dbo.PublishersChannels_Upsert
+    Purpose: Efficiently upserts (inserts or updates) a publisher-channel relationship.
+    Parameters:
+        - @PublisherId INT: The publisher Id
+        - @ChannelId INT: The channel Id
+    Returns: None (inserts or updates Deleted and LastModified fields)
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
+CREATE PROCEDURE dbo.PublishersChannels_Upsert
     @PublisherId INT,
     @ChannelId INT
 AS

@@ -1,17 +1,25 @@
-﻿/* ---------------------------------------------------------------- */
-/* Clients_Upsert                                         */
-/* Author: Richard Joy                                              */
-/* Updated by: Richard Joy                                          */
-/* Create date: 25-Apr-2025                                         */
-/* Description: Insert or update a client based on ClientUniqueId   */
-/* ---------------------------------------------------------------- */
+﻿/*
+    Procedure: dbo.Clients_Upsert
+    Purpose: Inserts a new client or updates an existing client based on UniqueRef. Updates only Name, ServerId, and PolicyId for existing clients.
+    Parameters:
+        - @Id INT OUTPUT: Returns the client Id (inserted or updated)
+        - @Name VARCHAR(100): Client name
+        - @UniqueRef UNIQUEIDENTIFIER: Unique client reference
+        - @UserId INT: User Id (owner)
+        - @ServerId INT: Assigned server Id
+        - @PolicyId INT: Enrollment policy Id
+    Returns: None (output parameter @Id is set)
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.Clients_Upsert
-    @Id         INT                 OUTPUT,
-    @Name       VARCHAR(100),
-    @UniqueRef  UNIQUEIDENTIFIER,
-    @UserId     INT,
-    @ServerId   INT,
-    @PolicyId   INT
+    @Id INT OUTPUT,
+    @Name VARCHAR(100),
+    @UniqueRef UNIQUEIDENTIFIER,
+    @UserId INT,
+    @ServerId INT,
+    @PolicyId INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -23,33 +31,23 @@ BEGIN
     WHERE UniqueRef = @UniqueRef;
 
     IF @ExistingId IS NOT NULL
-        BEGIN
-            -- Update existing client; only name, server, and policy can be updated
-            UPDATE dbo.Clients
-            SET Name        = @Name,
-                ServerId    = @ServerId,
-                PolicyId    = @PolicyId
-            WHERE
-                Id          = @ExistingId;
+    BEGIN
+        -- Update only mutable fields
+        UPDATE dbo.Clients
+        SET Name = @Name,
+            ServerId = @ServerId,
+            PolicyId = @PolicyId
+        WHERE Id = @ExistingId;
 
-            SET @Id = @ExistingId;
-        END
+        SET @Id = @ExistingId;
+    END
     ELSE
-        BEGIN
-            -- Insert new client
-            INSERT INTO dbo.Clients
-            ( Name
-            , ServerId
-            , UniqueRef
-            , UserId
-            , PolicyId)
-            VALUES
-                ( @Name
-                , @ServerId
-                , @UniqueRef
-                , @UserId
-                , @PolicyId);
+    BEGIN
+        INSERT INTO dbo.Clients
+            (Name, ServerId, UniqueRef, UserId, PolicyId)
+        VALUES
+            (@Name, @ServerId, @UniqueRef, @UserId, @PolicyId);
 
-            SET @Id = SCOPE_IDENTITY();
-        END
+        SET @Id = SCOPE_IDENTITY();
+    END
 END;

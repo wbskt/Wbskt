@@ -1,3 +1,13 @@
+/*
+    Procedure: dbo.EnrollmentPolicies_IncrementUsage
+    Purpose: Increments the CurrentUsage for a policy and deactivates it if the max is reached.
+    Parameters:
+        - @Id INT: The enrollment policy Id to increment
+    Returns: None (updates CurrentUsage and IsActive fields)
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.EnrollmentPolicies_IncrementUsage
     @Id INT
 AS

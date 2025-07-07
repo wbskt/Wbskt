@@ -1,21 +1,25 @@
-﻿/* -------------------------------- */
-/* Users_GetBy_Id                   */
-/* Author: Richard Joy              */
-/* Updated by: Richard Joy          */
-/* Create date: 24-Aug-2024         */
-/* Description: Self explanatory    */
-/* -------------------------------- */
+﻿/*
+    Procedure: dbo.Users_GetBy_Id
+    Purpose: Retrieves a user by their unique Id.
+    Parameters:
+        - @Id INT: The user Id to retrieve
+    Returns: Id, Name, EmailId, PasswordHash, PasswordSalt
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.Users_GetBy_Id
-  @Id INT
+    @Id INT
 AS
 BEGIN
-  SET NOCOUNT ON;
+    SET NOCOUNT ON;
 
-  SELECT Id
-       , Name
-       , EmailId
-       , PasswordHash
-       , PasswordSalt
+    SELECT
+        Id,
+        Name,
+        EmailId,
+        PasswordHash,
+        PasswordSalt
     FROM dbo.Users
-   WHERE Id = @Id
+    WHERE Id = @Id;
 END;

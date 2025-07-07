@@ -1,3 +1,22 @@
+/*
+    Table: dbo.EnrollmentPolicies
+    Purpose: Stores enrollment policy definitions for users, including type, limits, and status.
+    Columns:
+        - Id: INT, primary key
+        - UserId: INT, foreign key to Users
+        - PolicyRef: UNIQUEIDENTIFIER, unique policy reference
+        - Name: VARCHAR(100), policy name
+        - PolicyType: INT, type of policy
+        - MaxClients: INT, max clients allowed (nullable)
+        - ExpiryDate: DATETIME, expiry date (nullable)
+        - CurrentUsage: INT, current usage count
+        - IsActive: BIT, active status
+        - LastModified: DATETIME, last modification timestamp
+    Constraints: PK, unique, FK to Users, checks for type, usage, and limits
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE TABLE [dbo].[EnrollmentPolicies] (
     [Id]                INT                 IDENTITY (1, 1) NOT NULL,
     [UserId]            INT                 NOT NULL,

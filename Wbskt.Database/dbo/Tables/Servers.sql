@@ -1,4 +1,20 @@
-﻿CREATE TABLE [dbo].[Servers] (
+﻿/*
+    Table: dbo.Servers
+    Purpose: Stores server information, including network and status details.
+    Columns:
+        - Id: INT, primary key
+        - IPAddress: VARCHAR(100), server IP address
+        - PublicDomainName: VARCHAR(100), public domain name
+        - Port: INT, network port
+        - Type: INT, server type
+        - Active: BIT, server status
+        - LastModified: DATETIME, last modification timestamp
+    Constraints: PK, unique on IPAddress+Port
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
+CREATE TABLE [dbo].[Servers] (
     [Id]                INT             IDENTITY (1, 1) NOT NULL,
     [IPAddress]         VARCHAR (100)   NOT NULL,
     [PublicDomainName]  VARCHAR (100)   NOT NULL,

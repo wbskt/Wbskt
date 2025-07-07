@@ -1,3 +1,12 @@
+/*
+    Procedure: dbo.EnrollmentPolicies_CleanupExpired
+    Purpose: Deactivates expired time-limited enrollment policies.
+    Parameters: None
+    Returns: None (updates IsActive and LastModified fields)
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.EnrollmentPolicies_CleanupExpired
 AS
 BEGIN

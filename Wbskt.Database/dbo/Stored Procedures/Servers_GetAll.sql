@@ -1,20 +1,24 @@
-﻿/* -------------------------------- */
-/* Servers_GetAll                   */
-/* Author: Richard Joy              */
-/* Updated by: Richard Joy          */
-/* Create date: 26-Aug-2024         */
-/* Description: Self explanatory    */
-/* -------------------------------- */
+﻿/*
+    Procedure: dbo.Servers_GetAll
+    Purpose: Retrieves all servers.
+    Parameters:
+        None
+    Returns: Id, IPAddress, PublicDomainName, Port, Type, Active
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.Servers_GetAll
 AS
 BEGIN
-  SET NOCOUNT ON;
+    SET NOCOUNT ON;
 
-  SELECT Id
-       , IPAddress
-       , PublicDomainName
-       , Port
-       , Type
-       , Active
-    FROM dbo.Servers
+    SELECT
+        Id,
+        IPAddress,
+        PublicDomainName,
+        Port,
+        Type,
+        Active
+    FROM dbo.Servers;
 END;

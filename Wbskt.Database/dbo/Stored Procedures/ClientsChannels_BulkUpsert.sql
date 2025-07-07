@@ -1,3 +1,13 @@
+/*
+    Procedure: dbo.ClientsChannels_BulkUpsert
+    Purpose: Efficiently upserts (inserts or updates) client-channel relationships in bulk.
+    Parameters:
+        - @ClientChannelData ClientChannelTableType READONLY: Table of ClientId/ChannelId pairs
+    Returns: None (inserts or updates Deleted and LastModified fields)
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.ClientsChannels_BulkUpsert
     @ClientChannelData ClientChannelTableType READONLY
 AS

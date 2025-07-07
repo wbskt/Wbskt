@@ -1,3 +1,13 @@
+/*
+    Procedure: dbo.PublishersChannels_BulkUpsert
+    Purpose: Efficiently upserts (inserts or updates) publisher-channel relationships in bulk.
+    Parameters:
+        - @PublisherChannelData PublisherChannelTableType READONLY: Table of PublisherId/ChannelId pairs
+    Returns: None (inserts or updates Deleted and LastModified fields)
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE PROCEDURE dbo.PublishersChannels_BulkUpsert
     @PublisherChannelData PublisherChannelTableType READONLY
 AS

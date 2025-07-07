@@ -1,4 +1,20 @@
-﻿CREATE TABLE [dbo].[Clients] (
+﻿/*
+    Table: dbo.Clients
+    Purpose: Stores client information, including user, server, and policy associations.
+    Columns:
+        - Id: INT, primary key
+        - UserId: INT, foreign key to Users
+        - ServerId: INT, foreign key to Servers
+        - Name: VARCHAR(100), client name
+        - UniqueRef: UNIQUEIDENTIFIER, unique client reference
+        - LastModified: DATETIME, last modification timestamp
+        - PolicyId: INT, foreign key to EnrollmentPolicies
+    Constraints: PK, unique, FK to Users, Servers, EnrollmentPolicies
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
+CREATE TABLE [dbo].[Clients] (
     [Id]                INT                 IDENTITY (1, 1) NOT NULL,
     [UserId]            INT                 NOT NULL,
     [ServerId]          INT                 NOT NULL,

@@ -1,3 +1,16 @@
+/*
+    Table: dbo.PublishersChannels
+    Purpose: Stores relationships between publishers and channels, including deletion status.
+    Columns:
+        - PublisherId: INT, foreign key to Publishers
+        - ChannelId: INT, foreign key to Channels
+        - LastModified: DATETIME, last modification timestamp
+        - Deleted: BIT, soft delete flag
+    Constraints: unique, FK to Publishers and Channels
+    Author: Richard Joy
+    Date: 2025-04-25
+    Last Modified: 2025-04-25 by Richard Joy - Initial version
+*/
 CREATE TABLE [dbo].[PublishersChannels] (
     [PublisherId]   INT     NOT NULL,
     [ChannelId]     INT     NOT NULL,
