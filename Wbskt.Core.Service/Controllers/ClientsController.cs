@@ -10,7 +10,7 @@ namespace Wbskt.Core.Service.Controllers;
 public class ClientsController(Logger<ClientsController> logger, IClientsManagementService clientsService, IEnrollmentService enrollmentService) : ControllerBase
 {
     [HttpGet]
-    public IActionResult GetClients()
+    public IActionResult GetAllForUser()
     {
         logger.LogTrace("getting all clients");
         var userId = User.GetUserId();

@@ -13,7 +13,7 @@ public class PublishersController(ILogger<PublishersController> logger, IPublish
 {
     [HttpGet]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IReadOnlyCollection<PublisherRecord> GetAll()
+    public IReadOnlyCollection<PublisherRecord> GetAllForUser()
     {
         var userId = User.GetUserId();
         var details = publishersService.GetAllForUser(userId);

@@ -6,12 +6,12 @@ using Wbskt.Core.Service.Services;
 
 namespace Wbskt.Core.Service.Controllers;
 
-[Route("api/enroll")]
+[Route("api/[controller]")]
 [ApiController]
 [Authorize]
 public class EnrollmentController(IEnrollmentService enrollmentService) : ControllerBase
 {
-    [HttpPost("code")]
+    [HttpPost]
     public EnrollmentPolicyRecord CreateEnrollmentCode([FromBody] EnrollmentPolicyRecord record)
     {
         var userId = User.GetUserId();
@@ -20,8 +20,8 @@ public class EnrollmentController(IEnrollmentService enrollmentService) : Contro
         return record;
     }
 
-    [HttpGet("policies")]
-    public IEnumerable<EnrollmentPolicyRecord> GetPolicies()
+    [HttpGet]
+    public IEnumerable<EnrollmentPolicyRecord> GetAllForUser()
     {
         var userId = User.GetUserId();
         var policies = enrollmentService.GetPoliciesByUserId(userId);

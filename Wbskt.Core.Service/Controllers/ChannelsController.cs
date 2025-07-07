@@ -13,7 +13,7 @@ public class ChannelsController(ILogger<ChannelsController> logger, IChannelsSer
 {
     [HttpGet]
     [Authorize(AuthenticationSchemes = Constants.AuthSchemes.UserScheme)]
-    public IEnumerable<ChannelRecord> GetAll()
+    public IEnumerable<ChannelRecord> GetAllForUser()
     {
         var userId = User.GetUserId();
         var details = channelsService.GetAllForUser(userId);
