@@ -1,8 +1,6 @@
-using Microsoft.Extensions.Logging;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 using Wbskt.Common.Writers;
-using Wbskt.Core.Service.Services;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
@@ -11,7 +9,7 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
     public int Create(PublisherRecord publisherRecord)
     {
         logger.LogDebug("creating publisher with name: {Name}", publisherRecord.Name);
-        
+
         // Check if user already has a publisher with the same name
         var existingPublishers = GetAllForUser(publisherRecord.UserId);
         if (existingPublishers.Any(p => p.Name == publisherRecord.Name))
@@ -52,4 +50,4 @@ public class PublishersService(ILogger<PublishersService> logger, IPublishersWri
         var publishers = publishersReader.GetAllByIds(publisherIds);
         return publishers.Select(p => p.PublisherRef).ToList().AsReadOnly();
     }
-} 
+}

@@ -5,4 +5,4 @@ namespace Wbskt.Common.Writers;
 public interface IClientsWriter
 {
     int UpsertClient(ClientRecord record);
-} 
+}

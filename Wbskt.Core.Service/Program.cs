@@ -31,13 +31,7 @@ public static class Program
         Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
 
         builder.Host.UseSerilog(Log.Logger);
-        builder.WebHost.UseKestrel().ConfigureKestrel((_, options) =>
-        {
-            options.ConfigureHttpsDefaults(httpsOptions =>
-            {
-                httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-            });
-        });
+        builder.WebHost.UseKestrel().ConfigureKestrel((_, options) => { options.ConfigureHttpsDefaults(httpsOptions => { httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13; }); });
 
         // Add Windows Service hosting
         builder.Host.UseWindowsService();
@@ -66,10 +60,10 @@ public static class Program
         // Register Background Services
         builder.Services.AddHostedService<ServerBackgroundService>();
         builder.Services.AddAuthentication(opt =>
-        {
-            opt.DefaultAuthenticateScheme = Constants.AuthSchemes.UserScheme;
-            opt.DefaultChallengeScheme = Constants.AuthSchemes.UserScheme;
-        })
+            {
+                opt.DefaultAuthenticateScheme = Constants.AuthSchemes.UserScheme;
+                opt.DefaultChallengeScheme = Constants.AuthSchemes.UserScheme;
+            })
             .AddUserAuthScheme(builder.Configuration)
             .AddClientAuthScheme(builder.Configuration)
             .AddSocketServerAuthScheme(builder.Configuration);
@@ -91,15 +85,9 @@ public static class Program
 
         var cancellationService = app.Services.GetRequiredService<ICancellationService>();
         var relationService = app.Services.GetRequiredService<IRelationService>();
-        app.Lifetime.ApplicationStarted.Register(() =>
-        {
-            relationService.InitializeRelations();
-        });
+        app.Lifetime.ApplicationStarted.Register(() => { relationService.InitializeRelations(); });
 
-        app.Lifetime.ApplicationStopping.Register(() =>
-        {
-            cancellationService.Cancel().Wait();
-        });
+        app.Lifetime.ApplicationStopping.Register(() => { cancellationService.Cancel().Wait(); });
 
         await app.RunAsync(cancellationService.GetToken());
     }

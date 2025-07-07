@@ -10,4 +10,4 @@ public interface IPublishersService
     Guid GetPublisherRefById(int publisherId);
     IReadOnlyCollection<int> GetPublisherIdsByRefs(Guid[] publisherRefs);
     IReadOnlyCollection<Guid> GetPublisherRefsByIds(int[] publisherIds);
-} 
+}

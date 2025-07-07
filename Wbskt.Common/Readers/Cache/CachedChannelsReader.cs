@@ -11,8 +11,8 @@ namespace Wbskt.Common.Readers.Cache;
 internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChannelsDatabaseReader channelsReader) : IChannelsReader, IDatabaseChangeListener
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, ChannelReadRecord> channelsCache = [];
     private readonly ConcurrentDictionary<Guid, ChannelReadRecord> channelsByGuidCache = [];
+    private readonly ConcurrentDictionary<int, ChannelReadRecord> channelsCache = [];
 
     public ChannelReadRecord GetById(int channelId)
     {

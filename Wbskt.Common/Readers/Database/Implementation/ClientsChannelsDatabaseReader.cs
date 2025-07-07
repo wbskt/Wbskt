@@ -74,9 +74,9 @@ internal sealed class ClientsChannelsDatabaseReader(ILogger<ClientsChannelsDatab
 
     private class OrdinalColumnMapping
     {
-        public int ClientId;
         public int ChannelId;
-        public int LastModified;
+        public int ClientId;
         public int Deleted;
+        public int LastModified;
     }
 }

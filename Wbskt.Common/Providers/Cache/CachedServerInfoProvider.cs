@@ -7,9 +7,9 @@ namespace Wbskt.Common.Providers.Cache;
 internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider> logger, IServerInfoProvider serverInfoProvider) : ICachedServerInfoProvider
 {
     private static readonly string ServerType = Environment.GetEnvironmentVariable(nameof(ServerType)) ?? Constants.ServerType.CoreServer.ToString();
+    private readonly object @lock = new();
 
     private readonly List<ServerInfo> serverInfos = [];
-    private readonly object @lock = new();
 
     public IReadOnlyCollection<ServerInfo> GetAll()
     {

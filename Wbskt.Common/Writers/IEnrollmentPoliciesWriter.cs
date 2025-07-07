@@ -6,4 +6,4 @@ public interface IEnrollmentPoliciesWriter
 {
     int InsertPolicy(EnrollmentPolicyRecord record);
     void IncrementUsage(int policyId);
-} 
+}

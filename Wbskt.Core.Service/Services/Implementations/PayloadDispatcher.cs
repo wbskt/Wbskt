@@ -1,12 +1,16 @@
 ﻿using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Wbskt.Common.Contracts;
 using Wbskt.Common.Providers;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerInfoProvider serverInfoProvider, IPublishersChannelsService publishersChannelsService, IAuthService authService, IRelationService relationService) : IPayloadDispatcher
+public class PayloadDispatcher(
+    ILogger<ServerInfoService> logger,
+    ICachedServerInfoProvider serverInfoProvider,
+    IPublishersChannelsService publishersChannelsService,
+    IAuthService authService,
+    IRelationService relationService) : IPayloadDispatcher
 {
     public async Task<bool> DispatchPayload(ClientPayload payload)
     {
@@ -41,7 +45,7 @@ public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerI
         var httpClient = new HttpClient
         {
             BaseAddress = new Uri($"http://{server.GetAddressWithFallback()}"),
-            DefaultRequestHeaders = { Authorization = authHeader}
+            DefaultRequestHeaders = { Authorization = authHeader }
         };
 
         try
@@ -53,7 +57,7 @@ public class PayloadDispatcher(ILogger<ServerInfoService> logger, ICachedServerI
                 logger.LogError("dispatch to {server} Id:({serverId}) failed with: {reason}", server.GetAddressWithFallback(), server.ServerId, result.ReasonPhrase);
             }
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             logger.LogWarning("error while request to {url}/dispatch, error: {details}", httpClient.BaseAddress, ex.Message);
         }

@@ -2,10 +2,17 @@
 
 public static class Constants
 {
+    public enum ServerType
+    {
+        CoreServer,
+        SocketServer
+    }
+
     public static class Application
     {
         public const string AppFolderName = "Wbskt";
     }
+
     public static class JwtKeyNames
     {
         public const string UserTokenKey = "Jwt:UserTokenKey";
@@ -47,11 +54,5 @@ public static class Constants
     {
         public const string LogPath = "LogPath";
         public const string LogTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
-    }
-
-    public enum ServerType
-    {
-        CoreServer,
-        SocketServer
     }
 }

@@ -38,6 +38,7 @@ internal sealed class ClientsManagementService(
         {
             throw WbsktExceptions.ClientRefNotExists(clientRef);
         }
+
         SetPolicyRef(new[] { client });
         return client;
     }
@@ -57,6 +58,7 @@ internal sealed class ClientsManagementService(
         {
             throw WbsktExceptions.ClientRefNotExists(policyRef);
         }
+
         record.PolicyId = policy.Id;
         return clientsWriter.UpsertClient(record);
     }

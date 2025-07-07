@@ -134,10 +134,10 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
 
     private class OrdinalColumnMapping
     {
-        public int UserId;
-        public int UserName;
         public int EmailId;
         public int PasswordHash;
         public int PasswordSalt;
+        public int UserId;
+        public int UserName;
     }
 }

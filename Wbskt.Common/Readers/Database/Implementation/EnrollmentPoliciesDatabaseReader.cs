@@ -86,15 +86,15 @@ internal sealed class EnrollmentPoliciesDatabaseReader(ILogger<EnrollmentPolicie
 
     private class OrdinalColumnMapping
     {
-        public int Id;
-        public int UserId;
-        public int PolicyRef;
-        public int Name;
-        public int PolicyType;
-        public int MaxClients;
-        public int ExpiryDate;
         public int CurrentUsage;
+        public int ExpiryDate;
+        public int Id;
         public int IsActive;
         public int LastModified;
+        public int MaxClients;
+        public int Name;
+        public int PolicyRef;
+        public int PolicyType;
+        public int UserId;
     }
 }

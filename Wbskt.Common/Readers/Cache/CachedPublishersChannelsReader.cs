@@ -7,11 +7,20 @@ using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Cache;
 
-internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChannelsReader> logger, IPublishersChannelsDatabaseReader publishersChannelsReader) : IDatabaseChangeListener, IPublishersChannelsReader
+internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChannelsReader> logger, IPublishersChannelsDatabaseReader publishersChannelsReader)
+    : IDatabaseChangeListener, IPublishersChannelsReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> publisherToChannels = [];
     private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> channelToPublishers = [];
+    private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> publisherToChannels = [];
+
+    public void RegisterDatabaseListener()
+    {
+        if (publishersChannelsReader is PublishersChannelsDatabaseReader publishersChannelsReaderImp)
+        {
+            publishersChannelsReaderImp.RegisterSqlDependency(OnDatabaseChange);
+        }
+    }
 
     public IReadOnlyCollection<int> GetChannelIdsForPublisher(int publisherId)
     {
@@ -20,6 +29,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
         {
             return [.. channels.Where(pc => !pc.Deleted).Select(pc => pc.ChannelId)];
         }
+
         return [];
     }
 
@@ -30,6 +40,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
         {
             return [.. publishers.Where(pc => !pc.Deleted).Select(pc => pc.PublisherId)];
         }
+
         return [];
     }
 
@@ -71,14 +82,6 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
         return allPublisherIds.ToList().AsReadOnly();
     }
 
-    public void RegisterDatabaseListener()
-    {
-        if (publishersChannelsReader is PublishersChannelsDatabaseReader publishersChannelsReaderImp)
-        {
-            publishersChannelsReaderImp.RegisterSqlDependency(OnDatabaseChange);
-        }
-    }
-
     private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
     {
         logger.LogInformation("database change detected: {Info}", e.Info);
@@ -115,6 +118,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
                     {
                         channels.Add(record); // Add new - same object reference
                     }
+
                     return channels;
                 }
             );
@@ -134,6 +138,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
                     {
                         publishers.Add(record); // Add new - same object reference
                     }
+
                     return publishers;
                 }
             );

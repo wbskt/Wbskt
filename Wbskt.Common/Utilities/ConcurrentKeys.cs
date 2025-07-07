@@ -12,10 +12,7 @@ public class ConcurrentKeys<T> where T : notnull
 
     public ConcurrentKeys(T[] keys)
     {
-        foreach (var key in keys)
-        {
-            Add(key);
-        }
+        foreach (var key in keys) Add(key);
     }
 
     public void Add(T key)

@@ -48,10 +48,7 @@ internal sealed class PublishersDatabaseReader(ILogger<PublishersDatabaseReader>
         using var reader = command.ExecuteReader();
         var mapping = GetColumnMapping(reader);
 
-        while (reader.Read())
-        {
-            result.Add(ParseData(reader, mapping));
-        }
+        while (reader.Read()) result.Add(ParseData(reader, mapping));
 
         return result.AsReadOnly();
     }
@@ -83,7 +80,7 @@ internal sealed class PublishersDatabaseReader(ILogger<PublishersDatabaseReader>
             Name = reader.GetString(mapping.Name),
             UserId = reader.GetInt32(mapping.UserId),
             PublisherRef = reader.GetGuid(mapping.PublisherRef),
-            LastModified = reader.GetDateTime(mapping.LastModified),
+            LastModified = reader.GetDateTime(mapping.LastModified)
         };
 
         return data;
@@ -97,7 +94,7 @@ internal sealed class PublishersDatabaseReader(ILogger<PublishersDatabaseReader>
             Name = reader.GetOrdinal("Name"),
             UserId = reader.GetOrdinal("UserId"),
             PublisherRef = reader.GetOrdinal("PublisherRef"),
-            LastModified = reader.GetOrdinal("LastModified"),
+            LastModified = reader.GetOrdinal("LastModified")
         };
 
         return mapping;
@@ -106,9 +103,9 @@ internal sealed class PublishersDatabaseReader(ILogger<PublishersDatabaseReader>
     private class OrdinalColumnMapping
     {
         public int Id;
-        public int Name;
-        public int UserId;
-        public int PublisherRef;
         public int LastModified;
+        public int Name;
+        public int PublisherRef;
+        public int UserId;
     }
 }

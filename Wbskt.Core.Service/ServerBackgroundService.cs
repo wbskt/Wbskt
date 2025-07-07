@@ -7,7 +7,9 @@ public class ServerBackgroundService(ILogger<ServerBackgroundService> logger) : 
         logger.LogInformation("server background Service is starting...");
         await Task.Run(() =>
         {
-            while (true) { }
+            while (true)
+            {
+            }
         }, stoppingToken);
     }
 }

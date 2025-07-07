@@ -8,11 +8,18 @@ using Wbskt.Common.Utilities;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-public class RelationService(ILogger<RelationService> logger, IClientsReader clientsReader, IClientsChannelsReader clientsChannelsReader, ICachedServerInfoProvider serverInfoProvider, IChannelsReader channelsReader) : IRelationService
+public class RelationService(
+    ILogger<RelationService> logger,
+    IClientsReader clientsReader,
+    IClientsChannelsReader clientsChannelsReader,
+    ICachedServerInfoProvider serverInfoProvider,
+    IChannelsReader channelsReader) : IRelationService
 {
-    // server - [channels]
-    // used for: re-balancing when a particulate server becomes offline
-    private readonly ConcurrentDictionary<int, ConcurrentKeys<int>> serverChannelsMap = new();
+    //<------------------------------->
+
+    // channel - [clients]
+    // used for: validation, n clients per channel, and look up for re-balancing
+    private readonly ConcurrentDictionary<int, ConcurrentKeys<int>> channelClientsMap = new();
 
     // channel - [servers]
     // used for: dispatching messages to servers based on the channelId (gets the list of servers to which a message needs to be dispatched for a channel)
@@ -23,14 +30,13 @@ public class RelationService(ILogger<RelationService> logger, IClientsReader cli
     // used for: dispatching messages to particular client. A client will always be assigned to one server.
     private readonly ConcurrentDictionary<int, int> clientServerMap = new();
 
+    // server - [channels]
+    // used for: re-balancing when a particulate server becomes offline
+    private readonly ConcurrentDictionary<int, ConcurrentKeys<int>> serverChannelsMap = new();
+
     // server - [client]
     // used for: health purposes and re-balancing. to know how many clients are assigned to a particular server.
     private readonly ConcurrentDictionary<int, ConcurrentKeys<int>> serverClientsMap = new();
-    //<------------------------------->
-
-    // channel - [clients]
-    // used for: validation, n clients per channel, and look up for re-balancing
-    private readonly ConcurrentDictionary<int, ConcurrentKeys<int>> channelClientsMap = new();
 
     public int GetAvailableServerId()
     {
@@ -137,6 +143,7 @@ public class RelationService(ILogger<RelationService> logger, IClientsReader cli
     }
 
     #region Initialization
+
     private void MapAllServerChannels(IReadOnlyCollection<ServerInfo> servers)
     {
         serverChannelsMap.Clear();
@@ -177,6 +184,7 @@ public class RelationService(ILogger<RelationService> logger, IClientsReader cli
             {
                 clientIds.Add(clientId);
             }
+
             channelClientsMap.TryAdd(channel.Id, clientIds);
         }
     }
@@ -197,5 +205,6 @@ public class RelationService(ILogger<RelationService> logger, IClientsReader cli
             serverClientsMap.TryAdd(server.ServerId, clientIds);
         }
     }
+
     #endregion
 }

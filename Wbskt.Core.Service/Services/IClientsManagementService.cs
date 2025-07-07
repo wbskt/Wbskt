@@ -12,4 +12,4 @@ public interface IClientsManagementService
     void SetClientChannels(Guid clientRef, Guid[] channelRefs);
     IReadOnlyCollection<Guid> GetChannelRefsForClient(Guid clientRef);
     IReadOnlyCollection<Guid> GetClientRefsForChannel(Guid channelRef);
-} 
+}

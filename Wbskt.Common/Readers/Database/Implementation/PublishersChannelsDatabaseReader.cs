@@ -57,7 +57,7 @@ internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannel
             Deleted = reader.GetBoolean(mapping.Deleted),
             ChannelId = reader.GetInt32(mapping.ChannelId),
             PublisherId = reader.GetInt32(mapping.PublisherId),
-            LastModified = reader.GetDateTime(mapping.LastModified),
+            LastModified = reader.GetDateTime(mapping.LastModified)
         };
 
         return data;
@@ -70,7 +70,7 @@ internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannel
             Deleted = reader.GetOrdinal("Deleted"),
             ChannelId = reader.GetOrdinal("ChannelId"),
             PublisherId = reader.GetOrdinal("PublisherId"),
-            LastModified = reader.GetOrdinal("LastModified"),
+            LastModified = reader.GetOrdinal("LastModified")
         };
 
         return mapping;
@@ -78,9 +78,9 @@ internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannel
 
     private class OrdinalColumnMapping
     {
-        public int Deleted;
         public int ChannelId;
-        public int PublisherId;
+        public int Deleted;
         public int LastModified;
+        public int PublisherId;
     }
 }

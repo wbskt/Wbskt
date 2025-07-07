@@ -10,8 +10,8 @@ namespace Wbskt.Common.Readers.Cache;
 internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsReader> logger, IClientsChannelsDatabaseReader clientsChannelsReader) : IDatabaseChangeListener, IClientsChannelsReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> clientToChannels = [];
     private readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> channelToClients = [];
+    private readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> clientToChannels = [];
 
     public IReadOnlyCollection<int> GetChannelIdsForClient(int clientId)
     {
@@ -20,6 +20,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
         {
             return [.. channels.Where(cc => !cc.Deleted).Select(cc => cc.ChannelId)];
         }
+
         return [];
     }
 
@@ -30,6 +31,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
         {
             return [.. clients.Where(cc => !cc.Deleted).Select(cc => cc.ClientId)];
         }
+
         return [];
     }
 
@@ -115,6 +117,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
                         {
                             channels.Remove(existing);
                         }
+
                         channels.Add(clientChannel);
                         return channels;
                     });
@@ -130,6 +133,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
                         {
                             clients.Remove(existing);
                         }
+
                         clients.Add(clientChannel);
                         return clients;
                     });
@@ -149,4 +153,4 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
             throw;
         }
     }
-} 
+}

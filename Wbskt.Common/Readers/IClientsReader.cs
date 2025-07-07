@@ -10,4 +10,4 @@ public interface IClientsReader
     IReadOnlyCollection<ClientReadRecord> GetAllByUserId(int userId);
     IReadOnlyCollection<ClientReadRecord> GetAllByIds(int[] ids);
     IReadOnlyCollection<ClientReadRecord> GetAllByRefs(Guid[] clientRefs);
-} 
+}

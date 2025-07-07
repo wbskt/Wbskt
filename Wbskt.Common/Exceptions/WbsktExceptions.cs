@@ -8,6 +8,7 @@ public static class WbsktExceptions
     {
         return new UnauthorizedAccessException($"emailId: '{emailId}' already exists");
     }
+
     public static ValidationException ChannelExists(string channelName)
     {
         return new ValidationException($"channel: '{channelName}' already exists");
@@ -65,7 +66,7 @@ public static class WbsktExceptions
 
     public static InvalidOperationException SocketServerUnavailable()
     {
-        return new InvalidOperationException($"the are no socket servers registered");
+        return new InvalidOperationException("the are no socket servers registered");
     }
 
     public static InvalidOperationException FailedToInsertOrUpdateClient(Guid clientUniqueId)

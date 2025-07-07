@@ -45,10 +45,7 @@ internal sealed class PublishersChannelsWriter(ILogger<PublishersChannelsWriter>
         command.Parameters.Add(new SqlParameter("@ChannelId", channelId));
 
         var rowsAffected = command.ExecuteNonQuery();
-        if (rowsAffected == 0)
-        {
-            logger.LogWarning("no publisher-channel relation found to delete: PublisherId={PublisherId}, ChannelId={ChannelId}", publisherId, channelId);
-        }
+        if (rowsAffected == 0) logger.LogWarning("no publisher-channel relation found to delete: PublisherId={PublisherId}, ChannelId={ChannelId}", publisherId, channelId);
     }
 
     public void BulkUpsertPublisherChannels(IReadOnlyCollection<PublisherChannelRecord> pairs)

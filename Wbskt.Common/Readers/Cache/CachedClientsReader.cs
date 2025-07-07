@@ -11,8 +11,8 @@ namespace Wbskt.Common.Readers.Cache;
 internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, IClientsDatabaseReader clientsReader) : IDatabaseChangeListener, IClientsReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, ClientReadRecord> clientsCache = [];
     private readonly ConcurrentDictionary<Guid, ClientReadRecord> clientsByGuidCache = [];
+    private readonly ConcurrentDictionary<int, ClientReadRecord> clientsCache = [];
 
     public ClientReadRecord GetById(int id)
     {
@@ -131,4 +131,4 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
             throw;
         }
     }
-} 
+}

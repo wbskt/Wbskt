@@ -45,10 +45,7 @@ internal sealed class ClientsChannelsWriter(ILogger<ClientsChannelsWriter> logge
         command.Parameters.Add(new SqlParameter("@ChannelId", channelId));
 
         var rowsAffected = command.ExecuteNonQuery();
-        if (rowsAffected == 0)
-        {
-            logger.LogWarning("no client-channel relation found to delete: ClientId={ClientId}, ChannelId={ChannelId}", clientId, channelId);
-        }
+        if (rowsAffected == 0) logger.LogWarning("no client-channel relation found to delete: ClientId={ClientId}, ChannelId={ChannelId}", clientId, channelId);
     }
 
     public void BulkUpsertClientChannels(IReadOnlyCollection<ClientChannelRecord> pairs)

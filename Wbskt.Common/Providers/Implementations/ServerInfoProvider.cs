@@ -123,11 +123,11 @@ internal sealed class ServerInfoProvider(ILogger<ServerInfoProvider> logger, ICo
 
     private class OrdinalColumnMapping
     {
-        public int Port;
-        public int Type;
         public int Active;
-        public int ServerId;
         public int IPAddress;
+        public int Port;
         public int PublicDomainName;
+        public int ServerId;
+        public int Type;
     }
 }

@@ -105,10 +105,10 @@ internal sealed class ChannelsDatabaseReader(ILogger<ChannelsDatabaseReader> log
 
     private class OrdinalColumnMapping
     {
+        public int ChannelRef;
         public int Id;
+        public int LastModified;
         public int Name;
         public int UserId;
-        public int LastModified;
-        public int ChannelRef;
     }
 }

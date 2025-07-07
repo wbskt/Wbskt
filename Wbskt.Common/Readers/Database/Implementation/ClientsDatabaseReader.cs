@@ -79,10 +79,10 @@ internal sealed class ClientsDatabaseReader(ILogger<ClientsDatabaseReader> logge
     private class OrdinalColumnMapping
     {
         public int Id;
+        public int LastModified;
         public int Name;
-        public int UserId;
         public int ServerId;
         public int UniqueRef;
-        public int LastModified;
+        public int UserId;
     }
 }

@@ -8,4 +8,4 @@ public interface IClientsChannelsWriter
     void DeleteClientChannel(int clientId, int channelId);
     void BulkUpsertClientChannels(IReadOnlyCollection<ClientChannelRecord> pairs);
     void BulkDeleteClientChannels(IReadOnlyCollection<ClientChannelRecord> pairs);
-} 
+}

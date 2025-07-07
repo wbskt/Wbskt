@@ -6,4 +6,4 @@ public interface IClientsChannelsReader
     IReadOnlyCollection<int> GetClientIdsForChannel(int channelId);
     IReadOnlyCollection<int> GetChannelIdsForClients(int[] clientIds);
     IReadOnlyCollection<int> GetClientIdsForChannels(int[] channelIds);
-} 
+}

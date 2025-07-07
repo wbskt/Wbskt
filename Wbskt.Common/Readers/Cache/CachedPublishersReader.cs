@@ -11,8 +11,16 @@ namespace Wbskt.Common.Readers.Cache;
 internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> logger, IPublishersDatabaseReader publishersReader) : IDatabaseChangeListener, IPublishersReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, PublisherReadRecord> publishersCache = [];
     private readonly ConcurrentDictionary<Guid, PublisherReadRecord> publishersByGuidCache = [];
+    private readonly ConcurrentDictionary<int, PublisherReadRecord> publishersCache = [];
+
+    public void RegisterDatabaseListener()
+    {
+        if (publishersReader is PublishersDatabaseReader publishersReaderImp)
+        {
+            publishersReaderImp.RegisterSqlDependency(OnDatabaseChange);
+        }
+    }
 
     public PublisherReadRecord GetById(int id)
     {
@@ -78,14 +86,6 @@ internal sealed class CachedPublishersReader(ILogger<CachedPublishersReader> log
         }
 
         return result.AsReadOnly();
-    }
-
-    public void RegisterDatabaseListener()
-    {
-        if (publishersReader is PublishersDatabaseReader publishersReaderImp)
-        {
-            publishersReaderImp.RegisterSqlDependency(OnDatabaseChange);
-        }
     }
 
     private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)

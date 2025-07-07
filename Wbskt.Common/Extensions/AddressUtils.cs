@@ -31,7 +31,7 @@ public static class AddressUtils
         {
             var client = new HttpClient
             {
-                BaseAddress = new Uri("https://ifconfig.me"),
+                BaseAddress = new Uri("https://ifconfig.me")
             };
 
             var result = await client.GetAsync("ip");

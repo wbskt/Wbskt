@@ -4,14 +4,14 @@ using System.Text;
 namespace Wbskt.Common.Extensions;
 
 /// <summary>
-/// Provides extension methods for WebSocket operations.
+///     Provides extension methods for WebSocket operations.
 /// </summary>
 public static class SocketExtensions
 {
     private const int BufferSize = 4096; // 4 KB buffer size for reading messages.
 
     /// <summary>
-    /// Sends a text message asynchronously using the WebSocket.
+    ///     Sends a text message asynchronously using the WebSocket.
     /// </summary>
     /// <param name="webSocket">The WebSocket instance.</param>
     /// <param name="message">The message to send.</param>
@@ -22,7 +22,7 @@ public static class SocketExtensions
     }
 
     /// <summary>
-    /// Sends a text message asynchronously using the WebSocket with a cancellation token.
+    ///     Sends a text message asynchronously using the WebSocket with a cancellation token.
     /// </summary>
     /// <param name="webSocket">The WebSocket instance.</param>
     /// <param name="message">The message to send.</param>
@@ -36,11 +36,11 @@ public static class SocketExtensions
         var messageBytes = Encoding.UTF8.GetBytes(message);
         var messageSegment = new ArraySegment<byte>(messageBytes);
 
-        await webSocket.SendAsync(messageSegment, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+        await webSocket.SendAsync(messageSegment, WebSocketMessageType.Text, true, cancellationToken);
     }
 
     /// <summary>
-    /// Receives a text message asynchronously using the WebSocket.
+    ///     Receives a text message asynchronously using the WebSocket.
     /// </summary>
     /// <param name="webSocket">The WebSocket instance.</param>
     /// <returns>A task representing the asynchronous operation, containing the result and message.</returns>
@@ -50,7 +50,7 @@ public static class SocketExtensions
     }
 
     /// <summary>
-    /// Receives a text message asynchronously using the WebSocket with a cancellation token.
+    ///     Receives a text message asynchronously using the WebSocket with a cancellation token.
     /// </summary>
     /// <param name="webSocket">The WebSocket instance.</param>
     /// <param name="cancellationToken">The cancellation token to observe.</param>

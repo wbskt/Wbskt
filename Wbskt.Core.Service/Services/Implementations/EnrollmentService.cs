@@ -40,6 +40,7 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 {
                     return false;
                 }
+
                 break;
 
             case EnrollmentPolicyType.NumberOfClients:
@@ -47,6 +48,7 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 {
                     return false;
                 }
+
                 break;
 
             case EnrollmentPolicyType.Unlimited:
@@ -59,10 +61,12 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 {
                     return false;
                 }
+
                 if (policy.MaxClients.HasValue && policy.CurrentUsage >= policy.MaxClients.Value)
                 {
                     return false;
                 }
+
                 break;
         }
 
@@ -91,10 +95,12 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 {
                     throw new ArgumentException("Expiry date is required for time-limited policies", nameof(record));
                 }
+
                 if (record.ExpiryDate.Value <= DateTime.UtcNow)
                 {
                     throw new ArgumentException("Expiry date must be in the future", nameof(record));
                 }
+
                 break;
 
             case EnrollmentPolicyType.NumberOfClients:
@@ -102,6 +108,7 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 {
                     throw new ArgumentException("MaxClients must be greater than 0 for NumberOfClients policies", nameof(record));
                 }
+
                 break;
 
             case EnrollmentPolicyType.Unlimited:
@@ -113,14 +120,17 @@ internal sealed class EnrollmentService(ILogger<EnrollmentService> logger, IEnro
                 {
                     throw new ArgumentException("Expiry date is required for TimeAndCount policies", nameof(record));
                 }
+
                 if (record.ExpiryDate.Value <= DateTime.UtcNow)
                 {
                     throw new ArgumentException("Expiry date must be in the future", nameof(record));
                 }
+
                 if (record.MaxClients is not > 0)
                 {
                     throw new ArgumentException("MaxClients must be greater than 0 for TimeAndCount policies", nameof(record));
                 }
+
                 break;
 
             default:

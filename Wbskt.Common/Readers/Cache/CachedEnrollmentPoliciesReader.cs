@@ -7,11 +7,20 @@ using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Cache;
 
-internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPoliciesReader> logger, IEnrollmentPoliciesDatabaseReader enrollmentPoliciesReader) : IDatabaseChangeListener, IEnrollmentPoliciesReader
+internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPoliciesReader> logger, IEnrollmentPoliciesDatabaseReader enrollmentPoliciesReader)
+    : IDatabaseChangeListener, IEnrollmentPoliciesReader
 {
     private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, EnrollmentPolicyReadRecord> policiesCache = [];
     private readonly ConcurrentDictionary<Guid, EnrollmentPolicyReadRecord> policiesByPolicyRefCache = [];
+    private readonly ConcurrentDictionary<int, EnrollmentPolicyReadRecord> policiesCache = [];
+
+    public void RegisterDatabaseListener()
+    {
+        if (enrollmentPoliciesReader is EnrollmentPoliciesDatabaseReader enrollmentPoliciesReaderImp)
+        {
+            enrollmentPoliciesReaderImp.RegisterSqlDependency(OnDatabaseChange);
+        }
+    }
 
     public IReadOnlyCollection<EnrollmentPolicyReadRecord> GetAll()
     {
@@ -35,14 +44,6 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
     {
         RefreshCacheIfEmpty();
         return policiesByPolicyRefCache.GetValueOrDefault(policyRef);
-    }
-
-    public void RegisterDatabaseListener()
-    {
-        if (enrollmentPoliciesReader is EnrollmentPoliciesDatabaseReader enrollmentPoliciesReaderImp)
-        {
-            enrollmentPoliciesReaderImp.RegisterSqlDependency(OnDatabaseChange);
-        }
     }
 
     private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
