@@ -9,8 +9,7 @@ internal sealed class PayloadDispatcher(
     ILogger<ServerInfoService> logger,
     ICachedServerInfoProvider serverInfoProvider,
     IPublishersChannelsService publishersChannelsService,
-    IAuthService authService,
-    IRelationService relationService) : IPayloadDispatcher
+    IAuthService authService) : IPayloadDispatcher
 {
     public async Task<bool> DispatchPayload(ClientPayload payload)
     {
@@ -26,10 +25,10 @@ internal sealed class PayloadDispatcher(
             return false;
         }
 
-        foreach (var serverId in relationService.GetServersForChannels(channelIds))
+        foreach (var server in serverInfoProvider.GetAllSocketServerInfo())
         {
-            logger.LogDebug("dispatcher task queued for socket server: {serverId}, publisherId: {publisherId}", serverId, payload);
-            tasks.Add(DispatchPayloadToServer(serverId, payload));
+            logger.LogDebug("dispatcher task queued for socket server: {serverId}, publisherId: {publisherId}", server.ServerId, payload);
+            tasks.Add(DispatchPayloadToServer(server.ServerId, payload));
         }
 
         await Task.WhenAll(tasks);
