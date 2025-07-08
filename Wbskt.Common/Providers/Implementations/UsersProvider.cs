@@ -91,7 +91,7 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
         command.CommandType = CommandType.StoredProcedure;
         command.CommandText = "dbo.Users_Insert";
 
-        command.Parameters.Add(new SqlParameter("@UserName", ProviderExtensions.ReplaceDbNulls(user.UserName)));
+        command.Parameters.Add(new SqlParameter("@Name", ProviderExtensions.ReplaceDbNulls(user.Name)));
         command.Parameters.Add(new SqlParameter("@EmailId", ProviderExtensions.ReplaceDbNulls(user.EmailId)));
         command.Parameters.Add(new SqlParameter("@PasswordHash", ProviderExtensions.ReplaceDbNulls(user.PasswordHash)));
         command.Parameters.Add(new SqlParameter("@PasswordSalt", ProviderExtensions.ReplaceDbNulls(user.PasswordSalt)));
@@ -110,7 +110,7 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
         var data = new User
         {
             UserId = reader.GetInt32(mapping.UserId),
-            UserName = reader.GetString(mapping.UserName),
+            Name = reader.GetString(mapping.Name),
             EmailId = reader.GetString(mapping.EmailId),
             PasswordHash = reader.GetString(mapping.PasswordHash),
             PasswordSalt = reader.GetString(mapping.PasswordSalt)
@@ -124,7 +124,7 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
         var mapping = new OrdinalColumnMapping();
 
         mapping.UserId = reader.GetOrdinal("Id");
-        mapping.UserName = reader.GetOrdinal("UserName");
+        mapping.Name = reader.GetOrdinal("Name");
         mapping.EmailId = reader.GetOrdinal("EmailId");
         mapping.PasswordHash = reader.GetOrdinal("PasswordHash");
         mapping.PasswordSalt = reader.GetOrdinal("PasswordSalt");
@@ -138,6 +138,6 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
         public int PasswordHash;
         public int PasswordSalt;
         public int UserId;
-        public int UserName;
+        public int Name;
     }
 }

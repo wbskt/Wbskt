@@ -7,7 +7,7 @@ public static class ProviderExtensions
 {
     public static object? ReplaceDbNulls(object? value)
     {
-        if (value is DateTime time && time == DateTime.MinValue)
+        if (value is DateTime time && time == DateTime.UnixEpoch)
         {
             return DBNull.Value;
         }

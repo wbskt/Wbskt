@@ -10,9 +10,9 @@ namespace Wbskt.Common.Readers.Cache;
 internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersChannelsReader> logger, IPublishersChannelsDatabaseReader publishersChannelsReader)
     : IDatabaseChangeListener, IPublishersChannelsReader
 {
-    private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> channelToPublishers = [];
-    private readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> publisherToChannels = [];
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> ChannelToPublishers = [];
+    private static readonly ConcurrentDictionary<int, List<PublisherChannelReadRecord>> PublisherToChannels = [];
 
     public void RegisterDatabaseListener()
     {
@@ -25,7 +25,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
     public IReadOnlyCollection<int> GetChannelIdsForPublisher(int publisherId)
     {
         RefreshCacheIfEmpty();
-        if (publisherToChannels.TryGetValue(publisherId, out var channels))
+        if (PublisherToChannels.TryGetValue(publisherId, out var channels))
         {
             return [.. channels.Where(pc => !pc.Deleted).Select(pc => pc.ChannelId)];
         }
@@ -36,7 +36,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
     public IReadOnlyCollection<int> GetPublisherIdsForChannel(int channelId)
     {
         RefreshCacheIfEmpty();
-        if (channelToPublishers.TryGetValue(channelId, out var publishers))
+        if (ChannelToPublishers.TryGetValue(channelId, out var publishers))
         {
             return [.. publishers.Where(pc => !pc.Deleted).Select(pc => pc.PublisherId)];
         }
@@ -51,7 +51,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
 
         foreach (var publisherId in publisherIds)
         {
-            if (publisherToChannels.TryGetValue(publisherId, out var channels))
+            if (PublisherToChannels.TryGetValue(publisherId, out var channels))
             {
                 foreach (var channel in channels.Where(pc => !pc.Deleted))
                 {
@@ -70,7 +70,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
 
         foreach (var channelId in channelIds)
         {
-            if (channelToPublishers.TryGetValue(channelId, out var publishers))
+            if (ChannelToPublishers.TryGetValue(channelId, out var publishers))
             {
                 foreach (var publisher in publishers.Where(pc => !pc.Deleted))
                 {
@@ -92,7 +92,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
 
     private void RefreshCacheIfEmpty()
     {
-        if (publisherToChannels.IsEmpty || channelToPublishers.IsEmpty)
+        if (PublisherToChannels.IsEmpty || ChannelToPublishers.IsEmpty)
         {
             RefreshCache();
         }
@@ -104,7 +104,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
         foreach (var record in latestPublisherChannels)
         {
             // Add to publisher -> channels mapping
-            publisherToChannels.AddOrUpdate(
+            PublisherToChannels.AddOrUpdate(
                 record.PublisherId,
                 [record],
                 (_, channels) =>
@@ -124,7 +124,7 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
             );
 
             // Add to channel -> publishers mapping (same record object)
-            channelToPublishers.AddOrUpdate(
+            ChannelToPublishers.AddOrUpdate(
                 record.ChannelId,
                 [record],
                 (_, publishers) =>

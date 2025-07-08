@@ -10,14 +10,14 @@ namespace Wbskt.Common.Readers.Cache;
 
 internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, IClientsDatabaseReader clientsReader) : IDatabaseChangeListener, IClientsReader
 {
-    private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<Guid, ClientReadRecord> clientsByGuidCache = [];
-    private readonly ConcurrentDictionary<int, ClientReadRecord> clientsCache = [];
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<Guid, ClientReadRecord> ClientsByGuidCache = [];
+    private static readonly ConcurrentDictionary<int, ClientReadRecord> ClientsCache = [];
 
     public ClientReadRecord GetById(int id)
     {
         RefreshCacheIfEmpty();
-        if (clientsCache.TryGetValue(id, out var record))
+        if (ClientsCache.TryGetValue(id, out var record))
         {
             return record;
         }
@@ -28,7 +28,7 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
     public ClientReadRecord GetByRef(Guid clientRef)
     {
         RefreshCacheIfEmpty();
-        if (clientsByGuidCache.TryGetValue(clientRef, out var record))
+        if (ClientsByGuidCache.TryGetValue(clientRef, out var record))
         {
             return record;
         }
@@ -39,13 +39,13 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
     public IReadOnlyCollection<ClientReadRecord> GetAll()
     {
         RefreshCacheIfEmpty();
-        return [.. clientsCache.Values];
+        return [.. ClientsCache.Values];
     }
 
     public IReadOnlyCollection<ClientReadRecord> GetAllByUserId(int userId)
     {
         RefreshCacheIfEmpty();
-        return [.. clientsCache.Values.Where(c => c.UserId == userId)];
+        return [.. ClientsCache.Values.Where(c => c.UserId == userId)];
     }
 
     public IReadOnlyCollection<ClientReadRecord> GetAllByIds(int[] ids)
@@ -55,7 +55,7 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
 
         foreach (var id in ids)
         {
-            if (clientsCache.TryGetValue(id, out var record))
+            if (ClientsCache.TryGetValue(id, out var record))
             {
                 result.Add(record);
             }
@@ -71,7 +71,7 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
 
         foreach (var clientRef in clientRefs)
         {
-            if (clientsByGuidCache.TryGetValue(clientRef, out var record))
+            if (ClientsByGuidCache.TryGetValue(clientRef, out var record))
             {
                 result.Add(record);
             }
@@ -98,7 +98,7 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
 
     private void RefreshCacheIfEmpty()
     {
-        if (clientsCache.IsEmpty || clientsByGuidCache.IsEmpty)
+        if (ClientsCache.IsEmpty || ClientsByGuidCache.IsEmpty)
         {
             RefreshCache();
         }
@@ -113,8 +113,8 @@ internal sealed class CachedClientsReader(ILogger<CachedClientsReader> logger, I
 
             foreach (var client in clients)
             {
-                clientsCache.AddOrUpdate(client.Id, client, (_, _) => client);
-                clientsByGuidCache.AddOrUpdate(client.UniqueRef, client, (_, _) => client);
+                ClientsCache.AddOrUpdate(client.Id, client, (_, _) => client);
+                ClientsByGuidCache.AddOrUpdate(client.UniqueRef, client, (_, _) => client);
 
                 if (client.LastModified > maxLastModified)
                 {

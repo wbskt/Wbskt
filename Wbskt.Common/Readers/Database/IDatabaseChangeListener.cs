@@ -1,6 +1,6 @@
 ﻿namespace Wbskt.Common.Readers.Database;
 
-internal interface IDatabaseChangeListener
+public interface IDatabaseChangeListener
 {
     void RegisterDatabaseListener();
 }

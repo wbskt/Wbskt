@@ -10,14 +10,14 @@ namespace Wbskt.Common.Readers.Cache;
 
 internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger, IChannelsDatabaseReader channelsReader) : IChannelsReader, IDatabaseChangeListener
 {
-    private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<Guid, ChannelReadRecord> channelsByGuidCache = [];
-    private readonly ConcurrentDictionary<int, ChannelReadRecord> channelsCache = [];
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<Guid, ChannelReadRecord> ChannelsByGuidCache = [];
+    private static readonly ConcurrentDictionary<int, ChannelReadRecord> ChannelsCache = [];
 
     public ChannelReadRecord GetById(int channelId)
     {
         RefreshCacheIfEmpty();
-        if (channelsCache.TryGetValue(channelId, out var record))
+        if (ChannelsCache.TryGetValue(channelId, out var record))
         {
             return record;
         }
@@ -28,7 +28,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
     public ChannelReadRecord GetByRef(Guid channelRef)
     {
         RefreshCacheIfEmpty();
-        if (channelsByGuidCache.TryGetValue(channelRef, out var record))
+        if (ChannelsByGuidCache.TryGetValue(channelRef, out var record))
         {
             return record;
         }
@@ -39,13 +39,13 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
     public IReadOnlyCollection<ChannelReadRecord> GetAll()
     {
         RefreshCacheIfEmpty();
-        return [.. channelsCache.Values];
+        return [.. ChannelsCache.Values];
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAllByUserId(int userId)
     {
         RefreshCacheIfEmpty();
-        return [.. channelsCache.Values.Where(c => c.UserId == userId)];
+        return [.. ChannelsCache.Values.Where(c => c.UserId == userId)];
     }
 
     public IReadOnlyCollection<ChannelReadRecord> GetAllByIds(int[] ids)
@@ -55,7 +55,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
 
         foreach (var id in ids)
         {
-            if (channelsCache.TryGetValue(id, out var record))
+            if (ChannelsCache.TryGetValue(id, out var record))
             {
                 result.Add(record);
             }
@@ -71,7 +71,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
 
         foreach (var channelRef in channelRefs)
         {
-            if (channelsByGuidCache.TryGetValue(channelRef, out var record))
+            if (ChannelsByGuidCache.TryGetValue(channelRef, out var record))
             {
                 result.Add(record);
             }
@@ -98,7 +98,7 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
 
     private void RefreshCacheIfEmpty()
     {
-        if (channelsCache.IsEmpty || channelsByGuidCache.IsEmpty)
+        if (ChannelsCache.IsEmpty || ChannelsByGuidCache.IsEmpty)
         {
             RefreshCache();
         }
@@ -109,8 +109,8 @@ internal sealed class CachedChannelsReader(ILogger<CachedChannelsReader> logger,
         var latestChannels = channelsReader.GetAll(_lastModified);
         foreach (var record in latestChannels)
         {
-            channelsCache[record.Id] = record;
-            channelsByGuidCache[record.ChannelRef] = record;
+            ChannelsCache[record.Id] = record;
+            ChannelsByGuidCache[record.ChannelRef] = record;
 
             if (record.LastModified > _lastModified)
             {

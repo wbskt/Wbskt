@@ -57,3 +57,21 @@ public static class DependencyInjection
         serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedEnrollmentPoliciesReader>(nameof(CachedEnrollmentPoliciesReader));
     }
 }
+
+public class DatabaseChangeListenerRegistry
+{
+    private readonly string[] registeredKeys = new[]
+    {
+        nameof(CachedChannelsReader),
+        nameof(CachedPublishersReader),
+        nameof(CachedPublishersChannelsReader),
+        nameof(CachedClientsReader),
+        nameof(CachedClientsChannelsReader),
+        nameof(CachedEnrollmentPoliciesReader)
+    };
+
+    public IEnumerable<IDatabaseChangeListener> GetAllListeners(IServiceProvider serviceProvider)
+    {
+        return registeredKeys.Select(serviceProvider.GetRequiredKeyedService<IDatabaseChangeListener>);
+    }
+}

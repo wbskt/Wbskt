@@ -23,7 +23,7 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
             Subject = new ClaimsIdentity(new Claim[]
             {
                 new(Constants.Claims.EmailId, userData.EmailId),
-                new(Constants.Claims.Name, userData.UserName),
+                new(Constants.Claims.Name, userData.Name),
                 new(Constants.Claims.UserData, userData.UserId.ToString())
             }),
             Expires = DateTime.UtcNow.AddDays(1),
@@ -63,7 +63,7 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
         var salt = GenerateSalt();
         var saltedPassword = request.Password + salt;
         var hashedPassword = passwordHasher.HashPassword(null!, saltedPassword);
-        var user = new User { EmailId = request.EmailId, PasswordHash = hashedPassword, PasswordSalt = salt, UserName = request.UserName };
+        var user = new User { EmailId = request.EmailId, PasswordHash = hashedPassword, PasswordSalt = salt, Name = request.UserName };
         return usersService.AddUser(user);
     }
 

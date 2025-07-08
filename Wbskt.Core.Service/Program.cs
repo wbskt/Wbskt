@@ -1,9 +1,11 @@
-﻿using System.Security.Authentication;
+﻿using System.Data.SqlClient;
+using System.Security.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Wbskt.Common;
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Extensions;
+using Wbskt.Common.Readers;
 using Wbskt.Common.Services;
 using Wbskt.Core.Service.Pipeline;
 using Wbskt.Core.Service.Services;
@@ -84,11 +86,31 @@ public static class Program
         app.MapControllers();
 
         var cancellationService = app.Services.GetRequiredService<ICancellationService>();
-        var relationService = app.Services.GetRequiredService<IRelationService>();
-        app.Lifetime.ApplicationStarted.Register(() => { relationService.InitializeRelations(); });
+        app.Lifetime.ApplicationStarted.Register(() => { OnStarted(app.Services); });
 
-        app.Lifetime.ApplicationStopping.Register(() => { cancellationService.Cancel().Wait(); });
+        app.Lifetime.ApplicationStopping.Register(() => { OnStopping(app.Services); });
 
         await app.RunAsync(cancellationService.GetToken());
+    }
+
+    private static void OnStopping(IServiceProvider serviceProvider)
+    {
+        var cancellationService = serviceProvider.GetRequiredService<ICancellationService>();
+        var connectionString = serviceProvider.GetRequiredService<IConnectionStringProvider>().ConnectionString;
+        cancellationService.Cancel().Wait();
+        SqlDependency.Stop(connectionString);
+    }
+
+    private  static void OnStarted(IServiceProvider serviceProvider)
+    {
+        var connectionString = serviceProvider.GetRequiredService<IConnectionStringProvider>().ConnectionString;
+        SqlDependency.Start(connectionString);
+
+        var changeListeners = new DatabaseChangeListenerRegistry().GetAllListeners(serviceProvider);
+
+        foreach (var changeListener in changeListeners)
+        {
+            changeListener.RegisterDatabaseListener();
+        }
     }
 }

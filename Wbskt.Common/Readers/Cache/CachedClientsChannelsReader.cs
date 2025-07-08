@@ -9,14 +9,14 @@ namespace Wbskt.Common.Readers.Cache;
 
 internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsReader> logger, IClientsChannelsDatabaseReader clientsChannelsReader) : IDatabaseChangeListener, IClientsChannelsReader
 {
-    private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> channelToClients = [];
-    private readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> clientToChannels = [];
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> ChannelToClients = [];
+    private static readonly ConcurrentDictionary<int, List<ClientChannelReadRecord>> ClientToChannels = [];
 
     public IReadOnlyCollection<int> GetChannelIdsForClient(int clientId)
     {
         RefreshCacheIfEmpty();
-        if (clientToChannels.TryGetValue(clientId, out var channels))
+        if (ClientToChannels.TryGetValue(clientId, out var channels))
         {
             return [.. channels.Where(cc => !cc.Deleted).Select(cc => cc.ChannelId)];
         }
@@ -27,7 +27,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
     public IReadOnlyCollection<int> GetClientIdsForChannel(int channelId)
     {
         RefreshCacheIfEmpty();
-        if (channelToClients.TryGetValue(channelId, out var clients))
+        if (ChannelToClients.TryGetValue(channelId, out var clients))
         {
             return [.. clients.Where(cc => !cc.Deleted).Select(cc => cc.ClientId)];
         }
@@ -42,7 +42,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
 
         foreach (var clientId in clientIds)
         {
-            if (clientToChannels.TryGetValue(clientId, out var channels))
+            if (ClientToChannels.TryGetValue(clientId, out var channels))
             {
                 foreach (var channel in channels.Where(cc => !cc.Deleted))
                 {
@@ -61,7 +61,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
 
         foreach (var channelId in channelIds)
         {
-            if (channelToClients.TryGetValue(channelId, out var clients))
+            if (ChannelToClients.TryGetValue(channelId, out var clients))
             {
                 foreach (var client in clients.Where(cc => !cc.Deleted))
                 {
@@ -91,7 +91,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
 
     private void RefreshCacheIfEmpty()
     {
-        if (clientToChannels.IsEmpty || channelToClients.IsEmpty)
+        if (ClientToChannels.IsEmpty || ChannelToClients.IsEmpty)
         {
             RefreshCache();
         }
@@ -107,7 +107,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
             foreach (var clientChannel in clientChannels)
             {
                 // Update client to channels mapping
-                clientToChannels.AddOrUpdate(
+                ClientToChannels.AddOrUpdate(
                     clientChannel.ClientId,
                     [clientChannel],
                     (_, channels) =>
@@ -123,7 +123,7 @@ internal sealed class CachedClientsChannelsReader(ILogger<CachedClientsChannelsR
                     });
 
                 // Update channel to clients mapping
-                channelToClients.AddOrUpdate(
+                ChannelToClients.AddOrUpdate(
                     clientChannel.ChannelId,
                     [clientChannel],
                     (_, clients) =>

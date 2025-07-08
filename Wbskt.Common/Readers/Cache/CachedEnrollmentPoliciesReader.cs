@@ -10,9 +10,9 @@ namespace Wbskt.Common.Readers.Cache;
 internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPoliciesReader> logger, IEnrollmentPoliciesDatabaseReader enrollmentPoliciesReader)
     : IDatabaseChangeListener, IEnrollmentPoliciesReader
 {
-    private static DateTime _lastModified = DateTime.MinValue;
-    private readonly ConcurrentDictionary<Guid, EnrollmentPolicyReadRecord> policiesByPolicyRefCache = [];
-    private readonly ConcurrentDictionary<int, EnrollmentPolicyReadRecord> policiesCache = [];
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<Guid, EnrollmentPolicyReadRecord> PoliciesByPolicyRefCache = [];
+    private static readonly ConcurrentDictionary<int, EnrollmentPolicyReadRecord> PoliciesCache = [];
 
     public void RegisterDatabaseListener()
     {
@@ -25,25 +25,25 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
     public IReadOnlyCollection<EnrollmentPolicyReadRecord> GetAll()
     {
         RefreshCacheIfEmpty();
-        return [.. policiesCache.Values];
+        return [.. PoliciesCache.Values];
     }
 
     public IReadOnlyCollection<EnrollmentPolicyReadRecord> GetAllByUserId(int userId)
     {
         RefreshCacheIfEmpty();
-        return [.. policiesCache.Values.Where(p => p.UserId == userId)];
+        return [.. PoliciesCache.Values.Where(p => p.UserId == userId)];
     }
 
     public EnrollmentPolicyReadRecord? GetById(int policyId)
     {
         RefreshCacheIfEmpty();
-        return policiesCache.GetValueOrDefault(policyId);
+        return PoliciesCache.GetValueOrDefault(policyId);
     }
 
     public EnrollmentPolicyReadRecord? GetByRef(Guid policyRef)
     {
         RefreshCacheIfEmpty();
-        return policiesByPolicyRefCache.GetValueOrDefault(policyRef);
+        return PoliciesByPolicyRefCache.GetValueOrDefault(policyRef);
     }
 
     private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
@@ -56,7 +56,7 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
 
     private void RefreshCacheIfEmpty()
     {
-        if (policiesCache.IsEmpty || policiesByPolicyRefCache.IsEmpty)
+        if (PoliciesCache.IsEmpty || PoliciesByPolicyRefCache.IsEmpty)
         {
             RefreshCache();
         }
@@ -71,8 +71,8 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
 
             foreach (var policy in policies)
             {
-                policiesCache.AddOrUpdate(policy.Id, policy, (_, _) => policy);
-                policiesByPolicyRefCache.AddOrUpdate(policy.PolicyRef, policy, (_, _) => policy);
+                PoliciesCache.AddOrUpdate(policy.Id, policy, (_, _) => policy);
+                PoliciesByPolicyRefCache.AddOrUpdate(policy.PolicyRef, policy, (_, _) => policy);
 
                 if (policy.LastModified > maxLastModified)
                 {
