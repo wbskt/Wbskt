@@ -86,8 +86,8 @@ internal sealed class CachedPublishersChannelsReader(ILogger<CachedPublishersCha
     {
         logger.LogInformation("database change detected: {Info}", e.Info);
 
-        RefreshCache();
         RegisterDatabaseListener(); // re-register after change
+        RefreshCache();
     }
 
     private void RefreshCacheIfEmpty()

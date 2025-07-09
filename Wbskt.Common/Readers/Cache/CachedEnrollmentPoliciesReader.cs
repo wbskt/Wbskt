@@ -50,8 +50,8 @@ internal sealed class CachedEnrollmentPoliciesReader(ILogger<CachedEnrollmentPol
     {
         logger.LogInformation("database change detected: {Info}", e.Info);
 
-        RefreshCache();
         RegisterDatabaseListener(); // re-register after change
+        RefreshCache();
     }
 
     private void RefreshCacheIfEmpty()
