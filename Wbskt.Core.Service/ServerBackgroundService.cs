@@ -5,11 +5,7 @@ public class ServerBackgroundService(ILogger<ServerBackgroundService> logger) : 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("server background Service is starting...");
-        await Task.Run(() =>
-        {
-            while (true)
-            {
-            }
-        }, stoppingToken);
+        await Task.Yield();
+        while (!stoppingToken.IsCancellationRequested) { }
     }
 }

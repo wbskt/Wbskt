@@ -20,7 +20,7 @@ public static class Program
     public static async Task Main(string[] args)
     {
         Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(nameof(Constants.ServerType), Constants.ServerType.CoreServer.ToString());
+        Environment.SetEnvironmentVariable(nameof(Constants.ServerType), nameof(Constants.ServerType.CoreServer));
 
         if (!Directory.Exists(ProgramDataPath))
         {

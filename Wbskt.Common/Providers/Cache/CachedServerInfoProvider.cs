@@ -6,24 +6,24 @@ namespace Wbskt.Common.Providers.Cache;
 
 internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider> logger, IServerInfoProvider serverInfoProvider) : ICachedServerInfoProvider
 {
-    private static readonly string ServerType = Environment.GetEnvironmentVariable(nameof(ServerType)) ?? Constants.ServerType.CoreServer.ToString();
-    private readonly object @lock = new();
+    private static readonly string ServerType = Environment.GetEnvironmentVariable(nameof(ServerType)) ?? nameof(Constants.ServerType.CoreServer);
+    private readonly object _lock = new();
 
-    private readonly List<ServerInfo> serverInfos = [];
+    private readonly List<ServerInfo> _serverInfos = [];
 
     public IReadOnlyCollection<ServerInfo> GetAll()
     {
-        lock (@lock)
+        lock (_lock)
         {
-            if (serverInfos.Count != 0)
+            if (_serverInfos.Count != 0)
             {
-                return [.. serverInfos]; // return a copy to prevent external mutation
+                return [.. _serverInfos]; // return a copy to prevent external mutation
             }
 
             var records = serverInfoProvider.GetAll();
-            serverInfos.AddRange(records);
+            _serverInfos.AddRange(records);
 
-            return [.. serverInfos]; // return a copy to prevent external mutation
+            return [.. _serverInfos]; // return a copy to prevent external mutation
         }
     }
 
@@ -42,7 +42,7 @@ internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider>
             throw WbsktExceptions.InvalidId(id, "Server");
         }
 
-        if (ServerType == Constants.ServerType.CoreServer.ToString())
+        if (ServerType == nameof(Constants.ServerType.CoreServer))
         {
             logger.LogError("core server cannot perform this operation: {operationName}", nameof(UpdatePublicDomainName));
             return;
@@ -55,9 +55,9 @@ internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider>
         }
 
         serverInfoProvider.UpdatePublicDomainName(id, publicDomainName);
-        lock (@lock)
+        lock (_lock)
         {
-            var info = serverInfos.FirstOrDefault(s => s.ServerId == id);
+            var info = _serverInfos.FirstOrDefault(s => s.ServerId == id);
             if (info != null)
             {
                 info.PublicDomainName = publicDomainName;
@@ -84,9 +84,9 @@ internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider>
         }
 
         serverInfoProvider.UpdateServerStatus(id, active);
-        lock (@lock)
+        lock (_lock)
         {
-            var info = serverInfos.FirstOrDefault(s => s.ServerId == id);
+            var info = _serverInfos.FirstOrDefault(s => s.ServerId == id);
             if (info != null)
             {
                 info.Active = active;
@@ -126,10 +126,10 @@ internal sealed class CachedServerInfoProvider(ILogger<CachedServerInfoProvider>
     private void RefreshCache()
     {
         var records = serverInfoProvider.GetAll();
-        lock (@lock)
+        lock (_lock)
         {
-            serverInfos.Clear();
-            serverInfos.AddRange(records);
+            _serverInfos.Clear();
+            _serverInfos.AddRange(records);
         }
     }
 }
