@@ -6,18 +6,16 @@
         - @Name VARCHAR(100): User name
         - @EmailId VARCHAR(100): User email address
         - @PasswordHash VARCHAR(512): Password hash
-        - @PasswordSalt VARCHAR(50): Password salt
     Returns: None (output parameter @Id is set)
     Author: Richard Joy
     Date: 2024-08-24
-    Last Modified: 2024-08-24 by Richard Joy - Initial version
+    Last Modified: 2025-10-09 by Richard Joy - Removed PasswordSalt
 */
 CREATE PROCEDURE dbo.Users_Insert
     @Id INT OUTPUT,
     @Name VARCHAR(100),
     @EmailId VARCHAR(100),
-    @PasswordHash VARCHAR(512),
-    @PasswordSalt VARCHAR(50)
+    @PasswordHash VARCHAR(512)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -25,14 +23,12 @@ BEGIN
     INSERT INTO dbo.Users (
         Name,
         EmailId,
-        PasswordHash,
-        PasswordSalt
+        PasswordHash
     )
     VALUES (
         @Name,
         @EmailId,
-        @PasswordHash,
-        @PasswordSalt
+        @PasswordHash
     );
     SELECT @Id = SCOPE_IDENTITY();
 END;

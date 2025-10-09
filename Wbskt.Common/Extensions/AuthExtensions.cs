@@ -20,10 +20,12 @@ public static class AuthExtensions
         {
             options.TokenValidationParameters = new TokenValidationParameters
             {
-                ValidateIssuer = false,
+                ValidateIssuer = true,
                 ValidateLifetime = true,
-                ValidateAudience = false,
+                ValidateAudience = true,
                 ValidateIssuerSigningKey = true,
+                ValidIssuer = configuration[Constants.JwtKeyNames.Issuer],
+                ValidAudience = configuration[Constants.JwtKeyNames.Audience],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
             };
         });
@@ -38,10 +40,12 @@ public static class AuthExtensions
         {
             options.TokenValidationParameters = new TokenValidationParameters
             {
-                ValidateIssuer = false,
+                ValidateIssuer = true,
                 ValidateLifetime = true,
-                ValidateAudience = false,
+                ValidateAudience = true,
                 ValidateIssuerSigningKey = true,
+                ValidIssuer = configuration[Constants.JwtKeyNames.Issuer],
+                ValidAudience = configuration[Constants.JwtKeyNames.Audience],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
             };
         });
@@ -56,10 +60,12 @@ public static class AuthExtensions
         {
             options.TokenValidationParameters = new TokenValidationParameters
             {
-                ValidateIssuer = false,
+                ValidateIssuer = true,
                 ValidateLifetime = true,
-                ValidateAudience = false,
+                ValidateAudience = true,
                 ValidateIssuerSigningKey = true,
+                ValidIssuer = configuration[Constants.JwtKeyNames.Issuer],
+                ValidAudience = configuration[Constants.JwtKeyNames.Audience],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
             };
         });
@@ -74,10 +80,12 @@ public static class AuthExtensions
         {
             options.TokenValidationParameters = new TokenValidationParameters
             {
-                ValidateIssuer = false,
+                ValidateIssuer = true,
                 ValidateLifetime = true,
-                ValidateAudience = false,
+                ValidateAudience = true,
                 ValidateIssuerSigningKey = true,
+                ValidIssuer = configuration[Constants.JwtKeyNames.Issuer],
+                ValidAudience = configuration[Constants.JwtKeyNames.Audience],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
             };
         });

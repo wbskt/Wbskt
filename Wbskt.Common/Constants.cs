@@ -19,6 +19,8 @@ public static class Constants
         public const string CoreServerTokenKey = "Jwt:CoreServerTokenKey";
         public const string SocketServerTokenKey = "Jwt:SocketServerTokenKey";
         public const string ClientServerTokenKey = "Jwt:ClientServerTokenKey";
+        public const string Issuer = "Jwt:Issuer";
+        public const string Audience = "Jwt:Audience";
     }
 
     public static class AuthSchemes

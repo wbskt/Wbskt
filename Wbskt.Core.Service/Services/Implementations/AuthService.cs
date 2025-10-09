@@ -27,6 +27,8 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
                 new(Constants.Claims.UserData, userData.UserId.ToString())
             }),
             Expires = DateTime.UtcNow.AddDays(1),
+            Issuer = configuration[Constants.JwtKeyNames.Issuer],
+            Audience = configuration[Constants.JwtKeyNames.Audience],
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
         };
 
@@ -46,7 +48,9 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
                 new(Constants.Claims.CoreServer, Guid.NewGuid().ToString())
             }),
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256),
-            Expires = DateTime.Now.AddMinutes(Constants.ExpiryTimes.ServerTokenExpiry)
+            Expires = DateTime.Now.AddMinutes(Constants.ExpiryTimes.ServerTokenExpiry),
+            Issuer = configuration[Constants.JwtKeyNames.Issuer],
+            Audience = configuration[Constants.JwtKeyNames.Audience]
         };
 
         logger.LogDebug("core server token created");
@@ -60,10 +64,8 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
             throw WbsktExceptions.EmailIdExists(request.EmailId);
         }
 
-        var salt = GenerateSalt();
-        var saltedPassword = request.Password + salt;
-        var hashedPassword = passwordHasher.HashPassword(null!, saltedPassword);
-        var user = new User { EmailId = request.EmailId, PasswordHash = hashedPassword, PasswordSalt = salt, Name = request.UserName };
+        var hashedPassword = passwordHasher.HashPassword(null!, request.Password);
+        var user = new User { EmailId = request.EmailId, PasswordHash = hashedPassword, Name = request.UserName };
         return usersService.AddUser(user);
     }
 
@@ -71,8 +73,7 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
     {
         var user = usersService.GetUserByEmailId(loginRequest.EmailId);
 
-        var saltedPassword = loginRequest.Password + user.PasswordSalt;
-        var result = passwordHasher.VerifyHashedPassword(null!, user.PasswordHash, saltedPassword);
+        var result = passwordHasher.VerifyHashedPassword(null!, user.PasswordHash, loginRequest.Password);
 
         if (result != PasswordVerificationResult.Success)
         {
@@ -80,13 +81,5 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
         }
 
         return true;
-    }
-
-    private static string GenerateSalt()
-    {
-        var buffer = new byte[16];
-        RandomNumberGenerator.Fill(buffer);
-
-        return Convert.ToBase64String(buffer);
     }
 }

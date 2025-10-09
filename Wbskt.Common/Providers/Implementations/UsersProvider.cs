@@ -94,7 +94,6 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
         command.Parameters.Add(new SqlParameter("@Name", ProviderExtensions.ReplaceDbNulls(user.Name)));
         command.Parameters.Add(new SqlParameter("@EmailId", ProviderExtensions.ReplaceDbNulls(user.EmailId)));
         command.Parameters.Add(new SqlParameter("@PasswordHash", ProviderExtensions.ReplaceDbNulls(user.PasswordHash)));
-        command.Parameters.Add(new SqlParameter("@PasswordSalt", ProviderExtensions.ReplaceDbNulls(user.PasswordSalt)));
 
         var id = new SqlParameter("@Id", SqlDbType.Int) { Size = int.MaxValue };
         id.Direction = ParameterDirection.Output;
@@ -113,7 +112,6 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
             Name = reader.GetString(mapping.Name),
             EmailId = reader.GetString(mapping.EmailId),
             PasswordHash = reader.GetString(mapping.PasswordHash),
-            PasswordSalt = reader.GetString(mapping.PasswordSalt)
         };
 
         return data;
@@ -127,7 +125,6 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
         mapping.Name = reader.GetOrdinal("Name");
         mapping.EmailId = reader.GetOrdinal("EmailId");
         mapping.PasswordHash = reader.GetOrdinal("PasswordHash");
-        mapping.PasswordSalt = reader.GetOrdinal("PasswordSalt");
 
         return mapping;
     }
@@ -136,7 +133,6 @@ internal sealed class UsersProvider(ILogger<UsersProvider> logger, IConnectionSt
     {
         public int EmailId;
         public int PasswordHash;
-        public int PasswordSalt;
         public int UserId;
         public int Name;
     }
