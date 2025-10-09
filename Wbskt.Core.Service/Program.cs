@@ -15,7 +15,7 @@ namespace Wbskt.Core.Service;
 
 public static class Program
 {
-    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Constants.Application.AppFolderName);
+    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.Application.AppFolderName);
 
     public static async Task Main(string[] args)
     {

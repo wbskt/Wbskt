@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DefaultItemExcludes>$(DefaultItemExcludes);publish**</DefaultItemExcludes>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>Wbskt.Core.Service.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
