@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Wbskt.Common.Providers;
 using Wbskt.Common.Providers.Cache;
 using Wbskt.Common.Providers.Implementations;
@@ -50,11 +50,11 @@ public static class DependencyInjection
         serviceCollection.AddSingleton<IClientsChannelsWriter, ClientsChannelsWriter>();
         serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedClientsChannelsReader>(nameof(CachedClientsChannelsReader));
 
-        // Enrollment Policies
-        serviceCollection.AddSingleton<IEnrollmentPoliciesWriter, EnrollmentPoliciesWriter>();
-        serviceCollection.AddSingleton<IEnrollmentPoliciesDatabaseReader, EnrollmentPoliciesDatabaseReader>();
-        serviceCollection.AddSingleton<IEnrollmentPoliciesReader, CachedEnrollmentPoliciesReader>();
-        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedEnrollmentPoliciesReader>(nameof(CachedEnrollmentPoliciesReader));
+        // Registration Policies
+        serviceCollection.AddSingleton<IRegistrationPoliciesWriter, RegistrationPoliciesWriter>();
+        serviceCollection.AddSingleton<IRegistrationPoliciesDatabaseReader, RegistrationPoliciesDatabaseReader>();
+        serviceCollection.AddSingleton<IRegistrationPoliciesReader, CachedRegistrationPoliciesReader>();
+        serviceCollection.AddKeyedSingleton<IDatabaseChangeListener, CachedRegistrationPoliciesReader>(nameof(CachedRegistrationPoliciesReader));
     }
 }
 
@@ -67,7 +67,7 @@ public class DatabaseChangeListenerRegistry
         nameof(CachedPublishersChannelsReader),
         nameof(CachedClientsReader),
         nameof(CachedClientsChannelsReader),
-        nameof(CachedEnrollmentPoliciesReader)
+        nameof(CachedRegistrationPoliciesReader)
     };
 
     public IEnumerable<IDatabaseChangeListener> GetAllListeners(IServiceProvider serviceProvider)

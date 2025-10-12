@@ -1,30 +1,33 @@
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Database.Implementation;
 
 /// <summary>
-/// Concrete implementation for reading registration policy data from the database.
+/// Concrete implementation for reading registration policy data from the database, with support for SqlDependency.
 /// </summary>
-internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPoliciesDatabaseReader
+public class RegistrationPoliciesDatabaseReader : IRegistrationPoliciesDatabaseReader
 {
+    private readonly ILogger<RegistrationPoliciesDatabaseReader> _logger;
     private readonly IConnectionStringProvider _connectionStringProvider;
 
-    public RegistrationPoliciesDatabaseReader(IConnectionStringProvider connectionStringProvider)
+    public RegistrationPoliciesDatabaseReader(ILogger<RegistrationPoliciesDatabaseReader> logger, IConnectionStringProvider connectionStringProvider)
     {
+        _logger = logger;
         _connectionStringProvider = connectionStringProvider;
     }
 
-    public async Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken)
+    public async Task<List<RegistrationPolicyRecord>> GetAllAsync(DateTime lastModified, CancellationToken cancellationToken)
     {
-        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
+        await using var connection = new SqlConnection(_connectionStringProvider.Get());
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "dbo.RegistrationPolicies_GetAll_ByUserId";
+        command.CommandText = "dbo.RegistrationPolicies_GetAll";
         command.CommandType = CommandType.StoredProcedure;
-        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@LastModified", lastModified);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
@@ -39,10 +42,30 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
                 UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
                 MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
                 Expiry = reader.IsDBNull(reader.GetOrdinal("Expiry")) ? null : reader.GetDateTime(reader.GetOrdinal("Expiry")),
-                Pin = reader.GetInt32(reader.GetOrdinal("Pin"))
+                Pin = reader.GetInt32(reader.GetOrdinal("Pin")),
+                LastModified = reader.GetDateTime(reader.GetOrdinal("LastModified"))
             });
         }
-
         return policies;
+    }
+
+    public void RegisterSqlDependency(OnChangeEventHandler onChange)
+    {
+        try
+        {
+            var connectionString = _connectionStringProvider.Get();
+            using var connection = new SqlConnection(connectionString);
+            using var command = new SqlCommand("SELECT LastModified FROM dbo.RegistrationPolicies", connection);
+
+            var dependency = new SqlDependency(command);
+            dependency.OnChange += onChange;
+
+            connection.Open();
+            command.ExecuteReader(CommandBehavior.CloseConnection);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to register SQL dependency for RegistrationPolicies.");
+        }
     }
 }

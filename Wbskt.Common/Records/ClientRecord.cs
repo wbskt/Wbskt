@@ -39,6 +39,12 @@ public record ClientRecord
     /// Indicates if the client is active.
     /// </summary>
     public bool Active { get; set; }
+
+    /// <summary>
+    /// Timestamp of the last modification.
+    /// </summary>
+    [JsonIgnore]
+    public DateTime LastModified { get; init; }
 }
 
 // Note: The records below are for client-channel relationships and may need to be reviewed

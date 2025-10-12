@@ -30,7 +30,8 @@ BEGIN
         SET
             [Name] = @Name,
             [Active] = @Active,
-            [RegistrationPolicyId] = @RegistrationPolicyId -- Allow policy to be updated
+            [RegistrationPolicyId] = @RegistrationPolicyId, -- Allow policy to be updated
+            [LastModified] = GETUTCDATE()
         WHERE
             [RefId] = @RefId;
 

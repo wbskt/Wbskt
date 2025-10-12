@@ -1,43 +1,92 @@
-using Microsoft.Extensions.Caching.Memory;
-using Wbskt.Common.Records;
+using System.Collections.Concurrent;
+using System.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using Wbskt.Common.Readers.Database;
+using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Cache;
 
 /// <summary>
-/// A cached implementation of the client reader to reduce database load.
+/// A cached implementation of the client reader that uses a ConcurrentDictionary and SqlDependency.
 /// </summary>
-internal sealed class CachedClientsReader : IClientsReader
+internal sealed class CachedClientsReader : IClientsReader, IDatabaseChangeListener
 {
+    private readonly ILogger<CachedClientsReader> _logger;
     private readonly IClientsDatabaseReader _databaseReader;
-    private readonly IMemoryCache _cache;
-    private static readonly string CacheKey = "Clients_All";
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
-    public CachedClientsReader(IClientsDatabaseReader databaseReader, IMemoryCache cache)
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<Guid, ClientRecord> ClientsByRefCache = [];
+    private static readonly ConcurrentDictionary<int, ClientRecord> ClientsByIdCache = [];
+
+    public CachedClientsReader(ILogger<CachedClientsReader> logger, IClientsDatabaseReader databaseReader)
     {
+        _logger = logger;
         _databaseReader = databaseReader;
-        _cache = cache;
     }
 
     public async Task<ClientRecord?> GetByRefAsync(Guid refId, CancellationToken cancellationToken)
     {
-        var clients = await GetAllFromCacheAsync(cancellationToken);
-        return clients.FirstOrDefault(c => c.RefId == refId);
+        await RefreshCacheIfEmpty(cancellationToken);
+        ClientsByRefCache.TryGetValue(refId, out var client);
+        return client;
     }
 
     public async Task<List<ClientRecord>> GetAllByUserIdAsync(int userId, CancellationToken cancellationToken)
     {
-        var clients = await GetAllFromCacheAsync(cancellationToken);
-        return clients.Where(c => c.UserId == userId).ToList();
+        await RefreshCacheIfEmpty(cancellationToken);
+        return ClientsByIdCache.Values.Where(c => c.UserId == userId).ToList();
     }
 
-    private async Task<List<ClientRecord>> GetAllFromCacheAsync(CancellationToken cancellationToken)
+    public void RegisterDatabaseListener()
     {
-        return await _cache.GetOrCreateAsync(CacheKey, async entry =>
+        if (_databaseReader is Database.Implementation.ClientsDatabaseReader dbReaderImpl)
         {
-            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _databaseReader.GetAllAsync(cancellationToken);
-        }) ?? [];
+            dbReaderImpl.RegisterSqlDependency(OnDatabaseChange);
+        }
+    }
+
+    private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
+    {
+        _logger.LogInformation("Database change detected for Clients: {Info}", e.Info);
+        // Re-register to continue listening for subsequent changes
+        RegisterDatabaseListener();
+        // Asynchronously refresh the cache. Fire-and-forget.
+        _ = RefreshCache(CancellationToken.None);
+    }
+
+    private async Task RefreshCacheIfEmpty(CancellationToken cancellationToken)
+    {
+        if (ClientsByIdCache.IsEmpty)
+        {
+            await RefreshCache(cancellationToken);
+        }
+    }
+
+    private async Task RefreshCache(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var clients = await _databaseReader.GetAllAsync(_lastModified, cancellationToken);
+            var maxLastModified = _lastModified;
+
+            foreach (var client in clients)
+            {
+                ClientsByIdCache[client.Id] = client;
+                ClientsByRefCache[client.RefId] = client;
+
+                if (client.LastModified > maxLastModified)
+                {
+                    maxLastModified = client.LastModified;
+                }
+            }
+
+            _lastModified = maxLastModified;
+            _logger.LogDebug("Clients cache refreshed with {count} clients", clients.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refresh clients cache");
+            throw;
+        }
     }
 }

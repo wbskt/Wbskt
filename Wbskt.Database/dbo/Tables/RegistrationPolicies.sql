@@ -22,7 +22,8 @@ CREATE TABLE [dbo].[RegistrationPolicies] (
     [Name]              VARCHAR (100)       NOT NULL,
     [MaxClients]        INT                 NULL,     -- For NumberOfClients and TimeAndCount policies
     [Expiry]            DATETIME            NULL,     -- For TimeLimited and TimeAndCount policies
-    [LastModified]      DATETIME            DEFAULT CURRENT_TIMESTAMP,
+    [Pin]               INT                 NOT NULL,
+    [LastModified]      DATETIME2           NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT [Pk_RegistrationPolicies]     PRIMARY KEY CLUSTERED       ([Id]   ASC),
     CONSTRAINT [Unq_RegistrationPolicies_RefId] UNIQUE      NONCLUSTERED    ([RefId] ASC),
     CONSTRAINT [Unq_RegistrationPolicies_UserId_Name] UNIQUE NONCLUSTERED ([UserId] ASC, [Name] ASC),

@@ -31,7 +31,7 @@ internal sealed class PublishersChannelsDatabaseReader(ILogger<PublishersChannel
         return result.AsReadOnly();
     }
 
-    internal void RegisterSqlDependency(OnChangeEventHandler onDatabaseChange)
+    public void RegisterSqlDependency(OnChangeEventHandler onDatabaseChange)
     {
         try
         {

@@ -1,34 +1,83 @@
-using Microsoft.Extensions.Caching.Memory;
-using Wbskt.Common.Records;
+using System.Collections.Concurrent;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using Wbskt.Common.Readers.Database;
+using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Cache;
 
 /// <summary>
-/// A cached implementation of the registration policy reader to reduce database load.
+/// A cached implementation of the registration policy reader that uses a ConcurrentDictionary and SqlDependency.
 /// </summary>
-internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesReader
+public class CachedRegistrationPoliciesReader : IRegistrationPoliciesReader, IDatabaseChangeListener
 {
+    private readonly ILogger<CachedRegistrationPoliciesReader> _logger;
     private readonly IRegistrationPoliciesDatabaseReader _databaseReader;
-    private readonly IMemoryCache _cache;
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+
+    private static DateTime _lastModified = DateTime.UnixEpoch;
+    private static readonly ConcurrentDictionary<int, RegistrationPolicyRecord> PoliciesByIdCache = [];
 
     public CachedRegistrationPoliciesReader(
-        IRegistrationPoliciesDatabaseReader databaseReader,
-        IMemoryCache cache)
+        ILogger<CachedRegistrationPoliciesReader> logger,
+        IRegistrationPoliciesDatabaseReader databaseReader)
     {
+        _logger = logger;
         _databaseReader = databaseReader;
-        _cache = cache;
     }
 
     public async Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken)
     {
-        var cacheKey = $"RegistrationPolicies_User_{userId}";
+        await RefreshCacheIfEmpty(cancellationToken);
+        return PoliciesByIdCache.Values.Where(p => p.UserId == userId).ToList();
+    }
 
-        return await _cache.GetOrCreateAsync(cacheKey, async entry =>
+    public void RegisterDatabaseListener()
+    {
+        if (_databaseReader is Database.Implementation.RegistrationPoliciesDatabaseReader dbReaderImpl)
         {
-            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _databaseReader.GetAllAsync(userId, cancellationToken);
-        });
+            dbReaderImpl.RegisterSqlDependency(OnDatabaseChange);
+        }
+    }
+
+    private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
+    {
+        _logger.LogInformation("Database change detected for RegistrationPolicies: {Info}", e.Info);
+        RegisterDatabaseListener();
+        _ = RefreshCache(CancellationToken.None);
+    }
+
+    private async Task RefreshCacheIfEmpty(CancellationToken cancellationToken)
+    {
+        if (PoliciesByIdCache.IsEmpty)
+        {
+            await RefreshCache(cancellationToken);
+        }
+    }
+
+    private async Task RefreshCache(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var policies = await _databaseReader.GetAllAsync(_lastModified, cancellationToken);
+            var maxLastModified = _lastModified;
+
+            foreach (var policy in policies)
+            {
+                PoliciesByIdCache[policy.Id] = policy;
+
+                if (policy.LastModified > maxLastModified)
+                {
+                    maxLastModified = policy.LastModified;
+                }
+            }
+
+            _lastModified = maxLastModified;
+            _logger.LogDebug("RegistrationPolicies cache refreshed with {count} policies", policies.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refresh RegistrationPolicies cache");
+            throw;
+        }
     }
 }

@@ -41,4 +41,9 @@ public record RegistrationPolicyRecord
     /// A PIN code associated with the policy for certain registration types.
     /// </summary>
     public int Pin { get; init; }
+
+    /// <summary>
+    /// Timestamp of the last modification.
+    /// </summary>
+    public DateTime LastModified { get; init; }
 }

@@ -8,10 +8,10 @@ namespace Wbskt.Common.Readers.Database;
 public interface IRegistrationPoliciesDatabaseReader
 {
     /// <summary>
-    /// Gets all registration policies for a specific user.
+    /// Gets all registration policies from the database modified after a certain time.
     /// </summary>
-    /// <param name="userId">The ID of the user.</param>
+    /// <param name="lastModified">The timestamp to query from.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A list of registration policy records.</returns>
-    Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken);
+    Task<List<RegistrationPolicyRecord>> GetAllAsync(DateTime lastModified, CancellationToken cancellationToken);
 }

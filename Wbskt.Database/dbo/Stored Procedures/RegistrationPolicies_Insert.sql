@@ -25,8 +25,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    INSERT INTO [dbo].[RegistrationPolicies] ([RefId], [Name], [UserId], [MaxClients], [Expiry], [Pin])
-    VALUES (@RefId, @Name, @UserId, @MaxClients, @Expiry, @Pin);
+    INSERT INTO [dbo].[RegistrationPolicies] ([RefId], [Name], [UserId], [MaxClients], [Expiry], [Pin], [LastModified])
+    VALUES (@RefId, @Name, @UserId, @MaxClients, @Expiry, @Pin, GETUTCDATE());
 
     SET @Id = SCOPE_IDENTITY();
 END
