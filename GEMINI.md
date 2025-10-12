@@ -2,13 +2,16 @@
 
 This project, named WBSKT, is a .NET Core application that provides a client registration and authentication system. It's built with .NET 8 and uses a SQL Server database for data storage. The architecture follows a standard client-server model, where clients register and authenticate with a core service.
 
-The application currently supports user authentication with JWTs and refresh tokens, and provides a REST API for managing registration policies. The next step is to implement the client registration functionality.
+The application currently supports user authentication with JWTs and refresh tokens, and provides a REST API for managing registration policies. The client registration workflow is also implemented, allowing clients to register themselves using a policy and receive a client-specific JWT.
+
+## Architecture
 
 The solution is divided into several projects:
 
-*   **Wbskt.Core.Service**: The main web service project, built with ASP.NET Core. It exposes a REST API for user registration and login.
-*   **Wbskt.Common**: A shared library containing common contracts, services, and utilities used by other projects in the solution.
-*   **Wbskt.Database**: A SQL Server database project containing the schema definitions for the application's database.
+*   **Wbskt.Core.Service**: The main web service project, built with ASP.NET Core. It exposes the REST API for all user and client interactions.
+*   **Wbskt.Common**: A shared library containing common components such as contracts, services, readers, writers, records, and exceptions.
+*   **Wbskt.Database**: A SQL Server database project containing the schema definitions (tables and stored procedures) for the application.
+*   **Wbskt.EventBus**: A class library project that contains the core components of the in-process event bus, which is used for decoupling components.
 *   **Wbskt.Core.Installer**: A WiX installer project for creating a Windows installer for the application.
 
 ## API Endpoints
@@ -27,32 +30,69 @@ The solution is divided into several projects:
 - `PUT /api/policies/{refId}`: Updates a registration policy.
 - `DELETE /api/policies/{refId}`: Deletes a registration policy.
 
-## Building and Running
+### Registrations
 
-To build and run this project, you will need the .NET 8 SDK and a SQL Server instance.
+- `POST /api/registrations`: Registers a new client using a registration policy.
 
-1.  **Database Setup**:
-    *   Create a database named `Wbskt.Core`.
-    *   Execute the SQL scripts in the `Wbskt.Database` project to create the necessary tables and stored procedures. The scripts are located in the `Tables` and `Stored Procedures` folders.
+## Database Schema
 
-2.  **Configuration**:
-    *   Update the connection string in `appsettings.json` in the `Wbskt.Core.Service` project to point to your SQL Server instance.
+### Users
 
-3.  **Running the Service**:
-    *   You can run the service from Visual Studio by setting `Wbskt.Core.Service` as the startup project and pressing F5.
-    *   Alternatively, you can use the `dotnet run` command in the `Wbskt.Core.Service` directory:
+- `Id`: `INT`
+- `Name`: `NVARCHAR(100)`
+- `EmailId`: `NVARCHAR(100)`
+- `PasswordHash`: `VARCHAR(512)`
 
-    ```bash
-    dotnet run --project Wbskt.Core.Service/Wbskt.Core.Service.csproj
-    ```
+### UserRefreshTokens
+
+- `Id`: `INT`
+- `UserId`: `INT`
+- `Token`: `VARCHAR(256)`
+- `Expires`: `DATETIME`
+- `Created`: `DATETIME`
+- `CreatedByIp`: `VARCHAR(50)`
+- `Revoked`: `DATETIME`
+- `RevokedByIp`: `VARCHAR(50)`
+- `ReplacedByToken`: `VARCHAR(256)`
+
+### RegistrationPolicies
+
+- `Id`: `INT`
+- `RefId`: `GUID`
+- `UserId`: `INT`
+- `Name`: `NVARCHAR(100)`
+- `MaxClients`: `INT` (nullable)
+- `Expiry`: `DATETIME` (nullable)
+- `Pin`: `INT`
+
+### Clients
+
+- `Id`: `INT`
+- `RefId`: `GUID`
+- `UserId`: `INT`
+- `RegistrationPolicyId`: `INT`
+- `Name`: `NVARCHAR(100)` (nullable)
+- `Active`: `BOOL`
+
+### Servers
+
+- `Id`: `INT`
+- `PublicDomainName`: `VARCHAR(256)`
+- `Status`: `INT`
 
 ## Development Conventions
 
 *   **Coding Style**: The project follows standard C# coding conventions.
 *   **Dependency Injection**: The project uses the built-in dependency injection container in ASP.NET Core. Services are registered in `Program.cs` and in the `DependencyInjection` class in the `Wbskt.Common` project.
-*   **Authentication**: The service uses JWT Bearer authentication with refresh tokens.
+*   **Authentication**: The service uses JWT Bearer authentication with refresh tokens. There are separate authentication schemes for users, clients, and socket servers, each with its own signing key.
+*   **API Security**:
+    - The API uses `RefId` (GUID) instead of integer IDs to expose resources.
+    - A `CurrentUser` service is used to securely access the current user's information from the request context.
 *   **Logging**: The project uses Serilog for logging.
-*   **Database Access**: The project uses `Microsoft.Data.SqlClient` for database access. Stored procedures are used for database operations.
-*   **Caching**: The project uses a generic `ICacheService` for caching data in memory. This service is used by the cached readers to reduce database load.
+*   **Database Access**: The project uses `Microsoft.Data.SqlClient` for database access. All database operations are performed through stored procedures.
+*   **Caching**: The project uses a hybrid caching strategy.
+    - User-specific data (like policies) is cached per user.
+    - Global data (like servers) is cached using a `LastModified` timestamp.
+*   **Event Bus**: An in-process event bus is implemented to decouple components. This is currently used for cache invalidation. When a policy is created, updated, or deleted, the `RegistrationPoliciesWriter` publishes an event, and the `PolicyCacheHandler` subscribes to these events to invalidate the cache.
 *   **Exception Handling**: The project uses custom exception classes defined in `WbsktExceptions.cs` to handle specific error scenarios.
 *   **Testing**: There are no tests in the project currently.
