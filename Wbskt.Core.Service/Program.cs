@@ -40,6 +40,7 @@ public static class Program
         builder.Services.AddSingleton<IPasswordHasher<UserRecord>, PasswordHasher<UserRecord>>();
 
         builder.Services.AddSingleton<IAuthService, AuthService>();
+        builder.Services.AddSingleton<IPolicyService, PolicyService>();
 
         builder.Services.ConfigureCommonServices();
 

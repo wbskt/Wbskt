@@ -41,4 +41,35 @@ internal sealed class RegistrationPoliciesWriter : IRegistrationPoliciesWriter
 
         return (int)idParameter.Value;
     }
+
+    public async Task UpdateAsync(RegistrationPolicyRecord policy, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "dbo.RegistrationPolicies_Update";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@Id", policy.Id);
+        command.Parameters.AddWithValue("@Name", policy.Name);
+        command.Parameters.AddWithValue("@MaxClients", (object?)policy.MaxClients ?? DBNull.Value);
+        command.Parameters.AddWithValue("@Expiry", (object?)policy.Expiry ?? DBNull.Value);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteAsync(int policyId, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "dbo.RegistrationPolicies_Delete";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@Id", policyId);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 }

@@ -48,4 +48,34 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
         }
         return policies;
     }
+
+    public async Task<RegistrationPolicyRecord?> GetByIdAsync(int policyId, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "dbo.RegistrationPolicies_GetBy_Id";
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.AddWithValue("@Id", policyId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            return new RegistrationPolicyRecord
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
+                Name = reader.GetString(reader.GetOrdinal("Name")),
+                UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
+                MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
+                Expiry = reader.IsDBNull(reader.GetOrdinal("Expiry")) ? null : reader.GetDateTime(reader.GetOrdinal("Expiry")),
+                Pin = reader.GetInt32(reader.GetOrdinal("Pin")),
+                LastModified = reader.GetDateTime(reader.GetOrdinal("LastModified"))
+            };
+        }
+
+        return null;
+    }
 }
