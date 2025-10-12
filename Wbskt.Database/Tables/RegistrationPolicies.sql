@@ -22,10 +22,11 @@ CREATE TABLE [dbo].[RegistrationPolicies] (
     [Name]              VARCHAR (100)       NOT NULL,
     [MaxClients]        INT                 NULL,     -- For NumberOfClients and TimeAndCount policies
     [Expiry]            DATETIME            NULL,     -- For TimeLimited and TimeAndCount policies
-    [Pin]               INT                 NOT NULL,
+    [Pin]               VARCHAR(6)          NOT NULL,
     [LastModified]      DATETIME2           NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT [Pk_RegistrationPolicies]     PRIMARY KEY CLUSTERED       ([Id]   ASC),
     CONSTRAINT [Unq_RegistrationPolicies_RefId] UNIQUE      NONCLUSTERED    ([RefId] ASC),
+    CONSTRAINT [Unq_RegistrationPolicies_Pin] UNIQUE      NONCLUSTERED    ([Pin] ASC),
     CONSTRAINT [Unq_RegistrationPolicies_UserId_Name] UNIQUE NONCLUSTERED ([UserId] ASC, [Name] ASC),
     CONSTRAINT [Fk_RegistrationPolicies_Users] FOREIGN KEY ([UserId]) REFERENCES [dbo].[Users] ([Id]),
 );

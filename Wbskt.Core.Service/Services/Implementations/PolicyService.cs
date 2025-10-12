@@ -22,13 +22,15 @@ internal sealed class PolicyService : IPolicyService
 
     public async Task<PolicyResponse> CreatePolicyAsync(CreatePolicyRequest request, CancellationToken cancellationToken)
     {
+        var pin = await GenerateUniquePin(cancellationToken);
+
         var policy = new RegistrationPolicyRecord
         {
             UserId = _currentUser.Id,
             Name = request.Name,
             MaxClients = request.MaxClients,
             Expiry = request.Expiry,
-            Pin = request.Pin,
+            Pin = pin,
             RefId = Guid.NewGuid(),
             LastModified = DateTime.UtcNow
         };
@@ -36,6 +38,22 @@ internal sealed class PolicyService : IPolicyService
         var policyId = await _policiesWriter.InsertAsync(policy, cancellationToken);
 
         return ToPolicyResponse(policy with { Id = policyId });
+    }
+
+    private async Task<string> GenerateUniquePin(CancellationToken cancellationToken)
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var random = new Random();
+        string pin;
+
+        do
+        {
+            pin = new string(Enumerable.Repeat(chars, 6)
+                .Select(s => s[random.Next(s.Length)]).ToArray());
+        }
+        while (await _policiesReader.GetByPinAsync(pin, cancellationToken) != null);
+
+        return pin;
     }
 
     public async Task<List<PolicyResponse>> GetPoliciesAsync(CancellationToken cancellationToken)

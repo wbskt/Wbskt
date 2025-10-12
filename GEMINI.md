@@ -63,7 +63,7 @@ The solution is divided into several projects:
 - `Name`: `NVARCHAR(100)`
 - `MaxClients`: `INT` (nullable)
 - `Expiry`: `DATETIME` (nullable)
-- `Pin`: `INT`
+- `Pin`: `VARCHAR(6)` (unique, server-generated)
 
 ### Clients
 

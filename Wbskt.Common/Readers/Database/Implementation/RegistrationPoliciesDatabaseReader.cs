@@ -42,23 +42,22 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
                 UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
                 MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
                 Expiry = reader.IsDBNull(reader.GetOrdinal("Expiry")) ? null : reader.GetDateTime(reader.GetOrdinal("Expiry")),
-                Pin = reader.GetInt32(reader.GetOrdinal("Pin")),
+                Pin = reader.GetString(reader.GetOrdinal("Pin")),
                 LastModified = reader.GetDateTime(reader.GetOrdinal("LastModified"))
             });
         }
         return policies;
     }
 
-    public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(int userId, Guid refId, CancellationToken cancellationToken)
+    public async Task<RegistrationPolicyRecord?> GetByPinAsync(string pin, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "dbo.RegistrationPolicies_GetBy_RefId";
+        command.CommandText = "dbo.RegistrationPolicies_GetBy_Pin";
         command.CommandType = CommandType.StoredProcedure;
-        command.Parameters.AddWithValue("@RefId", refId);
-        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@Pin", pin);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
@@ -72,7 +71,7 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
                 UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
                 MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
                 Expiry = reader.IsDBNull(reader.GetOrdinal("Expiry")) ? null : reader.GetDateTime(reader.GetOrdinal("Expiry")),
-                Pin = reader.GetInt32(reader.GetOrdinal("Pin")),
+                Pin = reader.GetString(reader.GetOrdinal("Pin")),
                 LastModified = reader.GetDateTime(reader.GetOrdinal("LastModified"))
             };
         }

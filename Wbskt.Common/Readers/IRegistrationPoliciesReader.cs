@@ -15,4 +15,5 @@ public interface IRegistrationPoliciesReader
     /// <returns>A list of registration policy records.</returns>
     Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken);
     Task<RegistrationPolicyRecord?> GetByRefIdAsync(int userId, Guid refId, CancellationToken cancellationToken);
+    Task<RegistrationPolicyRecord?> GetByPinAsync(string pin, CancellationToken cancellationToken);
 }

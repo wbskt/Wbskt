@@ -39,9 +39,9 @@ internal sealed class RegistrationService : IRegistrationService
 
     public async Task<ClientRegistrationResponse> RegisterClientAsync(ClientRegistrationRequest request, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByRefIdAsync(_currentUser.Id, request.PolicyRefId, cancellationToken);
+        var policy = await _policiesReader.GetByPinAsync(request.Pin, cancellationToken);
 
-        if (policy == null || policy.Pin != request.Pin)
+        if (policy == null)
         {
             throw WbsktExceptions.InvalidPolicyPin();
         }

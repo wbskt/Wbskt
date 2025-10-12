@@ -27,7 +27,17 @@ internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesRe
 
     public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(int userId, Guid refId, CancellationToken cancellationToken)
     {
-        var policies = await GetAllAsync(userId, cancellationToken);
+        // This is not ideal, but for now we will rely on the user-specific cache.
+        // In the future, we can implement a more granular cache for individual policies.
+        var policies = await _cacheService.GetOrSetAsync("AllPolicies", () => _databaseReader.GetAllAsync(DateTime.UnixEpoch, cancellationToken), Constants.ExpiryTimes.CacheExpiry, cancellationToken);
         return policies.FirstOrDefault(p => p.RefId == refId);
+    }
+
+    public async Task<RegistrationPolicyRecord?> GetByPinAsync(string pin, CancellationToken cancellationToken)
+    {
+        // This is not ideal, but for now we will rely on the user-specific cache.
+        // In the future, we can implement a more granular cache for individual policies.
+        var policies = await _cacheService.GetOrSetAsync("AllPolicies", () => _databaseReader.GetAllAsync(DateTime.UnixEpoch, cancellationToken), Constants.ExpiryTimes.CacheExpiry, cancellationToken);
+        return policies.FirstOrDefault(p => p.Pin == pin);
     }
 }

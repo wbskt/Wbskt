@@ -19,7 +19,7 @@ CREATE PROCEDURE [dbo].[RegistrationPolicies_Insert]
     @UserId INT,
     @MaxClients INT = NULL,
     @Expiry DATETIME = NULL,
-    @Pin INT,
+    @Pin VARCHAR(6),
     @Id INT OUTPUT
 AS
 BEGIN

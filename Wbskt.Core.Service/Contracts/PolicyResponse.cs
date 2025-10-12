@@ -6,5 +6,5 @@ public record PolicyResponse
     public required string Name { get; init; }
     public int? MaxClients { get; init; }
     public DateTime? Expiry { get; init; }
-    public int Pin { get; init; }
+    public string Pin { get; init; }
 }
