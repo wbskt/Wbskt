@@ -42,9 +42,6 @@ public static class Program
 
         builder.Services.AddSingleton<IAuthService, AuthService>();
 
-        // to avoid cyclic-dependency
-        builder.Services.AddSingleton(sp => new Lazy<IServerInfoService>(sp.GetRequiredService<IServerInfoService>));
-
         builder.Services.ConfigureCommonServices();
 
         // Register Background Services

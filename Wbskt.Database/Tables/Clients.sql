@@ -28,6 +28,3 @@ CREATE TABLE [dbo].[Clients] (
     CONSTRAINT [Fk_Clients_RegistrationPolicies] FOREIGN KEY ([RegistrationPolicyId]) REFERENCES [dbo].[RegistrationPolicies] ([Id])
 );
 GO
-
-CREATE NONCLUSTERED INDEX [IX_Clients_UserId] ON [dbo].[Clients] ([UserId] ASC);
-GO

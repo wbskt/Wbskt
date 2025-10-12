@@ -16,6 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		global.json = global.json
 		README.md = README.md
 		LICENSE.txt = LICENSE.txt
+		GEMINI.md = GEMINI.md
 	EndProjectSection
 EndProject
 Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "Wbskt.Core.Installer", "Wbskt.Core.Installer\Wbskt.Core.Installer.wixproj", "{0EC7D8CC-02F9-4200-B181-04AECD52B8AD}"

@@ -1,5 +1,5 @@
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 

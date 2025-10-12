@@ -1,16 +1,16 @@
-WBSKT
+# WBSKT
 
 
-Registration Policy
+## Registration Policy
 - Indefinite number of clients or time
     - Secure, means server has a key which can be used to validate id/hash of the clients. Each hash of id will be generated and preconfigured into the client.
 - Limited number of clients
     - 1 client for one time use
 
 
-Client registration
+## Client registration
 
-Types
+### Types
 - Manual
     - This means we’ll pass in a key to the client library and invoke registration.
     - This key may be the policy key. This client will be tied up with the policy.
@@ -18,7 +18,7 @@ Types
     - Secure, the client will invoke the registration with the pre-configured id/hashes.
     - This will probably be used by start-ups.
 
-Workflow
+### Workflow
 - Client will invoke the registration endpoint to the core server.
 - Core server will validate the request and policy and will provide an auth-token tied to the user and the policy.
     - Also, this token will contain the address of the socket server to which it needs to connect.
@@ -26,15 +26,15 @@ Workflow
 - Client will always have a persistent socket connection with the socket server.
 
 
-Database
+## Database
 
-Users
+### Users
 - Id : INT
 - Name : NVARCHAR(100)
 - Email : NVARCHAR(100)
 - PasswordHash: VARCHAR (512)
 
-RegistrationPolicies
+### RegistrationPolicies
 - RefId : GUID
 - Id : INT
 - Name : NVARCHAR(100)
@@ -43,7 +43,7 @@ RegistrationPolicies
 - Expiry: DATETIME NULLABLE
 - Pin: INT
 
-Clients
+### Clients
 - UserId : INT
 - RegistrationPolicyId : INT
 - Name : NVARCHAR(100) NULLABLE
