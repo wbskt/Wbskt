@@ -50,6 +50,7 @@ public static class Constants
     {
         public const int ClientTokenExpiry = 1; // 1 minute
         public const int ServerTokenExpiry = 60 * 24; // one day
+        public static TimeSpan CacheExpiry = TimeSpan.FromMinutes(5);
     }
 
     public static class LoggingConstants

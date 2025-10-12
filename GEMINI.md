@@ -37,4 +37,5 @@ To build and run this project, you will need the .NET 8 SDK and a SQL Server ins
 *   **Authentication**: The service uses JWT Bearer authentication.
 *   **Logging**: The project uses Serilog for logging.
 *   **Database Access**: The project uses `Microsoft.Data.SqlClient` for database access. Stored procedures are used for database operations.
+*   **Caching**: The project uses a generic `ICacheService` for caching data in memory. This service is used by the cached readers to reduce database load.
 *   **Testing**: There are no tests in the project currently.

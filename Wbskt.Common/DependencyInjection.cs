@@ -7,12 +7,16 @@ using Wbskt.Common.Services;
 using Wbskt.Common.Writers;
 using Wbskt.Common.Writers.Implementations;
 
+
+
 namespace Wbskt.Common;
 
 public static class DependencyInjection
 {
     public static void ConfigureCommonServices(this IServiceCollection serviceCollection)
     {
+        serviceCollection.AddMemoryCache();
+        serviceCollection.AddSingleton<ICacheService, CacheService>();
         serviceCollection.AddSingleton<ICancellationService, CancellationService>();
         
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();

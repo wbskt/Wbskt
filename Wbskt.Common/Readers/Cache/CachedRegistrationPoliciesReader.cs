@@ -1,67 +1,28 @@
-using System.Collections.Concurrent;
-using Microsoft.Extensions.Logging;
 using Wbskt.Common.Readers.Database;
 using Wbskt.Common.Records;
+using Wbskt.Common.Services;
 
 namespace Wbskt.Common.Readers.Cache;
 
-/// <summary>
-/// A cached implementation of the registration policy reader that uses a ConcurrentDictionary and SqlDependency.
-/// </summary>
 internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesReader
 {
-    private readonly ILogger<CachedRegistrationPoliciesReader> _logger;
     private readonly IRegistrationPoliciesDatabaseReader _databaseReader;
+    private readonly ICacheService _cacheService;
 
-    private static DateTime _lastModified = DateTime.UnixEpoch;
-    private static readonly ConcurrentDictionary<int, RegistrationPolicyRecord> PoliciesByIdCache = [];
-
-    public CachedRegistrationPoliciesReader(
-        ILogger<CachedRegistrationPoliciesReader> logger,
-        IRegistrationPoliciesDatabaseReader databaseReader)
+    public CachedRegistrationPoliciesReader(IRegistrationPoliciesDatabaseReader databaseReader, ICacheService cacheService)
     {
-        _logger = logger;
         _databaseReader = databaseReader;
+        _cacheService = cacheService;
     }
 
     public async Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken)
     {
-        await RefreshCacheIfEmpty(cancellationToken);
-        return PoliciesByIdCache.Values.Where(p => p.UserId == userId).ToList();
+        var policies = await GetAllPoliciesAsync(cancellationToken);
+        return policies.Where(p => p.UserId == userId).ToList();
     }
 
-    private async Task RefreshCacheIfEmpty(CancellationToken cancellationToken)
+    private Task<List<RegistrationPolicyRecord>> GetAllPoliciesAsync(CancellationToken cancellationToken)
     {
-        if (PoliciesByIdCache.IsEmpty)
-        {
-            await RefreshCache(cancellationToken);
-        }
-    }
-
-    private async Task RefreshCache(CancellationToken cancellationToken)
-    {
-        try
-        {
-            var policies = await _databaseReader.GetAllAsync(_lastModified, cancellationToken);
-            var maxLastModified = _lastModified;
-
-            foreach (var policy in policies)
-            {
-                PoliciesByIdCache[policy.Id] = policy;
-
-                if (policy.LastModified > maxLastModified)
-                {
-                    maxLastModified = policy.LastModified;
-                }
-            }
-
-            _lastModified = maxLastModified;
-            _logger.LogDebug("RegistrationPolicies cache refreshed with {count} policies", policies.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to refresh RegistrationPolicies cache");
-            throw;
-        }
+        return _cacheService.GetOrSetAsync("AllPolicies", () => _databaseReader.GetAllAsync(DateTime.UnixEpoch, cancellationToken), Constants.ExpiryTimes.CacheExpiry, cancellationToken);
     }
 }
