@@ -117,3 +117,65 @@ The client registration flow is designed to be secure and flexible, allowing use
 - `Id`: `INT`
 - `PublicDomainName`: `VARCHAR(256)`
 - `Status`: `INT`
+
+## Project Vision: A Workflow Automation Engine
+
+The core of WBSKT is a powerful workflow automation engine that connects triggers to actions. This allows users to create automated sequences that react to events from various sources, including real-time data from connected clients.
+
+A **Workflow** is a sequence of steps that starts with a single **Trigger** and executes one or more **Actions**, potentially controlled by **Modifiers** (like if-conditions).
+
+- **Trigger**: What starts the workflow (e.g., a webhook call, a timed schedule, or a specific data pattern from a client).
+- **Action**: A unit of work to be done (e.g., send a command to a client, send an email).
+- **Execution Context**: When a trigger fires, it creates a "context" (containing data from the trigger) that flows through the workflow, can be modified, and is used by actions.
+
+## Trigger Types
+
+Triggers can be categorized by what initiates them:
+
+#### 1. User-Initiated Triggers
+*   **Manual Trigger**: A user clicks a button in a UI or makes a direct API call to run a workflow. Essential for testing and direct control.
+
+#### 2. Scheduled Triggers
+*   **Timed (CRON) Trigger**: Runs a workflow on a recurring schedule (e.g., every day at midnight, every 5 minutes).
+*   **Delayed Trigger**: Runs a workflow once, a specific amount of time after it has been scheduled. (e.g., "run this in 2 hours").
+
+#### 3. Webhook & External Event Triggers
+*   **Generic Webhook**: A public URL that starts a workflow when it receives an HTTP request. This is the key to integrating with countless third-party services (e.g., GitHub, Stripe, Shopify).
+*   **Email Received Trigger**: Starts a workflow when an email is sent to a specific, unique email address. This would require integrating with an email parsing service like Mailgun or SendGrid Inbound Parse.
+
+#### 4. Real-time Client Data Triggers
+This is where you can listen to the stream of data from your connected clients and trigger workflows based on specific conditions.
+
+*   **Client Data Match Trigger**: The user defines a condition against the data packets being received from a specific client (or group of clients). The workflow engine continuously evaluates the incoming data stream.
+    *   *Example*: Trigger when `client_A.sensor_data.temperature > 40`.
+*   **Client Data Sequence Trigger**: Triggers when a specific sequence of events happens from a client within a certain timeframe.
+    *   *Example*: Trigger if `client_C.door_sensor` sends `{"status": "open"}` followed by `{"status": "closed"}` within 5 seconds.
+*   **Client Connectivity Trigger**: Triggers based on the client's connection status to the socket server.
+    *   *Example*: Trigger when `client_D` disconnects unexpectedly.
+
+#### 5. Internal Application Triggers
+*   **New User Registration**: Triggers a workflow when a new user signs up for your service (e.g., to send a welcome email).
+*   **New Client Registration**: Triggers a workflow when a new client is successfully registered via a policy (e.g., to notify the owner).
+
+## Action Types
+
+Actions are the "work" part of the workflow.
+
+#### 1. Internal & Client-Facing Actions
+*   **Send Payload to Client**: Send a specific JSON payload to one or more connected clients.
+*   **Update Client Configuration**: Send a special payload that instructs a client to update its internal settings.
+*   **Request Data from Client**: Send a message to a client asking it to report its current state.
+*   **Create/Update/Delete Policy**: Programmatically manage registration policies from within a workflow.
+*   **Log Data**: Write data from the workflow context to a dedicated log file or database table.
+
+#### 2. Notification & Communication Actions
+*   **Send Email**: Send an email via an integrated service (SendGrid, Mailgun, AWS SES).
+*   **Send SMS**: Send a text message via a service like Twilio.
+*   **Send WhatsApp Message**: Integrate with the WhatsApp Business API.
+*   **Send Telegram Message**: Use the Telegram Bot API to send messages.
+*   **Send Slack/Discord Message**: Post a message to a specific channel.
+
+#### 3. External Integration Actions
+*   **Make HTTP Request**: A generic action to call any external API.
+*   **Write to Google Sheets**: Append a new row to a specified Google Sheet.
+*   **Create Trello Card**: Create a new card on a Trello board.
