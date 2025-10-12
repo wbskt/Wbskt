@@ -59,16 +59,16 @@ internal sealed class RegistrationPoliciesWriter : IRegistrationPoliciesWriter
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task DeleteAsync(int policyId, CancellationToken cancellationToken)
+    public async Task DeleteAsync(Guid refId, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "dbo.RegistrationPolicies_Delete";
+        command.CommandText = "dbo.RegistrationPolicies_DeleteBy_RefId";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@Id", policyId);
+        command.Parameters.AddWithValue("@RefId", refId);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -1,15 +1,15 @@
 /*
-    Procedure: dbo.RegistrationPolicies_GetBy_Id
-    Purpose: Retrieves a registration policy by its unique Id.
+    Procedure: dbo.RegistrationPolicies_GetBy_RefId
+    Purpose: Retrieves a registration policy by its unique RefId.
     Parameters:
-        - @Id INT: The policy Id to retrieve
+        - @RefId UNIQUEIDENTIFIER: The policy RefId to retrieve
     Returns: Id, RefId, Name, UserId, MaxClients, Expiry, Pin, LastModified
     Author: Richard Joy
     Date: 2025-10-12
     Last Modified: 2025-10-12 by Richard Joy - Initial version
 */
-CREATE PROCEDURE dbo.RegistrationPolicies_GetBy_Id
-    @Id INT
+CREATE PROCEDURE dbo.RegistrationPolicies_GetBy_RefId
+    @RefId UNIQUEIDENTIFIER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,5 +24,5 @@ BEGIN
         Pin,
         LastModified
     FROM dbo.RegistrationPolicies
-    WHERE Id = @Id;
+    WHERE RefId = @RefId;
 END;

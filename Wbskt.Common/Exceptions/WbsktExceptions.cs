@@ -130,8 +130,8 @@ public static class WbsktExceptions
         return new InvalidCredentialException("The token provided is invalid or has expired. Please log in again to get a new token.");
     }
 
-    public static InvalidOperationException PolicyNotFound(int policyId)
+    public static InvalidOperationException PolicyNotFound(Guid refId)
     {
-        return new InvalidOperationException($"A registration policy with the ID '{policyId}' was not found. Please check the policy ID and try again.");
+        return new InvalidOperationException($"A registration policy with the RefId '{refId}' was not found. Please check the policy RefId and try again.");
     }
 }

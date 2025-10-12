@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Common;
@@ -24,7 +23,7 @@ public class PoliciesController : ControllerBase
     {
         var userId = GetUserId();
         var policy = await _policyService.CreatePolicyAsync(userId, request, cancellationToken);
-        return CreatedAtAction(nameof(GetPolicy), new { id = policy.Id }, policy);
+        return CreatedAtAction(nameof(GetPolicy), new { refId = policy.RefId }, policy);
     }
 
     [HttpGet]
@@ -35,11 +34,11 @@ public class PoliciesController : ControllerBase
         return Ok(policies);
     }
 
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetPolicy(int id, CancellationToken cancellationToken)
+    [HttpGet("{refId}")]
+    public async Task<IActionResult> GetPolicy(Guid refId, CancellationToken cancellationToken)
     {
         var userId = GetUserId();
-        var policy = await _policyService.GetPolicyAsync(userId, id, cancellationToken);
+        var policy = await _policyService.GetPolicyAsync(userId, refId, cancellationToken);
 
         if (policy == null)
         {
@@ -49,19 +48,19 @@ public class PoliciesController : ControllerBase
         return Ok(policy);
     }
 
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdatePolicy(int id, UpdatePolicyRequest request, CancellationToken cancellationToken)
+    [HttpPut("{refId}")]
+    public async Task<IActionResult> UpdatePolicy(Guid refId, UpdatePolicyRequest request, CancellationToken cancellationToken)
     {
         var userId = GetUserId();
-        var policy = await _policyService.UpdatePolicyAsync(userId, id, request, cancellationToken);
+        var policy = await _policyService.UpdatePolicyAsync(userId, refId, request, cancellationToken);
         return Ok(policy);
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeletePolicy(int id, CancellationToken cancellationToken)
+    [HttpDelete("{refId}")]
+    public async Task<IActionResult> DeletePolicy(Guid refId, CancellationToken cancellationToken)
     {
         var userId = GetUserId();
-        await _policyService.DeletePolicyAsync(userId, id, cancellationToken);
+        await _policyService.DeletePolicyAsync(userId, refId, cancellationToken);
         return NoContent();
     }
 

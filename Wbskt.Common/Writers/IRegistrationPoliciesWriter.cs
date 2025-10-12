@@ -15,5 +15,5 @@ public interface IRegistrationPoliciesWriter
     /// <returns>The ID of the newly created policy.</returns>
     Task<int> InsertAsync(RegistrationPolicyRecord policy, CancellationToken cancellationToken);
     Task UpdateAsync(RegistrationPolicyRecord policy, CancellationToken cancellationToken);
-    Task DeleteAsync(int policyId, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid refId, CancellationToken cancellationToken);
 }

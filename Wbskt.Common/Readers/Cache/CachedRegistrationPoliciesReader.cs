@@ -21,10 +21,10 @@ internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesRe
         return policies.Where(p => p.UserId == userId).ToList();
     }
 
-    public async Task<RegistrationPolicyRecord?> GetByIdAsync(int policyId, CancellationToken cancellationToken)
+    public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken)
     {
         var policies = await GetAllPoliciesAsync(cancellationToken);
-        return policies.FirstOrDefault(p => p.Id == policyId);
+        return policies.FirstOrDefault(p => p.RefId == refId);
     }
 
     private Task<List<RegistrationPolicyRecord>> GetAllPoliciesAsync(CancellationToken cancellationToken)

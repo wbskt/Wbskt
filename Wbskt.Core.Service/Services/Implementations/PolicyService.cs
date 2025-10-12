@@ -41,9 +41,9 @@ internal sealed class PolicyService : IPolicyService
         return policies.Select(ToPolicyResponse).ToList();
     }
 
-    public async Task<PolicyResponse?> GetPolicyAsync(int userId, int policyId, CancellationToken cancellationToken)
+    public async Task<PolicyResponse?> GetPolicyAsync(int userId, Guid refId, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByIdAsync(policyId, cancellationToken);
+        var policy = await _policiesReader.GetByRefIdAsync(refId, cancellationToken);
 
         if (policy == null || policy.UserId != userId)
         {
@@ -53,13 +53,13 @@ internal sealed class PolicyService : IPolicyService
         return ToPolicyResponse(policy);
     }
 
-    public async Task<PolicyResponse> UpdatePolicyAsync(int userId, int policyId, UpdatePolicyRequest request, CancellationToken cancellationToken)
+    public async Task<PolicyResponse> UpdatePolicyAsync(int userId, Guid refId, UpdatePolicyRequest request, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByIdAsync(policyId, cancellationToken);
+        var policy = await _policiesReader.GetByRefIdAsync(refId, cancellationToken);
 
         if (policy == null || policy.UserId != userId)
         {
-            throw WbsktExceptions.PolicyNotFound(policyId);
+            throw WbsktExceptions.PolicyNotFound(refId);
         }
 
         var updatedPolicy = policy with
@@ -75,23 +75,22 @@ internal sealed class PolicyService : IPolicyService
         return ToPolicyResponse(updatedPolicy);
     }
 
-    public async Task DeletePolicyAsync(int userId, int policyId, CancellationToken cancellationToken)
+    public async Task DeletePolicyAsync(int userId, Guid refId, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByIdAsync(policyId, cancellationToken);
+        var policy = await _policiesReader.GetByRefIdAsync(refId, cancellationToken);
 
         if (policy == null || policy.UserId != userId)
         {
-            throw WbsktExceptions.PolicyNotFound(policyId);
+            throw WbsktExceptions.PolicyNotFound(refId);
         }
 
-        await _policiesWriter.DeleteAsync(policyId, cancellationToken);
+        await _policiesWriter.DeleteAsync(refId, cancellationToken);
     }
 
     private static PolicyResponse ToPolicyResponse(RegistrationPolicyRecord policy)
     {
         return new PolicyResponse
         {
-            Id = policy.Id,
             RefId = policy.RefId,
             Name = policy.Name,
             MaxClients = policy.MaxClients,
