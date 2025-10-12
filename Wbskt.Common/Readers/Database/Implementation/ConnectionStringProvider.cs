@@ -1,16 +1,16 @@
 ﻿using Microsoft.Extensions.Configuration;
 
-namespace Wbskt.Common.Readers;
+namespace Wbskt.Common.Readers.Database.Implementation;
 
 internal sealed class ConnectionStringProvider : IConnectionStringProvider
 {
-    private readonly IConfiguration configuration;
+    private readonly IConfiguration _configuration;
 
     public ConnectionStringProvider(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        this.configuration = configuration;
+        _configuration = configuration;
     }
 
-    public string ConnectionString => configuration["ConnectionStrings:Database"]!;
+    public string ConnectionString => _configuration["ConnectionStrings:Database"]!;
 }
