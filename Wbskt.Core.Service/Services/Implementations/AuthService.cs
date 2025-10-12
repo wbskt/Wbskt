@@ -1,18 +1,24 @@
-﻿using System.Security.Claims;
-using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Wbskt.Common;
-using Wbskt.Common.Contracts;
 using Wbskt.Common.Exceptions;
+using Wbskt.Common.Readers;
+using Wbskt.Common.Records;
+using Wbskt.Common.Writers;
 
 namespace Wbskt.Core.Service.Services.Implementations;
 
-internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration configuration, IUsersService usersService, IPasswordHasher<User> passwordHasher) : IAuthService
+internal sealed class AuthService(
+    ILogger<AuthService> logger, 
+    IConfiguration configuration, 
+    IUsersReader usersReader, 
+    IUsersWriter usersWriter,
+    IPasswordHasher<UserRecord> passwordHasher) : IAuthService
 {
-    public string GenerateToken(User userData)
+    public string GenerateToken(UserRecord userData)
     {
         var tokenHandler = new JsonWebTokenHandler();
         var configurationKey = configuration[Constants.JwtKeyNames.UserTokenKey];
@@ -20,12 +26,11 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
         var key = Encoding.UTF8.GetBytes(configurationKey!);
         var tokenDescriptor = new SecurityTokenDescriptor
         {
-            Subject = new ClaimsIdentity(new Claim[]
-            {
-                new(Constants.Claims.EmailId, userData.EmailId),
-                new(Constants.Claims.Name, userData.Name),
-                new(Constants.Claims.UserData, userData.UserId.ToString())
-            }),
+            Subject = new ClaimsIdentity([
+                new Claim(Constants.Claims.EmailId, userData.Email),
+                new Claim(Constants.Claims.Name, userData.Name),
+                new Claim(Constants.Claims.UserData, userData.Id.ToString())
+            ]),
             Expires = DateTime.UtcNow.AddDays(1),
             Issuer = configuration[Constants.JwtKeyNames.Issuer],
             Audience = configuration[Constants.JwtKeyNames.Audience],
@@ -35,51 +40,34 @@ internal sealed class AuthService(ILogger<AuthService> logger, IConfiguration co
         return tokenHandler.CreateToken(tokenDescriptor);
     }
 
-    public string CreateCoreServerToken()
+    public async Task<UserRecord> RegisterUser(UserRegistrationRequest request, CancellationToken cancellationToken)
     {
-        var tokenHandler = new JsonWebTokenHandler();
-        var configurationKey = configuration[Constants.JwtKeyNames.CoreServerTokenKey];
-
-        var key = Encoding.UTF8.GetBytes(configurationKey!);
-        var tokenDescriptor = new SecurityTokenDescriptor
-        {
-            Subject = new ClaimsIdentity(new Claim[]
-            {
-                new(Constants.Claims.CoreServer, Guid.NewGuid().ToString())
-            }),
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256),
-            Expires = DateTime.Now.AddMinutes(Constants.ExpiryTimes.ServerTokenExpiry),
-            Issuer = configuration[Constants.JwtKeyNames.Issuer],
-            Audience = configuration[Constants.JwtKeyNames.Audience]
-        };
-
-        logger.LogDebug("core server token created");
-        return tokenHandler.CreateToken(tokenDescriptor);
-    }
-
-    public User RegisterUser(UserRegistrationRequest request)
-    {
-        if (usersService.FindUserIdByEmailId(request.EmailId) > 0)
+        var userId = await usersReader.FindByEmailIdAsync(request.EmailId, cancellationToken);
+        if (userId > 0)
         {
             throw WbsktExceptions.EmailIdExists(request.EmailId);
         }
 
-        var hashedPassword = passwordHasher.HashPassword(null!, request.Password);
-        var user = new User { EmailId = request.EmailId, PasswordHash = hashedPassword, Name = request.UserName };
-        return usersService.AddUser(user);
+        var user = new UserRecord
+        {
+            Email = request.EmailId, 
+            PasswordHash = passwordHasher.HashPassword(null!, request.Password), 
+            Name = request.UserName
+        };
+        
+        var newUserId = await usersWriter.InsertAsync(user, cancellationToken);
+
+        return user with { Id = newUserId };
     }
 
-    public bool ValidatePassword(UserLoginRequest loginRequest)
+    public async Task<bool> ValidatePassword(UserLoginRequest loginRequest, CancellationToken cancellationToken)
     {
-        var user = usersService.GetUserByEmailId(loginRequest.EmailId);
+        var user = await usersReader.GetByEmailIdAsync(loginRequest.EmailId, cancellationToken);
 
+        if (user == null) return false;
+        
         var result = passwordHasher.VerifyHashedPassword(null!, user.PasswordHash, loginRequest.Password);
 
-        if (result != PasswordVerificationResult.Success)
-        {
-            return false;
-        }
-
-        return true;
+        return result == PasswordVerificationResult.Success;
     }
 }

@@ -2,8 +2,8 @@
 using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Wbskt.Common;
-using Wbskt.Common.Contracts;
 using Wbskt.Common.Extensions;
+using Wbskt.Common.Records;
 using Wbskt.Common.Services;
 using Wbskt.Core.Service.Pipeline;
 using Wbskt.Core.Service.Services;
@@ -37,8 +37,7 @@ public static class Program
         builder.Host.UseWindowsService();
 
         // Add services to the container.
-        // todo: Add a new implementation that wraps PasswordHasher<User>
-        builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+        builder.Services.AddSingleton<IPasswordHasher<UserRecord>, PasswordHasher<UserRecord>>();
 
         builder.Services.AddSingleton<IAuthService, AuthService>();
 

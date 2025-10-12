@@ -26,5 +26,10 @@ public static class DependencyInjection
         serviceCollection.AddSingleton<IRegistrationPoliciesWriter, RegistrationPoliciesWriter>();
         serviceCollection.AddSingleton<IRegistrationPoliciesDatabaseReader, RegistrationPoliciesDatabaseReader>();
         serviceCollection.AddSingleton<IRegistrationPoliciesReader, CachedRegistrationPoliciesReader>();
+
+        // Users
+        serviceCollection.AddSingleton<IUsersWriter, UsersWriter>();
+        serviceCollection.AddSingleton<IUsersDatabaseReader, UsersDatabaseReader>();
+        serviceCollection.AddSingleton<IUsersReader, CachedUsersReader>();
     }
 }

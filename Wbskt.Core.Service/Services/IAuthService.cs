@@ -1,14 +1,12 @@
-﻿using Wbskt.Common.Contracts;
+﻿using Wbskt.Common.Records;
 
 namespace Wbskt.Core.Service.Services;
 
 public interface IAuthService
 {
-    string GenerateToken(User userData);
+    string GenerateToken(UserRecord userData);
 
-    bool ValidatePassword(UserLoginRequest loginRequest);
+    Task<bool> ValidatePassword(UserLoginRequest loginRequest, CancellationToken cancellationToken);
 
-    User RegisterUser(UserRegistrationRequest request);
-
-    string CreateCoreServerToken();
+    Task<UserRecord> RegisterUser(UserRegistrationRequest request, CancellationToken cancellationToken);
 }
