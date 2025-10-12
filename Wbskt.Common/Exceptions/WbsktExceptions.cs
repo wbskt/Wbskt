@@ -114,4 +114,19 @@ public static class WbsktExceptions
     {
         return new InvalidOperationException($"A publisher named '{publisherName}' already exists for this user. Please use a unique publisher name.");
     }
+
+    public static InvalidCredentialException UserNotFound(string emailId)
+    {
+        return new InvalidCredentialException($"A user with the email address '{emailId}' was not found. Please check the email address and try again.");
+    }
+
+    public static InvalidCredentialException InvalidCredentials()
+    {
+        return new InvalidCredentialException("The credentials provided are incorrect. Please check your email and password and try again.");
+    }
+
+    public static InvalidCredentialException InvalidToken()
+    {
+        return new InvalidCredentialException("The token provided is invalid or has expired. Please log in again to get a new token.");
+    }
 }

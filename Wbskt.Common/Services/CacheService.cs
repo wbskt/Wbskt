@@ -13,7 +13,9 @@ internal sealed class CacheService : ICacheService
 
     public async Task<T> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan duration, CancellationToken cancellationToken)
     {
+#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
         if (_memoryCache.TryGetValue(cacheKey, out T value))
+#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
         {
             return value!;
         }

@@ -34,8 +34,9 @@ To build and run this project, you will need the .NET 8 SDK and a SQL Server ins
 
 *   **Coding Style**: The project follows standard C# coding conventions.
 *   **Dependency Injection**: The project uses the built-in dependency injection container in ASP.NET Core. Services are registered in `Program.cs` and in the `DependencyInjection` class in the `Wbskt.Common` project.
-*   **Authentication**: The service uses JWT Bearer authentication.
+*   **Authentication**: The service uses JWT Bearer authentication with refresh tokens.
 *   **Logging**: The project uses Serilog for logging.
 *   **Database Access**: The project uses `Microsoft.Data.SqlClient` for database access. Stored procedures are used for database operations.
 *   **Caching**: The project uses a generic `ICacheService` for caching data in memory. This service is used by the cached readers to reduce database load.
+*   **Exception Handling**: The project uses custom exception classes defined in `WbsktExceptions.cs` to handle specific error scenarios.
 *   **Testing**: There are no tests in the project currently.
