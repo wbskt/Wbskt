@@ -22,6 +22,3 @@ CREATE TABLE [dbo].[Users] (
     CONSTRAINT [Unq_Users_EmailId]  UNIQUE          NONCLUSTERED    ([EmailId]  ASC)
 );
 GO
-
--- Additional indexes for better performance
-CREATE NONCLUSTERED INDEX [IX_Users_LastModified] ON [dbo].[Users] ([LastModified] ASC);

@@ -8,8 +8,8 @@
         - Name: VARCHAR(100), client name
         - UniqueRef: UNIQUEIDENTIFIER, unique client reference
         - LastModified: DATETIME, last modification timestamp
-        - PolicyId: INT, foreign key to EnrollmentPolicies
-    Constraints: PK, unique, FK to Users, Servers, EnrollmentPolicies
+        - PolicyId: INT, foreign key to RegistrationPolicies
+    Constraints: PK, unique, FK to Users, Servers, RegistrationPolicies
     Author: Richard Joy
     Date: 2025-04-25
     Last Modified: 2025-04-25 by Richard Joy - Initial version
@@ -27,7 +27,7 @@ CREATE TABLE [dbo].[Clients] (
     CONSTRAINT [Unq_Name_UserId]        UNIQUE      NONCLUSTERED    ([Name]         ASC,    [UserId]    ASC),
     CONSTRAINT [Fk_Clients_Users]       FOREIGN KEY                 ([UserId])      REFERENCES  [dbo].[Users]   ([Id]),
     CONSTRAINT [Fk_Clients_Servers]     FOREIGN KEY                 ([ServerId])    REFERENCES  [dbo].[Servers] ([Id]),
-    CONSTRAINT [Fk_Clients_Policies]    FOREIGN KEY                 ([PolicyId])    REFERENCES  [dbo].[EnrollmentPolicies] ([Id])
+    CONSTRAINT [Fk_Clients_Policies]    FOREIGN KEY                 ([PolicyId])    REFERENCES  [dbo].[RegistrationPolicies] ([Id])
 );
 GO
 
