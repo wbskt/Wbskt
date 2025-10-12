@@ -134,4 +134,19 @@ public static class WbsktExceptions
     {
         return new InvalidOperationException($"A registration policy with the RefId '{refId}' was not found. Please check the policy RefId and try again.");
     }
+
+    public static InvalidCredentialException InvalidPolicyPin()
+    {
+        return new InvalidCredentialException("The PIN provided for the registration policy is incorrect. Please check the PIN and try again.");
+    }
+
+    public static InvalidOperationException PolicyExpired()
+    {
+        return new InvalidOperationException("The registration policy has expired. Please create a new policy and try again.");
+    }
+
+    public static InvalidOperationException MaxClientsReached()
+    {
+        return new InvalidOperationException("The maximum number of clients for this registration policy has been reached. Please create a new policy or increase the client limit and try again.");
+    }
 }

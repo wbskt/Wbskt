@@ -39,5 +39,9 @@ public static class DependencyInjection
         // User Refresh Tokens
         serviceCollection.AddSingleton<IUserRefreshTokensWriter, UserRefreshTokensWriter>();
         serviceCollection.AddSingleton<IUserRefreshTokensDatabaseReader, UserRefreshTokensDatabaseReader>();
+
+        // Servers
+        serviceCollection.AddSingleton<IServersDatabaseReader, ServersDatabaseReader>();
+        serviceCollection.AddSingleton<IServersReader, CachedServersReader>();
     }
 }

@@ -15,20 +15,19 @@ internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesRe
         _cacheService = cacheService;
     }
 
-    public async Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken)
+    public Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken)
     {
-        var policies = await GetAllPoliciesAsync(cancellationToken);
-        return policies.Where(p => p.UserId == userId).ToList();
+        var cacheKey = $"Policies_User_{userId}";
+        return _cacheService.GetOrSetAsync(cacheKey, async () =>
+        {
+            var policies = await _databaseReader.GetAllAsync(DateTime.UnixEpoch, cancellationToken);
+            return policies.Where(p => p.UserId == userId).ToList();
+        }, Constants.ExpiryTimes.CacheExpiry, cancellationToken);
     }
 
-    public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken)
+    public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(int userId, Guid refId, CancellationToken cancellationToken)
     {
-        var policies = await GetAllPoliciesAsync(cancellationToken);
+        var policies = await GetAllAsync(userId, cancellationToken);
         return policies.FirstOrDefault(p => p.RefId == refId);
-    }
-
-    private Task<List<RegistrationPolicyRecord>> GetAllPoliciesAsync(CancellationToken cancellationToken)
-    {
-        return _cacheService.GetOrSetAsync("AllPolicies", () => _databaseReader.GetAllAsync(DateTime.UnixEpoch, cancellationToken), Constants.ExpiryTimes.CacheExpiry, cancellationToken);
     }
 }

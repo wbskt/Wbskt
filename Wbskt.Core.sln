@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		GEMINI.md = GEMINI.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wbskt.EventBus", "Wbskt.EventBus\Wbskt.EventBus.csproj", "{1B3B7A4B-8A2B-4F4B-8A2B-8A2B8A2B8A2B}"
+EndProject
 Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "Wbskt.Core.Installer", "Wbskt.Core.Installer\Wbskt.Core.Installer.wixproj", "{0EC7D8CC-02F9-4200-B181-04AECD52B8AD}"
 EndProject
 Global
@@ -101,6 +103,8 @@ Global
 		{0EC7D8CC-02F9-4200-B181-04AECD52B8AD}.Release|x64.Build.0 = Release|x64
 		{0EC7D8CC-02F9-4200-B181-04AECD52B8AD}.Release|x86.ActiveCfg = Release|x86
 		{0EC7D8CC-02F9-4200-B181-04AECD52B8AD}.Release|x86.Build.0 = Release|x86
+		{1B3B7A4B-8A2B-4F4B-8A2B-8A2B8A2B8A2B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B3B7A4B-8A2B-4F4B-8A2B-8A2B8A2B8A2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

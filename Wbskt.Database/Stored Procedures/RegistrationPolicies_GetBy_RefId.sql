@@ -9,7 +9,8 @@
     Last Modified: 2025-10-12 by Richard Joy - Initial version
 */
 CREATE PROCEDURE dbo.RegistrationPolicies_GetBy_RefId
-    @RefId UNIQUEIDENTIFIER
+    @RefId UNIQUEIDENTIFIER,
+    @UserId INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,5 +25,5 @@ BEGIN
         Pin,
         LastModified
     FROM dbo.RegistrationPolicies
-    WHERE RefId = @RefId;
+    WHERE RefId = @RefId AND UserId = @UserId;
 END;

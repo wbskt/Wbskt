@@ -29,4 +29,9 @@ internal sealed class CacheService : ICacheService
 
         return result;
     }
+
+    public void Remove(string cacheKey)
+    {
+        _memoryCache.Remove(cacheKey);
+    }
 }

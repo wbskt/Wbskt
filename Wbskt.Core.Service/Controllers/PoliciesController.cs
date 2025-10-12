@@ -21,24 +21,21 @@ public class PoliciesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreatePolicy(CreatePolicyRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        var policy = await _policyService.CreatePolicyAsync(userId, request, cancellationToken);
+        var policy = await _policyService.CreatePolicyAsync(request, cancellationToken);
         return CreatedAtAction(nameof(GetPolicy), new { refId = policy.RefId }, policy);
     }
 
     [HttpGet]
     public async Task<IActionResult> GetPolicies(CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        var policies = await _policyService.GetPoliciesAsync(userId, cancellationToken);
+        var policies = await _policyService.GetPoliciesAsync(cancellationToken);
         return Ok(policies);
     }
 
     [HttpGet("{refId}")]
     public async Task<IActionResult> GetPolicy(Guid refId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        var policy = await _policyService.GetPolicyAsync(userId, refId, cancellationToken);
+        var policy = await _policyService.GetPolicyAsync(refId, cancellationToken);
 
         if (policy == null)
         {
@@ -51,26 +48,14 @@ public class PoliciesController : ControllerBase
     [HttpPut("{refId}")]
     public async Task<IActionResult> UpdatePolicy(Guid refId, UpdatePolicyRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        var policy = await _policyService.UpdatePolicyAsync(userId, refId, request, cancellationToken);
+        var policy = await _policyService.UpdatePolicyAsync(refId, request, cancellationToken);
         return Ok(policy);
     }
 
     [HttpDelete("{refId}")]
     public async Task<IActionResult> DeletePolicy(Guid refId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        await _policyService.DeletePolicyAsync(userId, refId, cancellationToken);
+        await _policyService.DeletePolicyAsync(refId, cancellationToken);
         return NoContent();
-    }
-
-    private int GetUserId()
-    {
-        var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == Constants.Claims.UserData);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
-        {
-            throw new UnauthorizedAccessException("User ID not found in token.");
-        }
-        return userId;
     }
 }

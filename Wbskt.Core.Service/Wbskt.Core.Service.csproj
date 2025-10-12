@@ -20,5 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wbskt.Common\Wbskt.Common.csproj"/>
+    <ProjectReference Include="..\Wbskt.EventBus\Wbskt.EventBus.csproj"/>
   </ItemGroup>
 </Project>

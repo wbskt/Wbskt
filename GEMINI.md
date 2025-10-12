@@ -2,7 +2,7 @@
 
 This project, named WBSKT, is a .NET Core application that provides a client registration and authentication system. It's built with .NET 8 and uses a SQL Server database for data storage. The architecture follows a standard client-server model, where clients register and authenticate with a core service.
 
-The system supports different registration policies, including policies with a limited number of clients and time-based policies. Clients can register manually or automatically, and upon successful registration, they receive an authentication token for accessing other resources.
+The application currently supports user authentication with JWTs and refresh tokens, and provides a REST API for managing registration policies. The next step is to implement the client registration functionality.
 
 The solution is divided into several projects:
 
@@ -10,6 +10,22 @@ The solution is divided into several projects:
 *   **Wbskt.Common**: A shared library containing common contracts, services, and utilities used by other projects in the solution.
 *   **Wbskt.Database**: A SQL Server database project containing the schema definitions for the application's database.
 *   **Wbskt.Core.Installer**: A WiX installer project for creating a Windows installer for the application.
+
+## API Endpoints
+
+### Users
+
+- `POST /api/users/register`: Registers a new user.
+- `POST /api/users/login`: Logs in a user and returns an access token and a refresh token.
+- `POST /api/users/refresh-token`: Refreshes an access token using a refresh token.
+
+### Policies
+
+- `POST /api/policies`: Creates a new registration policy.
+- `GET /api/policies`: Gets all registration policies for the authenticated user.
+- `GET /api/policies/{refId}`: Gets a specific registration policy by its `RefId`.
+- `PUT /api/policies/{refId}`: Updates a registration policy.
+- `DELETE /api/policies/{refId}`: Deletes a registration policy.
 
 ## Building and Running
 

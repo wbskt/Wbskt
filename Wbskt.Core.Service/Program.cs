@@ -2,9 +2,12 @@
 using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Wbskt.Common;
+using Wbskt.Common.Events;
 using Wbskt.Common.Extensions;
 using Wbskt.Common.Records;
 using Wbskt.Common.Services;
+using Wbskt.EventBus;
+using Wbskt.Core.Service.EventHandlers;
 using Wbskt.Core.Service.Pipeline;
 using Wbskt.Core.Service.Services;
 using Wbskt.Core.Service.Services.Implementations;
@@ -37,10 +40,17 @@ public static class Program
         builder.Host.UseWindowsService();
 
         // Add services to the container.
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
         builder.Services.AddSingleton<IPasswordHasher<UserRecord>, PasswordHasher<UserRecord>>();
 
         builder.Services.AddSingleton<IAuthService, AuthService>();
         builder.Services.AddSingleton<IPolicyService, PolicyService>();
+        builder.Services.AddSingleton<IRegistrationService, RegistrationService>();
+
+        builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+        builder.Services.AddTransient<PolicyCacheHandler>();
 
         builder.Services.ConfigureCommonServices();
 
@@ -60,6 +70,11 @@ public static class Program
         builder.Services.AddControllers();
 
         var app = builder.Build();
+
+        var eventBus = app.Services.GetRequiredService<IEventBus>();
+        eventBus.Subscribe<PolicyCreatedEvent, PolicyCacheHandler>();
+        eventBus.Subscribe<PolicyUpdatedEvent, PolicyCacheHandler>();
+        eventBus.Subscribe<PolicyDeletedEvent, PolicyCacheHandler>();
 
         // Configure the HTTP request pipeline.
         app.UseMiddleware<ExceptionMiddleware>();

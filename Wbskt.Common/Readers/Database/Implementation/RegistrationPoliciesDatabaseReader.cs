@@ -49,7 +49,7 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
         return policies;
     }
 
-    public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken)
+    public async Task<RegistrationPolicyRecord?> GetByRefIdAsync(int userId, Guid refId, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
         await connection.OpenAsync(cancellationToken);
@@ -58,6 +58,7 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
         command.CommandText = "dbo.RegistrationPolicies_GetBy_RefId";
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@RefId", refId);
+        command.Parameters.AddWithValue("@UserId", userId);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 

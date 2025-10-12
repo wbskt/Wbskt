@@ -1,52 +1,69 @@
 # WBSKT
 
+This document provides an overview of the WBSKT project, its architecture, and its current status.
 
-## Registration Policy
-- Indefinite number of clients or time
-    - Secure, means server has a key which can be used to validate id/hash of the clients. Each hash of id will be generated and preconfigured into the client.
-- Limited number of clients
-    - 1 client for one time use
+## Current Status
 
+- **User Authentication**: The application supports user registration and login using JWTs and refresh tokens.
+- **Policy Management**: Users can create, read, update, and delete registration policies via a REST API.
+- **API Security**: The API uses `RefId` (GUID) instead of integer IDs to expose resources, enhancing security.
 
-## Client registration
+## Next Steps
 
-### Types
-- Manual
-    - This means we’ll pass in a key to the client library and invoke registration.
-    - This key may be the policy key. This client will be tied up with the policy.
-- Auto
-    - Secure, the client will invoke the registration with the pre-configured id/hashes.
-    - This will probably be used by start-ups.
+The next step is to implement the client registration functionality, which will allow clients to register themselves using the policies created by users.
 
-### Workflow
-- Client will invoke the registration endpoint to the core server.
-- Core server will validate the request and policy and will provide an auth-token tied to the user and the policy.
-    - Also, this token will contain the address of the socket server to which it needs to connect.
-- Client will then use this token and the socket server address to connect to the socket server.
-- Client will always have a persistent socket connection with the socket server.
+## API Endpoints
 
+### Users
+
+- `POST /api/users/register`: Registers a new user.
+- `POST /api/users/login`: Logs in a user and returns an access token and a refresh token.
+- `POST /api/users/refresh-token`: Refreshes an access token using a refresh token.
+
+### Policies
+
+- `POST /api/policies`: Creates a new registration policy.
+- `GET /api/policies`: Gets all registration policies for the authenticated user.
+- `GET /api/policies/{refId}`: Gets a specific registration policy by its `RefId`.
+- `PUT /api/policies/{refId}`: Updates a registration policy.
+- `DELETE /api/policies/{refId}`: Deletes a registration policy.
 
 ## Database
 
 ### Users
-- Id : INT
-- Name : NVARCHAR(100)
-- Email : NVARCHAR(100)
-- PasswordHash: VARCHAR (512)
+
+- `Id`: `INT`
+- `Name`: `NVARCHAR(100)`
+- `EmailId`: `NVARCHAR(100)`
+- `PasswordHash`: `VARCHAR(512)`
+
+### UserRefreshTokens
+
+- `Id`: `INT`
+- `UserId`: `INT`
+- `Token`: `VARCHAR(256)`
+- `Expires`: `DATETIME`
+- `Created`: `DATETIME`
+- `CreatedByIp`: `VARCHAR(50)`
+- `Revoked`: `DATETIME`
+- `RevokedByIp`: `VARCHAR(50)`
+- `ReplacedByToken`: `VARCHAR(256)`
 
 ### RegistrationPolicies
-- RefId : GUID
-- Id : INT
-- Name : NVARCHAR(100)
-- UserId : INT
-- MaxClients: INT NULLABLE
-- Expiry: DATETIME NULLABLE
-- Pin: INT
+
+- `Id`: `INT`
+- `RefId`: `GUID`
+- `UserId`: `INT`
+- `Name`: `NVARCHAR(100)`
+- `MaxClients`: `INT` (nullable)
+- `Expiry`: `DATETIME` (nullable)
+- `Pin`: `INT`
 
 ### Clients
-- UserId : INT
-- RegistrationPolicyId : INT
-- Name : NVARCHAR(100) NULLABLE
-- Id : INT
-- RefId : GUID
-- Active : BOOL
+
+- `Id`: `INT`
+- `RefId`: `GUID`
+- `UserId`: `INT`
+- `RegistrationPolicyId`: `INT`
+- `Name`: `NVARCHAR(100)` (nullable)
+- `Active`: `BOOL`

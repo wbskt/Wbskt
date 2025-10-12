@@ -1,6 +1,7 @@
 using Wbskt.Common.Exceptions;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
+using Wbskt.Common.Services;
 using Wbskt.Common.Writers;
 using Wbskt.Core.Service.Contracts;
 
@@ -10,18 +11,20 @@ internal sealed class PolicyService : IPolicyService
 {
     private readonly IRegistrationPoliciesReader _policiesReader;
     private readonly IRegistrationPoliciesWriter _policiesWriter;
+    private readonly ICurrentUser _currentUser;
 
-    public PolicyService(IRegistrationPoliciesReader policiesReader, IRegistrationPoliciesWriter policiesWriter)
+    public PolicyService(IRegistrationPoliciesReader policiesReader, IRegistrationPoliciesWriter policiesWriter, ICurrentUser currentUser)
     {
         _policiesReader = policiesReader;
         _policiesWriter = policiesWriter;
+        _currentUser = currentUser;
     }
 
-    public async Task<PolicyResponse> CreatePolicyAsync(int userId, CreatePolicyRequest request, CancellationToken cancellationToken)
+    public async Task<PolicyResponse> CreatePolicyAsync(CreatePolicyRequest request, CancellationToken cancellationToken)
     {
         var policy = new RegistrationPolicyRecord
         {
-            UserId = userId,
+            UserId = _currentUser.Id,
             Name = request.Name,
             MaxClients = request.MaxClients,
             Expiry = request.Expiry,
@@ -35,17 +38,17 @@ internal sealed class PolicyService : IPolicyService
         return ToPolicyResponse(policy with { Id = policyId });
     }
 
-    public async Task<List<PolicyResponse>> GetPoliciesAsync(int userId, CancellationToken cancellationToken)
+    public async Task<List<PolicyResponse>> GetPoliciesAsync(CancellationToken cancellationToken)
     {
-        var policies = await _policiesReader.GetAllAsync(userId, cancellationToken);
+        var policies = await _policiesReader.GetAllAsync(_currentUser.Id, cancellationToken);
         return policies.Select(ToPolicyResponse).ToList();
     }
 
-    public async Task<PolicyResponse?> GetPolicyAsync(int userId, Guid refId, CancellationToken cancellationToken)
+    public async Task<PolicyResponse?> GetPolicyAsync(Guid refId, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByRefIdAsync(refId, cancellationToken);
+        var policy = await _policiesReader.GetByRefIdAsync(_currentUser.Id, refId, cancellationToken);
 
-        if (policy == null || policy.UserId != userId)
+        if (policy == null)
         {
             return null;
         }
@@ -53,11 +56,11 @@ internal sealed class PolicyService : IPolicyService
         return ToPolicyResponse(policy);
     }
 
-    public async Task<PolicyResponse> UpdatePolicyAsync(int userId, Guid refId, UpdatePolicyRequest request, CancellationToken cancellationToken)
+    public async Task<PolicyResponse> UpdatePolicyAsync(Guid refId, UpdatePolicyRequest request, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByRefIdAsync(refId, cancellationToken);
+        var policy = await _policiesReader.GetByRefIdAsync(_currentUser.Id, refId, cancellationToken);
 
-        if (policy == null || policy.UserId != userId)
+        if (policy == null)
         {
             throw WbsktExceptions.PolicyNotFound(refId);
         }
@@ -75,11 +78,11 @@ internal sealed class PolicyService : IPolicyService
         return ToPolicyResponse(updatedPolicy);
     }
 
-    public async Task DeletePolicyAsync(int userId, Guid refId, CancellationToken cancellationToken)
+    public async Task DeletePolicyAsync(Guid refId, CancellationToken cancellationToken)
     {
-        var policy = await _policiesReader.GetByRefIdAsync(refId, cancellationToken);
+        var policy = await _policiesReader.GetByRefIdAsync(_currentUser.Id, refId, cancellationToken);
 
-        if (policy == null || policy.UserId != userId)
+        if (policy == null)
         {
             throw WbsktExceptions.PolicyNotFound(refId);
         }

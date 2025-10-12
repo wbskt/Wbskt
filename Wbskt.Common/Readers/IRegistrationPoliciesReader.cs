@@ -14,5 +14,5 @@ public interface IRegistrationPoliciesReader
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A list of registration policy records.</returns>
     Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken);
-    Task<RegistrationPolicyRecord?> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken);
+    Task<RegistrationPolicyRecord?> GetByRefIdAsync(int userId, Guid refId, CancellationToken cancellationToken);
 }
