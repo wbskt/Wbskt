@@ -1,6 +1,6 @@
 ﻿namespace Wbskt.Common.Contracts;
 
-public class UserLoginRequest
+public record UserLoginRequest
 {
     public required string EmailId { get; set; }
 

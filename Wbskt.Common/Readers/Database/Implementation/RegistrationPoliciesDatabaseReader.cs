@@ -1,5 +1,5 @@
 using System.Data;
-using Microsoft.Data.SqlClient;
+using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Common.Records;
 
@@ -8,7 +8,7 @@ namespace Wbskt.Common.Readers.Database.Implementation;
 /// <summary>
 /// Concrete implementation for reading registration policy data from the database, with support for SqlDependency.
 /// </summary>
-public class RegistrationPoliciesDatabaseReader : IRegistrationPoliciesDatabaseReader
+internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPoliciesDatabaseReader
 {
     private readonly ILogger<RegistrationPoliciesDatabaseReader> _logger;
     private readonly IConnectionStringProvider _connectionStringProvider;
@@ -21,7 +21,7 @@ public class RegistrationPoliciesDatabaseReader : IRegistrationPoliciesDatabaseR
 
     public async Task<List<RegistrationPolicyRecord>> GetAllAsync(DateTime lastModified, CancellationToken cancellationToken)
     {
-        await using var connection = new SqlConnection(_connectionStringProvider.Get());
+        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
@@ -47,25 +47,5 @@ public class RegistrationPoliciesDatabaseReader : IRegistrationPoliciesDatabaseR
             });
         }
         return policies;
-    }
-
-    public void RegisterSqlDependency(OnChangeEventHandler onChange)
-    {
-        try
-        {
-            var connectionString = _connectionStringProvider.Get();
-            using var connection = new SqlConnection(connectionString);
-            using var command = new SqlCommand("SELECT LastModified FROM dbo.RegistrationPolicies", connection);
-
-            var dependency = new SqlDependency(command);
-            dependency.OnChange += onChange;
-
-            connection.Open();
-            command.ExecuteReader(CommandBehavior.CloseConnection);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to register SQL dependency for RegistrationPolicies.");
-        }
     }
 }

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Common.Readers.Database;
 using Wbskt.Common.Records;
@@ -9,7 +8,7 @@ namespace Wbskt.Common.Readers.Cache;
 /// <summary>
 /// A cached implementation of the registration policy reader that uses a ConcurrentDictionary and SqlDependency.
 /// </summary>
-public class CachedRegistrationPoliciesReader : IRegistrationPoliciesReader, IDatabaseChangeListener
+internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesReader
 {
     private readonly ILogger<CachedRegistrationPoliciesReader> _logger;
     private readonly IRegistrationPoliciesDatabaseReader _databaseReader;
@@ -29,21 +28,6 @@ public class CachedRegistrationPoliciesReader : IRegistrationPoliciesReader, IDa
     {
         await RefreshCacheIfEmpty(cancellationToken);
         return PoliciesByIdCache.Values.Where(p => p.UserId == userId).ToList();
-    }
-
-    public void RegisterDatabaseListener()
-    {
-        if (_databaseReader is Database.Implementation.RegistrationPoliciesDatabaseReader dbReaderImpl)
-        {
-            dbReaderImpl.RegisterSqlDependency(OnDatabaseChange);
-        }
-    }
-
-    private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
-    {
-        _logger.LogInformation("Database change detected for RegistrationPolicies: {Info}", e.Info);
-        RegisterDatabaseListener();
-        _ = RefreshCache(CancellationToken.None);
     }
 
     private async Task RefreshCacheIfEmpty(CancellationToken cancellationToken)

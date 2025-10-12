@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <SqlFiles Include="dbo\**\**\*.sql" />
+        <SqlFiles Include="**\*.sql" />
     </ItemGroup>
 
 </Project>

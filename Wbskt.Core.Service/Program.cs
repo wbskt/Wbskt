@@ -1,11 +1,9 @@
-﻿using System.Data.SqlClient;
-using System.Security.Authentication;
+﻿using System.Security.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Wbskt.Common;
 using Wbskt.Common.Contracts;
 using Wbskt.Common.Extensions;
-using Wbskt.Common.Readers;
 using Wbskt.Common.Services;
 using Wbskt.Core.Service.Pipeline;
 using Wbskt.Core.Service.Services;
@@ -43,15 +41,6 @@ public static class Program
         builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
         builder.Services.AddSingleton<IAuthService, AuthService>();
-        builder.Services.AddSingleton<IUsersService, UsersService>();
-        builder.Services.AddSingleton<IChannelsService, ChannelsService>();
-        builder.Services.AddSingleton<IPublishersService, PublishersService>();
-        builder.Services.AddSingleton<IPublishersChannelsService, PublishersChannelsService>();
-        builder.Services.AddSingleton<IClientsManagementService, ClientsManagementService>();
-        builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
-        builder.Services.AddSingleton<IPayloadDispatcher, PayloadDispatcher>();
-        builder.Services.AddSingleton<IServerInfoService, ServerInfoService>();
-        builder.Services.AddSingleton<ICancellationService, CancellationService>();
 
         // to avoid cyclic-dependency
         builder.Services.AddSingleton(sp => new Lazy<IServerInfoService>(sp.GetRequiredService<IServerInfoService>));
@@ -95,21 +84,11 @@ public static class Program
     private static void OnStopping(IServiceProvider serviceProvider)
     {
         var cancellationService = serviceProvider.GetRequiredService<ICancellationService>();
-        var connectionString = serviceProvider.GetRequiredService<IConnectionStringProvider>().ConnectionString;
         cancellationService.Cancel().Wait();
-        SqlDependency.Stop(connectionString);
     }
 
     private  static void OnStarted(IServiceProvider serviceProvider)
     {
-        var connectionString = serviceProvider.GetRequiredService<IConnectionStringProvider>().ConnectionString;
-        SqlDependency.Start(connectionString);
-
-        var changeListeners = new DatabaseChangeListenerRegistry().GetAllListeners(serviceProvider);
-
-        foreach (var changeListener in changeListeners)
-        {
-            changeListener.RegisterDatabaseListener();
-        }
+        // TODO: if anything needs to be done when service is starting
     }
 }

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Common.Readers.Database;
 using Wbskt.Common.Records;
@@ -9,7 +8,7 @@ namespace Wbskt.Common.Readers.Cache;
 /// <summary>
 /// A cached implementation of the client reader that uses a ConcurrentDictionary and SqlDependency.
 /// </summary>
-internal sealed class CachedClientsReader : IClientsReader, IDatabaseChangeListener
+internal sealed class CachedClientsReader : IClientsReader
 {
     private readonly ILogger<CachedClientsReader> _logger;
     private readonly IClientsDatabaseReader _databaseReader;
@@ -35,23 +34,6 @@ internal sealed class CachedClientsReader : IClientsReader, IDatabaseChangeListe
     {
         await RefreshCacheIfEmpty(cancellationToken);
         return ClientsByIdCache.Values.Where(c => c.UserId == userId).ToList();
-    }
-
-    public void RegisterDatabaseListener()
-    {
-        if (_databaseReader is Database.Implementation.ClientsDatabaseReader dbReaderImpl)
-        {
-            dbReaderImpl.RegisterSqlDependency(OnDatabaseChange);
-        }
-    }
-
-    private void OnDatabaseChange(object sender, SqlNotificationEventArgs e)
-    {
-        _logger.LogInformation("Database change detected for Clients: {Info}", e.Info);
-        // Re-register to continue listening for subsequent changes
-        RegisterDatabaseListener();
-        // Asynchronously refresh the cache. Fire-and-forget.
-        _ = RefreshCache(CancellationToken.None);
     }
 
     private async Task RefreshCacheIfEmpty(CancellationToken cancellationToken)

@@ -1,6 +1,6 @@
 ﻿namespace Wbskt.Common.Contracts;
 
-public class UserRegistrationRequest : UserLoginRequest
+public record UserRegistrationRequest : UserLoginRequest
 {
     public string UserName { get; set; } = string.Empty;
 }

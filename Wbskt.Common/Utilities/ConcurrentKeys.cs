@@ -4,7 +4,7 @@ namespace Wbskt.Common.Utilities;
 
 public class ConcurrentKeys<T> where T : notnull
 {
-    private readonly ConcurrentDictionary<T, bool> dictionary = new();
+    private readonly ConcurrentDictionary<T, bool> _dictionary = new();
 
     public ConcurrentKeys()
     {
@@ -17,26 +17,26 @@ public class ConcurrentKeys<T> where T : notnull
 
     public void Add(T key)
     {
-        dictionary.TryAdd(key, default);
+        _dictionary.TryAdd(key, false);
     }
 
     public void Remove(T key)
     {
-        dictionary.TryRemove(key, out _);
+        _dictionary.TryRemove(key, out _);
     }
 
     public bool Contains(T key)
     {
-        return dictionary.ContainsKey(key);
+        return _dictionary.ContainsKey(key);
     }
 
     public void Clear()
     {
-        dictionary.Clear();
+        _dictionary.Clear();
     }
 
     public ICollection<T> GetKeys()
     {
-        return dictionary.Keys;
+        return _dictionary.Keys;
     }
 }

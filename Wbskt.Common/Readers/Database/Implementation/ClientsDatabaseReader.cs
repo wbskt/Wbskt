@@ -47,28 +47,4 @@ internal sealed class ClientsDatabaseReader : IClientsDatabaseReader
         }
         return clients;
     }
-
-    public void RegisterSqlDependency(OnChangeEventHandler onChange)
-    {
-        try
-        {
-            var connectionString = _connectionStringProvider.ConnectionString;
-            using var connection = new SqlConnection(connectionString);
-            // The query for dependency must be specific and match what the notification engine can support.
-            // We select a single, changing column.
-            using var command = new SqlCommand("SELECT LastModified FROM dbo.Clients", connection);
-
-            var dependency = new SqlDependency(command);
-            dependency.OnChange += onChange;
-
-            connection.Open();
-            // A reader must be executed for the dependency to be registered on the server.
-            command.ExecuteReader(CommandBehavior.CloseConnection);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to register SQL dependency for Clients.");
-            // Depending on policy, you might want to re-throw or handle this.
-        }
-    }
 }

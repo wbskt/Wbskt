@@ -1,15 +1,15 @@
 ﻿/*
-    Procedure: dbo.Users_GetBy_EmailId
-    Purpose: Retrieves a user by their email address.
+    Procedure: dbo.Users_GetBy_Id
+    Purpose: Retrieves a user by their unique Id.
     Parameters:
-        - @EmailId VARCHAR(100): The email address to search for
+        - @Id INT: The user Id to retrieve
     Returns: Id, Name, EmailId, PasswordHash, PasswordSalt
     Author: Richard Joy
     Date: 2025-04-25
     Last Modified: 2025-04-25 by Richard Joy - Initial version
 */
-CREATE PROCEDURE dbo.Users_GetBy_EmailId
-    @EmailId VARCHAR(100)
+CREATE PROCEDURE dbo.Users_GetBy_Id
+    @Id INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -18,8 +18,7 @@ BEGIN
         Id,
         Name,
         EmailId,
-        PasswordHash,
-        PasswordSalt
+        PasswordHash
     FROM dbo.Users
-    WHERE EmailId = @EmailId;
+    WHERE Id = @Id;
 END;
