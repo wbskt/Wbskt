@@ -3,61 +3,46 @@ using System.Text.Json.Serialization;
 namespace Wbskt.Common.Records;
 
 /// <summary>
-///     Client entity for creating and updating client data.
+/// Represents a client record, aligned with the dbo.Clients table.
 /// </summary>
 public record ClientRecord
 {
     /// <summary>
-    ///     Internal user ID who owns this client.
-    /// </summary>
-    [JsonIgnore]
-    public int UserId { get; set; }
-
-    /// <summary>
-    ///     Internal server ID where this client is assigned.
-    /// </summary>
-    [JsonIgnore]
-    public int ServerId { get; init; }
-
-    /// <summary>
-    ///     Internal enrollment policy ID for this client.
-    /// </summary>
-    [JsonIgnore]
-    public int PolicyId { get; set; }
-
-    /// <summary>
-    ///     Human-readable name for the client.
-    /// </summary>
-    public required string Name { get; init; }
-
-    /// <summary>
-    ///     Unique identifier for the client used in public APIs.
-    /// </summary>
-    public Guid UniqueRef { get; init; }
-
-    /// <summary>
-    ///     Enrollment policy reference.
-    /// </summary>
-    public Guid PolicyRef { get; set; }
-}
-
-/// <summary>
-///     Client entity with metadata for reading operations.
-/// </summary>
-public record ClientReadRecord : ClientRecord
-{
-    /// <summary>
-    ///     Internal database ID.
+    /// Internal database ID.
     /// </summary>
     [JsonIgnore]
     public int Id { get; init; }
 
     /// <summary>
-    ///     Timestamp when the client was last modified.
+    /// Publicly-facing unique identifier for the client.
+    /// </summary>
+    public Guid RefId { get; init; }
+
+    /// <summary>
+    /// The ID of the user who owns this client.
     /// </summary>
     [JsonIgnore]
-    public DateTime LastModified { get; init; }
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// The ID of the registration policy this client is bound to.
+    /// </summary>
+    [JsonIgnore]
+    public int RegistrationPolicyId { get; set; }
+
+    /// <summary>
+    /// Optional, human-readable name for the client.
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>
+    /// Indicates if the client is active.
+    /// </summary>
+    public bool Active { get; set; }
 }
+
+// Note: The records below are for client-channel relationships and may need to be reviewed
+// in a subsequent step to ensure they align with the overall new design.
 
 /// <summary>
 ///     Client-channel relationship for bulk operations.

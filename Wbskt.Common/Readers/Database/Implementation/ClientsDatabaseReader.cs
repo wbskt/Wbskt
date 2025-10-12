@@ -1,88 +1,46 @@
 using System.Data;
 using System.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Database.Implementation;
 
-internal sealed class ClientsDatabaseReader(ILogger<ClientsDatabaseReader> logger, IConnectionStringProvider connectionStringProvider) : IClientsDatabaseReader
+/// <summary>
+/// Concrete implementation for reading all client data from the database.
+/// </summary>
+internal sealed class ClientsDatabaseReader : IClientsDatabaseReader
 {
-    public IReadOnlyCollection<ClientReadRecord> GetAll(DateTime lastModified)
-    {
-        logger.LogTrace("DB operation: {functionName}", nameof(GetAll));
-        using var connection = new SqlConnection(connectionStringProvider.ConnectionString);
-        connection.Open();
+    private readonly IConnectionStringProvider _connectionStringProvider;
 
-        using var command = connection.CreateCommand();
-        command.CommandType = CommandType.StoredProcedure;
+    public ClientsDatabaseReader(IConnectionStringProvider connectionStringProvider)
+    {
+        _connectionStringProvider = connectionStringProvider;
+    }
+
+    public async Task<List<ClientRecord>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
         command.CommandText = "dbo.Clients_GetAll";
+        command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.Add(new SqlParameter("@LastModified", lastModified));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        var result = new List<ClientReadRecord>();
-        using var reader = command.ExecuteReader();
-        var mapping = GetColumnMapping(reader);
-
-        while (reader.Read())
+        var clients = new List<ClientRecord>();
+        while (await reader.ReadAsync(cancellationToken))
         {
-            result.Add(ParseData(reader, mapping));
+            clients.Add(new ClientRecord
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
+                UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
+                RegistrationPolicyId = reader.GetInt32(reader.GetOrdinal("RegistrationPolicyId")),
+                Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? null : reader.GetString(reader.GetOrdinal("Name")),
+                Active = reader.GetBoolean(reader.GetOrdinal("Active"))
+            });
         }
 
-        return result.AsReadOnly();
-    }
-
-    internal void RegisterSqlDependency(OnChangeEventHandler onDatabaseChange)
-    {
-        try
-        {
-            using var connection = new SqlConnection(connectionStringProvider.ConnectionString);
-            using var command = new SqlCommand("SELECT LastModified FROM dbo.Clients", connection); // listen to changes in this output
-
-            var dependency = new SqlDependency(command);
-            dependency.OnChange += onDatabaseChange;
-
-            connection.Open();
-            using var reader = command.ExecuteReader(); // must execute to register dependency
-        }
-        catch (SqlException sex)
-        {
-            logger.LogError(sex, "failed to register SQL dependency. {message}", sex.Message);
-        }
-    }
-
-    private static ClientReadRecord ParseData(SqlDataReader reader, OrdinalColumnMapping mapping)
-    {
-        return new ClientReadRecord
-        {
-            Id = reader.GetInt32(mapping.Id),
-            Name = reader.GetString(mapping.Name),
-            UserId = reader.GetInt32(mapping.UserId),
-            ServerId = reader.GetInt32(mapping.ServerId),
-            UniqueRef = reader.GetGuid(mapping.UniqueRef),
-            LastModified = reader.GetDateTime(mapping.LastModified)
-        };
-    }
-
-    private static OrdinalColumnMapping GetColumnMapping(SqlDataReader reader)
-    {
-        return new OrdinalColumnMapping
-        {
-            Id = reader.GetOrdinal("Id"),
-            Name = reader.GetOrdinal("Name"),
-            UserId = reader.GetOrdinal("UserId"),
-            ServerId = reader.GetOrdinal("ServerId"),
-            UniqueRef = reader.GetOrdinal("UniqueRef"),
-            LastModified = reader.GetOrdinal("LastModified")
-        };
-    }
-
-    private class OrdinalColumnMapping
-    {
-        public int Id;
-        public int LastModified;
-        public int Name;
-        public int ServerId;
-        public int UniqueRef;
-        public int UserId;
+        return clients;
     }
 }

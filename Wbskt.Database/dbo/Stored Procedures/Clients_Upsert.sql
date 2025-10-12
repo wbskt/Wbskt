@@ -1,53 +1,48 @@
-﻿/*
+/*
     Procedure: dbo.Clients_Upsert
-    Purpose: Inserts a new client or updates an existing client based on UniqueRef. Updates only Name, ServerId, and PolicyId for existing clients.
+    Purpose: Inserts a new client or updates an existing one based on RefId.
     Parameters:
-        - @Id INT OUTPUT: Returns the client Id (inserted or updated)
-        - @Name VARCHAR(100): Client name
-        - @UniqueRef UNIQUEIDENTIFIER: Unique client reference
-        - @UserId INT: User Id (owner)
-        - @ServerId INT: Assigned server Id
-        - @PolicyId INT: Enrollment policy Id
-    Returns: None (output parameter @Id is set)
+        - @RefId: UNIQUEIDENTIFIER, the client's public reference
+        - @UserId: INT, the owner's user ID
+        - @RegistrationPolicyId: INT, the policy ID
+        - @Name: NVARCHAR(100), the client's optional name
+        - @Active: BIT, the client's active status
+        - @Id: INT OUTPUT, the ID of the inserted or updated client
     Author: Richard Joy
-    Date: 2025-04-25
-    Last Modified: 2025-04-25 by Richard Joy - Initial version
+    Date: 2025-10-12
+    Last Modified: 2025-10-12 by Richard Joy - Aligned with new schema
 */
-CREATE PROCEDURE dbo.Clients_Upsert
-    @Id INT OUTPUT,
-    @Name VARCHAR(100),
-    @UniqueRef UNIQUEIDENTIFIER,
+CREATE PROCEDURE [dbo].[Clients_Upsert]
+    @RefId UNIQUEIDENTIFIER,
     @UserId INT,
-    @ServerId INT,
-    @PolicyId INT
+    @RegistrationPolicyId INT,
+    @Name NVARCHAR(100) = NULL,
+    @Active BIT,
+    @Id INT OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @ExistingId INT;
-
-    SELECT @ExistingId = Id
-    FROM dbo.Clients
-    WHERE UniqueRef = @UniqueRef;
-
-    IF @ExistingId IS NOT NULL
+    IF EXISTS (SELECT 1 FROM [dbo].[Clients] WHERE [RefId] = @RefId)
     BEGIN
-        -- Update only mutable fields
-        UPDATE dbo.Clients
-        SET Name = @Name,
-            ServerId = @ServerId,
-            PolicyId = @PolicyId
-        WHERE Id = @ExistingId;
+        -- Update existing client
+        UPDATE [dbo].[Clients]
+        SET
+            [Name] = @Name,
+            [Active] = @Active,
+            [RegistrationPolicyId] = @RegistrationPolicyId -- Allow policy to be updated
+        WHERE
+            [RefId] = @RefId;
 
-        SET @Id = @ExistingId;
+        SELECT @Id = [Id] FROM [dbo].[Clients] WHERE [RefId] = @RefId;
     END
     ELSE
     BEGIN
-        INSERT INTO dbo.Clients
-            (Name, ServerId, UniqueRef, UserId, PolicyId)
-        VALUES
-            (@Name, @ServerId, @UniqueRef, @UserId, @PolicyId);
+        -- Insert new client
+        INSERT INTO [dbo].[Clients] ([RefId], [UserId], [RegistrationPolicyId], [Name], [Active])
+        VALUES (@RefId, @UserId, @RegistrationPolicyId, @Name, @Active);
 
         SET @Id = SCOPE_IDENTITY();
     END
-END;
+END
+GO

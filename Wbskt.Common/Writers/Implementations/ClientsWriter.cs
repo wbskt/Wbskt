@@ -1,37 +1,42 @@
 using System.Data;
 using System.Data.SqlClient;
-using Microsoft.Extensions.Logging;
-using Wbskt.Common.Extensions;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Writers.Implementations;
 
-internal sealed class ClientsWriter(ILogger<ClientsWriter> logger, IConnectionStringProvider connectionStringProvider) : IClientsWriter
+/// <summary>
+/// Concrete implementation for writing client data to the database.
+/// </summary>
+internal sealed class ClientsWriter : IClientsWriter
 {
-    public int UpsertClient(ClientRecord record)
+    private readonly IConnectionStringProvider _connectionStringProvider;
+
+    public ClientsWriter(IConnectionStringProvider connectionStringProvider)
     {
-        logger.LogTrace("DB operation: {functionName}", nameof(UpsertClient));
-        ArgumentNullException.ThrowIfNull(record);
+        _connectionStringProvider = connectionStringProvider;
+    }
 
-        using var connection = new SqlConnection(connectionStringProvider.ConnectionString);
-        connection.Open();
+    public async Task<int> UpsertAsync(ClientRecord client, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
 
-        using var command = connection.CreateCommand();
-        command.CommandType = CommandType.StoredProcedure;
+        await using var command = connection.CreateCommand();
         command.CommandText = "dbo.Clients_Upsert";
+        command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.Add(new SqlParameter("@Name", ProviderExtensions.ReplaceDbNulls(record.Name)));
-        command.Parameters.Add(new SqlParameter("@UniqueRef", ProviderExtensions.ReplaceDbNulls(record.UniqueRef)));
-        command.Parameters.Add(new SqlParameter("@UserId", ProviderExtensions.ReplaceDbNulls(record.UserId)));
-        command.Parameters.Add(new SqlParameter("@ServerId", ProviderExtensions.ReplaceDbNulls(record.ServerId)));
-        command.Parameters.Add(new SqlParameter("@PolicyId", ProviderExtensions.ReplaceDbNulls(record.PolicyId)));
+        command.Parameters.AddWithValue("@RefId", client.RefId);
+        command.Parameters.AddWithValue("@UserId", client.UserId);
+        command.Parameters.AddWithValue("@RegistrationPolicyId", client.RegistrationPolicyId);
+        command.Parameters.AddWithValue("@Name", (object?)client.Name ?? DBNull.Value);
+        command.Parameters.AddWithValue("@Active", client.Active);
 
-        var id = new SqlParameter("@Id", SqlDbType.Int) { Size = int.MaxValue };
-        id.Direction = ParameterDirection.Output;
-        command.Parameters.Add(id);
-        command.ExecuteNonQuery();
+        var idParameter = command.Parameters.Add("@Id", SqlDbType.Int);
+        idParameter.Direction = ParameterDirection.Output;
 
-        return (int)(ProviderExtensions.ReplaceDbNulls(id.Value) ?? 0);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+
+        return (int)idParameter.Value;
     }
 }

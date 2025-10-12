@@ -1,26 +1,23 @@
 /*
     Procedure: dbo.Clients_GetAll
-    Purpose: Retrieves all clients modified since the specified date/time.
-    Parameters:
-        - @LastModified DATETIME: Only return clients modified on or after this timestamp
-    Returns: Id, Name, UserId, ServerId, UniqueRef, LastModified
+    Purpose: Retrieves all clients.
     Author: Richard Joy
-    Date: 2025-04-25
-    Last Modified: 2025-04-25 by Richard Joy - Initial version
+    Date: 2025-10-12
+    Last Modified: 2025-10-12 by Richard Joy - Aligned with new schema
 */
-CREATE PROCEDURE dbo.Clients_GetAll
-    @LastModified DATETIME
+CREATE PROCEDURE [dbo].[Clients_GetAll]
 AS
 BEGIN
     SET NOCOUNT ON;
 
     SELECT
-        Id,
-        Name,
-        UserId,
-        ServerId,
-        UniqueRef,
-        LastModified
-    FROM dbo.Clients
-    WHERE LastModified >= @LastModified;
-END;
+        [Id],
+        [RefId],
+        [UserId],
+        [RegistrationPolicyId],
+        [Name],
+        [Active]
+    FROM
+        [dbo].[Clients];
+END
+GO
