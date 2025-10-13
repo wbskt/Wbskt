@@ -9,7 +9,7 @@ public interface ICancellationService
     CancellationToken GetToken();
 }
 
-internal sealed class CancellationService : ICancellationService
+public sealed class CancellationService : ICancellationService
 {
     private readonly CancellationTokenSource ctx = new();
 
