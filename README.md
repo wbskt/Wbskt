@@ -52,6 +52,65 @@ The client registration flow is designed to be secure and flexible, allowing use
 - **Logging**: Review and improve logging throughout the application to ensure that all important events are logged.
 - **Error Handling**: Review and improve error handling and exception messages to provide more meaningful feedback to the client.
 
+## Implementation Plan: Phased Approach
+
+We will build the workflow engine in phases to ensure a solid foundation and manage complexity.
+
+### Phase 1: The Workflow Engine & Core Data Models
+
+This phase is about building the foundation: defining what a workflow is and creating an engine that can execute a simple, linear sequence of steps.
+
+1.  **Database Schema**:
+    *   Create a `Workflows` table: `Id`, `RefId`, `UserId`, `Name`, `IsEnabled`, `TriggerType`, `TriggerConfiguration` (JSON).
+    *   Create a `WorkflowSteps` table: `Id`, `WorkflowId`, `StepOrder`, `StepType`, `StepIdentifier`, `StepConfiguration` (JSON), `NextStepId` (for branching).
+    *   Create a `WorkflowExecutions` table (for logging): `Id`, `WorkflowId`, `TriggeredAt`, `CompletedAt`, `Status`, `InitialContext`, `FinalContext`, `ErrorLog`.
+
+2.  **New Project: `Wbskt.Workflow.Engine`**
+    *   Create a new class library for the engine to keep it decoupled.
+    *   Define core interfaces: `IAction`, `IWorkflowEngine`.
+    *   Implement the `WorkflowEngine` service to load and execute a workflow definition from the database.
+
+3.  **API Endpoints (`WorkflowsController`)**:
+    *   Implement full CRUD (Create, Read, Update, Delete) endpoints for managing workflow definitions (e.g., `POST /api/workflows`, `GET /api/workflows/{refId}`).
+
+### Phase 2: Implementing Triggers
+
+This phase brings the workflows to life.
+
+1.  **Manual Trigger**:
+    *   Create an endpoint `POST /api/workflows/{refId}/trigger` to directly execute a workflow for testing and manual control.
+
+2.  **Timed Trigger**:
+    *   Integrate a scheduling library like **Hangfire** or **Quartz.NET**.
+    *   Create a recurring background job that queries for due workflows and triggers them via the `IWorkflowEngine`.
+
+3.  **Webhook Trigger**:
+    *   Create a new, unauthenticated `WebhooksController` with an endpoint like `POST /api/webhooks/{webhookId}`.
+    *   The endpoint will look up the workflow associated with the unique `webhookId` and trigger its execution, passing the request body as the initial context.
+
+### Phase 3: Implementing Actions & Modifiers
+
+This phase makes the workflows perform useful work.
+
+1.  **Action Implementation**:
+    *   Create concrete implementations of the `IAction` interface for each action type.
+    *   Start with `SendPayloadToClientAction` to leverage the existing client infrastructure.
+    *   Then, implement external actions like `SendEmailAction`, managing API keys securely.
+
+2.  **Modifier Implementation (If-Condition)**:
+    *   Enhance the `WorkflowEngine` to support branching.
+    *   The `StepConfiguration` for an "if" step will define a condition to evaluate against the workflow context.
+    *   The `WorkflowSteps` table may be updated with `OnSuccessStepId` and `OnFailureStepId` to direct the flow.
+
+### Recommended Roadmap
+
+1.  **Build the Core Engine (Phase 1)**: Get the data models, `WorkflowEngine`, and workflow management APIs in place.
+2.  **Implement Manual & Timed Triggers (Phase 2)**: Prove the engine works and handles background tasks.
+3.  **Implement a Simple Action (Phase 3)**: Implement the `SendPayloadToClientAction`.
+4.  **Implement the If-Condition (Phase 3)**: Introduce basic control flow.
+5.  **Implement Webhook Triggers & External Actions (Phase 2 & 3)**: Expand the system's capabilities.
+6.  **Implement Loops and other Modifiers**: Tackle more complex control flow logic last.
+
 ## API Endpoints
 
 ### Users
