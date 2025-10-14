@@ -29,6 +29,12 @@ internal sealed class CachedWorkflowsReader : IWorkflowsReader
         return workflows.FirstOrDefault(p => p.RefId == refId);
     }
 
+    public Task<WorkflowRecord?> GetByWebhookIdAsync(Guid webhookId, CancellationToken cancellationToken)
+    {
+        // This lookup is not cached and passes directly to the database reader.
+        return _databaseReader.GetByWebhookIdAsync(webhookId, cancellationToken);
+    }
+
     public Task<List<WorkflowRecord>> GetActiveWorkflowsByTriggerTypeAsync(string triggerType, CancellationToken cancellationToken)
     {
         // This should not be cached as it is a frequent query for the scheduler.

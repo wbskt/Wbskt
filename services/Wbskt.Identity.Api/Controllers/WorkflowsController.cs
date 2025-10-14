@@ -42,6 +42,17 @@ public class WorkflowsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateWorkflow([FromBody] WorkflowRecord workflow, CancellationToken cancellationToken)
     {
+        if (workflow.TriggerType == "Webhook")
+        {
+            // Only generate a webhookId if one isn't provided in the configuration.
+            // This part would need a proper JSON parsing/merging utility in a real implementation.
+            if (string.IsNullOrWhiteSpace(workflow.TriggerConfiguration) || !workflow.TriggerConfiguration.Contains("webhookId"))
+            {
+                var webhookId = Guid.NewGuid();
+                workflow = workflow with { TriggerConfiguration = $"{{\"webhookId\":\"{webhookId}\"}}" };
+            }
+        }
+
         workflow = workflow with { UserId = _currentUser.Id };
         var workflowId = await _workflowsWriter.CreateAsync(workflow, cancellationToken);
         return CreatedAtAction(nameof(GetWorkflow), new { refId = workflow.RefId }, workflow with { Id = workflowId });
