@@ -1,3 +1,4 @@
+using Wbskt.Common.Configurations;
 using Wbskt.Common.Services;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
@@ -15,9 +16,9 @@ public class SendEmailAction : IAction
         _credentialService = credentialService;
     }
 
-    public async Task<ActionResult> ExecuteAsync(WorkflowContext context, CancellationToken cancellationToken)
+    public async Task<ActionResult> ExecuteAsync(StepConfigurationBase configuration, WorkflowContext context, CancellationToken cancellationToken)
     {
-        // In a real implementation, this would deserialize a proper StepConfiguration object.
+        var config = configuration as SendEmailConfiguration;
         _logger.LogInformation("Executing SendEmailAction.");
 
         // 1. Get user ID from context (would need to be passed in)
@@ -26,9 +27,9 @@ public class SendEmailAction : IAction
         // 4. Use SendGrid/Mailgun SDK to send email
 
         // Placeholder logic:
-        var apiKey = await _credentialService.GetCredentialsAsync(0, "SendGrid", cancellationToken);
+        var apiKey = await _credentialService.GetCredentialsAsync(0, config.IntegrationName, cancellationToken);
         _logger.LogInformation("Using API Key (placeholder): {ApiKey}", apiKey);
-        _logger.LogInformation("Email sent (placeholder) to recipient@example.com.");
+        _logger.LogInformation("Email sent (placeholder) to {Recipient}.", config.To);
 
         return new ActionResult(true);
     }

@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Wbskt.Common.Enums;
 using Wbskt.Common.Records;
 
 namespace Wbskt.Common.Readers.Database.Implementation;
@@ -35,7 +36,7 @@ internal sealed class WorkflowStepsDatabaseReader : IWorkflowStepsDatabaseReader
                 StepOrder = reader.GetInt32(2),
                 Name = reader.GetString(3),
                 StepType = reader.GetString(4),
-                StepIdentifier = reader.GetString(5),
+                StepIdentifier = (StepIdentifier)reader.GetInt16(5),
                 StepConfiguration = reader.IsDBNull(6) ? null : reader.GetString(6),
                 OnSuccessStepId = reader.IsDBNull(7) ? null : reader.GetInt32(7),
                 OnFailureStepId = reader.IsDBNull(8) ? null : reader.GetInt32(8)

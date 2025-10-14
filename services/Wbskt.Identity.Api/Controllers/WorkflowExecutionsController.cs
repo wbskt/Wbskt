@@ -11,15 +11,18 @@ public class WorkflowExecutionsController : ControllerBase
 {
     private readonly IWorkflowExecutionsReader _executionsReader;
     private readonly IWorkflowsReader _workflowsReader;
+    private readonly IWorkflowStepExecutionsReader _stepExecutionsReader;
     private readonly ICurrentUser _currentUser;
 
     public WorkflowExecutionsController(
         IWorkflowExecutionsReader executionsReader,
         IWorkflowsReader workflowsReader,
+        IWorkflowStepExecutionsReader stepExecutionsReader,
         ICurrentUser currentUser)
     {
         _executionsReader = executionsReader;
         _workflowsReader = workflowsReader;
+        _stepExecutionsReader = stepExecutionsReader;
         _currentUser = currentUser;
     }
 
@@ -52,6 +55,8 @@ public class WorkflowExecutionsController : ControllerBase
             return NotFound();
         }
 
-        return Ok(execution);
+        var steps = await _stepExecutionsReader.GetAllForExecutionAsync(executionId, cancellationToken);
+
+        return Ok(new { execution, steps });
     }
 }

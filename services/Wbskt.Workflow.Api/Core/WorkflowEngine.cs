@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Common.Configurations;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 using Wbskt.Common.Writers;
@@ -12,6 +13,7 @@ public class WorkflowEngine : IWorkflowEngine
     private readonly IWorkflowsReader _workflowsReader;
     private readonly IWorkflowStepsReader _workflowStepsReader;
     private readonly IWorkflowExecutionsWriter _executionsWriter;
+    private readonly IWorkflowStepExecutionsWriter _stepExecutionsWriter;
     private readonly ILogger<WorkflowEngine> _logger;
 
     public WorkflowEngine(
@@ -19,12 +21,14 @@ public class WorkflowEngine : IWorkflowEngine
         IWorkflowsReader workflowsReader,
         IWorkflowStepsReader workflowStepsReader,
         IWorkflowExecutionsWriter executionsWriter,
+        IWorkflowStepExecutionsWriter stepExecutionsWriter,
         ILogger<WorkflowEngine> logger)
     {
         _serviceProvider = serviceProvider;
         _workflowsReader = workflowsReader;
         _workflowStepsReader = workflowStepsReader;
         _executionsWriter = executionsWriter;
+        _stepExecutionsWriter = stepExecutionsWriter;
         _logger = logger;
     }
 
@@ -64,36 +68,67 @@ public class WorkflowEngine : IWorkflowEngine
             while (currentStepId.HasValue)
             {
                 var step = stepMap[currentStepId.Value];
-                _logger.LogInformation("Executing step {StepName} ({StepIdentifier})", step.Name, step.StepIdentifier);
-
-                using var scope = _serviceProvider.CreateScope();
-                var actionType = Type.GetType($"Wbskt.Workflow.Api.Actions.{step.StepIdentifier}");
-                if (actionType == null)
+                var stepExecutionRecord = new WorkflowStepExecutionRecord
                 {
-                    throw new InvalidOperationException($"Action type '{step.StepIdentifier}' not found.");
-                }
+                    WorkflowExecutionId = executionId,
+                    WorkflowStepId = step.Id,
+                    Status = "Running",
+                    StartedAt = DateTime.UtcNow,
+                    InputContext = JsonSerializer.Serialize(context.Properties)
+                };
+                var stepExecutionId = await _stepExecutionsWriter.CreateAsync(stepExecutionRecord, CancellationToken.None);
 
-                var action = scope.ServiceProvider.GetRequiredService(actionType) as IAction;
-                if (action == null)
+                try
                 {
-                    throw new InvalidOperationException($"Action with identifier '{step.StepIdentifier}' not found or does not implement IAction.");
-                }
+                    _logger.LogInformation("Executing step {StepName} ({StepIdentifier})", step.Name, step.StepIdentifier);
 
-                var result = await action.ExecuteAsync(context, CancellationToken.None);
-
-                if (result.IsSuccess)
-                {
-                    currentStepId = step.OnSuccessStepId;
-                    if (!currentStepId.HasValue) // If no explicit success path, try to go to next in order
+                    using var scope = _serviceProvider.CreateScope();
+                    var action = scope.ServiceProvider.GetRequiredKeyedService<IAction>(step.StepIdentifier);
+    
+                    // todo: custom mapping needed
+                    var configuration = JsonSerializer.Deserialize<StepConfigurationBase>(step.StepConfiguration ?? "{}");
+    
+                    if (configuration == null)
                     {
-                        var nextStep = steps.FirstOrDefault(s => s.StepOrder > step.StepOrder);
-                        currentStepId = nextStep?.Id;
+                        throw new InvalidOperationException($"Could not deserialize configuration for step '{step.Name}'.");
+                    }
+    
+                    var result = await action.ExecuteAsync( configuration, context, CancellationToken.None);
+                    stepExecutionRecord = stepExecutionRecord with
+                    {
+                        Id = stepExecutionId,
+                        Status = "Success",
+                        CompletedAt = DateTime.UtcNow,
+                        OutputContext = JsonSerializer.Serialize(context.Properties)
+                    };
+                    await _stepExecutionsWriter.UpdateAsync(stepExecutionRecord, CancellationToken.None);
+
+                    if (result.IsSuccess)
+                    {
+                        currentStepId = step.OnSuccessStepId;
+                        if (!currentStepId.HasValue) // If no explicit success path, try to go to next in order
+                        {
+                            var nextStep = steps.FirstOrDefault(s => s.StepOrder > step.StepOrder);
+                            currentStepId = nextStep?.Id;
+                        }
+                    }
+                    else
+                    {
+                        currentStepId = step.OnFailureStepId;
+                        // If no explicit failure path, the workflow branch terminates.
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    currentStepId = step.OnFailureStepId;
-                    // If no explicit failure path, the workflow branch terminates.
+                    stepExecutionRecord = stepExecutionRecord with
+                    {
+                        Id = stepExecutionId,
+                        Status = "Failed",
+                        CompletedAt = DateTime.UtcNow,
+                        ErrorLog = ex.Message
+                    };
+                    await _stepExecutionsWriter.UpdateAsync(stepExecutionRecord, CancellationToken.None);
+                    throw; // Re-throw to fail the main workflow execution
                 }
             }
 

@@ -7,6 +7,7 @@ using Wbskt.Workflow.Api.Core.Abstractions;
 using Wbskt.Workflow.Api.EventHandlers;
 using Wbskt.Workflow.Api.HostedServices;
 using Wbskt.Workflow.Api.Scheduling;
+using Wbskt.Common.Enums;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,11 +19,12 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<IWorkflowEngine, WorkflowEngine>();
 
-builder.Services.AddTransient<LogAction>();
-builder.Services.AddTransient<SendPayloadToClientAction>();
-builder.Services.AddTransient<SendEmailAction>();
-builder.Services.AddTransient<MakeHttpRequestAction>();
-builder.Services.AddTransient<IfConditionAction>();
+// Register Actions with Keys
+builder.Services.AddKeyedTransient<IAction, LogAction>(StepIdentifier.ActionLog);
+builder.Services.AddKeyedTransient<IAction, SendEmailAction>(StepIdentifier.ActionSendEmail);
+builder.Services.AddKeyedTransient<IAction, MakeHttpRequestAction>(StepIdentifier.ActionMakeHttpRequest);
+builder.Services.AddKeyedTransient<IAction, SendPayloadToClientAction>(StepIdentifier.ActionSendPayloadToClient);
+builder.Services.AddKeyedTransient<IAction, IfConditionAction>(StepIdentifier.ModifierIfCondition);
 
 builder.Services.AddHostedService<RealtimeTriggerService>();
 builder.Services.AddTransient<ClientDataReceivedEventHandler>();

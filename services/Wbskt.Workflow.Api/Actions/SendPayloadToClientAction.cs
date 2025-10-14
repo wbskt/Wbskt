@@ -1,3 +1,4 @@
+using Wbskt.Common.Configurations;
 using Wbskt.Common.Events;
 using Wbskt.EventBus;
 using Wbskt.Workflow.Api.Core;
@@ -14,7 +15,7 @@ public class SendPayloadToClientAction : IAction
         _eventBus = eventBus;
     }
 
-    public async Task<ActionResult> ExecuteAsync(WorkflowContext context, CancellationToken cancellationToken)
+    public async Task<ActionResult> ExecuteAsync(StepConfigurationBase configuration, WorkflowContext context, CancellationToken cancellationToken)
     {
         // In a real implementation, these would be read from the StepConfiguration
         var clientId = (int)context.Properties["client_id"];

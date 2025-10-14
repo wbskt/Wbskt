@@ -56,6 +56,10 @@ public static class DependencyInjection
         serviceCollection.AddScoped<IWorkflowExecutionsWriter, WorkflowExecutionsDatabaseWriter>();
         serviceCollection.AddScoped<IWorkflowExecutionsReader, WorkflowExecutionsDatabaseReader>();
 
+        // Workflow Step Executions
+        serviceCollection.AddScoped<IWorkflowStepExecutionsReader, WorkflowStepExecutionsDatabaseReader>();
+        serviceCollection.AddScoped<IWorkflowStepExecutionsWriter, WorkflowStepExecutionsDatabaseWriter>();
+
         // Credentials
         serviceCollection.AddScoped<ICredentialService, CredentialService>();
         serviceCollection.AddScoped<ICredentialsReader, CredentialsDatabaseReader>();

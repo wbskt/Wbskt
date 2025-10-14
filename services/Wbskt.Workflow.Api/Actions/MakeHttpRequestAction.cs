@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Wbskt.Common.Configurations;
 using Wbskt.Common.Services;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
@@ -18,16 +18,22 @@ public class MakeHttpRequestAction : IAction
         _logger = logger;
     }
 
-    public async Task<ActionResult> ExecuteAsync(WorkflowContext context, CancellationToken cancellationToken)
+    public async Task<ActionResult> ExecuteAsync(StepConfigurationBase configuration, WorkflowContext context, CancellationToken cancellationToken)
     {
+        var config = configuration as MakeHttpRequestConfiguration;
         _logger.LogInformation("Executing MakeHttpRequestAction.");
 
-        // In a real implementation, this would deserialize a proper StepConfiguration object.
-        // and use a templating engine.
+        // In a real implementation, this would use a templating engine.
 
         var client = _httpClientFactory.CreateClient();
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.example.com/data");
-        request.Content = new StringContent("{ \"message\": \"Hello from WBSKT Workflow!\" }", System.Text.Encoding.UTF8, "application/json");
+        var request = new HttpRequestMessage(new HttpMethod(config.Method), config.Url);
+
+        if (!string.IsNullOrEmpty(config.Body))
+        {
+            request.Content = new StringContent(config.Body, System.Text.Encoding.UTF8, "application/json");
+        }
+
+        // Header and auth logic would be added here
 
         var response = await client.SendAsync(request, cancellationToken);
 

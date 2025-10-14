@@ -1,3 +1,5 @@
+using Wbskt.Common.Enums;
+
 namespace Wbskt.Common.Records;
 
 public record WorkflowStepRecord
@@ -7,7 +9,7 @@ public record WorkflowStepRecord
     public int StepOrder { get; init; }
     public required string Name { get; init; }
     public required string StepType { get; init; }
-    public required string StepIdentifier { get; init; }
+    public required StepIdentifier StepIdentifier { get; init; }
     public string? StepConfiguration { get; init; }
     public int? OnSuccessStepId { get; init; }
     public int? OnFailureStepId { get; init; }

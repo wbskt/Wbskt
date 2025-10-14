@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Common.Configurations;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
 
@@ -13,10 +14,10 @@ public class IfConditionAction : IAction
         _logger = logger;
     }
 
-    public Task<ActionResult> ExecuteAsync(WorkflowContext context, CancellationToken cancellationToken)
+    public Task<ActionResult> ExecuteAsync(StepConfigurationBase configuration, WorkflowContext context, CancellationToken cancellationToken)
     {
-        // For now, we'll use a simple hardcoded condition.
-        // In a real implementation, this would parse the StepConfiguration.
+        var config = configuration as IfConditionConfiguration;
+        // In a real implementation, this would use a proper expression evaluator.
         if (context.Properties.TryGetValue("temperature", out var tempValue) && tempValue is JsonElement tempElement && tempElement.TryGetInt32(out var temperature))
         {
             if (temperature > 40)

@@ -1,3 +1,4 @@
+using Wbskt.Common.Configurations;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
 
@@ -11,7 +12,7 @@ public class LogAction : IAction
         _logger = logger;
     }
 
-    public Task<ActionResult> ExecuteAsync(WorkflowContext context, CancellationToken cancellationToken)
+    public Task<ActionResult> ExecuteAsync(StepConfigurationBase configuration, WorkflowContext context, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Executing LogAction for WorkflowExecutionId: {Id}", context.WorkflowExecutionId);
 
