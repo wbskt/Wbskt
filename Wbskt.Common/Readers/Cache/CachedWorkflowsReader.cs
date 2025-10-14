@@ -28,4 +28,10 @@ internal sealed class CachedWorkflowsReader : IWorkflowsReader
         var workflows = await _cacheService.GetOrSetAsync("AllWorkflows", () => _databaseReader.GetAllForUserAsync(0, cancellationToken), TimeSpan.FromMinutes(5), cancellationToken);
         return workflows.FirstOrDefault(p => p.RefId == refId);
     }
+
+    public Task<List<WorkflowRecord>> GetActiveTimedWorkflowsAsync(CancellationToken cancellationToken)
+    {
+        // This should not be cached as it is a frequent query for the scheduler.
+        return _databaseReader.GetActiveTimedWorkflowsAsync(cancellationToken);
+    }
 }

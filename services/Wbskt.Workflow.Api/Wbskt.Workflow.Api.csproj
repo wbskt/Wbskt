@@ -10,4 +10,10 @@
     <ProjectReference Include="..\..\Wbskt.Common\Wbskt.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" />
+    <PackageReference Include="Hangfire.SqlServer" />
+    <PackageReference Include="NCrontab.Advanced" />
+  </ItemGroup>
+
 </Project>
