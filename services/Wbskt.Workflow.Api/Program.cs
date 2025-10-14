@@ -17,6 +17,7 @@ builder.Services.AddSingleton<IWorkflowEngine, WorkflowEngine>();
 
 builder.Services.AddTransient<LogAction>();
 builder.Services.AddTransient<SendPayloadToClientAction>();
+builder.Services.AddTransient<IfConditionModifier>();
 
 builder.Services.AddHostedService<RealtimeTriggerService>();
 builder.Services.AddTransient<ClientDataReceivedEventHandler>();

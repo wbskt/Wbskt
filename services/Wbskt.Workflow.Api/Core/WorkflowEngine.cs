@@ -52,24 +52,48 @@ public class WorkflowEngine : IWorkflowEngine
 
         try
         {
-            var steps = await _workflowStepsReader.GetAllForWorkflowAsync(workflow.Id, CancellationToken.None);
+            var steps = (await _workflowStepsReader.GetAllForWorkflowAsync(workflow.Id, CancellationToken.None))
+                .OrderBy(s => s.StepOrder)
+                .ToList();
 
-            foreach (var step in steps.OrderBy(s => s.StepOrder))
+            if (!steps.Any()) return;
+
+            var stepMap = steps.ToDictionary(s => s.Id);
+            int? currentStepId = steps.First().Id;
+
+            while (currentStepId.HasValue)
             {
+                var step = stepMap[currentStepId.Value];
                 _logger.LogInformation("Executing step {StepName} ({StepIdentifier})", step.Name, step.StepIdentifier);
 
                 using var scope = _serviceProvider.CreateScope();
-                var action = scope.ServiceProvider.GetRequiredService(Type.GetType($"Wbskt.Workflow.Api.Actions.{step.StepIdentifier}")) as IAction;
+                var actionType = Type.GetType($"Wbskt.Workflow.Api.Actions.{step.StepIdentifier}");
+                if (actionType == null)
+                {
+                    throw new InvalidOperationException($"Action type '{step.StepIdentifier}' not found.");
+                }
 
+                var action = scope.ServiceProvider.GetRequiredService(actionType) as IAction;
                 if (action == null)
                 {
-                    throw new InvalidOperationException($"Action with identifier '{step.StepIdentifier}' not found.");
+                    throw new InvalidOperationException($"Action with identifier '{step.StepIdentifier}' not found or does not implement IAction.");
                 }
 
                 var result = await action.ExecuteAsync(context, CancellationToken.None);
-                if (!result.IsSuccess)
+
+                if (result.IsSuccess)
                 {
-                    throw new Exception(result.ErrorMessage);
+                    currentStepId = step.OnSuccessStepId;
+                    if (!currentStepId.HasValue) // If no explicit success path, try to go to next in order
+                    {
+                        var nextStep = steps.FirstOrDefault(s => s.StepOrder > step.StepOrder);
+                        currentStepId = nextStep?.Id;
+                    }
+                }
+                else
+                {
+                    currentStepId = step.OnFailureStepId;
+                    // If no explicit failure path, the workflow branch terminates.
                 }
             }
 
