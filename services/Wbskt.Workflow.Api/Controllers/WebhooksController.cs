@@ -6,6 +6,7 @@ using Wbskt.Workflow.Api.Core.Abstractions;
 
 namespace Wbskt.Workflow.Api.Controllers;
 
+// todo: configurable auth
 [ApiController]
 [Route("api/webhooks")]
 public class WebhooksController : ControllerBase

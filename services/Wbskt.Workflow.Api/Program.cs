@@ -13,10 +13,15 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.ConfigureCommonServices();
 
+builder.Services.AddDataProtection();
+builder.Services.AddHttpClient();
+
 builder.Services.AddSingleton<IWorkflowEngine, WorkflowEngine>();
 
 builder.Services.AddTransient<LogAction>();
 builder.Services.AddTransient<SendPayloadToClientAction>();
+builder.Services.AddTransient<SendEmailAction>();
+builder.Services.AddTransient<MakeHttpRequestAction>();
 builder.Services.AddTransient<IfConditionModifier>();
 
 builder.Services.AddHostedService<RealtimeTriggerService>();

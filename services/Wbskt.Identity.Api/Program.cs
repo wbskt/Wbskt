@@ -1,4 +1,4 @@
-﻿using System.Security.Authentication;
+using System.Security.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Wbskt.Common;
@@ -40,6 +40,7 @@ public static class Program
         builder.Host.UseWindowsService();
 
         // Add services to the container.
+        builder.Services.AddDataProtection();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
@@ -52,6 +53,7 @@ public static class Program
         builder.Services.ConfigureCommonServices();
         builder.Services.AddTransient<PolicyCacheHandler>();
         builder.Services.AddTransient<WorkflowCacheHandler>();
+        builder.Services.AddTransient<WorkflowStepsCacheHandler>();
 
         builder.Services.AddAuthentication(opt =>
             {

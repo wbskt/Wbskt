@@ -21,6 +21,7 @@
     <PackageReference Include="Microsoft.IdentityModel.Tokens"/>
     <PackageReference Include="Microsoft.Data.SqlClient"/>
     <PackageReference Include="RabbitMQ.Client" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" />
   </ItemGroup>
 
 </Project>
