@@ -4,15 +4,23 @@ using Wbskt.Common;
 using Wbskt.Workflow.Api.Actions;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
+using Wbskt.Workflow.Api.EventHandlers;
+using Wbskt.Workflow.Api.HostedServices;
 using Wbskt.Workflow.Api.Scheduling;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.ConfigureCommonServices();
+
 builder.Services.AddSingleton<IWorkflowEngine, WorkflowEngine>();
 
 builder.Services.AddTransient<LogAction>();
+builder.Services.AddTransient<SendPayloadToClientAction>();
+
+builder.Services.AddHostedService<RealtimeTriggerService>();
+builder.Services.AddTransient<ClientDataReceivedEventHandler>();
+
 builder.Services.AddTransient<WorkflowSchedulerService>();
 
 // Add Hangfire services.

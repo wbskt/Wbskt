@@ -24,7 +24,7 @@ public class WorkflowSchedulerService
     public async Task TriggerDueWorkflows()
     {
         _logger.LogInformation("Checking for due timed workflows.");
-        var timedWorkflows = await _workflowsReader.GetActiveTimedWorkflowsAsync(CancellationToken.None);
+        var timedWorkflows = await _workflowsReader.GetActiveWorkflowsByTriggerTypeAsync("Timed", CancellationToken.None);
 
         foreach (var workflow in timedWorkflows)
         {

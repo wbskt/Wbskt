@@ -29,9 +29,9 @@ internal sealed class CachedWorkflowsReader : IWorkflowsReader
         return workflows.FirstOrDefault(p => p.RefId == refId);
     }
 
-    public Task<List<WorkflowRecord>> GetActiveTimedWorkflowsAsync(CancellationToken cancellationToken)
+    public Task<List<WorkflowRecord>> GetActiveWorkflowsByTriggerTypeAsync(string triggerType, CancellationToken cancellationToken)
     {
         // This should not be cached as it is a frequent query for the scheduler.
-        return _databaseReader.GetActiveTimedWorkflowsAsync(cancellationToken);
+        return _databaseReader.GetActiveWorkflowsByTriggerTypeAsync(triggerType, cancellationToken);
     }
 }

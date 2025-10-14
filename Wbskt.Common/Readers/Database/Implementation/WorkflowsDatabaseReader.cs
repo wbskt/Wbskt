@@ -76,7 +76,7 @@ internal sealed class WorkflowsDatabaseReader : IWorkflowsDatabaseReader
         return null;
     }
 
-    public async Task<List<WorkflowRecord>> GetActiveTimedWorkflowsAsync(CancellationToken cancellationToken)
+    public async Task<List<WorkflowRecord>> GetActiveWorkflowsByTriggerTypeAsync(string triggerType, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionStringProvider.ConnectionString);
         await connection.OpenAsync(cancellationToken);
@@ -84,7 +84,7 @@ internal sealed class WorkflowsDatabaseReader : IWorkflowsDatabaseReader
         await using var command = connection.CreateCommand();
         command.CommandText = "dbo.Workflows_GetActive_ByTriggerType";
         command.CommandType = CommandType.StoredProcedure;
-        command.Parameters.AddWithValue("@TriggerType", "Timed");
+        command.Parameters.AddWithValue("@TriggerType", triggerType);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
