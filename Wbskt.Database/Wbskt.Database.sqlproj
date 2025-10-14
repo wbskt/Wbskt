@@ -8,7 +8,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <SqlFiles Include="**\*.sql" />
+        <SqlFiles Include="Stored Procedures\*.sql" />
+        <SqlFiles Include="Tables\*.sql" />
+        <SqlFiles Include="Types\*.sql" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <PostDeploy Include="PostDeploy\InsertDefaults.sql" />
     </ItemGroup>
 
 </Project>
