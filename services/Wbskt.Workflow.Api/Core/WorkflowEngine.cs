@@ -41,7 +41,7 @@ public class WorkflowEngine : IWorkflowEngine
 
         var executionRecord = new WorkflowExecutionRecord
         {
-            WorkflowId = workflow.Id,
+            WorkflowRefId = workflow.RefId,
             Status = "Running",
             TriggeredAt = DateTime.UtcNow,
             InitialContext = JsonSerializer.Serialize(initialContext.Properties)

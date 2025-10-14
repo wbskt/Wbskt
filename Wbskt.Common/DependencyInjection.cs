@@ -52,6 +52,7 @@ public static class DependencyInjection
 
         // Workflow Execution
         serviceCollection.AddScoped<IWorkflowExecutionsWriter, WorkflowExecutionsDatabaseWriter>();
+        serviceCollection.AddScoped<IWorkflowExecutionsReader, WorkflowExecutionsDatabaseReader>();
 
         // Servers
         serviceCollection.AddSingleton<IServersDatabaseReader, ServersDatabaseReader>();

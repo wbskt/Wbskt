@@ -1,5 +1,5 @@
 CREATE PROCEDURE [dbo].[WorkflowExecutions_Insert]
-    @WorkflowId INT,
+    @WorkflowRefId UNIQUEIDENTIFIER,
     @Status VARCHAR(20),
     @TriggeredAt DATETIME2,
     @InitialContext NVARCHAR(MAX),
@@ -8,8 +8,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    INSERT INTO [dbo].[WorkflowExecutions] ([WorkflowId], [Status], [TriggeredAt], [InitialContext])
-    VALUES (@WorkflowId, @Status, @TriggeredAt, @InitialContext);
+    INSERT INTO [dbo].[WorkflowExecutions] ([WorkflowRefId], [Status], [TriggeredAt], [InitialContext])
+    VALUES (@WorkflowRefId, @Status, @TriggeredAt, @InitialContext);
 
     SET @Id = SCOPE_IDENTITY();
 END

@@ -23,7 +23,7 @@ internal sealed class WorkflowExecutionsDatabaseWriter : IWorkflowExecutionsWrit
         command.CommandText = "dbo.WorkflowExecutions_Insert";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@WorkflowId", execution.WorkflowId);
+        command.Parameters.AddWithValue("@WorkflowRefId", execution.WorkflowRefId);
         command.Parameters.AddWithValue("@Status", execution.Status);
         command.Parameters.AddWithValue("@TriggeredAt", execution.TriggeredAt);
         command.Parameters.AddWithValue("@InitialContext", (object?)execution.InitialContext ?? DBNull.Value);
