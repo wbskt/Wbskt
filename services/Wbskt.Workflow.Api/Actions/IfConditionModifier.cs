@@ -4,11 +4,11 @@ using Wbskt.Workflow.Api.Core.Abstractions;
 
 namespace Wbskt.Workflow.Api.Actions;
 
-public class IfConditionModifier : IAction
+public class IfConditionAction : IAction
 {
-    private readonly ILogger<IfConditionModifier> _logger;
+    private readonly ILogger<IfConditionAction> _logger;
 
-    public IfConditionModifier(ILogger<IfConditionModifier> logger)
+    public IfConditionAction(ILogger<IfConditionAction> logger)
     {
         _logger = logger;
     }

@@ -22,7 +22,7 @@ builder.Services.AddTransient<LogAction>();
 builder.Services.AddTransient<SendPayloadToClientAction>();
 builder.Services.AddTransient<SendEmailAction>();
 builder.Services.AddTransient<MakeHttpRequestAction>();
-builder.Services.AddTransient<IfConditionModifier>();
+builder.Services.AddTransient<IfConditionAction>();
 
 builder.Services.AddHostedService<RealtimeTriggerService>();
 builder.Services.AddTransient<ClientDataReceivedEventHandler>();

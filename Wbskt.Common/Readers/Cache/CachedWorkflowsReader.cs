@@ -1,3 +1,4 @@
+using Wbskt.Common.Enums;
 using Wbskt.Common.Readers.Database;
 using Wbskt.Common.Records;
 using Wbskt.Common.Services;
@@ -35,7 +36,7 @@ internal sealed class CachedWorkflowsReader : IWorkflowsReader
         return _databaseReader.GetByWebhookIdAsync(webhookId, cancellationToken);
     }
 
-    public Task<List<WorkflowRecord>> GetActiveWorkflowsByTriggerTypeAsync(string triggerType, CancellationToken cancellationToken)
+    public Task<List<WorkflowRecord>> GetActiveWorkflowsByTriggerTypeAsync(TriggerType triggerType, CancellationToken cancellationToken)
     {
         // This should not be cached as it is a frequent query for the scheduler.
         return _databaseReader.GetActiveWorkflowsByTriggerTypeAsync(triggerType, cancellationToken);

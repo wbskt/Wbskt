@@ -1,3 +1,4 @@
+using Wbskt.Common.Enums;
 using Wbskt.Common.Events;
 using Wbskt.Common.Readers;
 using Wbskt.EventBus;
@@ -26,7 +27,7 @@ public class ClientDataReceivedEventHandler : IEventHandler<ClientDataReceivedEv
     {
         _logger.LogInformation("Handling client data event for ClientId: {ClientId}", @event.ClientId);
 
-        var workflows = await _workflowsReader.GetActiveWorkflowsByTriggerTypeAsync("ClientData", cancellationToken);
+        var workflows = await _workflowsReader.GetActiveWorkflowsByTriggerTypeAsync(TriggerType.ClientData, cancellationToken);
 
         // In the future, we can filter by client ID or other properties here.
         foreach (var workflow in workflows)
