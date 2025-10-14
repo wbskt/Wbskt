@@ -96,3 +96,29 @@ The solution is divided into several projects:
 *   **Event Bus**: An in-process event bus is implemented to decouple components. This is currently used for cache invalidation. When a policy is created, updated, or deleted, the `RegistrationPoliciesWriter` publishes an event, and the `PolicyCacheHandler` subscribes to these events to invalidate the cache.
 *   **Exception Handling**: The project uses custom exception classes defined in `WbsktExceptions.cs` to handle specific error scenarios.
 *   **Testing**: There are no tests in the project currently.
+
+## Future Architecture & Vision: The Workflow Engine
+
+The next major evolution for WBSKT is to build a powerful workflow automation engine on top of the existing foundation. This will transform the project from a client management system into a full-fledged automation platform.
+
+### Target Architecture
+
+The planned architecture will follow a decoupled, microservices-oriented approach to ensure scalability and separation of concerns:
+
+1.  **`Wbskt.Identity.Service`**: The existing service, focused on managing users, authentication, and the *definitions* of clients, policies, and workflows.
+2.  **`Wbskt.Socket.Service`**: A new, dedicated service for managing all persistent, real-time WebSocket connections with clients.
+3.  **`Wbskt.Workflow.Service`**: A new, headless service that acts as the "brain," listening for triggers and executing workflow logic.
+
+These services will communicate via a message broker (like RabbitMQ) to remain independent and scalable.
+
+### Core Concepts
+
+-   **Workflow**: A user-defined sequence of steps starting with a **Trigger** and performing one or more **Actions**.
+-   **Trigger**: The event that starts a workflow. Examples include:
+    -   *Real-time Client Data*: `IF client_A.sensor.temperature > 40`.
+    -   *Timed Schedule*: A CRON job (e.g., "every day at 5 PM").
+    -   *Webhook*: An incoming HTTP request from an external service.
+-   **Action**: The work to be done. Examples include:
+    -   *Send Payload to Client*: Command a device to perform an action.
+    -   *Send Email/SMS*: Send a notification.
+    -   *Make HTTP Request*: Call a third-party API.
