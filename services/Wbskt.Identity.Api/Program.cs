@@ -84,6 +84,8 @@ public static class Program
         eventBus.Subscribe<WorkflowUpdatedEvent, WorkflowCacheHandler>();
         eventBus.Subscribe<WorkflowDeletedEvent, WorkflowCacheHandler>();
 
+        eventBus.Subscribe<WorkflowStepsChangedEvent, WorkflowStepsCacheHandler>();
+
         // Configure the HTTP request pipeline.
         app.UseMiddleware<ExceptionMiddleware>();
         app.UseHttpsRedirection();
