@@ -7,8 +7,6 @@ using Wbskt.Common.Services;
 using Wbskt.Common.Writers;
 using Wbskt.Common.Writers.Implementations;
 
-
-
 namespace Wbskt.Common;
 
 public static class DependencyInjection
