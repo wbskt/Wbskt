@@ -1,5 +1,6 @@
 using Hangfire;
 using Hangfire.SqlServer;
+using Wbskt.Common;
 using Wbskt.Workflow.Api.Actions;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
@@ -8,6 +9,7 @@ using Wbskt.Workflow.Api.Scheduling;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.ConfigureCommonServices();
 builder.Services.AddSingleton<IWorkflowEngine, WorkflowEngine>();
 
 builder.Services.AddTransient<LogAction>();

@@ -1,4 +1,6 @@
-namespace Wbskt.EventBus;
+using Wbskt.EventBus;
+
+namespace Wbskt.Common.Messaging.InMemory;
 
 public class InMemoryEventBus : IEventBus
 {

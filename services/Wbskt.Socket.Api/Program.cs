@@ -1,15 +1,13 @@
 using Wbskt.Common;
 using Wbskt.Common.Extensions;
-using Wbskt.Common.Messaging.RabbitMQ;
-using Wbskt.EventBus;
 using Wbskt.Socket.Api.HostedServices;
 using Wbskt.Socket.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.ConfigureCommonServices();
 builder.Services.AddSingleton<IClientConnectionManager, ClientConnectionManager>();
-builder.Services.AddSingleton<IEventBus>(sp => new RabbitMQEventBus(sp, "localhost")); // todo: move to appSetting.json
 
 builder.Services.AddTransient<SendCommandToClientEventHandler>();
 

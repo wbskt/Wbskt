@@ -51,8 +51,8 @@ public static class Program
         builder.Services.AddSingleton<IAuthService, AuthService>();
         builder.Services.AddSingleton<IPolicyService, PolicyService>();
         builder.Services.AddSingleton<IRegistrationService, RegistrationService>();
-
-        builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+        
+        builder.Services.ConfigureCommonServices();
         builder.Services.AddTransient<PolicyCacheHandler>();
         builder.Services.AddTransient<WorkflowCacheHandler>();
 

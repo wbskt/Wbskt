@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Wbskt.Common.Messaging.RabbitMQ;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Readers.Cache;
 using Wbskt.Common.Readers.Database;
@@ -6,6 +7,7 @@ using Wbskt.Common.Readers.Database.Implementation;
 using Wbskt.Common.Services;
 using Wbskt.Common.Writers;
 using Wbskt.Common.Writers.Implementations;
+using Wbskt.EventBus;
 
 namespace Wbskt.Common;
 
@@ -16,6 +18,7 @@ public static class DependencyInjection
         serviceCollection.AddMemoryCache();
         serviceCollection.AddSingleton<ICacheService, CacheService>();
         serviceCollection.AddSingleton<ICancellationService, CancellationService>();
+        serviceCollection.AddSingleton<IEventBus>(sp => new RabbitMQEventBus(sp, "localhost")); // todo: move to appSetting.json
         
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();
 
