@@ -3,7 +3,7 @@ CREATE PROCEDURE [dbo].[Workflows_Update]
     @Name NVARCHAR(100),
     @Description NVARCHAR(500),
     @IsEnabled BIT,
-    @TriggerType VARCHAR(50),
+    @TriggerType INT,
     @TriggerConfiguration NVARCHAR(MAX)
 AS
 BEGIN

@@ -33,7 +33,7 @@ internal sealed class WorkflowsWriter : IWorkflowsWriter
         command.Parameters.AddWithValue("@Name", workflow.Name);
         command.Parameters.AddWithValue("@Description", (object?)workflow.Description ?? DBNull.Value);
         command.Parameters.AddWithValue("@IsEnabled", workflow.IsEnabled);
-        command.Parameters.AddWithValue("@TriggerType", workflow.TriggerType);
+        command.Parameters.AddWithValue("@TriggerType", (int)workflow.TriggerType);
         command.Parameters.AddWithValue("@TriggerConfiguration", (object?)workflow.TriggerConfiguration ?? DBNull.Value);
 
         var idParameter = command.Parameters.Add("@Id", SqlDbType.Int);
@@ -61,7 +61,7 @@ internal sealed class WorkflowsWriter : IWorkflowsWriter
         command.Parameters.AddWithValue("@Name", workflow.Name);
         command.Parameters.AddWithValue("@Description", (object?)workflow.Description ?? DBNull.Value);
         command.Parameters.AddWithValue("@IsEnabled", workflow.IsEnabled);
-        command.Parameters.AddWithValue("@TriggerType", workflow.TriggerType);
+        command.Parameters.AddWithValue("@TriggerType", (int)workflow.TriggerType);
         command.Parameters.AddWithValue("@TriggerConfiguration", (object?)workflow.TriggerConfiguration ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(cancellationToken);

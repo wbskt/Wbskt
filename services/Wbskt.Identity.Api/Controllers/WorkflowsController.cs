@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.Common.Enums;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Records;
 using Wbskt.Common.Services;
@@ -48,14 +49,14 @@ public class WorkflowsController : ControllerBase
             Name = request.Name,
             Description = request.Description,
             IsEnabled = request.IsEnabled,
-            TriggerType = request.TriggerType,
+            TriggerType= request.TriggerType,
             TriggerConfiguration = request.TriggerConfiguration,
             UserId = _currentUser.Id,
             RefId = Guid.NewGuid(),
             LastModified = DateTime.UtcNow
         };
 
-        if (workflow.TriggerType == "Webhook")
+        if (request.TriggerType == TriggerType.Webhook)
         {
             // Only generate a webhookId if one isn't provided in the configuration.
             // This part would need a proper JSON parsing/merging utility in a real implementation.

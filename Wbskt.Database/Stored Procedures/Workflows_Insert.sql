@@ -4,7 +4,7 @@ CREATE PROCEDURE [dbo].[Workflows_Insert]
     @Name NVARCHAR(100),
     @Description NVARCHAR(500),
     @IsEnabled BIT,
-    @TriggerType VARCHAR(50),
+    @TriggerType INT,
     @TriggerConfiguration NVARCHAR(MAX),
     @Id INT OUTPUT
 AS
