@@ -56,8 +56,6 @@ public static class Program
         builder.Services.AddTransient<PolicyCacheHandler>();
         builder.Services.AddTransient<WorkflowCacheHandler>();
 
-        // Register Background Services
-        builder.Services.AddHostedService<ServerBackgroundService>();
         builder.Services.AddAuthentication(opt =>
             {
                 opt.DefaultAuthenticateScheme = Constants.AuthSchemes.UserScheme;
