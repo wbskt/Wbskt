@@ -4,7 +4,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT [Id], [WorkflowId], [Status], [TriggeredAt], [CompletedAt], [InitialContext], [ErrorLog]
+    SELECT [Id], [WorkflowRefId], [Status], [TriggeredAt], [CompletedAt], [InitialContext], [ErrorLog]
     FROM [dbo].[WorkflowExecutions]
     WHERE [Id] = @Id;
 END
