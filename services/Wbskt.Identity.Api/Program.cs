@@ -4,8 +4,11 @@ using Serilog;
 using Wbskt.Common;
 using Wbskt.Common.Events;
 using Wbskt.Common.Extensions;
+using Wbskt.Common.Readers;
+using Wbskt.Common.Readers.Database;
 using Wbskt.Common.Records;
 using Wbskt.Common.Services;
+using Wbskt.Common.Writers;
 using Wbskt.EventBus;
 using Wbskt.Identity.Api.EventHandlers;
 using Wbskt.Identity.Api.Pipeline;
@@ -51,6 +54,7 @@ public static class Program
 
         builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
         builder.Services.AddTransient<PolicyCacheHandler>();
+        builder.Services.AddTransient<WorkflowCacheHandler>();
 
         builder.Services.ConfigureCommonServices();
 
@@ -75,6 +79,10 @@ public static class Program
         eventBus.Subscribe<PolicyCreatedEvent, PolicyCacheHandler>();
         eventBus.Subscribe<PolicyUpdatedEvent, PolicyCacheHandler>();
         eventBus.Subscribe<PolicyDeletedEvent, PolicyCacheHandler>();
+
+        eventBus.Subscribe<WorkflowCreatedEvent, WorkflowCacheHandler>();
+        eventBus.Subscribe<WorkflowUpdatedEvent, WorkflowCacheHandler>();
+        eventBus.Subscribe<WorkflowDeletedEvent, WorkflowCacheHandler>();
 
         // Configure the HTTP request pipeline.
         app.UseMiddleware<ExceptionMiddleware>();

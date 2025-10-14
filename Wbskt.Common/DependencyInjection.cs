@@ -39,6 +39,16 @@ public static class DependencyInjection
         // User Refresh Tokens
         serviceCollection.AddSingleton<IUserRefreshTokensWriter, UserRefreshTokensWriter>();
         serviceCollection.AddSingleton<IUserRefreshTokensDatabaseReader, UserRefreshTokensDatabaseReader>();
+        
+        // Workflow
+        serviceCollection.AddScoped<IWorkflowsDatabaseReader, WorkflowsDatabaseReader>();
+        serviceCollection.AddScoped<IWorkflowsReader, CachedWorkflowsReader>();
+        serviceCollection.AddScoped<IWorkflowsWriter, WorkflowsWriter>();
+        
+        // Workflow Steps
+        serviceCollection.AddScoped<IWorkflowStepsReader, CachedWorkflowStepsReader>();
+        serviceCollection.AddScoped<IWorkflowStepsDatabaseReader, WorkflowStepsDatabaseReader>();
+        serviceCollection.AddScoped<IWorkflowStepsWriter, WorkflowStepsWriter>();
 
         // Servers
         serviceCollection.AddSingleton<IServersDatabaseReader, ServersDatabaseReader>();
