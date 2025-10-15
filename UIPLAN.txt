@@ -1,0 +1,177 @@
+  Here is a recommended tech stack for the frontend:
+
+  1. Framework: React
+   * Why: React's component-based architecture is perfect for building a complex, interactive UI like a workflow editor. Its vast ecosystem includes mature libraries essential for this project, such as:
+       * Visual Workflow Builder: Libraries like React Flow are specifically designed for creating node-based editors, which would be ideal for visually constructing workflows.
+       * State Management: Tools like Redux Toolkit or Zustand can efficiently manage the complex state of the application (e.g., workflow definitions, user data, execution logs).
+
+  2. Language: TypeScript
+   * Why: Since the backend is C#, using TypeScript provides end-to-end type safety. This is crucial for a data-intensive application, as it helps prevent common bugs and makes communication with the .NET REST API
+     more robust and predictable.
+
+  3. UI Component Library: Material-UI (MUI) or Ant Design
+   * Why: Instead of building every button, form, and table from scratch, a component library will dramatically accelerate development.
+       * MUI offers a polished, modern set of components following Google's Material Design principles.
+       * Ant Design is excellent for data-dense, enterprise-grade interfaces, which aligns well with a dashboard for managing workflows.
+
+  4. Build Tool: Vite
+   * Why: Vite offers a significantly faster development experience compared to older tools, with near-instant server start and Hot Module Replacement (HMR). It's the modern standard for bundling React
+     applications.
+
+  Summary of Recommended Stack:
+
+   * Framework: React
+   * Language: TypeScript
+   * Component Library: Material-UI (MUI)
+   * Workflow Canvas: React Flow
+   * Build Tool: Vite
+
+  This stack provides a powerful and flexible foundation for building a feature-rich, modern, and maintainable user interface for the WBSKT platform.
+
+> provide feature list for the ui. like what all pages, how user interacts, explain a wireframe of the ui
+
+✦ Of course. Here is a detailed breakdown of a potential feature list, user interaction flow, and a conceptual wireframe for the WBSKT frontend.
+
+  ---
+
+  1. UI Feature List & Pages
+
+  This outlines the primary sections and pages the user would interact with.
+
+  Authentication
+   * Login Page: A simple form for email and password.
+   * Registration Page: A form for new users to sign up.
+
+  Main Application Layout (Post-Login)
+   * Persistent Left Sidebar: For primary navigation between the main sections.
+   * Top Header: Displays the current page title and provides access to user settings.
+
+  1. Dashboard
+   * Purpose: Provide a high-level overview and quick access to recent activity.
+   * Features:
+       * Stats Widgets: Cards showing key metrics (e.g., "Total Workflows," "Executions in last 24h," "Connected Clients").
+       * Recent Executions: A list of the 5-10 most recent workflow runs with their status (Success/Failed).
+       * Failed Executions: A prominent list of recent failed runs so users can quickly identify problems.
+
+  2. Workflows
+   * Purpose: The central hub for creating, viewing, and managing all workflows.
+   * Pages & Features:
+       * Workflows List Page:
+           * A searchable and filterable table of all workflows.
+           * Columns: Name, Trigger Type, Status (Enabled/Disabled), Last Modified.
+           * Actions per workflow: Edit, Manually Trigger, View Executions, Delete.
+           * A primary "Create Workflow" button.
+       * Workflow Editor / Builder Page:
+           * The core interactive feature of the UI.
+           * A visual canvas for building workflow graphs.
+           * A side panel containing all available Triggers and Actions that can be dragged onto the canvas.
+           * A configuration panel that updates based on the selected node (step) to set its parameters.
+           * Ability to save, enable, and test the workflow directly from the builder.
+
+  3. Executions
+   * Purpose: A global, detailed log for monitoring and debugging all workflow runs.
+   * Features:
+       * A filterable list of every single workflow execution from the entire system.
+       * Filters for: date range, workflow name, status (Success/Failed/Running).
+       * Execution Detail View: A drill-down view showing:
+           * The initial data that triggered the workflow.
+           * A step-by-step log of the execution, showing the data (context) as it flowed through.
+           * The input and output of each action.
+           * Detailed error messages for failed steps.
+
+  4. Clients & Policies
+   * Purpose: To manage the IoT-specific aspects of the platform.
+   * Pages & Features:
+       * Policies Page: Full CRUD (Create, Read, Update, Delete) for client registration policies. A form would allow setting the PIN, client limits, and expiry.
+       * Clients Page: A view-only list of all clients that have successfully registered, showing which policy they used and their connection status.
+
+  5. Integrations
+   * Purpose: To manage credentials for external services used in workflow actions.
+   * Features:
+       * A page where users can securely add, update, and delete credentials (e.g., API keys, tokens).
+       * Each integration (e.g., SendGrid for email, Twilio for SMS) would have its own section with a form to input the required secrets. The UI would never display the secrets after they are saved.
+
+  ---
+
+  2. User Interaction & Flow
+
+  Here’s a typical user journey for creating a new workflow:
+
+   1. Login & Navigation: The user logs in and is taken to the Dashboard. They click on "Workflows" in the left sidebar.
+   2. Initiate Creation: On the Workflows List Page, they click the "Create Workflow" button.
+   3. Enter the Builder: They are now on the Workflow Editor Page.
+       * Name the Workflow: They first give the workflow a name, like "Notify on new GitHub push."
+       * Select a Trigger: In the left-side panel of available nodes, they select the "Webhook" trigger. The canvas automatically displays the unique webhook URL for them to copy.
+       * Add an Action: They drag a "Make HTTP Request" action from the side panel onto the canvas and draw a line connecting the Webhook trigger to it.
+       * Configure the Action: They click the "Make HTTP Request" node. The right-side configuration panel populates with fields for URL, Method, Headers, and Body. They can use data from the trigger (e.g.,
+         {{trigger.body.repository.name}}) to dynamically construct the request.
+       * Add Logic: They drag an "If-Condition" node onto the canvas and connect the HTTP action to it. They configure it to check if the HTTP response was successful (e.g., {{steps.http_request.statusCode}} ==
+         200).
+       * Add Branches: They drag two "Send Email" actions onto the canvas. They connect the "success" path of the If-Condition to one, and the "failure" path to the other, configuring different email subjects for
+         each case.
+   4. Save and Enable: The user clicks "Save". A toggle switch appears, which they click to enable the workflow.
+   5. Testing: The user copies the webhook URL and configures their GitHub repository to send a POST request to it on a push event.
+   6. Monitoring: They push a change to their repo, then navigate to the Executions page in the UI. They see a new entry for their workflow with a "Success" status, confirming everything worked as expected.
+
+  ---
+
+  3. Conceptual UI Wireframe (Text Description)
+
+  Main Layout
+
+    1 +-----------------------------------------------------------------------------+
+    2 | [LOGO] WBSKT          |  Workflows                                [User Avatar] | Top Header
+    3 +-----------------------+-----------------------------------------------------+
+    4 |                       |                                                     |
+    5 |  [Icon] Dashboard     |                                                     |
+    6 |  [Icon] Workflows     |                                                     |
+    7 |  [Icon] Executions    |                                                     |
+    8 |  [Icon] Clients       |                  MAIN CONTENT AREA                  |
+    9 |  [Icon] Integrations  |                                                     |
+   10 |                       |                                                     |
+   11 |                       |                                                     |
+   12 |                       |                                                     |
+   13 | Left Sidebar          |                                                     |
+   14 +-----------------------+-----------------------------------------------------+
+
+  Wireframe 1: Workflow Editor Page
+
+  This is the most complex and important screen.
+
+    1 +--------------------------------------------------------------------------------------+
+    2 | Workflows > New Workflow                                        [Save] [Enable]    |
+    3 +--------------------------------------------------------------------------------------+
+    4 | Triggers & Actions    |                                          | Configuration   |
+    5 |-----------------------|         Workflow Canvas                  |-----------------|
+    6 | [Drag] Webhook        |                                          |                 |
+    7 | [Drag] Timed Schedule |  +-----------+      +------------+       | [Click a node   |
+
+    8 | [Drag] Client Data    |  |  Webhook  +----->| Send Email +------>|  to configure   |
+    9 |                       |  +-----------+      +------------+       |  it here]       |
+   10 | Actions               |                                          |                 |
+   11 | [Drag] Send Email     |                                          | To: ___________ |
+   12 | [Drag] HTTP Request   |                                          | Sub: __________ |
+   13 | [Drag] If-Condition   |                                          | Body: _________ |
+   14 | ...                   |                                          |                 |
+   15 +--------------------------------------------------------------------------------------+
+
+  Wireframe 2: Executions Detail Page
+
+  This page is for debugging a single workflow run.
+
+    1 +--------------------------------------------------------------------------------------+
+    2 | Executions > execution-id-12345                                  [Re-run Workflow] |
+    3 +--------------------------------------------------------------------------------------+
+    4 | Status: Success ✅     | Triggered: Oct 15, 3:45 PM | Duration: 450ms                |
+    5 |--------------------------------------------------------------------------------------|
+    6 | Step-by-Step Log      |                                                              |
+    7 |-----------------------|                  Log Details / Context                       |
+    8 |                       |                                                              |
+    9 | > [Success] Trigger   |  {                                                           |
+   10 |                       |    "body": { "message": "Hello World" },                     |
+   11 | > [Success] Step 1    |    "headers": { ... }                                        |
+   12 |                       |  }                                                           |
+   13 | > [Failed]  Step 2    |                                                              |
+   14 |                       |                                                              |
+   15 |                       |                                                              |
+   16 +--------------------------------------------------------------------------------------+
