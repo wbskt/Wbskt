@@ -1,10 +1,10 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ProtectedRoute } from './ProtectedRoute';
+import { LoginPage } from '../features/auth/LoginPage';
+import { RegisterPage } from '../features/auth/RegisterPage';
 
-// Placeholder Pages
-const LoginPage = () => <h1>Login Page</h1>;
-const RegisterPage = () => <h1>Register Page</h1>;
+// Placeholders for pages that are not yet built
 const DashboardPage = () => <h1>Dashboard</h1>;
 const WorkflowsListPage = () => <h1>Workflows</h1>;
 const ExecutionsListPage = () => <h1>Executions</h1>;
