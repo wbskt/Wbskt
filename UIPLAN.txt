@@ -1,177 +1,583 @@
-  Here is a recommended tech stack for the frontend:
+  Of course. Let's translate the powerful backend we've designed into a user-friendly frontend experience. Here is a proposed feature list, a description of the user interaction, and a wireframe concept for the core workflow studio
+    UI.
+  
+    ---
+  
+    UI Feature List & Page Breakdown
+  
+    The application can be broken down into a few key pages/sections, accessible via a main navigation sidebar.
+  
+    1. Dashboard Page (`/dashboard`)
+     * Purpose: The user's landing page after logging in. Provides a high-level overview and quick access.
+     * Features:
+         * A summary widget showing the total number of workflows and recent execution statuses (e.g., "5 Successful, 1 Failed in the last 24 hours").
+         * A list of "Recently Edited" workflows for quick access.
+         * A prominent "Create New Workflow" button.
+         * A chart showing workflow execution volume over the last 7 days.
+  
+    2. Workflows Page (`/workflows`)
+     * Purpose: The main page for managing all workflows.
+     * Features:
+         * A searchable, sortable table/list of all the user's workflows.
+         * Columns for: Name, Status (Enabled/Disabled), Trigger Type, Last Modified, Last Run Status.
+         * An "Enable/Disable" toggle switch for each workflow directly in the list.
+         * Actions for each workflow: Edit, Run Manually, View History, Delete.
+  
+    3. Workflow Studio / Editor Page (`/workflows/{refId}`)
+     * Purpose: The core of the application. A visual, node-based canvas for creating and editing a single workflow. This is where React Flow will be used.
+     * Features:
+         * Nodes Panel (Sidebar): A list of all available Triggers, Actions, and Modifiers that can be dragged onto the canvas.
+         * Canvas: The main area where users build their workflow by placing nodes and connecting them with "wires" (edges).
+         * Configuration Panel (Contextual Sidebar): When a user clicks on a node on the canvas, this panel appears, showing the specific form to configure that step (e.g., the CRON schedule for a Timed Trigger, the recipient and
+           subject for a Send Email Action).
+         * Save/Status Bar: A top bar showing the workflow's name, a "Save" button, and an indicator for unsaved changes.
+         * Test Run Button: A button to manually trigger the workflow with a sample JSON payload, allowing for quick testing.
+  
+    4. Execution History Page (`/workflows/{refId}/history`)
+     * Purpose: To view the run history for a specific workflow.
+     * Features:
+         * A list of all past executions for the workflow, showing Execution ID, Status (Success/Failed), and Timestamp.
+         * Clicking on a specific execution will navigate to the Execution Detail Page.
+  
+    5. Execution Detail Page (`/executions/{executionId}`)
+     * Purpose: To debug a specific workflow run. This is the "receipt" of an execution.
+     * Features:
+         * A high-level summary showing the overall status, start/end times, and the initial trigger data.
+         * A detailed, step-by-step log of the execution. Each step will show:
+             * Step Name and Icon.
+             * Status (Success/Failed/Skipped).
+             * Duration.
+             * A "View Data" button to inspect the input and output context (the JSON data) for that specific step. This is invaluable for debugging.
+  
+    6. Settings / Integrations Page (`/settings/integrations`)
+     * Purpose: For users to manage their credentials for third-party services.
+     * Features:
+         * A list of supported integrations (SendGrid, Twilio, etc.).
+         * A form to add a new credential, where the user gives it a name (e.g., "My Work SendGrid") and pastes their API key. The key is sent to the POST /api/credentials endpoint.
+         * A list of already configured credentials, with options to delete them.
+  
+    ---
+  
+    User Interaction & Wireframe Concept
+  
+    Let's focus on the most important page: the Workflow Studio.
+  
+    Wireframe Description:
+  
+    Imagine a three-column layout:
+  
+  
+    ┌──────────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────┐
+    │ [1] Nodes Panel (Left Sidebar)                                   │ [2] Canvas (Main Content Area)                             │ [3] Configuration Panel (Right Sidebar)                                │
+    ├──────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+    │ A fixed sidebar with a searchable list of nodes.                 │ The primary interactive area where the workflow is built.  │ A contextual panel that appears when a node is selected on the canvas. │
+    │ Triggers<br/>-  मैनुअल<br/>- Timed<br/>- Webhook<br/>- Client Data │ A grid background. Users can pan and zoom.                 │ Node: "Is Temperature Critical?"<br/>(If-Condition)                    │
+    │ Actions<br/>- Send Email<br/>- Make HTTP Request<br/>- Log Data  │ [Trigger: Timed]<br/>`                                     │ <br/>     ▼<br/>[Action: Get Weather]<br/>                             │
+    │ Modifiers<br/>- If-Condition<br/>- For-Each Loop                 │ Nodes are cards with an icon, name, and connection points. │ The form fields are specific to the selected node type.                │
+    └──────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────────────────────┘
+  
+    User Flow for Creating a Workflow:
+  
+     1. The user navigates to the /workflows page and clicks "Create New Workflow".
+     2. They are taken to the Workflow Studio (/workflows/new).
+     3. Step 1: Choose a Trigger: The user drags the "Timed Trigger" node from the [1] Nodes Panel onto the [2] Canvas.
+     4. Step 2: Configure the Trigger: The user clicks the "Timed Trigger" node. The [3] Configuration Panel appears, showing a form with a field for a CRON expression. The user enters 0 9 * * * (every day at 9 AM).
+     5. Step 3: Add an Action: The user drags the "Make HTTP Request" node onto the canvas. A "wire" automatically snaps from the trigger to this new action node.
+     6. Step 4: Configure the Action: The user clicks the "Make HTTP Request" node. The configuration panel now shows fields for URL, Method, etc. The user enters the URL for a weather API.
+     7. Step 5: Add a Modifier: The user drags an "If-Condition" node onto the canvas and connects the HTTP request node to it.
+     8. Step 6: Configure the Modifier: The user clicks the "If-Condition" node. In the configuration panel, they set up the condition: LeftOperand = {{ context.steps.http_request.response.body.temperature }}, Operator = GreaterThan,
+        RightOperand = 25.
+     9. Step 7: Create Branches: The user drags a "Send SMS" action onto the canvas and connects the "Yes" output of the if-condition to it. They drag a "Log Data" action and connect the "No" output to it. They configure both actions.
+     10. Step 8: Save: The user clicks the "Save" button in the top bar. The frontend serializes this entire graph structure and sends it to the POST /api/workflows endpoint.
+  
+    This visual, interactive model makes it possible for both B2B and B2C users to build incredibly complex and powerful automations without writing a single line of code.
+   ╭───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+   │ ✓  ReadManyFiles Will attempt to read and concatenate files using patterns:                                                                                                                                                           │
+   │    UIPLAN.txt                                                                                                                                                                                                                         │
+   │     (within target directory:                                                                                                                                                                                                         │
+   │    /Users/richardjoy/Projects/wbskt/Core                                                                                                                                                                                              │
+   │    ) . Excluding: patterns like                                                                                                                                                                                                       │
+   │    **/node_modules/**`, `**/.git/**...`. File encoding: utf-8. Separator: "--- path/to/file.ext ---".                                                                                                                                 │
+   │                                                                                                                                                                                                                                       │
+   │    ### ReadManyFiles Result (Target Dir: `/Users/richardjoy/Projects/wbskt/Core`)                                                                                                                                                     │
+   │                                                                                                                                                                                                                                       │
+   │    Successfully read and concatenated content from **1 file(s)**.                                                                                                                                                                     │
+   │                                                                                                                                                                                                                                       │
+   │    **Processed Files:**                                                                                                                                                                                                               │
+   │    - `UIPLAN.txt`                                                                                                                                                                                                                     │
+   ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  
+  > please go through @UIPLAN.txt and describe the plan or the proposal in the same manner
+  
+  ✦ Of course. The provided document, UIPLAN.txt, contains three distinct but related sections: a recommended Tech Stack, a UI Feature List & Pages, and a proposed Project Structure.
+  
+    Here is a detailed description of the plan, presented in the same comprehensive manner as our previous planning sessions.
+  
+    ---
+  
+    Part 1: Proposed Frontend Tech Stack
+  
+    Goal: To select a modern, robust, and productive set of technologies for building the frontend application.
+  
+    The plan recommends a stack that prioritizes developer experience, performance, and long-term maintainability, with strong synergy with the existing .NET backend.
+  
+     * Framework & Build Tool: Vite + React.
+         * Reasoning: This combination is chosen for its superior development speed. Vite provides near-instant server starts and fast updates, while React offers a mature, component-based architecture ideal for a complex UI. This is
+           the modern standard, replacing older tools like Create React App.
+  
+     * Language: TypeScript.
+         * Reasoning: This is a critical choice for ensuring type safety and robustness. It aligns perfectly with the C# backend, allowing for end-to-end type safety, which reduces bugs and improves developer productivity through
+           better autocompletion and error checking.
+  
+     * UI Component Library: Material-UI (MUI).
+         * Reasoning: To accelerate development by providing a comprehensive set of pre-built, professional-grade components (buttons, forms, tables, etc.). MUI is selected for its polished, modern aesthetic based on Google's Material
+           Design, which is well-suited for an enterprise-grade dashboard.
+  
+     * Workflow Canvas Library: React Flow.
+         * Reasoning: This is a specialized library chosen specifically for the core feature of the UI. It handles the complex logic of rendering, connecting, and interacting with nodes on a canvas, allowing developers to focus on the
+           application's unique features rather than reinventing the wheel.
+  
+    ---
+  
+    Part 2: UI Features, Pages, and User Flow
+  
+    Goal: To define the user-facing features of the application and map them to a clear page structure and user journey.
+  
+    The application is broken down into five main sections, accessible from a persistent sidebar, plus authentication pages.
+  
+     1. Dashboard: The landing page, providing a high-level overview with widgets for key stats (e.g., total workflows, recent executions) and quick access to recently failed runs for immediate problem identification.
+     2. Workflows: The central hub for managing all automation.
+         * List Page: A master view to search, filter, and manage all created workflows, with actions to edit, trigger, or delete them.
+         * Editor/Builder Page: The core interactive experience. This is a visual canvas (powered by React Flow) where users drag-and-drop triggers and actions from a side panel and configure them in a contextual properties panel.
+     3. Executions: A global, detailed audit trail for monitoring and debugging. It provides a filterable list of every workflow run. A drill-down view for each run shows the initial trigger data and a step-by-step log, including the
+        data context before and after each action.
+     4. Clients & Policies: A dedicated section for managing the IoT-specific aspects, including full CRUD for client registration policies and a view-only list of registered clients.
+     5. Integrations: A secure area for users to manage credentials (e.g., API keys) for third-party services like SendGrid or Twilio. The UI will allow adding and deleting credentials but will never display the saved secrets.
+  
+    A typical User Flow is described where a user creates a "Notify on new GitHub push" workflow, demonstrating how they would interact with the different UI panels to build, test, and monitor their automation.
+  
+    ---
+  
+    Part 3: Proposed Project Structure
+  
+    Goal: To organize the frontend codebase in a scalable and maintainable way using a "feature-sliced" design.
+  
+    The proposed structure co-locates all code related to a specific feature (e.g., authentication, workflows) into a single directory, making the project easy to navigate.
+  
+     * `src/components/`: Contains globally reusable UI components (Button, Modal) and layout components (Sidebar, Header).
+     * `src/features/`: The heart of the application. Each sub-directory is a self-contained feature.
+         * Example: `src/features/workflows/`: This folder would contain everything related to the workflow feature:
+             * The main page components (WorkflowBuilderPage.tsx, WorkflowsListPage.tsx).
+             * Feature-specific components, such as the custom nodes for the canvas (ActionNode.tsx) and the UI panels (ConfigPanel.tsx).
+             * API call functions (api.ts).
+             * Custom hooks for managing complex logic (useWorkflowBuilder.ts).
+     * `src/lib/`: For configuring third-party libraries, such as creating a pre-configured axios instance with interceptors to automatically attach the JWT auth token to all API requests.
+     * `src/routes/`: Defines the URL routing for the application, including ProtectedRoute components that handle authentication checks before rendering a page.
+     * `src/store/`: For global state management (e.g., using Redux Toolkit or Zustand).
+  
+    This comprehensive plan details not only what to build but also how to build it, providing a clear blueprint for developing a modern, robust, and user-friendly frontend for the WBSKT platform.
+  
+  > please provide a wireframe of the ui
+  
+  ✦ Of course. Since I can't generate a visual image, I will provide a detailed, text-based wireframe that describes the layout and components of the key pages. This format is often used in early-stage planning to define the structure
+    and flow of a user interface.
+  
+    ---
+  
+    Wireframe 1: Main Application Layout
+  
+    This is the shell that contains all other pages after a user logs in.
+  
+      1 +--------------------------------------------------------------------------------------+
+      2 | [LOGO] WBSKT          |  Workflows                                       [User Avatar] |  <- Top Header
+      3 +-----------------------+----------------------------------------------------------------+
+      4 | [Icon] Dashboard      |                                                                |
+      5 | [Icon] Workflows      |                                                                |
+      6 | [Icon] Executions     |                                                                |
+      7 | [Icon] Clients        |                  ( MAIN CONTENT AREA )                         |
+      8 | [Icon] Integrations   |                  ( Renders the current page,                   |
+      9 |                       |                    e.g., Dashboard or Editor )                 |
+     10 | ---                   |                                                                |
+     11 | [Icon] Settings       |                                                                |
+     12 | [Icon] Logout         |                                                                |
+     13 |                       |                                                                |
+     14 | ^ Left Sidebar        |                                                                |
+     15 +--------------------------------------------------------------------------------------+
+     * Top Header: Static. Displays the current page title. The user avatar opens a dropdown for account settings or logout.
+     * Left Sidebar: Static. Provides primary navigation. The currently active page is highlighted.
+  
+    ---
+  
+    Wireframe 2: The Workflow Studio / Editor Page
+  
+    This is the most complex and important screen, using a three-column layout.
+  
+      1 +--------------------------------------------------------------------------------------+
+      2 | Workflows > "Notify on High Temp"                               [Save] [Run Test] [x] |  <- Page Header
+      3 +--------------------------------------------------------------------------------------+
+      4 | [1] Nodes Panel       | [2] Canvas Area                          | [3] Config Panel    |
+      5 |-----------------------|------------------------------------------|---------------------|
+      6 |   [Search nodes...]   |                                          | [Node Icon]         |
+      7 |                       |                                          |  Send Critical Alert|
+      8 |   TRIGGERS            |  +------------------+                    | ------------------- |
+      9 |   - [Drag] Timed      |  | [T] Timed Trigger|                    |  INTEGRATION        |
+     10 |   - [Drag] Webhook    |  +------------------+                    |  [ My Twilio Key ▼ ]|
+     11 |                       |          |                               |                     |
+     12 |   ACTIONS             |          ▼                               |  RECIPIENT          |
+     13 |   - [Drag] Send Email |  +------------------+                    |  [ +15551234567  ]  |
+     14 |   - [Drag] Send SMS   |  | [A] Get Temp     |                    |                     |
+     15 |                       |  +------------------+                    |  MESSAGE            |
+     16 |   MODIFIERS           |          |                               |  [ CRITICAL: Temp  ] |
+     17 |   - [Drag] If-Cond    |          ▼                               |  [ is {{...}}    ] |
+     18 |                       |  +< >---------------+                    |                     |
+     19 |                       |  | [M] If Temp > 40 | --(Yes)-->          |                     |
+     20 |                       |  +------------------+                    |                     |
+     21 |                       |          | (No)                          |                     |
+     22 |                       |          ▼                               |                     |
+     23 |                       |  +------------------+                    |                     |
+     24 |                       |  | [A] Log Normal   |                    |                     |
+     25 |                       |  +------------------+                    |                     |
+     26 +--------------------------------------------------------------------------------------+
+     * [1] Nodes Panel: A scrollable list of all available building blocks (Triggers, Actions, Modifiers), grouped by type. Users drag items from here onto the canvas.
+     * [2] Canvas Area: The main workspace (powered by React Flow). Users can pan, zoom, and arrange nodes. They connect the output handle of one node to the input handle of another to create the workflow logic.
+     * [3] Configuration Panel: This panel is contextual. It's empty by default. When a user clicks a node on the canvas (e.g., the "Send Critical Alert" SMS node), this panel populates with the specific form fields required to
+       configure that action.
+  
+    ---
+  
+    Wireframe 3: The Execution Detail Page
+  
+    This page is for debugging a single workflow run. It's read-only.
+  
+      1 +--------------------------------------------------------------------------------------+
+      2 | Executions > "Run #a3b8-f2c1"                                     [Re-run Workflow] |  <- Page Header
+      3 +--------------------------------------------------------------------------------------+
+      4 |                                                                                      |
+      5 |  OVERVIEW                                                                            |
+      6 |  ----------------------------------------------------------------------------------  |
+      7 |  Status: Failed ❌   | Triggered: Oct 15, 4:02:11 PM | Duration: 1.2s                 |
+      8 |                                                                                      |
+      9 |  TRIGGER DATA                                                                        |
+     10 |  [ View JSON... ]                                                                    |
+     11 |                                                                                      |
+     12 +--------------------------------------------------------------------------------------+
+     13 |                                                                                      |
+     14 |  STEP-BY-STEP LOG                                                                    |
+     15 |  ----------------------------------------------------------------------------------  |
+     16 |                                                                                      |
+     17 |  [ > ] [Success ✅] 1. Timed Trigger (Ran at 4:02:11 PM)                              |
+     18 |                                                                                      |
+     19 |  [ > ] [Success ✅] 2. Get Temperature Reading (Duration: 350ms) [View Data]          |
+     20 |                                                                                      |
+     21 |  [ v ] [Failed  ❌] 3. Send Critical Alert (Duration: 850ms)   [View Data]          |
+     22 |        |                                                                             |
+     23 |        |  Error Details:                                                             |
+     24 |        |  -----------------------------------------------------------------------   |
+     25 |        |  | API authentication failed. Please check your Twilio credentials.    |   |
+     26 |        |  -----------------------------------------------------------------------   |
+     27 |                                                                                      |
+     28 |  [   ] [Skipped ⚪] 4. Log High Temperature (Was not reached)                         |
+     29 |                                                                                      |
+     30 +--------------------------------------------------------------------------------------+
+     * Overview Section: Shows the high-level outcome of the run. The "Trigger Data" button would open a modal to show the initial JSON data that started the workflow.
+     * Step-by-Step Log: A collapsible list of each step that was executed.
+         * Each step has a status icon (Success, Failed, Skipped).
+         * Clicking a step ([ v ]) expands it to show detailed error messages.
+         * The [View Data] button on a step would open a modal showing the state of the WorkflowContext both before and after that specific step ran, which is essential for debugging data transformations.
+  
+  > please provide a detailed project structure.
+  
+  ✦ Of course. Here is a detailed project structure for the React application, designed for scalability, maintainability, and clarity, following the feature-driven plan we discussed.
+  
+    This structure uses a "feature-sliced" design, where code related to a specific feature (like Workflows or Authentication) is co-located.
+  
+    Recommended Project Structure
+  
+      1 /wbskt-ui
+      2 ├── public/
+      3 │   ├── favicon.ico
+      4 │   └── index.html
+      5 ├── src/
+      6 │   ├── assets/
+      7 │   │   ├── fonts/
+      8 │   │   └── images/
+      9 │   │
+     10 │   ├── components/
+     11 │   │   ├── common/
+     12 │   │   │   ├── Button.tsx
+     13 │   │   │   ├── Input.tsx
+     14 │   │   │   ├── Modal.tsx
+     15 │   │   │   ├── Spinner.tsx
+     16 │   │   │   └── Table.tsx
+     17 │   │   └── layout/
+     18 │   │       ├── MainLayout.tsx
+     19 │   │       ├── Header.tsx
+     20 │   │       └── Sidebar.tsx
+     21 │   │
+     22 │   ├── features/
+     23 │   │   ├── auth/
+     24 │   │   │   ├── api.ts
+     25 │   │   │   ├── LoginPage.tsx
+     26 │   │   │   ├── RegisterPage.tsx
+     27 │   │   │   └── useAuth.ts
+     28 │   │   │
+     29 │   │   ├── dashboard/
+     30 │   │   │   ├── components/
+     31 │   │   │   │   ├── StatsWidget.tsx
+     32 │   │   │   │   └── RecentExecutionsList.tsx
+     33 │   │   │   └── DashboardPage.tsx
+     34 │   │   │
+     35 │   │   ├── workflows/
+     36 │   │   │   ├── api.ts
+     37 │   │   │   ├── components/
+     38 │   │   │   │   ├── nodes/           // Custom nodes for the workflow canvas
+     39 │   │   │   │   │   ├── ActionNode.tsx
+     40 │   │   │   │   │   ├── ConditionNode.tsx
+     41 │   │   │   │   │   └── TriggerNode.tsx
+     42 │   │   │   │   ├── panels/          // UI panels for the builder
+     43 │   │   │   │   │   ├── ActionsPanel.tsx
+     44 │   │   │   │   │   └── ConfigPanel.tsx
+     45 │   │   │   │   └── WorkflowCanvas.tsx
+     46 │   │   │   ├── hooks/
+     47 │   │   │   │   └── useWorkflowBuilder.ts
+     48 │   │   │   ├── WorkflowBuilderPage.tsx
+     49 │   │   │   ├── WorkflowsListPage.tsx
+     50 │   │   │   └── types.ts
+     51 │   │   │
+     52 │   │   ├── executions/
+     53 │   │   │   ├── api.ts
+     54 │   │   │   ├── ExecutionDetailPage.tsx
+     55 │   │   │   └── ExecutionsListPage.tsx
+     56 │   │   │
+     57 │   │   └── (policies, clients, integrations follow a similar structure)
+     58 │   │
+     59 │   ├── hooks/
+     60 │   │   └── useLocalStorage.ts
+     61 │   │
+     62 │   ├── lib/
+     63 │   │   └── axios.ts
+     64 │   │
+     65 │   ├── providers/
+     66 │   │   └── AppProvider.tsx
+     67 │   │
+     68 │   ├── routes/
+     69 │   │   ├── index.tsx
+     70 │   │   └── ProtectedRoute.tsx
+     71 │   │
+     72 │   ├── store/
+     73 │   │   ├── rootReducer.ts
+     74 │   │   └── store.ts
+     75 │   │
+     76 │   ├── types/
+     77 │   │   └── api.ts
+     78 │   │
+     79 │   ├── App.tsx
+     80 │   └── main.tsx
+     81 │
+     82 ├── .eslintrc.cjs
+     83 ├── .gitignore
+     84 ├── package.json
+     85 └── tsconfig.json
+  
+    ---
+  
+    Explanation of Key Directories
+  
+     * `src/assets`: Global static assets like images, fonts, and global CSS files (if any).
+  
+     * `src/components`: This is for reusable, generic components that are not tied to any specific feature.
+         * `common/`: Basic building blocks of your UI (e.g., a customized Button that is used everywhere).
+         * `layout/`: Components that define the main structure of the app, like the Sidebar and Header, which wrap the page content.
+  
+     * `src/features`: The core of the application. Each sub-directory is a self-contained feature. This makes the codebase easy to navigate and maintain. A typical feature folder contains:
+         * `*.Page.tsx`: The top-level component for a specific route (e.g., WorkflowsListPage.tsx). It assembles other components to create a full page.
+         * `api.ts`: Functions for making API calls related to this feature (e.g., getWorkflows, createWorkflow).
+         * `components/`: Components that are specific to this feature and not used elsewhere (e.g., WorkflowCanvas is only used within the "workflows" feature).
+         * `hooks/`: Custom React hooks with logic specific to the feature (e.g., useWorkflowBuilder would contain the complex state management for the builder canvas).
+         * `types.ts`: TypeScript types and interfaces for the feature's data structures.
+  
+     * `src/hooks`: For global, reusable hooks that can be used across multiple features (e.g., useLocalStorage).
+  
+     * `src/lib`: For third-party library setup and configuration.
+         * `axios.ts`: A pre-configured Axios instance. This is where you'd set the base API URL and create interceptors to automatically attach the JWT authentication token to every request.
+  
+     * `src/providers`: For wrapping the application with global context providers. The AppProvider.tsx would contain the React Router, state management store provider (e.g., Redux), and the MUI theme provider, keeping App.tsx clean.
+  
+     * `src/routes`: Defines the application's URL routes.
+         * `index.tsx`: Maps URL paths to their corresponding page components.
+         * `ProtectedRoute.tsx`: A special component that checks if a user is authenticated before rendering a page. If not, it redirects them to the login page.
+  
+     * `src/store`: For global state management using a library like Zustand or Redux Toolkit. It defines the main store and combines the "slices" or reducers from different features.
+  
+     * `App.tsx`: The root component of the application. It typically renders the main router and providers.
+  
+     * `main.tsx`: The entry point of the application, where the root App component is rendered into the DOM.
 
-  1. Framework: React
-   * Why: React's component-based architecture is perfect for building a complex, interactive UI like a workflow editor. Its vast ecosystem includes mature libraries essential for this project, such as:
-       * Visual Workflow Builder: Libraries like React Flow are specifically designed for creating node-based editors, which would be ideal for visually constructing workflows.
-       * State Management: Tools like Redux Toolkit or Zustand can efficiently manage the complex state of the application (e.g., workflow definitions, user data, execution logs).
 
-  2. Language: TypeScript
-   * Why: Since the backend is C#, using TypeScript provides end-to-end type safety. This is crucial for a data-intensive application, as it helps prevent common bugs and makes communication with the .NET REST API
-     more robust and predictable.
+--------------------
+  
+  Tailwind:
+  Phase 1: Project Foundation & Core Authentication
+  
+    Goal: To establish a secure, navigable application shell. A user can sign up, log in, log out, and navigate between empty, protected pages. This phase is all about the skeleton and core styling primitives.
+  
+     * Action Item 1.1: Project Initialization & Tooling
+         * [ ] Scaffold project: npm create vite@latest wbskt-ui -- --template react-ts.
+         * [ ] Install dependencies: react-router-dom, axios, zustand, @headlessui/react, clsx.
+         * [ ] Install dev dependencies: tailwindcss, postcss, autoprefixer, and all ESLint/Prettier packages.
+         * [ ] Configure Tailwind CSS by creating and setting up tailwind.config.js and postcss.config.js.
+  
+     * Action Item 1.2: Build the "Common" Component Library
+         * [ ] In src/components/common/, create your base UI components styled with Tailwind. This is your internal design system.
+             * Button.tsx: With variant props for primary, secondary, and destructive styles.
+             * Input.tsx, Label.tsx, Textarea.tsx: Basic form elements.
+             * Card.tsx: A container with padding, border, and shadow.
+             * Modal.tsx: Use Headless UI's Dialog for accessibility and style the panel with Tailwind.
+             * Dropdown.tsx: Use Headless UI's Menu for the logic and style the items.
+             * Spinner.tsx: A simple loading spinner.
+  
+     * Action Item 1.3: Core Layout & Routing
+         * [ ] Build the static MainLayout.tsx, Sidebar.tsx, and Header.tsx using your common components and Tailwind's layout utilities.
+         * [ ] In src/routes/index.tsx, define all routes (/dashboard, /workflows, etc.), each pointing to a newly created, empty placeholder page component (e.g., WorkflowsListPage.tsx).
+         * [ ] Implement the ProtectedRoute.tsx component for handling authentication checks.
+  
+     * Action Item 1.4: Authentication Feature (`/features/auth`)
+         * [ ] Build the LoginPage.tsx and RegisterPage.tsx using your common form components.
+         * [ ] Create the auth.store.ts (Zustand) with persistence to localStorage.
+         * [ ] Implement auth.api.ts to call the backend login/register endpoints.
+         * [ ] Implement the useAuth.ts hook to provide login, logout, and isAuthenticated state to the UI.
+         * [ ] Configure the global axios instance with interceptors for automatically attaching the auth token and handling 401 session expiry errors.
+  
+    ---
+  
+    Phase 2: Read-Only Data Display & Dashboard
+  
+    Goal: To bring the application to life with real data. This phase focuses on fetching and displaying information from all major backend endpoints.
+  
+     * Action Item 2.1: Install & Configure TanStack Query
+         * [ ] npm install @tanstack/react-query.
+         * [ ] Wrap the application in the QueryClientProvider.
+  
+     * Action Item 2.2: Build the Dashboard Page (`/features/dashboard`)
+         * [ ] Build the UI using Card.tsx for widgets.
+         * [ ] Create dashboard.api.ts to fetch summary data.
+         * [ ] Use useQuery in StatsWidget.tsx and RecentExecutionsList.tsx to display real-time statistics and history.
+  
+     * Action Item 2.3: Build the Reusable Data Table Component
+         * [ ] In src/components/common/, create a powerful, reusable Table.tsx.
+         * [ ] Style it with Tailwind. It should accept data and columns props.
+         * [ ] Include functionality for sorting and add a slot for action buttons (like Edit/Delete) on each row.
+  
+     * Action Item 2.4: Implement All "List" Pages (Read-Only)
+         * [ ] `WorkflowsListPage.tsx`: Use your Table component to display the list of workflows fetched from GET /api/workflows.
+         * [ ] `ExecutionsListPage.tsx`: Use the Table to display all workflow runs. Add filter controls (e.g., a Dropdown for status, date pickers for time range).
+         * [ ] `PoliciesPage.tsx`: Use the Table to display client registration policies.
+         * [ ] `ClientsPage.tsx`: Use the Table to display registered clients.
+         * [ ] `IntegrationsPage.tsx`: Use the Table to display the user's configured integrations (names and types only).
+  
+    ---
+  
+    Phase 3: Management & CRUD Operations
+  
+    Goal: To make the application fully interactive by implementing creation, update, and deletion functionality for core resources.
+  
+     * Action Item 3.1: Full CRUD for Policies
+         * [ ] On the PoliciesPage.tsx, wire up the "Create Policy" button to open a CreatePolicyModal.tsx.
+         * [ ] Build the creation and editing forms inside the modal.
+         * [ ] Use TanStack Mutation (useMutation) to handle the POST, PUT, and DELETE API calls, ensuring the table data is automatically refetched on success.
+  
+     * Action Item 3.2: Full CRUD for Integrations
+         * [ ] On the IntegrationsPage.tsx, implement the "Add New Credential" flow using a modal.
+         * [ ] The form should securely send the API key to the backend.
+         * [ ] Implement the "Delete" functionality for saved credentials.
+  
+     * Action Item 3.3: The Execution Detail View
+         * [ ] Build the ExecutionDetailPage.tsx.
+         * [ ] Fetch data from GET /api/executions/{id}.
+         * [ ] Create a StepLogItem.tsx component to visually represent each step in the execution log, showing its status, duration, and an error message if it failed.
+         * [ ] Implement the "View Data" modal that shows the formatted JSON context for a selected step.
+  
+    ---
+  
+    Phase 4: The Workflow Studio - Visuals & Interaction
+  
+    Goal: To build the visual core of the product: the drag-and-drop workflow editor.
+  
+     * Action Item 4.1: Canvas & React Flow Setup
+         * [ ] Install @reactflow/core and react-dnd.
+         * [ ] Create the WorkflowBuilderPage.tsx with its three-column layout.
+         * [ ] Implement the WorkflowCanvas.tsx component, configuring the ReactFlow provider and controls (minimap, background).
+  
+     * Action Item 4.2: Custom Nodes & Drag-and-Drop
+         * [ ] In src/features/workflows/components/nodes/, create custom, Tailwind-styled components for each node type (TriggerNode, ActionNode, ConditionNode).
+         * [ ] Build the NodesPanel.tsx sidebar, which lists available nodes.
+         * [ ] Use react-dnd to make these nodes draggable from the panel onto the React Flow canvas.
+  
+     * Action Item 4.3: Node & Edge Management
+         * [ ] Implement the logic for connecting nodes with edges.
+         * [ ] Implement the ability to delete selected nodes or edges from the canvas.
+         * [ ] Implement a useWorkflowBuilder.ts hook to start managing the state of nodes and edges.
+  
+    ---
+  
+    Phase 5: The Workflow Studio - Configuration & Full Functionality
+  
+    Goal: To make the designer fully functional, allowing users to configure every step and save their complete, complex workflows.
+  
+     * Action Item 5.1: The Dynamic Configuration Panel
+         * [ ] Build the ConfigPanel.tsx. It will subscribe to changes in the selected node from the useWorkflowBuilder hook's state.
+         * [ ] Create a separate form component for each configurable node type (e.g., SendEmailConfigForm.tsx, IfConditionConfigForm.tsx).
+         * [ ] The ConfigPanel will dynamically render the correct form based on the selected node's type.
+         * [ ] Any change in a configuration form will update the state of that specific node within the useWorkflowBuilder hook.
+  
+     * Action Item 5.2: Saving, Loading, and API Integration
+         * [ ] Implement the "Save" function within the useWorkflowBuilder hook. This function will serialize the nodes and edges state into the JSON structure required by the backend API.
+         * [ ] Use a useMutation hook to call the POST /api/workflows or PUT /api/workflows/{refId} endpoints.
+         * [ ] Implement the "Load" functionality. On page load, a useQuery hook will fetch the workflow data, and a utility function will transform it into the nodes and edges state that React Flow can render.
+  
+     * Action Item 5.3: Finalizing Workflow Management
+         * [ ] On the WorkflowsListPage.tsx, fully implement the "Delete", "Enable/Disable", and "Run Manually" buttons, connecting them to their respective API mutations.
+         
+Detailed Verification & Incorporation of Suggestions
 
-  3. UI Component Library: Material-UI (MUI) or Ant Design
-   * Why: Instead of building every button, form, and table from scratch, a component library will dramatically accelerate development.
-       * MUI offers a polished, modern set of components following Google's Material Design principles.
-       * Ant Design is excellent for data-dense, enterprise-grade interfaces, which aligns well with a dashboard for managing workflows.
+  Let's go through each phase and check for completeness, incorporating the previous suggestions.
 
-  4. Build Tool: Vite
-   * Why: Vite offers a significantly faster development experience compared to older tools, with near-instant server start and Hot Module Replacement (HMR). It's the modern standard for bundling React
-     applications.
+  Phase 1: Foundation & Core Authentication
+   * Completeness: This phase is very complete. It covers project setup, tooling, core layout, routing, and the entire authentication flow.
+   * Suggestion Check:
+       * `401 Interceptor`: The plan mentions creating an axios interceptor to attach the token. I will explicitly add my previous suggestion to this action item: the interceptor should also handle 401 Unauthorized responses to
+         automatically log the user out. This is a critical piece of robust session management.
+   * Verdict: Excellent. With the added note about the 401 handler, this phase is perfect.
 
-  Summary of Recommended Stack:
+  Phase 2: Read-Only Data Display & Dashboard
+   * Completeness: This is also very thorough. It correctly prioritizes building a reusable Table component, which is highly efficient. It covers all the major read-only pages.
+   * Suggestion Check:
+       * `Auto-refreshing`: The plan is solid, but we can explicitly add the suggestion for the ExecutionsListPage.tsx.
+   * Verdict: Excellent. I'll just add a note to remember the auto-refresh feature.
 
-   * Framework: React
-   * Language: TypeScript
-   * Component Library: Material-UI (MUI)
-   * Workflow Canvas: React Flow
-   * Build Tool: Vite
+  Phase 3: Core Management (CRUD Operations)
+   * Completeness: This phase correctly covers the "write" operations for the foundational features (Policies, Integrations) and the detailed view for debugging executions.
+   * Suggestion Check:
+       * `Test Connection Button`: The plan mentions creating the SaveCredentialModal.tsx. I will add a specific sub-task to this action item to include a "Test Connection" button in that modal's design, which would trigger a
+         dedicated backend endpoint.
+   * Verdict: Perfect. The plan is solid, and the suggestion can be easily added as a sub-task.
 
-  This stack provides a powerful and flexible foundation for building a feature-rich, modern, and maintainable user interface for the WBSKT platform.
+  Phase 4: The Workflow Studio - Canvas & Nodes
+   * Completeness: This is a great breakdown of how to tackle the visual aspect of the editor first. It correctly separates the canvas setup from the node design and the user interaction logic.
+   * Suggestion Check:
+       * `Node Status Icons`: The plan details creating custom nodes. I will add a note to this action item to include a visual status indicator (e.g., a red/green dot) on the nodes themselves to show if they are fully configured.
+   * Verdict: Excellent. The plan is sound, and the suggestion fits naturally into the custom node design task.
 
-> provide feature list for the ui. like what all pages, how user interacts, explain a wireframe of the ui
+  Phase 5: The Workflow Studio - Configuration & State
+   * Completeness: This phase correctly brings everything together: the dynamic configuration panel, the state management hook (useWorkflowBuilder), and the final API integration for saving/loading.
+   * Suggestion Check:
+       * `"Dirty" Check / Save Button State`: The plan covers the "Save" functionality. I will add a specific sub-task to this action item: the useWorkflowBuilder hook should also manage a "dirty" state, and the "Save" button in
+         the UI should be disabled if no changes have been made.
+   * Verdict: Perfect. This is the logical place to handle that piece of UI state.
 
-✦ Of course. Here is a detailed breakdown of a potential feature list, user interaction flow, and a conceptual wireframe for the WBSKT frontend.
+  Final Conclusion
 
-  ---
+  You have not missed anything significant.
 
-  1. UI Feature List & Pages
-
-  This outlines the primary sections and pages the user would interact with.
-
-  Authentication
-   * Login Page: A simple form for email and password.
-   * Registration Page: A form for new users to sign up.
-
-  Main Application Layout (Post-Login)
-   * Persistent Left Sidebar: For primary navigation between the main sections.
-   * Top Header: Displays the current page title and provides access to user settings.
-
-  1. Dashboard
-   * Purpose: Provide a high-level overview and quick access to recent activity.
-   * Features:
-       * Stats Widgets: Cards showing key metrics (e.g., "Total Workflows," "Executions in last 24h," "Connected Clients").
-       * Recent Executions: A list of the 5-10 most recent workflow runs with their status (Success/Failed).
-       * Failed Executions: A prominent list of recent failed runs so users can quickly identify problems.
-
-  2. Workflows
-   * Purpose: The central hub for creating, viewing, and managing all workflows.
-   * Pages & Features:
-       * Workflows List Page:
-           * A searchable and filterable table of all workflows.
-           * Columns: Name, Trigger Type, Status (Enabled/Disabled), Last Modified.
-           * Actions per workflow: Edit, Manually Trigger, View Executions, Delete.
-           * A primary "Create Workflow" button.
-       * Workflow Editor / Builder Page:
-           * The core interactive feature of the UI.
-           * A visual canvas for building workflow graphs.
-           * A side panel containing all available Triggers and Actions that can be dragged onto the canvas.
-           * A configuration panel that updates based on the selected node (step) to set its parameters.
-           * Ability to save, enable, and test the workflow directly from the builder.
-
-  3. Executions
-   * Purpose: A global, detailed log for monitoring and debugging all workflow runs.
-   * Features:
-       * A filterable list of every single workflow execution from the entire system.
-       * Filters for: date range, workflow name, status (Success/Failed/Running).
-       * Execution Detail View: A drill-down view showing:
-           * The initial data that triggered the workflow.
-           * A step-by-step log of the execution, showing the data (context) as it flowed through.
-           * The input and output of each action.
-           * Detailed error messages for failed steps.
-
-  4. Clients & Policies
-   * Purpose: To manage the IoT-specific aspects of the platform.
-   * Pages & Features:
-       * Policies Page: Full CRUD (Create, Read, Update, Delete) for client registration policies. A form would allow setting the PIN, client limits, and expiry.
-       * Clients Page: A view-only list of all clients that have successfully registered, showing which policy they used and their connection status.
-
-  5. Integrations
-   * Purpose: To manage credentials for external services used in workflow actions.
-   * Features:
-       * A page where users can securely add, update, and delete credentials (e.g., API keys, tokens).
-       * Each integration (e.g., SendGrid for email, Twilio for SMS) would have its own section with a form to input the required secrets. The UI would never display the secrets after they are saved.
-
-  ---
-
-  2. User Interaction & Flow
-
-  Here’s a typical user journey for creating a new workflow:
-
-   1. Login & Navigation: The user logs in and is taken to the Dashboard. They click on "Workflows" in the left sidebar.
-   2. Initiate Creation: On the Workflows List Page, they click the "Create Workflow" button.
-   3. Enter the Builder: They are now on the Workflow Editor Page.
-       * Name the Workflow: They first give the workflow a name, like "Notify on new GitHub push."
-       * Select a Trigger: In the left-side panel of available nodes, they select the "Webhook" trigger. The canvas automatically displays the unique webhook URL for them to copy.
-       * Add an Action: They drag a "Make HTTP Request" action from the side panel onto the canvas and draw a line connecting the Webhook trigger to it.
-       * Configure the Action: They click the "Make HTTP Request" node. The right-side configuration panel populates with fields for URL, Method, Headers, and Body. They can use data from the trigger (e.g.,
-         {{trigger.body.repository.name}}) to dynamically construct the request.
-       * Add Logic: They drag an "If-Condition" node onto the canvas and connect the HTTP action to it. They configure it to check if the HTTP response was successful (e.g., {{steps.http_request.statusCode}} ==
-         200).
-       * Add Branches: They drag two "Send Email" actions onto the canvas. They connect the "success" path of the If-Condition to one, and the "failure" path to the other, configuring different email subjects for
-         each case.
-   4. Save and Enable: The user clicks "Save". A toggle switch appears, which they click to enable the workflow.
-   5. Testing: The user copies the webhook URL and configures their GitHub repository to send a POST request to it on a push event.
-   6. Monitoring: They push a change to their repo, then navigate to the Executions page in the UI. They see a new entry for their workflow with a "Success" status, confirming everything worked as expected.
-
-  ---
-
-  3. Conceptual UI Wireframe (Text Description)
-
-  Main Layout
-
-    1 +-----------------------------------------------------------------------------+
-    2 | [LOGO] WBSKT          |  Workflows                                [User Avatar] | Top Header
-    3 +-----------------------+-----------------------------------------------------+
-    4 |                       |                                                     |
-    5 |  [Icon] Dashboard     |                                                     |
-    6 |  [Icon] Workflows     |                                                     |
-    7 |  [Icon] Executions    |                                                     |
-    8 |  [Icon] Clients       |                  MAIN CONTENT AREA                  |
-    9 |  [Icon] Integrations  |                                                     |
-   10 |                       |                                                     |
-   11 |                       |                                                     |
-   12 |                       |                                                     |
-   13 | Left Sidebar          |                                                     |
-   14 +-----------------------+-----------------------------------------------------+
-
-  Wireframe 1: Workflow Editor Page
-
-  This is the most complex and important screen.
-
-    1 +--------------------------------------------------------------------------------------+
-    2 | Workflows > New Workflow                                        [Save] [Enable]    |
-    3 +--------------------------------------------------------------------------------------+
-    4 | Triggers & Actions    |                                          | Configuration   |
-    5 |-----------------------|         Workflow Canvas                  |-----------------|
-    6 | [Drag] Webhook        |                                          |                 |
-    7 | [Drag] Timed Schedule |  +-----------+      +------------+       | [Click a node   |
-
-    8 | [Drag] Client Data    |  |  Webhook  +----->| Send Email +------>|  to configure   |
-    9 |                       |  +-----------+      +------------+       |  it here]       |
-   10 | Actions               |                                          |                 |
-   11 | [Drag] Send Email     |                                          | To: ___________ |
-   12 | [Drag] HTTP Request   |                                          | Sub: __________ |
-   13 | [Drag] If-Condition   |                                          | Body: _________ |
-   14 | ...                   |                                          |                 |
-   15 +--------------------------------------------------------------------------------------+
-
-  Wireframe 2: Executions Detail Page
-
-  This page is for debugging a single workflow run.
-
-    1 +--------------------------------------------------------------------------------------+
-    2 | Executions > execution-id-12345                                  [Re-run Workflow] |
-    3 +--------------------------------------------------------------------------------------+
-    4 | Status: Success ✅     | Triggered: Oct 15, 3:45 PM | Duration: 450ms                |
-    5 |--------------------------------------------------------------------------------------|
-    6 | Step-by-Step Log      |                                                              |
-    7 |-----------------------|                  Log Details / Context                       |
-    8 |                       |                                                              |
-    9 | > [Success] Trigger   |  {                                                           |
-   10 |                       |    "body": { "message": "Hello World" },                     |
-   11 | > [Success] Step 1    |    "headers": { ... }                                        |
-   12 |                       |  }                                                           |
-   13 | > [Failed]  Step 2    |                                                              |
-   14 |                       |                                                              |
-   15 |                       |                                                              |
-   16 +--------------------------------------------------------------------------------------+
+  The five-phase plan is thorough, logical, and sets the project up for success. The technology choices are modern and appropriate for the complexity of the application. My suggestions are minor "quality-of-life" and
+  "robustness" enhancements that fit perfectly within the existing structure of your plan.
