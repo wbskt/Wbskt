@@ -368,3 +368,4 @@ FodyWeavers.xsd
 #*appsettings.Development.json
 *appsettings.Production.json
 .aider*
+.DS_Store
