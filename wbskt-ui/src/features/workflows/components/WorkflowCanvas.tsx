@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { ReactFlowProvider, type Node, type Edge, ReactFlow, useReactFlow } from '@reactflow/core';
+import { useCallback, useRef, useState } from 'react';
+import { ReactFlowProvider, type Node, type Edge, ReactFlow, useReactFlow, addEdge, useEdgesState, useNodesState, type Connection } from '@reactflow/core';
 import { Controls } from '@reactflow/controls';
 import { MiniMap } from '@reactflow/minimap';
 import { TriggerNode } from './nodes/TriggerNode';
@@ -23,11 +23,29 @@ const nodeTypes = {
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
-export const WorkflowCanvas = () => {
-  const [nodes, setNodes] = useState<Node[]>(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
+interface WorkflowCanvasProps {
+  onNodeSelected: (node: Node | null) => void;
+}
+
+export const WorkflowCanvas = ({ onNodeSelected }: WorkflowCanvasProps) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project } = useReactFlow();
+
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  const onNodeClick = (_: React.MouseEvent, node: Node) => {
+    onNodeSelected(node);
+  };
+
+  const onPaneClick = () => {
+    onNodeSelected(null);
+  };
+
   const [{ isOver }, drop] = useDrop({
     accept: DRAGGABLE_NODE_TYPE,
     drop: (item: { nodeType: string; label: string; stepIdentifier: string }, monitor) => {
@@ -52,7 +70,17 @@ export const WorkflowCanvas = () => {
   return (
     <div ref={reactFlowWrapper} style={{ height: '100%', width: '100%' }}>
       <div ref={drop as unknown as React.Ref<HTMLDivElement>} style={{ height: '100%', width: '100%' }}>
-        <ReactFlow nodes={nodes} edges={edges} fitView nodeTypes={nodeTypes}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          fitView
+          nodeTypes={nodeTypes}
+        >
           <Background />
           <Controls />
           <MiniMap />
@@ -62,8 +90,8 @@ export const WorkflowCanvas = () => {
   );
 };
 
-export const WorkflowCanvasWrapper = () => (
+export const WorkflowCanvasWrapper = ({ onNodeSelected }: WorkflowCanvasProps) => (
   <ReactFlowProvider>
-    <WorkflowCanvas />
+    <WorkflowCanvas onNodeSelected={onNodeSelected} />
   </ReactFlowProvider>
 );
