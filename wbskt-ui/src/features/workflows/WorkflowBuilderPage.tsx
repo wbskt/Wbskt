@@ -3,10 +3,28 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { WorkflowCanvasWrapper } from './components/WorkflowCanvas';
 import { NodesPanel } from './components/panels/NodesPanel';
+import { ConfigPanel } from './components/panels/ConfigPanel';
 import type { Node } from '@reactflow/core';
+import type { StepConfigurationBase } from '../../types/api';
 
 export const WorkflowBuilderPage = () => {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  // The nodes and setNodes state will be lifted into this component later
+  // For now, this handler is a placeholder for the logic.
+  const handleConfigurationChange = (newConfig: StepConfigurationBase) => {
+    if (!selectedNode) return;
+
+    console.log('Configuration changed for node:', selectedNode.id, newConfig);
+    // Here, you would update the `nodes` array:
+    // setNodes((nds) =>
+    //   nds.map((node) => {
+    //     if (node.id === selectedNode.id) {
+    //       return { ...node, data: { ...node.data, configuration: newConfig } };
+    //     }
+    //     return node;
+    //   })
+    // );
+  };
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -20,12 +38,7 @@ export const WorkflowBuilderPage = () => {
         </div>
 
         <div className="w-80 bg-white border-l border-gray-300">
-          <div className="p-4 font-bold border-b">Configuration</div>
-          {selectedNode ? (
-            <p className="p-4 text-sm">Selected: {selectedNode.data.label}</p>
-          ) : (
-            <p className="p-4 text-sm text-gray-500">Select a node to configure it.</p>
-          )}
+          <ConfigPanel selectedNode={selectedNode} onConfigurationChange={handleConfigurationChange} />
         </div>
       </div>
     </DndProvider>

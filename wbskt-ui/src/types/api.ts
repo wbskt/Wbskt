@@ -41,6 +41,34 @@ export interface CredentialRecord {
   lastModified: string;
 }
 
+// Step Configurations
+export interface StepConfigurationBase {}
+
+export interface TimedTriggerConfiguration extends StepConfigurationBase {
+  cronExpression: string;
+}
+
+export interface SendEmailConfiguration extends StepConfigurationBase {
+  integrationName: string;
+  to: string;
+  subject: string;
+  body: string;
+}
+
+export interface IfConditionConfiguration extends StepConfigurationBase {
+  leftOperand: string;
+  operator: string;
+  rightOperand: string;
+}
+
+export interface MakeHttpRequestConfiguration extends StepConfigurationBase {
+  url: string;
+  method: string;
+  authentication?: string;
+  headers?: string;
+  body?: string;
+}
+
 export interface WorkflowStepExecutionRecord {
   id: number;
   workflowExecutionId: number;
