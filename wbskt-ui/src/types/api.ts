@@ -40,3 +40,20 @@ export interface CredentialRecord {
   integrationType: string;
   lastModified: string;
 }
+
+export interface WorkflowStepExecutionRecord {
+  id: number;
+  workflowExecutionId: number;
+  workflowStepId: number;
+  status: 'Success' | 'Failed' | 'Skipped';
+  startedAt: string;
+  completedAt: string | null;
+  inputContext: string | null;
+  outputContext: string | null;
+  errorLog: string | null;
+}
+
+export interface ExecutionDetailResponse {
+  execution: ExecutionRecord;
+  steps: WorkflowStepExecutionRecord[];
+}

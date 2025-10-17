@@ -8,6 +8,7 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { WorkflowsListPage } from '../features/workflows/WorkflowsListPage';
 import { ExecutionsListPage } from '../features/executions/ExecutionsListPage';
+import { ExecutionDetailPage } from '../features/executions/ExecutionDetailPage';
 import { ClientsPage } from '../features/clients/ClientsPage';
 import { PoliciesPage } from '../features/policies/PoliciesPage';
 import { IntegrationsPage } from '../features/integrations/IntegrationsPage';
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'workflows', element: <WorkflowsListPage /> },
           { path: 'executions', element: <ExecutionsListPage /> },
+          { path: 'executions/:executionId', element: <ExecutionDetailPage /> },
           { path: 'clients', element: <ClientsPage /> },
           { path: 'policies', element: <PoliciesPage /> },
           { path: 'integrations', element: <IntegrationsPage /> },
