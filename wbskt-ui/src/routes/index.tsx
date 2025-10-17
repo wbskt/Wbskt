@@ -6,11 +6,11 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 
 // Placeholders for pages that are not yet built
 import { DashboardPage } from '../features/dashboard/DashboardPage';
-const WorkflowsListPage = () => <h1>Workflows</h1>;
-const ExecutionsListPage = () => <h1>Executions</h1>;
-const ClientsPage = () => <h1>Clients</h1>;
-const PoliciesPage = () => <h1>Policies</h1>;
-const IntegrationsPage = () => <h1>Integrations</h1>;
+import { WorkflowsListPage } from '../features/workflows/WorkflowsListPage';
+import { ExecutionsListPage } from '../features/executions/ExecutionsListPage';
+import { ClientsPage } from '../features/clients/ClientsPage';
+import { PoliciesPage } from '../features/policies/PoliciesPage';
+import { IntegrationsPage } from '../features/integrations/IntegrationsPage';
 
 export const router = createBrowserRouter([
   {
