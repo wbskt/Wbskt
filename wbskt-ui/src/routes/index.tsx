@@ -5,7 +5,7 @@ import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 
 // Placeholders for pages that are not yet built
-const DashboardPage = () => <h1>Dashboard</h1>;
+import { DashboardPage } from '../features/dashboard/DashboardPage';
 const WorkflowsListPage = () => <h1>Workflows</h1>;
 const ExecutionsListPage = () => <h1>Executions</h1>;
 const ClientsPage = () => <h1>Clients</h1>;
