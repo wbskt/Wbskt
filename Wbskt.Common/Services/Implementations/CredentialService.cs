@@ -46,4 +46,9 @@ public class CredentialService : ICredentialService
 
         return _credentialsWriter.UpsertAsync(record, cancellationToken);
     }
+
+    public Task DeleteAsync(int userId, int credentialId, CancellationToken cancellationToken)
+    {
+        return _credentialsWriter.DeleteAsync(credentialId, userId, cancellationToken);
+    }
 }

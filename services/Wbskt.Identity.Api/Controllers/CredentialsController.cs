@@ -35,4 +35,13 @@ public class CredentialsController : ControllerBase
         await _credentialService.SaveCredentialsAsync(_currentUser.Id, request.IntegrationType, request.Name, request.Credentials, cancellationToken);
         return NoContent();
     }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteCredential(int id, CancellationToken cancellationToken)
+    {
+        // The service layer will ensure the user can only delete their own credentials.
+        await _credentialService.DeleteAsync(_currentUser.Id, id, cancellationToken);
+        return NoContent();
+    }
+
 }
