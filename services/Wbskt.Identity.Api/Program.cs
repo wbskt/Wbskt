@@ -1,4 +1,5 @@
 using System.Security.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Wbskt.Common;
@@ -40,9 +41,11 @@ public static class Program
         builder.Host.UseWindowsService();
 
         // Add services to the container.
-        builder.Services.AddDataProtection();
+        builder.Services
+            .AddDataProtection()
+            .DisableAutomaticKeyGeneration();
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+        builder.Services.AddSingleton<ICurrentUser, CurrentUser>();
 
         builder.Services.AddSingleton<IPasswordHasher<UserRecord>, PasswordHasher<UserRecord>>();
 
@@ -51,9 +54,9 @@ public static class Program
         builder.Services.AddSingleton<IRegistrationService, RegistrationService>();
         
         builder.Services.ConfigureCommonServices();
-        builder.Services.AddTransient<PolicyCacheHandler>();
-        builder.Services.AddTransient<WorkflowCacheHandler>();
-        builder.Services.AddTransient<WorkflowStepsCacheHandler>();
+        builder.Services.AddSingleton<PolicyCacheHandler>();
+        builder.Services.AddSingleton<WorkflowCacheHandler>();
+        builder.Services.AddSingleton<WorkflowStepsCacheHandler>();
 
         builder.Services.AddAuthentication(opt =>
             {
@@ -67,6 +70,17 @@ public static class Program
         builder.Services.AddAuthorization();
 
         builder.Services.AddControllers();
+
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowAll",
+                policyBuilder =>
+                {
+                    policyBuilder.AllowAnyOrigin()
+                        .AllowAnyMethod()
+                        .AllowAnyHeader();
+                });
+        });
 
         var app = builder.Build();
 
@@ -83,7 +97,13 @@ public static class Program
 
         // Configure the HTTP request pipeline.
         app.UseMiddleware<ExceptionMiddleware>();
-        app.UseHttpsRedirection();
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseHttpsRedirection();
+        }
+
+        app.UseCors("AllowAll"); // make sure this is placed before app.UseAuthorization()
+
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseWebSockets();

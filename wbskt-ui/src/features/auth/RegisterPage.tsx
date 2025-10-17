@@ -14,7 +14,7 @@ export const RegisterPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    register({ name, email, password });
+    register({ userName: name, emailId: email, password: password });
   };
 
   return (

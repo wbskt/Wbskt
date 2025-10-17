@@ -13,13 +13,13 @@ export const LoginPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login({ email, password });
+    login({ emailId: email, password: password });
   };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <Card className="w-full max-w-md p-8 space-y-6">
-        <h2 className="text-2xl font-bold text-center">Login to WBSKT</h2>
+        <h2 className="text-2xl font-bold text-center">Login to BSKT</h2>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <Label htmlFor="email">Email Address</Label>

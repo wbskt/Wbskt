@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from './auth.store';
-import { loginUser, registerUser } from './api';
+import { loginUser, registerUser, type LoginCredentials, type RegisterData } from './api';
 
 export const useAuth = () => {
   const {
@@ -13,7 +13,7 @@ export const useAuth = () => {
   } = useAuthStore();
   const navigate = useNavigate();
 
-  const login = async (credentials: any) => {
+  const login = async (credentials: LoginCredentials) => {
     try {
       const data = await loginUser(credentials);
       setToken(data.accessToken); // Assuming the token is in accessToken
@@ -26,7 +26,7 @@ export const useAuth = () => {
     }
   };
 
-  const register = async (data: any) => {
+  const register = async (data: RegisterData) => {
     try {
       await registerUser(data);
       navigate('/login'); // Redirect to login after successful registration

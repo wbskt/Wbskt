@@ -1,8 +1,8 @@
 import axios from '../../lib/axios';
 
 // Placeholder types - these should be imported from a shared types directory
-interface LoginCredentials { email: string; password: string; }
-interface RegisterData { name: string; email: string; password: string; }
+export interface LoginCredentials { emailId: string; password: string; }
+export interface RegisterData { userName: string; emailId: string; password: string; }
 
 export const loginUser = async (credentials: LoginCredentials) => {
   const response = await axios.post('/api/users/login', credentials);
