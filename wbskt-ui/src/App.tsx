@@ -1,7 +1,8 @@
-export default function App() {
-  return (
-    <div className="p-10 bg-blue-500 text-white text-2xl font-bold">
-      Tailwind is working!
-    </div>
-  );
+import { RouterProvider } from 'react-router-dom';
+import { router } from './routes';
+
+function App() {
+  return <RouterProvider router={router} />;
 }
+
+export default App;
