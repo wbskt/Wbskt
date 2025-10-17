@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getWorkflows } from './api';
 import { Table, type ColumnDef } from '../../components/common/Table';
 import type { WorkflowRecord } from '../../types/api';
-import { Dropdown, DropdownItem } from '../../components/common/Dropdown';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/common/Button';
 
 const StatusBadge = ({ isEnabled }: { isEnabled: boolean }) => (
@@ -52,11 +52,12 @@ export const WorkflowsListPage = () => {
       header: 'Actions',
       accessorKey: 'id', // Use a unique key
       cell: (row) => (
-        <Dropdown button={<Button size="sm" variant="secondary">Actions</Button>}>
-          <DropdownItem>Edit</DropdownItem>
-          <DropdownItem>View History</DropdownItem>
-          <DropdownItem>Delete</DropdownItem>
-        </Dropdown>
+        <div className="space-x-2">
+          <Link to={`/workflows/${row.refId}`}>
+            <Button size="sm" variant="secondary">Edit</Button>
+          </Link>
+          <Button size="sm" variant="destructive">Delete</Button>
+        </div>
       ),
     },
   ];

@@ -7,6 +7,7 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 // Placeholders for pages that are not yet built
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { WorkflowsListPage } from '../features/workflows/WorkflowsListPage';
+import { WorkflowBuilderPage } from '../features/workflows/WorkflowBuilderPage';
 import { ExecutionsListPage } from '../features/executions/ExecutionsListPage';
 import { ExecutionDetailPage } from '../features/executions/ExecutionDetailPage';
 import { ClientsPage } from '../features/clients/ClientsPage';
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
         children: [
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'workflows', element: <WorkflowsListPage /> },
+          { path: 'workflows/:refId', element: <WorkflowBuilderPage /> },
           { path: 'executions', element: <ExecutionsListPage /> },
           { path: 'executions/:executionId', element: <ExecutionDetailPage /> },
           { path: 'clients', element: <ClientsPage /> },
