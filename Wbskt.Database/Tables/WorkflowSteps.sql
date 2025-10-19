@@ -8,6 +8,8 @@ CREATE TABLE [dbo].[WorkflowSteps] (
     [StepConfiguration] NVARCHAR(MAX) NULL, -- JSON configuration for this specific step
     [OnSuccessStepId] INT NULL, -- For branching: ID of the next step on success/true
     [OnFailureStepId] INT NULL, -- For branching: ID of the next step on failure/false
+    [PositionX] INT NULL,
+    [PositionY] INT NULL,
     CONSTRAINT [PK_WorkflowSteps] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_WorkflowSteps_Workflows] FOREIGN KEY ([WorkflowId]) 
         REFERENCES [dbo].[Workflows]([Id]) ON DELETE CASCADE

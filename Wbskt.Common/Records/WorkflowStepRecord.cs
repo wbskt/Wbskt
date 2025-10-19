@@ -13,4 +13,6 @@ public record WorkflowStepRecord
     public string? StepConfiguration { get; init; }
     public int? OnSuccessStepId { get; init; }
     public int? OnFailureStepId { get; init; }
+    public int? PositionX { get; init; }
+    public int? PositionY { get; init; }
 }

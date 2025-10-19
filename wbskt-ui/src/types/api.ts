@@ -41,6 +41,31 @@ export interface CredentialRecord {
   lastModified: string;
 }
 
+export interface WorkflowStepRecord {
+  id: number;
+  workflowId: number;
+  stepOrder: number;
+  name: string;
+  stepType: string;
+  stepIdentifier: string;
+  stepConfiguration: string | null;
+  onSuccessStepId: number | null;
+  onFailureStepId: number | null;
+  PositionX: number | null;
+  PositionY: number | null;
+}
+
+export interface WorkflowDetailResponse {
+  refId: string;
+  name: string;
+  description: string | null;
+  isEnabled: boolean;
+  triggerTypeId: number;
+  triggerConfiguration: string | null;
+  lastModified: string;
+  steps: WorkflowStepRecord[];
+}
+
 // Step Configurations
 export interface StepConfigurationBase {}
 
