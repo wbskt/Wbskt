@@ -23,7 +23,7 @@ public class MakeHttpRequestAction : IAction
         // In a real implementation, this would use a templating engine.
 
         var client = _httpClientFactory.CreateClient();
-        var request = new HttpRequestMessage(new HttpMethod(config.Method), config.Url);
+        var request = new HttpRequestMessage(new HttpMethod(config!.Method), config.Url);
 
         if (!string.IsNullOrEmpty(config.Body))
         {
