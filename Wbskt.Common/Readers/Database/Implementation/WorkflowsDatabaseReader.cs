@@ -39,7 +39,10 @@ internal sealed class WorkflowsDatabaseReader : IWorkflowsDatabaseReader
                 IsEnabled = reader.GetBoolean(5),
                 TriggerType = (TriggerType)reader.GetInt32(6),
                 TriggerConfiguration = reader.IsDBNull(7) ? null : reader.GetString(7),
-                LastModified = reader.GetDateTime(8)
+                ViewportX = reader.IsDBNull(8) ? (float?)null : (float)reader.GetDouble(8),
+                ViewportY = reader.IsDBNull(9) ? (float?)null : (float)reader.GetDouble(9),
+                ViewportZoom = reader.IsDBNull(10) ? (float?)null : (float)reader.GetDouble(10),
+                LastModified = reader.GetDateTime(11)
             });
         }
 
@@ -70,7 +73,10 @@ internal sealed class WorkflowsDatabaseReader : IWorkflowsDatabaseReader
                 IsEnabled = reader.GetBoolean(5),
                 TriggerType = (TriggerType)reader.GetInt32(6),
                 TriggerConfiguration = reader.IsDBNull(7) ? null : reader.GetString(7),
-                LastModified = reader.GetDateTime(8)
+                ViewportX = reader.IsDBNull(8) ? (float?)null : (float)reader.GetDouble(8),
+                ViewportY = reader.IsDBNull(9) ? (float?)null : (float)reader.GetDouble(9),
+                ViewportZoom = reader.IsDBNull(10) ? (float?)null : (float)reader.GetDouble(10),
+                LastModified = reader.GetDateTime(11)
             };
         }
 
@@ -101,7 +107,10 @@ internal sealed class WorkflowsDatabaseReader : IWorkflowsDatabaseReader
                 IsEnabled = reader.GetBoolean(5),
                 TriggerType = (TriggerType)reader.GetInt32(6),
                 TriggerConfiguration = reader.IsDBNull(7) ? null : reader.GetString(7),
-                LastModified = reader.GetDateTime(8)
+                ViewportX = reader.IsDBNull(8) ? (float?)null : (float)reader.GetDouble(8),
+                ViewportY = reader.IsDBNull(9) ? (float?)null : (float)reader.GetDouble(9),
+                ViewportZoom = reader.IsDBNull(10) ? (float?)null : (float)reader.GetDouble(10),
+                LastModified = reader.GetDateTime(11)
             };
         }
 
@@ -133,7 +142,10 @@ internal sealed class WorkflowsDatabaseReader : IWorkflowsDatabaseReader
                 IsEnabled = reader.GetBoolean(5),
                 TriggerType = (TriggerType)reader.GetInt32(6),
                 TriggerConfiguration = reader.IsDBNull(7) ? null : reader.GetString(7),
-                LastModified = reader.GetDateTime(8)
+                ViewportX = reader.IsDBNull(8) ? (float?)null : (float)reader.GetDouble(8),
+                ViewportY = reader.IsDBNull(9) ? (float?)null : (float)reader.GetDouble(9),
+                ViewportZoom = reader.IsDBNull(10) ? (float?)null : (float)reader.GetDouble(10),
+                LastModified = reader.GetDateTime(11)
             });
         }
 

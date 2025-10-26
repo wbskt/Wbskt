@@ -49,8 +49,11 @@ public class WorkflowsController : ControllerBase
             Name = request.Name,
             Description = request.Description,
             IsEnabled = request.IsEnabled,
-            TriggerType= request.TriggerType,
+            TriggerType = request.TriggerType,
             TriggerConfiguration = request.TriggerConfiguration,
+            ViewportX = request.ViewportX,
+            ViewportY = request.ViewportY,
+            ViewportZoom = request.ViewportZoom,
             UserId = _currentUser.Id,
             RefId = Guid.NewGuid(),
             LastModified = DateTime.UtcNow
@@ -105,6 +108,9 @@ public class WorkflowsController : ControllerBase
             TriggerType = workflow.TriggerType,
             TriggerConfiguration = workflow.TriggerConfiguration,
             LastModified = workflow.LastModified,
+            ViewportX = workflow.ViewportX,
+            ViewportY = workflow.ViewportY,
+            ViewportZoom = workflow.ViewportZoom,
             Steps = steps
         };
 
@@ -130,6 +136,9 @@ public class WorkflowsController : ControllerBase
             IsEnabled = request.IsEnabled,
             TriggerType = request.TriggerType,
             TriggerConfiguration = request.TriggerConfiguration,
+            ViewportX = request.ViewportX,
+            ViewportY = request.ViewportY,
+            ViewportZoom = request.ViewportZoom,
             LastModified = DateTime.UtcNow
         };
 

@@ -58,6 +58,9 @@ export interface WorkflowDetailResponse {
   triggerTypeId: number;
   triggerConfiguration: string | null;
   lastModified: string;
+  viewportX: number | null;
+  viewportY: number | null;
+  viewportZoom: number | null;
   steps: WorkflowStepRecord[];
 }
 

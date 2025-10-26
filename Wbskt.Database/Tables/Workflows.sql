@@ -7,6 +7,9 @@ CREATE TABLE [dbo].[Workflows] (
     [IsEnabled] BIT NOT NULL DEFAULT 0,
     [TriggerType] INT NOT NULL,
     [TriggerConfiguration] NVARCHAR(MAX) NULL, -- Stores JSON data like a CRON schedule
+    [ViewportX] FLOAT NULL,
+    [ViewportY] FLOAT NULL,
+    [ViewportZoom] FLOAT NULL,
     [LastModified] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT [PK_Workflows] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [UNQ_Workflows_RefId] UNIQUE NONCLUSTERED ([RefId] ASC),

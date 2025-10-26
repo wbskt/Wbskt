@@ -63,6 +63,9 @@ internal sealed class WorkflowsWriter : IWorkflowsWriter
         command.Parameters.AddWithValue("@IsEnabled", workflow.IsEnabled);
         command.Parameters.AddWithValue("@TriggerType", (int)workflow.TriggerType);
         command.Parameters.AddWithValue("@TriggerConfiguration", (object?)workflow.TriggerConfiguration ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ViewportX", (object?)workflow.ViewportX ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ViewportY", (object?)workflow.ViewportY ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ViewportZoom", (object?)workflow.ViewportZoom ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
 

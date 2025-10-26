@@ -6,13 +6,16 @@ CREATE PROCEDURE [dbo].[Workflows_Insert]
     @IsEnabled BIT,
     @TriggerType INT,
     @TriggerConfiguration NVARCHAR(MAX),
+    @ViewportX FLOAT,
+    @ViewportY FLOAT,
+    @ViewportZoom FLOAT,
     @Id INT OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    INSERT INTO [dbo].[Workflows] ([RefId], [UserId], [Name], [Description], [IsEnabled], [TriggerType], [TriggerConfiguration])
-    VALUES (@RefId, @UserId, @Name, @Description, @IsEnabled, @TriggerType, @TriggerConfiguration);
+    INSERT INTO [dbo].[Workflows] ([RefId], [UserId], [Name], [Description], [IsEnabled], [TriggerType], [TriggerConfiguration], [ViewportX], [ViewportY], [ViewportZoom])
+    VALUES (@RefId, @UserId, @Name, @Description, @IsEnabled, @TriggerType, @TriggerConfiguration, @ViewportX, @ViewportY, @ViewportZoom);
 
     SET @Id = SCOPE_IDENTITY();
 END

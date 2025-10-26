@@ -55,7 +55,7 @@ export const useWorkflowBuilder = () => {
   const [workflowName, setWorkflowName] = useState('Untitled Workflow');
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { project } = useReactFlow();
+  const { project, getViewport, setViewport } = useReactFlow();
 
   const { data: loadedData, isLoading } = useQuery({
     queryKey: ['workflow', refId],
@@ -70,6 +70,9 @@ export const useWorkflowBuilder = () => {
       setNodes(loadedNodes);
       setEdges(loadedEdges);
       setWorkflowName(loadedData.name);
+      if (loadedData.viewportX != null && loadedData.viewportY != null && loadedData.viewportZoom != null) {
+          setViewport({ x: loadedData.viewportX, y: loadedData.viewportY, zoom: loadedData.viewportZoom });
+        }
       setIsDirty(false);
     }
   }, [loadedData, setNodes, setEdges]);
@@ -137,6 +140,8 @@ export const useWorkflowBuilder = () => {
   }});
 
   const saveWorkflow = () => {
+    const viewport = getViewport();
+
     const steps: Omit<WorkflowStepRecord, 'id' | 'workflowId'>[] = nodes.map((node, index) => ({
       stepOrder: index,
       name: node.data.label,
@@ -155,7 +160,10 @@ export const useWorkflowBuilder = () => {
       isEnabled: loadedData?.isEnabled ?? true,
       triggerTypeId: loadedData?.triggerTypeId ?? 1,
       triggerConfiguration: loadedData?.triggerConfiguration ?? '{}',
-      steps: steps as WorkflowStepRecord[], // Correctly cast the steps
+      steps: steps as WorkflowStepRecord[],
+      ViewportX: viewport.x,
+      ViewportY: viewport.y,
+      ViewportZoom: viewport.zoom,
     };
 
     if (isNewWorkflow) {

@@ -10,5 +10,8 @@ public record UpdateWorkflowRequest
     public bool IsEnabled { get; init; }
     public required TriggerType TriggerType { get; init; }
     public string? TriggerConfiguration { get; init; }
+    public float? ViewportX { get; init; }
+    public float? ViewportY { get; init; }
+    public float? ViewportZoom { get; init; }
     public required List<WorkflowStepRecord> Steps { get; init; }
 }
