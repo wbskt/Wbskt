@@ -73,6 +73,7 @@ export const WorkflowsListPage = () => {
         data={workflows ?? []}
         isLoading={isLoading}
         emptyState="No workflows found."
+        getRowId={(row) => row.id}
       />
     </div>
   );

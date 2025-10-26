@@ -14,7 +14,7 @@ export const ClientsPage = () => {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Registered Clients</h1>
-      <Table columns={columns} data={clients ?? []} isLoading={isLoading} />
+      <Table columns={columns} data={clients ?? []} isLoading={isLoading} getRowId={(row) => row.id} />
     </div>
   );
 };

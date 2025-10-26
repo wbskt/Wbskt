@@ -13,9 +13,10 @@ interface TableProps<T> {
   columns: ColumnDef<T>[];
   isLoading?: boolean;
   emptyState?: ReactNode;
+  getRowId: (row: T) => string | number;
 }
 
-export const Table = <T extends { id: string | number }>({ data, columns, isLoading, emptyState }: TableProps<T>) => {
+export const Table = <T,>({ data, columns, isLoading, emptyState, getRowId }: TableProps<T>) => {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -46,9 +47,9 @@ export const Table = <T extends { id: string | number }>({ data, columns, isLoad
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {data.map((row) => (
-            <tr key={row.id} className="hover:bg-gray-50">
+            <tr key={getRowId(row)} className="hover:bg-gray-50">
               {columns.map((column) => (
-                <td key={`${row.id}-${column.accessorKey as string}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                <td key={`${getRowId(row)}-${column.accessorKey as string}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                   {column.cell ? column.cell(row) : (row[column.accessorKey] as ReactNode)}
                 </td>
               ))}

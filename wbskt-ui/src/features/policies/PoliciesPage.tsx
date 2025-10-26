@@ -73,7 +73,7 @@ export const PoliciesPage = () => {
         <h1 className="text-2xl font-bold">Registration Policies</h1>
         <Button variant="primary" onClick={() => { setSelectedPolicy(null); setManageModalOpen(true); }}>Create Policy</Button>
       </div>
-      <Table columns={columns} data={policies ?? []} isLoading={isLoading} />
+      <Table columns={columns} data={policies ?? []} isLoading={isLoading} getRowId={(row) => row.id}/>
       <ManagePolicyModal
         isOpen={manageModalOpen}
         onClose={() => setManageModalOpen(false)}

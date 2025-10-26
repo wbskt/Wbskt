@@ -1,37 +1,50 @@
-import { Card } from '../../../components/common/Card';
+import { Link } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
+import { Table, type ColumnDef } from '../../../components/common/Table';
+import { StatusBadge } from '../../../components/common/StatusBadge';
 import type { RecentExecution } from '../types';
-import clsx from 'clsx';
 
 interface RecentExecutionsListProps {
   executions: RecentExecution[];
 }
 
-const StatusBadge = ({ status }: { status: 'Success' | 'Failed' }) => (
-  <span
-    className={clsx(
-      'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-      status === 'Success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-    )}
-  >
-    {status}
-  </span>
-);
-
 export const RecentExecutionsList = ({ executions }: RecentExecutionsListProps) => {
+  const columns: ColumnDef<RecentExecution>[] = [
+    {
+      header: 'Workflow',
+      accessorKey: 'workflowName',
+      cell: (row) => <p className="font-medium">{row.workflowName}</p>,
+    },
+    {
+      header: 'Timestamp',
+      accessorKey: 'timestamp',
+      cell: (row) => (
+        <span className="text-gray-600">
+          {formatDistanceToNow(new Date(row.timestamp), { addSuffix: true })}
+        </span>
+      ),
+    },
+    {
+      header: 'Status',
+      accessorKey: 'status',
+      cell: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      header: '',
+      accessorKey: 'executionId',
+      cell: (row) => (
+        <Link to={`/executions/${row.executionId}`} className="text-blue-600 hover:underline font-medium">
+          View
+        </Link>
+      ),
+    },
+  ];
+
   return (
-    <Card className="p-4">
-      <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Executions</h3>
-      <ul className="divide-y divide-gray-200">
-        {executions.map((execution) => (
-          <li key={execution.executionId} className="py-3 flex justify-between items-center">
-            <div>
-              <p className="text-sm font-medium text-gray-900">{execution.workflowName}</p>
-              <p className="text-sm text-gray-500">{new Date(execution.timestamp).toLocaleString()}</p>
-            </div>
-            <StatusBadge status={execution.status} />
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <div>
+      <h3 className="text-lg font-medium text-gray-900 mb-4 px-4 pt-4">Recent Executions</h3>
+      <Table columns={columns} data={executions} getRowId={(row) => row.executionId} />
+    </div>
   );
 };
+

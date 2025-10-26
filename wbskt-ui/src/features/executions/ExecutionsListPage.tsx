@@ -33,6 +33,7 @@ export const ExecutionsListPage = () => {
         data={executions ?? []}
         isLoading={isLoading}
         emptyState="No executions found."
+        getRowId={(row) => row.id}
       />
     </div>
   );
