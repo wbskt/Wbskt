@@ -1,5 +1,4 @@
 using Wbskt.Common.Configurations;
-using Wbskt.Common.Services;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
 
@@ -8,12 +7,10 @@ namespace Wbskt.Workflow.Api.Actions;
 public class SendEmailAction : IAction
 {
     private readonly ILogger<SendEmailAction> _logger;
-    private readonly ICredentialService _credentialService;
 
-    public SendEmailAction(ILogger<SendEmailAction> logger, ICredentialService credentialService)
+    public SendEmailAction(ILogger<SendEmailAction> logger)
     {
         _logger = logger;
-        _credentialService = credentialService;
     }
 
     public async Task<ActionResult> ExecuteAsync(StepConfigurationBase configuration, WorkflowContext context, CancellationToken cancellationToken)
@@ -27,8 +24,7 @@ public class SendEmailAction : IAction
         // 4. Use SendGrid/Mailgun SDK to send email
 
         // Placeholder logic:
-        var apiKey = await _credentialService.GetCredentialsAsync(0, config.IntegrationName, cancellationToken);
-        _logger.LogInformation("Using API Key (placeholder): {ApiKey}", apiKey);
+        _logger.LogInformation("Using API Key (placeholder)");
         _logger.LogInformation("Email sent (placeholder) to {Recipient}.", config.To);
 
         return new ActionResult(true);

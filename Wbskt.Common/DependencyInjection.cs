@@ -5,7 +5,6 @@ using Wbskt.Common.Readers.Cache;
 using Wbskt.Common.Readers.Database;
 using Wbskt.Common.Readers.Database.Implementation;
 using Wbskt.Common.Services;
-using Wbskt.Common.Services.Implementations;
 using Wbskt.Common.Writers;
 using Wbskt.Common.Writers.Implementations;
 using Wbskt.EventBus;
@@ -60,10 +59,7 @@ public static class DependencyInjection
         serviceCollection.AddScoped<IWorkflowStepExecutionsReader, WorkflowStepExecutionsDatabaseReader>();
         serviceCollection.AddScoped<IWorkflowStepExecutionsWriter, WorkflowStepExecutionsDatabaseWriter>();
 
-        // Credentials
-        serviceCollection.AddScoped<ICredentialService, CredentialService>();
-        serviceCollection.AddScoped<ICredentialsReader, CredentialsDatabaseReader>();
-        serviceCollection.AddScoped<ICredentialsWriter, CredentialsDatabaseWriter>();
+
 
         // Servers
         serviceCollection.AddSingleton<IServersDatabaseReader, ServersDatabaseReader>();

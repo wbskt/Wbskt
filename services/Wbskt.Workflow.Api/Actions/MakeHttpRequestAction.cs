@@ -1,5 +1,4 @@
 using Wbskt.Common.Configurations;
-using Wbskt.Common.Services;
 using Wbskt.Workflow.Api.Core;
 using Wbskt.Workflow.Api.Core.Abstractions;
 
@@ -8,13 +7,11 @@ namespace Wbskt.Workflow.Api.Actions;
 public class MakeHttpRequestAction : IAction
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ICredentialService _credentialService;
     private readonly ILogger<MakeHttpRequestAction> _logger;
 
-    public MakeHttpRequestAction(IHttpClientFactory httpClientFactory, ICredentialService credentialService, ILogger<MakeHttpRequestAction> logger)
+    public MakeHttpRequestAction(IHttpClientFactory httpClientFactory, ILogger<MakeHttpRequestAction> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _credentialService = credentialService;
         _logger = logger;
     }
 
