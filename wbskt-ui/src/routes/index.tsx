@@ -12,7 +12,6 @@ import { ExecutionsListPage } from '../features/executions/ExecutionsListPage';
 import { ExecutionDetailPage } from '../features/executions/ExecutionDetailPage';
 import { ClientsPage } from '../features/clients/ClientsPage';
 import { PoliciesPage } from '../features/policies/PoliciesPage';
-import { IntegrationsPage } from '../features/integrations/IntegrationsPage';
 
 export const router = createBrowserRouter([
   {
@@ -37,7 +36,7 @@ export const router = createBrowserRouter([
           { path: 'executions/:executionId', element: <ExecutionDetailPage /> },
           { path: 'clients', element: <ClientsPage /> },
           { path: 'policies', element: <PoliciesPage /> },
-          { path: 'integrations', element: <IntegrationsPage /> },
+
           { path: '/', element: <Navigate to="/dashboard" replace /> },
         ],
       },

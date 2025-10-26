@@ -6,7 +6,6 @@ const navigation = [
   { name: 'Executions', href: '/executions' },
   { name: 'Clients', href: '/clients' },
   { name: 'Policies', href: '/policies' },
-  { name: 'Integrations', href: '/integrations' },
 ];
 
 export const Sidebar = () => {

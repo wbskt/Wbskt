@@ -34,12 +34,7 @@ export interface ClientRecord {
   active: boolean;
 }
 
-export interface CredentialRecord {
-  id: number;
-  name: string;
-  integrationType: string;
-  lastModified: string;
-}
+
 
 export interface WorkflowStepRecord {
   id: number;
