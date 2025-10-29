@@ -1,11 +1,14 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import ReactFlow, { Controls, Background, MiniMap, ReactFlowProvider, useNodesState, useEdgesState, useReactFlow, type Node, BackgroundVariant } from 'reactflow';
+import ReactFlow, { Controls, Background, MiniMap, ReactFlowProvider, useReactFlow, type Node as RFNode, BackgroundVariant } from 'reactflow';
 import 'reactflow/dist/style.css';
 import './index.scss';
 import { DndProvider, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { NodeLibrary, DRAGGABLE_NODE_TYPE } from './components/NodeLibrary';
 import { NodeInspector } from './components/NodeInspector';
+import { useWorkflowStore } from './store/workflowStore';
+import { serializeWorkflow, deserializeWorkflow } from './utils/workflow-utils';
+import type { Workflow } from './types';
 
 interface AppProps {
   workflow?: string; // JSON string of workflow data
@@ -20,39 +23,31 @@ function debounce<T extends (...args: any[]) => any>(func: T, delay: number): T 
   }) as T;
 }
 
-const initialNodes = [
-  { id: '1', position: { x: 0, y: 0 }, data: { label: 'Hello' } },
-  { id: '2', position: { x: 100, y: 100 }, data: { label: 'World' } },
-];
-const initialEdges = [{ id: 'e1-2', source: '1', target: '2' }];
-
-function FlowEditor({ workflow, setSelectedNode }: AppProps & { setSelectedNode: (node: Node | null) => void; }) {
+function FlowEditor({ workflow }: AppProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project } = useReactFlow();
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  const { nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange, onConnect, setSelectedNode } = useWorkflowStore();
 
   // Effect to load workflow data from prop
   useEffect(() => {
     if (workflow) {
       try {
-        const parsedWorkflow = JSON.parse(workflow);
-        setNodes(parsedWorkflow.nodes || []);
-        setEdges(parsedWorkflow.edges || []);
+        const parsedWorkflow: Workflow = JSON.parse(workflow);
+        const { nodes: deserializedNodes, edges: deserializedEdges } = deserializeWorkflow(parsedWorkflow);
+        setNodes(deserializedNodes);
+        setEdges(deserializedEdges);
       } catch (e) {
         console.error("Failed to parse workflow JSON from prop:", e);
       }
     } else {
-      setNodes(initialNodes);
-      setEdges(initialEdges);
+      // Reset to initial state if workflow prop is cleared or not provided
+      setNodes([]); // Or some default initial nodes
+      setEdges([]); // Or some default initial edges
     }
   }, [workflow, setNodes, setEdges]);
 
-  const onConnect = useCallback((connection: any) => {
-    setEdges((eds) => eds.concat(connection));
-  }, [setEdges]);
-
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: RFNode) => {
     setSelectedNode(node);
   }, [setSelectedNode]);
 
@@ -62,10 +57,18 @@ function FlowEditor({ workflow, setSelectedNode }: AppProps & { setSelectedNode:
 
   // Debounced function to dispatch event
   const dispatchUpdateEvent = useCallback(debounce((currentNodes, currentEdges) => {
-    const serializedWorkflowData = { nodes: currentNodes, edges: currentEdges }; // Simplified serialization
+    const parsedWorkflow: Workflow = JSON.parse(workflow || '{}');
+    const workflowId = parsedWorkflow.id; // Assuming 'id' is available on the Workflow object
+    if (!workflowId) {
+      console.warn("Cannot dispatch workflowUpdated event: workflowId is missing.");
+      return;
+    }
+
+    const serializedWorkflowData = serializeWorkflow(workflowId, currentNodes, currentEdges); // Use the serializer
+
     window.dispatchEvent(new CustomEvent('workflowUpdated', {
       detail: {
-        workflowId: JSON.parse(workflow || '{}').id, // Extract workflowId from prop
+        workflowId: workflowId,
         workflowData: serializedWorkflowData
       },
       bubbles: true,
@@ -79,7 +82,7 @@ function FlowEditor({ workflow, setSelectedNode }: AppProps & { setSelectedNode:
     dispatchUpdateEvent(nodes, edges);
   }, [nodes, edges, dispatchUpdateEvent]);
 
-  const [{ isOver }, drop] = useDrop(() => ({
+  const [, drop] = useDrop(() => ({
     accept: DRAGGABLE_NODE_TYPE,
     drop: (item: { type: string; label: string }, monitor) => {
       const clientOffset = monitor.getClientOffset();
@@ -95,11 +98,11 @@ function FlowEditor({ workflow, setSelectedNode }: AppProps & { setSelectedNode:
         id: String(Date.now()), // Unique ID
         type: item.type,
         position,
-        data: { label: item.label },
+        data: { label: item.label, configuration: {} }, // Initialize configuration
       };
 
-      setNodes((nds) => nds.concat(newNode));
-    },
+  const newNodesArray = [...nodes, newNode];
+    setNodes(newNodesArray);    },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
     }),
@@ -126,16 +129,16 @@ function FlowEditor({ workflow, setSelectedNode }: AppProps & { setSelectedNode:
 }
 
 function AppWrapper(props: AppProps) {
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const { selectedNode, handleNodeConfigChange } = useWorkflowStore();
 
   return (
     <DndProvider backend={HTML5Backend}>
       <div style={{ width: '100%', height: '100%', display: 'flex' }}>
         <NodeLibrary />
         <ReactFlowProvider>
-          <FlowEditor {...props} setSelectedNode={setSelectedNode} />
+          <FlowEditor {...props} />
         </ReactFlowProvider>
-        <NodeInspector selectedNode={selectedNode} />
+        <NodeInspector selectedNode={selectedNode} onConfigChange={handleNodeConfigChange} />
       </div>
     </DndProvider>
   );
