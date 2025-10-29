@@ -4,5 +4,10 @@
 </div>
 
 <div class="content-area">
-  <p>Workflow list will be displayed here.</p>
+  <ul *ngIf="workflows$ | async as workflows">
+    <li *ngFor="let workflow of workflows">
+      {{ workflow.name }} ({{ workflow.isEnabled ? 'Enabled' : 'Disabled' }})
+    </li>
+  </ul>
+  <p *ngIf="!(workflows$ | async)?.length">No workflows found.</p>
 </div>

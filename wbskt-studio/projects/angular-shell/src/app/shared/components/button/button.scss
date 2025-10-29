@@ -18,16 +18,16 @@
     background-color: var(--color-accent);
     color: var(--color-bg-primary);
     &:hover:not(:disabled) {
-      background-color: darken(var(--color-accent), 10%);
+      background-color: var(--color-accent-dark);
     }
   }
 
   &-secondary {
     background-color: var(--color-bg-secondary);
     color: var(--color-text-primary);
-    border-color: var(--color-border, #444);
+    border-color: var(--color-border);
     &:hover:not(:disabled) {
-      background-color: lighten(var(--color-bg-secondary), 5%);
+      background-color: var(--color-bg-secondary-hover);
     }
   }
 
@@ -35,7 +35,7 @@
     background-color: var(--color-danger);
     color: var(--color-text-primary);
     &:hover:not(:disabled) {
-      background-color: darken(var(--color-danger), 10%);
+      background-color: var(--color-danger-dark);
     }
   }
 

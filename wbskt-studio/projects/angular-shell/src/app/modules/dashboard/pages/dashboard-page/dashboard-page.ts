@@ -1,6 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CardComponent } from '../../../../shared/components/card/card';
+import { ApiClientService } from '../../../../core/api/api-client';
+import { DashboardStats } from '../../../../core/api/types';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-dashboard-page',
@@ -9,11 +12,12 @@ import { CardComponent } from '../../../../shared/components/card/card';
   templateUrl: './dashboard-page.html',
   styleUrls: ['./dashboard-page.scss']
 })
-export class DashboardPageComponent {
-  stats = [
-    { title: 'Total Workflows', value: 42 },
-    { title: 'Enabled Workflows', value: 38 },
-    { title: 'Executions (24h)', value: 1024 },
-    { title: 'Failed (24h)', value: 16 },
-  ];
+export class DashboardPageComponent implements OnInit {
+  dashboardStats$!: Observable<DashboardStats>;
+
+  constructor(private apiClient: ApiClientService) {}
+
+  ngOnInit(): void {
+    this.dashboardStats$ = this.apiClient.getDashboardStats();
+  }
 }

@@ -30,8 +30,15 @@ export class LoginPageComponent {
   async onSubmit(): Promise<void> {
     if (this.loginForm.valid) {
       const { email, password } = this.loginForm.value;
-      await this.authService.login(email!, password!);
-      this.router.navigate(['/dashboard']);
+      this.authService.login({ email, password }).subscribe({
+        next: () => {
+          this.router.navigate(['/dashboard']);
+        },
+        error: (err) => {
+          console.error('Login failed:', err);
+          // TODO: Display error message to user
+        }
+      });
     }
   }
 }

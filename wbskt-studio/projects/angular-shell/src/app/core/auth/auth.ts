@@ -1,4 +1,7 @@
 import { Injectable, signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { tap } from 'rxjs';
+import { ApiClientService } from '../api/api-client';
 
 @Injectable({
   providedIn: 'root'
@@ -6,26 +9,23 @@ import { Injectable, signal } from '@angular/core';
 export class AuthService {
   isAuthenticated = signal<boolean>(false);
 
-  constructor() {
-    // Check for a token on startup
+  constructor(private apiClient: ApiClientService, private router: Router) {
     const token = localStorage.getItem('wbskt_auth_token');
     this.isAuthenticated.set(!!token);
   }
 
-  login(email: string, password: string): Promise<void> {
-    // Mock API call
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const dummyToken = `dummy-token-for-${email}`;
-        localStorage.setItem('wbskt_auth_token', dummyToken);
+  login(credentials: any) {
+    return this.apiClient.login(credentials).pipe(
+      tap(response => {
+        localStorage.setItem('wbskt_auth_token', response.token);
         this.isAuthenticated.set(true);
-        resolve();
-      }, 500);
-    });
+      })
+    );
   }
 
   logout(): void {
     localStorage.removeItem('wbskt_auth_token');
     this.isAuthenticated.set(false);
+    this.router.navigate(['/login']);
   }
 }
