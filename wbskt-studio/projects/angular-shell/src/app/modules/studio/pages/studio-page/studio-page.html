@@ -1,0 +1,6 @@
+<div class="studio-container">
+  <h1 *ngIf="workflowId">Studio for Workflow: {{ workflowId }}</h1>
+  <div class="react-flow-wrapper">
+    <wbskt-react-flow *ngIf="workflowData"></wbskt-react-flow>
+  </div>
+</div>

@@ -21,6 +21,10 @@ export const routes: Routes = [
                 path: 'workflows',
                 loadChildren: () => import('./modules/workflows/workflows-module').then(m => m.WorkflowsModule)
             },
+            {
+                path: 'studio/:workflowId',
+                loadChildren: () => import('./modules/studio/studio-module').then(m => m.StudioModule)
+            },
         ]
     }
 ];
