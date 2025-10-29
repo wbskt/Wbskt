@@ -20,6 +20,14 @@ export class ApiClientService {
     return this.http.get<Workflow[]>(`${this.baseUrl}/workflows`);
   }
 
+  getWorkflow(workflowId: string): Observable<Workflow> {
+    return this.http.get<Workflow>(`${this.baseUrl}/workflows/${workflowId}`);
+  }
+
+  saveWorkflow(workflowId: string, workflowData: any): Observable<any> {
+    return this.http.put(`${this.baseUrl}/workflows/${workflowId}`, workflowData);
+  }
+
   login(credentials: any): Observable<{ token: string }> {
     return this.http.post<{ token: string }>(`${this.baseUrl}/users/login`, credentials);
   }
