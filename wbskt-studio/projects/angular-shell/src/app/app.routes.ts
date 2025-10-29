@@ -7,12 +7,14 @@ export const routes: Routes = [
         component: LayoutComponent,
         children: [
             { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-            // Placeholder for dashboard route
-            { path: 'dashboard', component: class { } }, 
-            // Placeholder for workflows route
-            { path: 'workflows', component: class { } },
-            // Placeholder for executions route
-            { path: 'executions', component: class { } },
+            {
+                path: 'dashboard',
+                loadChildren: () => import('./modules/dashboard/dashboard-module').then(m => m.DashboardModule)
+            },
+            {
+                path: 'workflows',
+                loadChildren: () => import('./modules/workflows/workflows-module').then(m => m.WorkflowsModule)
+            },
         ]
     }
 ];
