@@ -1,0 +1,26 @@
+:root {
+  // Colors
+  --color-bg-primary: #1E1E1E;
+  --color-bg-secondary: #2D2D2D;
+  --color-text-primary: #ECECEC;
+  --color-text-secondary: #A0A0A0;
+  --color-accent: #4A9EFF;
+  --color-danger: #FF4747;
+
+  // Fonts
+  --font-primary: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
+
+  // Spacing
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 24px;
+  --spacing-6: 32px;
+
+  // Radius
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+}

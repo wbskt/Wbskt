@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  height: 100vh;
+  width: 100vw;
+}
+
+.layout-container {
+  display: grid;
+  height: 100%;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "header header"
+    "sidebar main";
+}
+
+app-topbar {
+  grid-area: header;
+}
+
+app-sidebar {
+  grid-area: sidebar;
+}
+
+.main-content {
+  grid-area: main;
+  overflow-y: auto;
+  padding: var(--spacing-5);
+}
