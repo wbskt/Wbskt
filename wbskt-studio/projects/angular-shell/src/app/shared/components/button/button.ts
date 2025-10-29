@@ -11,4 +11,5 @@ import { CommonModule } from '@angular/common';
 export class ButtonComponent {
   @Input() variant: 'primary' | 'secondary' | 'destructive' = 'primary';
   @Input() size: 'sm' | 'md' | 'lg' = 'md';
+  @Input() disabled = false;
 }
