@@ -13,7 +13,7 @@
 */
 CREATE PROCEDURE dbo.Users_Insert
     @Id INT OUTPUT,
-    @Name VARCHAR(100),
+    @Name NVARCHAR(100),
     @EmailId VARCHAR(100),
     @PasswordHash VARCHAR(512)
 AS

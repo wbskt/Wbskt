@@ -14,7 +14,7 @@
 CREATE PROCEDURE dbo.UserRefreshTokens_Insert
     @UserId INT,
     @Token VARCHAR(256),
-    @Expires DATETIME,
+    @Expires DATETIME2,
     @CreatedByIp VARCHAR(50)
 AS
 BEGIN

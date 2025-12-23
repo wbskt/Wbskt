@@ -12,5 +12,6 @@ CREATE TABLE [dbo].[WorkflowSteps] (
     [PositionY] INT NULL,
     CONSTRAINT [PK_WorkflowSteps] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_WorkflowSteps_Workflows] FOREIGN KEY ([WorkflowId]) 
-        REFERENCES [dbo].[Workflows]([Id]) ON DELETE CASCADE
+        REFERENCES [dbo].[Workflows]([Id]) ON DELETE CASCADE,
+    CONSTRAINT [CK_WorkflowSteps_StepConfiguration_IsJson] CHECK ([StepConfiguration] IS NULL OR ISJSON([StepConfiguration]) = 1)
 );

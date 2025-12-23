@@ -13,9 +13,9 @@
 */
 CREATE PROCEDURE dbo.RegistrationPolicies_Update
     @Id INT,
-    @Name VARCHAR(100),
+    @Name NVARCHAR(100),
     @MaxClients INT,
-    @Expiry DATETIME
+    @Expiry DATETIME2
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,6 +24,7 @@ BEGIN
     SET
         Name = @Name,
         MaxClients = @MaxClients,
-        Expiry = @Expiry
+        Expiry = @Expiry,
+        LastModified = GETUTCDATE()
     WHERE Id = @Id;
 END;

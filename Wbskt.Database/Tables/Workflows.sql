@@ -14,5 +14,6 @@ CREATE TABLE [dbo].[Workflows] (
     CONSTRAINT [PK_Workflows] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [UNQ_Workflows_RefId] UNIQUE NONCLUSTERED ([RefId] ASC),
     CONSTRAINT [FK_Workflows_Users] FOREIGN KEY ([UserId]) REFERENCES [dbo].[Users]([Id]),
-    CONSTRAINT [FK_Workflows_TriggerTypes] FOREIGN KEY ([TriggerType]) REFERENCES [dbo].[TriggerTypes]([Id])
+    CONSTRAINT [FK_Workflows_TriggerTypes] FOREIGN KEY ([TriggerType]) REFERENCES [dbo].[TriggerTypes]([Id]),
+    CONSTRAINT [CK_Workflows_TriggerConfiguration_IsJson] CHECK ([TriggerConfiguration] IS NULL OR ISJSON([TriggerConfiguration]) = 1)
 );

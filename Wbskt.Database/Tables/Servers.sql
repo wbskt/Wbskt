@@ -12,7 +12,7 @@
 */
 CREATE TABLE [dbo].[Servers] (
     [Id] INT IDENTITY (1, 1) NOT NULL,
-    [PublicDomainName] VARCHAR(256) NOT NULL,
+    [PublicDomainName] NVARCHAR(256) NOT NULL,
     [Status] INT NOT NULL,
     [LastModified] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT [Pk_Servers] PRIMARY KEY CLUSTERED ([Id] ASC)

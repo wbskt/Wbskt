@@ -13,7 +13,7 @@
 */
 CREATE PROCEDURE dbo.UserRefreshTokens_Update
     @Id INT,
-    @Revoked DATETIME,
+    @Revoked DATETIME2,
     @RevokedByIp VARCHAR(50),
     @ReplacedByToken VARCHAR(256)
 AS

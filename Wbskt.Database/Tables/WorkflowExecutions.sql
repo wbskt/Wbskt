@@ -8,5 +8,6 @@ CREATE TABLE [dbo].[WorkflowExecutions] (
     [ErrorLog] NVARCHAR(MAX) NULL, -- Store any exception messages
     CONSTRAINT [PK_WorkflowExecutions] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_WorkflowExecutions_Workflows] FOREIGN KEY ([WorkflowRefId]) 
-        REFERENCES [dbo].[Workflows]([RefId]) ON DELETE CASCADE
+        REFERENCES [dbo].[Workflows]([RefId]) ON DELETE CASCADE,
+    CONSTRAINT [CK_WorkflowExecutions_InitialContext_IsJson] CHECK ([InitialContext] IS NULL OR ISJSON([InitialContext]) = 1)
 );

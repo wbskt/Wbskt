@@ -9,5 +9,7 @@ CREATE TABLE [dbo].[WorkflowStepExecutions] (
     [OutputContext] NVARCHAR(MAX) NULL, -- The workflow context as it was AFTER this step ran
     [ErrorLog] NVARCHAR(MAX) NULL,
     CONSTRAINT [PK_WorkflowStepExecutions] PRIMARY KEY CLUSTERED ([Id] ASC),
-    CONSTRAINT [FK_StepExecutions_MainExecution] FOREIGN KEY ([WorkflowExecutionId]) REFERENCES [dbo].[WorkflowExecutions]([Id]) ON DELETE CASCADE
+    CONSTRAINT [FK_StepExecutions_MainExecution] FOREIGN KEY ([WorkflowExecutionId]) REFERENCES [dbo].[WorkflowExecutions]([Id]) ON DELETE CASCADE,
+    CONSTRAINT [CK_WorkflowStepExecutions_InputContext_IsJson] CHECK ([InputContext] IS NULL OR ISJSON([InputContext]) = 1),
+    CONSTRAINT [CK_WorkflowStepExecutions_OutputContext_IsJson] CHECK ([OutputContext] IS NULL OR ISJSON([OutputContext]) = 1)
 );

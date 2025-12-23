@@ -19,9 +19,9 @@ CREATE TABLE [dbo].[RegistrationPolicies] (
     [Id]                INT                 IDENTITY (1, 1) NOT NULL,
     [UserId]            INT                 NOT NULL,
     [RefId]             UNIQUEIDENTIFIER    NOT NULL,
-    [Name]              VARCHAR (100)       NOT NULL,
+    [Name]              NVARCHAR (100)      NOT NULL,
     [MaxClients]        INT                 NULL,     -- For NumberOfClients and TimeAndCount policies
-    [Expiry]            DATETIME            NULL,     -- For TimeLimited and TimeAndCount policies
+    [Expiry]            DATETIME2           NULL,     -- For TimeLimited and TimeAndCount policies
     [Pin]               VARCHAR(6)          NOT NULL,
     [LastModified]      DATETIME2           NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT [Pk_RegistrationPolicies]     PRIMARY KEY CLUSTERED       ([Id]   ASC),
