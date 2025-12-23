@@ -29,6 +29,7 @@ public static class Constants
         public const string ClientScheme = "Client";
         public const string SocketServerScheme = "Server";
         public const string CoreServerScheme = "Core";
+        public const string AuthServerScheme = "WbsktAuth";
     }
 
     public static class Claims

@@ -8,6 +8,7 @@ using Wbskt.Workflow.Api.EventHandlers;
 using Wbskt.Workflow.Api.HostedServices;
 using Wbskt.Workflow.Api.Scheduling;
 using Wbskt.Common.Enums;
+using Wbskt.Common.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,12 +49,21 @@ builder.Services.AddHangfire(configuration => configuration
 // Add the Hangfire server.
 builder.Services.AddHangfireServer();
 
+builder.Services.AddAuthentication(opt =>
+    {
+        opt.DefaultAuthenticateScheme = Constants.AuthSchemes.AuthServerScheme;
+        opt.DefaultChallengeScheme = Constants.AuthSchemes.AuthServerScheme;
+    })
+    .AddAuthServerScheme(builder.Configuration);
+
+builder.Services.AddAuthorization();
+
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseHangfireDashboard();

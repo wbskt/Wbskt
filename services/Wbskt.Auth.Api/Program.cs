@@ -7,7 +7,8 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
+builder.Services.AddRazorPages();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -40,10 +41,12 @@ builder.Services.AddOpenIddict()
     // Register the OpenIddict server components.
     .AddServer(options =>
     {
-        // Enable the token endpoint.
-        options.SetTokenEndpointUris("connect/token");
+        // Enable the authorization and token endpoints.
+        options.SetAuthorizationEndpointUris("connect/authorize")
+               .SetTokenEndpointUris("connect/token");
 
-        // Enable the client credentials flow.
+        // Enable flows.
+        options.AllowAuthorizationCodeFlow();
         options.AllowClientCredentialsFlow();
         options.AllowPasswordFlow();
         options.AllowRefreshTokenFlow();
@@ -54,6 +57,7 @@ builder.Services.AddOpenIddict()
 
         // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
         options.UseAspNetCore()
+               .EnableAuthorizationEndpointPassthrough()
                .EnableTokenEndpointPassthrough();
     })
 
@@ -80,10 +84,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapDefaultControllerRoute();
 
 app.Run();

@@ -65,7 +65,8 @@ public static class Program
             })
             .AddUserAuthScheme(builder.Configuration)
             .AddClientAuthScheme(builder.Configuration)
-            .AddSocketServerAuthScheme(builder.Configuration);
+            .AddSocketServerAuthScheme(builder.Configuration)
+            .AddAuthServerScheme(builder.Configuration);
 
         builder.Services.AddAuthorization();
 

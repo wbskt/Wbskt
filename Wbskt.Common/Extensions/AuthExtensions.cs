@@ -93,6 +93,25 @@ public static class AuthExtensions
         return builder;
     }
 
+    public static AuthenticationBuilder AddAuthServerScheme(this AuthenticationBuilder builder, IConfiguration configuration)
+    {
+        builder.AddJwtBearer(Constants.AuthSchemes.AuthServerScheme, options =>
+        {
+            options.Authority = configuration["AuthServer:Authority"];
+            options.Audience = configuration["AuthServer:Audience"];
+            options.RequireHttpsMetadata = false; // Set to true in production
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true
+            };
+        });
+
+        return builder;
+    }
+
     public static int GetUserId(this IPrincipal principal)
     {
         var claim = principal.GetClaim(Constants.Claims.UserData);

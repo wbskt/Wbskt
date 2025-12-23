@@ -8,12 +8,14 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using Wbskt.Auth.Api.Models;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using Microsoft.Extensions.Primitives;
+using Wbskt.Auth.Api.ViewModels.Authorization;
 
 namespace Wbskt.Auth.Api.Controllers;
 
 [ApiController]
 [Route("connect")]
-public class AuthorizationController : ControllerBase
+public class AuthorizationController : Controller
 {
     private readonly IOpenIddictApplicationManager _applicationManager;
     private readonly UserManager<ApplicationUser> _userManager;
@@ -29,6 +31,94 @@ public class AuthorizationController : ControllerBase
         _signInManager = signInManager;
     }
 
+    [HttpGet("authorize")]
+    [HttpPost("authorize")]
+    [IgnoreAntiforgeryToken] // For simplicity in API mode, but ideally enable it
+    public async Task<IActionResult> Authorize()
+    {
+        var request = HttpContext.GetOpenIddictServerRequest() ??
+            throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+
+        // If the user is authenticated, handle the request
+        var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        if (!result.Succeeded || result.Principal == null)
+        {
+            // If the client application requested promptless authentication,
+            // return an error indicating that the user is not logged in.
+            if (request.HasPrompt(Prompts.None))
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.LoginRequired,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user is not logged in."
+                    }));
+            }
+
+            // Return the login view
+            return View("Login", new LoginViewModel { ReturnUrl = Request.Path + Request.QueryString });
+        }
+        
+        // Handle the login form submission
+        if (Request.Method == "POST")
+        {
+             // This block handles the POST from the Login View
+             // Re-validating credentials here is redundant if we rely on the cookie, 
+             // but if we are doing a custom flow, we might need it. 
+             // However, strictly speaking, if 'AuthenticateAsync' succeeded above (via cookie), we are good.
+             // If we are coming from the Login View POST, the standard Identity behavior is to sign in the user
+             // which sets the cookie, and then redirect back to this endpoint (GET).
+             
+             // So if we are here (POST) but NOT authenticated, it means we are processing the form submission.
+             // But the logic above says "if !Succeeded -> return View".
+             // So actually, the form in Login.cshtml should post to a separate action OR we handle it here.
+             // Let's stick to the standard pattern: 
+             // 1. User hits GET /authorize. Not logged in -> Show View.
+             // 2. User POSTs to /authorize with username/password.
+             // 3. We validate, Sign In (Cookie), and then Redirect to GET /authorize (Resume flow).
+        }
+        
+        // Since we are now authenticated (IdentityConstants.ApplicationScheme),
+        // we create the claims principal for OpenIddict
+        var user = await _userManager.GetUserAsync(result.Principal);
+        if (user == null)
+        {
+             return View("Login", new LoginViewModel 
+             { 
+                 ReturnUrl = Request.Path + Request.QueryString,
+             });
+        }
+
+        var principal = await CreateUserPrincipalAsync(user);
+
+        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+    
+    [HttpPost("authorize/login")] // Helper action for the form post
+    [ValidateAntiForgeryToken] // NOW we can use it
+    public async Task<IActionResult> Login(LoginViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View("Login", model);
+        }
+
+        var user = await _userManager.FindByNameAsync(model.Username);
+        if (user != null)
+        {
+            var result = await _signInManager.PasswordSignInAsync(user, model.Password, true, false);
+            if (result.Succeeded)
+            {
+                // Redirect back to the original URL (which was /connect/authorize?...)
+                return Redirect(model.ReturnUrl ?? "/");
+            }
+        }
+
+        ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+        return View("Login", model);
+    }
+
     [HttpPost("token")]
     [Produces("application/json")]
     public async Task<IActionResult> Exchange()
@@ -39,7 +129,39 @@ public class AuthorizationController : ControllerBase
             return BadRequest("The OpenID Connect request cannot be retrieved.");
         }
 
-        if (request.IsPasswordGrantType())
+        if (request.IsAuthorizationCodeGrantType())
+        {
+             // Retrieve the claims principal stored in the authorization code
+            var principal = (await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme)).Principal;
+            if (principal == null)
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The token is no longer valid."
+                    }));
+            }
+            
+             // Validate user
+            var user = await _userManager.GetUserAsync(principal);
+            if (user == null || !await _signInManager.CanSignInAsync(user))
+            {
+                 return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user is no longer allowed to sign in."
+                    }));
+            }
+
+            // Ensure the user is still allowed to sign in.
+            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
+        else if (request.IsPasswordGrantType())
         {
             var user = await _userManager.FindByNameAsync(request.Username ?? string.Empty);
             if (user == null)
@@ -86,7 +208,7 @@ public class AuthorizationController : ControllerBase
             // Create a new ClaimsIdentity containing the claims that
             // will be used to create an id_token, a token or a code.
             var identity = new ClaimsIdentity(
-                TokenValidationParameters.DefaultAuthenticationType,
+                OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
                 Claims.Name, Claims.Role);
 
             // Use the client_id as the subject identifier.
