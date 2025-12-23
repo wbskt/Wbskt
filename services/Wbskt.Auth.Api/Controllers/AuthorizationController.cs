@@ -10,6 +10,7 @@ using Wbskt.Auth.Api.Models;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.Primitives;
 using Wbskt.Auth.Api.ViewModels.Authorization;
+using Wbskt.Auth.Api.Data;
 
 namespace Wbskt.Auth.Api.Controllers;
 
@@ -20,15 +21,18 @@ public class AuthorizationController : Controller
     private readonly IOpenIddictApplicationManager _applicationManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
+    private readonly AuthDbContext _context;
 
     public AuthorizationController(
         IOpenIddictApplicationManager applicationManager,
         UserManager<ApplicationUser> userManager,
-        SignInManager<ApplicationUser> signInManager)
+        SignInManager<ApplicationUser> signInManager,
+        AuthDbContext context)
     {
         _applicationManager = applicationManager;
         _userManager = userManager;
         _signInManager = signInManager;
+        _context = context;
     }
 
     [HttpGet("authorize")]
@@ -90,7 +94,7 @@ public class AuthorizationController : Controller
              });
         }
 
-        var principal = await CreateUserPrincipalAsync(user);
+        var principal = await CreateUserPrincipalAsync(user, request.GetScopes());
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -117,6 +121,18 @@ public class AuthorizationController : Controller
 
         ModelState.AddModelError(string.Empty, "Invalid login attempt.");
         return View("Login", model);
+    }
+
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        await _signInManager.SignOutAsync();
+        return SignOut(
+            authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+            properties: new AuthenticationProperties
+            {
+                RedirectUri = "/"
+            });
     }
 
     [HttpPost("token")]
@@ -189,7 +205,7 @@ public class AuthorizationController : Controller
             }
 
             // Create the principal
-            var principal = await CreateUserPrincipalAsync(user);
+            var principal = await CreateUserPrincipalAsync(user, request.GetScopes());
 
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
@@ -275,19 +291,39 @@ public class AuthorizationController : Controller
         throw new NotImplementedException("The specified grant type is not implemented.");
     }
     
-    private async Task<ClaimsPrincipal> CreateUserPrincipalAsync(ApplicationUser user)
+    private async Task<ClaimsPrincipal> CreateUserPrincipalAsync(ApplicationUser user, IEnumerable<string> scopes)
     {
         var principal = await _signInManager.CreateUserPrincipalAsync(user);
 
         // Set the list of scopes granted to the client application.
-        principal.SetScopes(new[]
+        principal.SetScopes(scopes);
+
+        // --- Custom RBAC Logic ---
+        // 1. Get User Roles
+        var roles = await _userManager.GetRolesAsync(user);
+        
+        // 2. Get Role Ids
+        // Note: This assumes AspNetRoles are used. We need to query Roles table.
+        // But Identity stores roles by Name usually in the Principal. 
+        // Let's do a direct DB lookup for permissions based on Role Names for efficiency.
+        
+        // Fetch RoleIds for the user's roles
+        // We use _context to join Roles -> RolePermissions -> Permissions
+        // IdentityRole table name is "AspNetRoles" by default but mapped to IdentityRole entity
+        
+        var userPermissions = from r in _context.Roles
+                              join rp in _context.RolePermissions on r.Id equals rp.RoleId
+                              join p in _context.Permissions on rp.PermissionId equals p.Id
+                              where roles.Contains(r.Name)
+                              select p.Code;
+
+        foreach (var permCode in userPermissions.Distinct())
         {
-            Scopes.OpenId,
-            Scopes.Email,
-            Scopes.Profile,
-            Scopes.OfflineAccess,
-            Scopes.Roles
-        }.Intersect(principal.GetScopes()));
+            var claim = new Claim("permission", permCode);
+            claim.SetDestinations(Destinations.AccessToken, Destinations.IdentityToken);
+            ((ClaimsIdentity)principal.Identity!).AddClaim(claim);
+        }
+        // -------------------------
 
         foreach (var claim in principal.Claims)
         {
@@ -327,6 +363,11 @@ public class AuthorizationController : Controller
                 if (principal.HasScope(Scopes.Roles))
                     yield return Destinations.IdentityToken;
 
+                yield break;
+            
+            case "permission":
+                yield return Destinations.AccessToken;
+                yield return Destinations.IdentityToken;
                 yield break;
 
             // Never include the security stamp in the access and identity tokens, as it's a secret value.

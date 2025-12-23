@@ -11,6 +11,9 @@ public class AuthDbContext : IdentityDbContext<ApplicationUser>
     {
     }
 
+    public DbSet<Permission> Permissions { get; set; }
+    public DbSet<RolePermission> RolePermissions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -19,6 +22,10 @@ public class AuthDbContext : IdentityDbContext<ApplicationUser>
         // For example, you can rename the ASP.NET Identity table names and more.
         // Add your customizations after calling base.OnModelCreating(builder);
         
+        // Configure RolePermission composite key
+        builder.Entity<RolePermission>()
+            .HasKey(rp => new { rp.RoleId, rp.PermissionId });
+
         // This is required for OpenIddict to register its own tables
         builder.UseOpenIddict();
     }

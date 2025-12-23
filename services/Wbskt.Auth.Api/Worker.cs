@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Identity;
 using OpenIddict.Abstractions;
 using Wbskt.Auth.Api.Data;
+using Wbskt.Auth.Api.Models;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Wbskt.Auth.Api;
@@ -19,6 +21,61 @@ public class Worker : IHostedService
 
         var context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
         await context.Database.EnsureCreatedAsync(cancellationToken);
+
+        // --- Seed Roles ---
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var roles = new[] { "Admin", "User" };
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+            }
+        }
+
+        // --- Seed Permissions ---
+        var permissions = new[] 
+        { 
+            "workflow.read", "workflow.write", "workflow.delete",
+            "client.read", "client.write", "client.delete"
+        };
+
+        foreach (var code in permissions)
+        {
+            if (!context.Permissions.Any(p => p.Code == code))
+            {
+                context.Permissions.Add(new Models.Permission { Code = code, Description = $"Allow {code}" });
+            }
+        }
+        await context.SaveChangesAsync(cancellationToken);
+
+        // --- Assign Permissions to Admin Role ---
+        var adminRole = await roleManager.FindByNameAsync("Admin");
+        if (adminRole != null)
+        {
+            var allPermissions = context.Permissions.ToList();
+            foreach (var perm in allPermissions)
+            {
+                if (!context.RolePermissions.Any(rp => rp.RoleId == adminRole.Id && rp.PermissionId == perm.Id))
+                {
+                    context.RolePermissions.Add(new Models.RolePermission { RoleId = adminRole.Id, PermissionId = perm.Id });
+                }
+            }
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        // --- Seed Admin User ---
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var adminEmail = "admin@wbskt.com";
+        if (await userManager.FindByEmailAsync(adminEmail) == null)
+        {
+            var user = new ApplicationUser { UserName = adminEmail, Email = adminEmail, EmailConfirmed = true };
+            var result = await userManager.CreateAsync(user, "Admin123!");
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(user, "Admin");
+            }
+        }
 
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 

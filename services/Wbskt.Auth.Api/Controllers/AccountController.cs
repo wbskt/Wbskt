@@ -26,6 +26,8 @@ public class AccountController : ControllerBase
 
         if (result.Succeeded)
         {
+            // Assign default role
+            await _userManager.AddToRoleAsync(user, "User");
             return Ok(new { Message = "User registered successfully" });
         }
 
