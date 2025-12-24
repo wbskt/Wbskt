@@ -9,4 +9,4 @@ public class RolePermission
 
     [ForeignKey(nameof(PermissionId))]
     public Permission Permission { get; set; } = null!;
-}
+} 

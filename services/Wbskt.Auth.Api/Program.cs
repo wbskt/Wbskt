@@ -2,94 +2,94 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Wbskt.Auth.Api.Data;
 using Wbskt.Auth.Api.Models;
-using static OpenIddict.Abstractions.OpenIddictConstants;
 
-var builder = WebApplication.CreateBuilder(args);
+namespace Wbskt.Auth.Api;
 
-// Add services to the container.
-builder.Services.AddControllersWithViews();
-builder.Services.AddRazorPages();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// Configure Entity Framework Core
-builder.Services.AddDbContext<AuthDbContext>(options =>
+public static class Program
 {
-    // Use SQL Server
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
-
-    // Register the entity sets needed by OpenIddict.
-    options.UseOpenIddict();
-});
-
-// Configure Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-    .AddEntityFrameworkStores<AuthDbContext>()
-    .AddDefaultTokenProviders();
-
-// Configure OpenIddict
-builder.Services.AddOpenIddict()
-    // Register the OpenIddict core components.
-    .AddCore(options =>
+    public static void Main(string[] args)
     {
-        // Configure OpenIddict to use the Entity Framework Core stores and models.
-        // Note: call ReplaceDefaultEntities() to use the default OpenIddict entities.
-        options.UseEntityFrameworkCore()
-               .UseDbContext<AuthDbContext>();
-    })
+        var builder = WebApplication.CreateBuilder(args);
 
-    // Register the OpenIddict server components.
-    .AddServer(options =>
-    {
-        // Enable the authorization and token endpoints.
-        options.SetAuthorizationEndpointUris("connect/authorize")
-               .SetTokenEndpointUris("connect/token");
+        builder.Services.AddControllersWithViews();
+        builder.Services.AddRazorPages();
+        builder.Services.AddEndpointsApiExplorer();
+        builder.Services.AddSwaggerGen();
 
-        // Enable flows.
-        options.AllowAuthorizationCodeFlow();
-        options.AllowClientCredentialsFlow();
-        options.AllowPasswordFlow();
-        options.AllowRefreshTokenFlow();
+        builder.Services.AddDbContext<AuthDbContext>(options =>
+        {
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+            options.UseOpenIddict();
+        });
 
-        // Register the signing and encryption credentials.
-        options.AddDevelopmentEncryptionCertificate()
-               .AddDevelopmentSigningCertificate();
+        // Configure Identity
+        builder.Services
+            .AddIdentity<ApplicationUser, IdentityRole>()
+            .AddEntityFrameworkStores<AuthDbContext>()
+            .AddDefaultTokenProviders();
 
-        // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
-        options.UseAspNetCore()
-               .EnableAuthorizationEndpointPassthrough()
-               .EnableTokenEndpointPassthrough();
-    })
+        // Configure OpenIddict
+        builder.Services
+            .AddOpenIddict()
+            .AddCore(options =>
+            {
+                // Configure OpenIddict to use the Entity Framework Core stores and models.
+                // Note: call ReplaceDefaultEntities() to use the default OpenIddict entities.
+                options
+                    .UseEntityFrameworkCore()
+                    .UseDbContext<AuthDbContext>();
+            })
+            .AddServer(options =>
+            {
+                // Enable the authorization and token endpoints.
+                options
+                    .SetAuthorizationEndpointUris("connect/authorize")
+                    .SetTokenEndpointUris("connect/token");
 
-    // Register the OpenIddict validation components.
-    .AddValidation(options =>
-    {
-        // Import the configuration from the local OpenIddict server instance.
-        options.UseLocalServer();
+                // Enable flows.
+                options.AllowAuthorizationCodeFlow();
+                options.AllowClientCredentialsFlow();
+                options.AllowPasswordFlow();
+                options.AllowRefreshTokenFlow();
 
-        // Register the ASP.NET Core host.
-        options.UseAspNetCore();
-    });
+                // Register the signing and encryption credentials.
+                options
+                    .AddDevelopmentEncryptionCertificate()
+                    .AddDevelopmentSigningCertificate();
 
-// Register the worker for seeding
-builder.Services.AddHostedService<Wbskt.Auth.Api.Worker>();
+                // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
+                options
+                    .UseAspNetCore()
+                    .EnableAuthorizationEndpointPassthrough()
+                    .EnableTokenEndpointPassthrough();
+            })
+            // Register the OpenIddict validation components.
+            .AddValidation(options =>
+            {
+                // Import the configuration from the local OpenIddict server instance.
+                options.UseLocalServer();
+                options.UseAspNetCore();
+            });
 
-var app = builder.Build();
+        builder.Services.AddHostedService<Worker>();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
+        var app = builder.Build();
+
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
+
+        app.UseHttpsRedirection();
+        app.UseStaticFiles();
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        app.MapControllers();
+        app.MapDefaultControllerRoute();
+
+        app.Run();
+    }
 }
-
-app.UseHttpsRedirection();
-app.UseStaticFiles();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers();
-app.MapDefaultControllerRoute();
-
-app.Run();
