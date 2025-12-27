@@ -2,7 +2,7 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34902.65
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Wbskt.Identity.Api", "Services\Wbskt.Identity.Api\Wbskt.Identity.Api.csproj", "{D9921D81-091F-45A0-A16B-FF743519EDD9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Wbskt.Management.Api", "Services\Wbskt.Management.Api\Wbskt.Management.Api.csproj", "{D9921D81-091F-45A0-A16B-FF743519EDD9}"
 EndProject
 Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "Wbskt.Database", "Wbskt.Database\Wbskt.Database.sqlproj", "{707A7510-F213-47B4-BBFE-A6550BC2214C}"
 EndProject

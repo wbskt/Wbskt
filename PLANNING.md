@@ -15,13 +15,13 @@ This step reorganizes the solution to logically separate different parts of the 
 * Rename the project folder:
 
     * From: `Wbskt.Core.Service`
-    * To: `Wbskt.Identity.Service`
+    * To: `Wbskt.Management.Service`
 * Open the solution file (`.sln`) in a text editor and update the project reference:
 
   ```plaintext
-  Wbskt.Identity.Service\Wbskt.Identity.Service.csproj
+  Wbskt.Management.Service\Wbskt.Management.Service.csproj
   ```
-* This service now explicitly handles **identity and management**.
+* This service now explicitly handles **Management and management**.
 
 ### **1.2. Create New Projects**
 
@@ -38,7 +38,7 @@ This step reorganizes the solution to logically separate different parts of the 
     * Create a **Solution Folder** named `services`.
     * Move the following projects into it:
 
-        * `Wbskt.Identity.Service`
+        * `Wbskt.Management.Service`
         * `Wbskt.Socket.Service`
         * `Wbskt.Workflow.Service`
 
@@ -190,7 +190,7 @@ public class WorkflowEngine : IWorkflowEngine
 
 ---
 
-## **Action Item 4: Management API (`Wbskt.Identity.Service`)**
+## **Action Item 4: Management API (`Wbskt.Management.Service`)**
 
 Provides the API/UI layer for managing workflows.
 
@@ -409,7 +409,7 @@ public class WorkflowTriggersController : ControllerBase
 
 ### **2.2. Test the Flow**
 
-1. Create a simple workflow (via `Wbskt.Identity.Service`) with one `LogAction` step.
+1. Create a simple workflow (via `Wbskt.Management.Service`) with one `LogAction` step.
 2. Call:
 
    ```
@@ -866,7 +866,7 @@ This enables **external services** to trigger workflows through HTTP calls — o
 
 ---
 
-### **2.3. Update Workflow Creation (`Wbskt.Identity.Service`)**
+### **2.3. Update Workflow Creation (`Wbskt.Management.Service`)**
 
 When a user creates a workflow with `TriggerType = "Webhook"`:
 
@@ -892,7 +892,7 @@ These actions prove the platform can **interact with external APIs and services*
 
 * Create a **Credentials** or **Integrations** table (encrypted at rest).
 * Store credentials linked to each `UserId`.
-* Expose secure APIs (in `Wbskt.Identity.Service`) for users to manage their secrets (e.g., API keys).
+* Expose secure APIs (in `Wbskt.Management.Service`) for users to manage their secrets (e.g., API keys).
 * **Never store secrets** directly in `StepConfiguration`.
 
 ---

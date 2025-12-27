@@ -105,7 +105,7 @@ The next major evolution for WBSKT is to build a powerful workflow automation en
 
 The planned architecture will follow a decoupled, microservices-oriented approach to ensure scalability and separation of concerns:
 
-1.  **`Wbskt.Identity.Service`**: The existing service, focused on managing users, authentication, and the *definitions* of clients, policies, and workflows.
+1.  **`Wbskt.Management.Service`**: The existing service, focused on managing users, authentication, and the *definitions* of clients, policies, and workflows.
 2.  **`Wbskt.Socket.Service`**: A new, dedicated service for managing all persistent, real-time WebSocket connections with clients.
 3.  **`Wbskt.Workflow.Service`**: A new, headless service that acts as the "brain," listening for triggers and executing workflow logic.
 
