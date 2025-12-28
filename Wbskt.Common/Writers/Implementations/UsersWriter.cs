@@ -11,7 +11,7 @@ internal sealed class UsersWriter : IUsersWriter
 
     public UsersWriter(IConnectionStringProvider connectionStringProvider)
     {
-        _connectionStringProvider = connectionStringProvider;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<int> InsertAsync(UserRecord user, CancellationToken cancellationToken)

@@ -15,9 +15,9 @@ internal sealed class PolicyService : IPolicyService
 
     public PolicyService(IRegistrationPoliciesReader policiesReader, IRegistrationPoliciesWriter policiesWriter, ICurrentUser currentUser)
     {
-        _policiesReader = policiesReader;
-        _policiesWriter = policiesWriter;
-        _currentUser = currentUser;
+        _policiesReader = policiesReader ?? throw new ArgumentNullException(nameof(policiesReader));
+        _policiesWriter = policiesWriter ?? throw new ArgumentNullException(nameof(policiesWriter));
+        _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
     }
 
     public async Task<PolicyResponse> CreatePolicyAsync(CreatePolicyRequest request, CancellationToken cancellationToken)

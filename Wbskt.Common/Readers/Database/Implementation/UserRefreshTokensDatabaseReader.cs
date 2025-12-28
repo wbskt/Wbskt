@@ -10,7 +10,7 @@ internal sealed class UserRefreshTokensDatabaseReader : IUserRefreshTokensDataba
 
     public UserRefreshTokensDatabaseReader(IConnectionStringProvider connectionStringProvider)
     {
-        _connectionStringProvider = connectionStringProvider;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<RefreshTokenRecord?> GetByTokenAsync(string token, CancellationToken cancellationToken)

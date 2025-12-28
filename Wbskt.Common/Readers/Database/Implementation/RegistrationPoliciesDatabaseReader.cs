@@ -15,8 +15,8 @@ internal sealed class RegistrationPoliciesDatabaseReader : IRegistrationPolicies
 
     public RegistrationPoliciesDatabaseReader(ILogger<RegistrationPoliciesDatabaseReader> logger, IConnectionStringProvider connectionStringProvider)
     {
-        _logger = logger;
-        _connectionStringProvider = connectionStringProvider;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<List<RegistrationPolicyRecord>> GetAllAsync(DateTime lastModified, CancellationToken cancellationToken)

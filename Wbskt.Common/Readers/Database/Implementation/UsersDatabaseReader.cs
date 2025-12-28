@@ -10,7 +10,7 @@ internal sealed class UsersDatabaseReader : IUsersDatabaseReader
 
     public UsersDatabaseReader(IConnectionStringProvider connectionStringProvider)
     {
-        _connectionStringProvider = connectionStringProvider;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<UserRecord?> GetByIdAsync(int userId, CancellationToken cancellationToken)

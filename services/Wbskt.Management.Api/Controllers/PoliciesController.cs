@@ -14,7 +14,7 @@ public class PoliciesController : ControllerBase
 
     public PoliciesController(IPolicyService policyService)
     {
-        _policyService = policyService;
+        _policyService = policyService ?? throw new ArgumentNullException(nameof(policyService));
     }
 
     [HttpPost]

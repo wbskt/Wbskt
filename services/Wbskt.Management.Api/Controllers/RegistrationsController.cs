@@ -12,7 +12,7 @@ public class RegistrationsController : ControllerBase
 
     public RegistrationsController(IRegistrationService registrationService)
     {
-        _registrationService = registrationService;
+        _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
     }
 
     [HttpPost]

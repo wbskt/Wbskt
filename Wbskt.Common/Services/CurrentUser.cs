@@ -9,7 +9,7 @@ public sealed class CurrentUser : ICurrentUser
 
     public CurrentUser(IHttpContextAccessor httpContextAccessor)
     {
-        _httpContextAccessor = httpContextAccessor;
+        _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
     }
 
     public int Id

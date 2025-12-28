@@ -10,7 +10,7 @@ public class CommandListenerService : IHostedService
 
     public CommandListenerService(IEventBus eventBus)
     {
-        _eventBus = eventBus;
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
 
     public Task StartAsync(CancellationToken cancellationToken)

@@ -8,7 +8,7 @@ internal sealed class CacheService : ICacheService
 
     public CacheService(IMemoryCache memoryCache)
     {
-        _memoryCache = memoryCache;
+        _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
     }
 
     public async Task<T> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan duration, CancellationToken cancellationToken)

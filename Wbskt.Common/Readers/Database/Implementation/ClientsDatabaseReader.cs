@@ -15,8 +15,8 @@ internal sealed class ClientsDatabaseReader : IClientsDatabaseReader
 
     public ClientsDatabaseReader(ILogger<ClientsDatabaseReader> logger, IConnectionStringProvider connectionStringProvider)
     {
-        _logger = logger;
-        _connectionStringProvider = connectionStringProvider;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<List<ClientRecord>> GetAllAsync(DateTime lastModified, CancellationToken cancellationToken)

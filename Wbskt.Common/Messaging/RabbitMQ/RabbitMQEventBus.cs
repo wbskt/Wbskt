@@ -45,7 +45,7 @@ public class RabbitMQEventBus : IEventBus, IDisposable
         _channel.QueueBind(queue: queueName, exchange: "wbskt_exchange", routingKey: eventName);
 
         var consumer = new EventingBasicConsumer(_channel);
-        consumer.Received += async (model, ea) =>
+        consumer.Received += async (_, ea) =>
         {
             var body = ea.Body.ToArray();
             var message = Encoding.UTF8.GetString(body);

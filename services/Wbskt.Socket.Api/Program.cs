@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureCommonServices();
 builder.Services.AddSingleton<IClientConnectionManager, ClientConnectionManager>();
 
-builder.Services.AddTransient<SendCommandToClientEventHandler>();
+builder.Services.AddSingleton<SendCommandToClientEventHandler>();
 
 builder.Services.AddAuthentication(opt =>
     {

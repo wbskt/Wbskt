@@ -11,8 +11,8 @@ internal sealed class CachedClientsReader : IClientsReader
 
     public CachedClientsReader(IClientsDatabaseReader databaseReader, ICacheService cacheService)
     {
-        _databaseReader = databaseReader;
-        _cacheService = cacheService;
+        _databaseReader = databaseReader ?? throw new ArgumentNullException(nameof(databaseReader));
+        _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
     }
 
     public async Task<ClientRecord?> GetByRefAsync(Guid refId, CancellationToken cancellationToken)

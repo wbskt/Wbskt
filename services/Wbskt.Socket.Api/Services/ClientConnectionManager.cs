@@ -13,8 +13,8 @@ public class ClientConnectionManager : IClientConnectionManager
 
     public ClientConnectionManager(ILogger<ClientConnectionManager> logger, IEventBus eventBus)
     {
-        _logger = logger;
-        _eventBus = eventBus;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
 
     public async Task OnConnected(int clientId, WebSocket socket)

@@ -8,15 +8,22 @@ namespace Wbskt.Management.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class UsersController(
-    IUsersReader usersReader,
-    IAuthService authService) : ControllerBase
+public class UsersController : ControllerBase
 {
+    private readonly IUsersReader _usersReader;
+    private readonly IAuthService _authService;
+
+    public UsersController(IUsersReader usersReader, IAuthService authService)
+    {
+        _usersReader = usersReader ?? throw new ArgumentNullException(nameof(usersReader));
+        _authService = authService ?? throw new ArgumentNullException(nameof(authService));
+    }
+
     [HttpPost("login")]
     public async Task<IActionResult> UserLogin(UserLoginRequest request, CancellationToken cancellationToken)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var response = await authService.Login(request, ipAddress, cancellationToken);
+        var response = await _authService.Login(request, ipAddress, cancellationToken);
         return Ok(response);
     }
 
@@ -24,7 +31,7 @@ public class UsersController(
     public async Task<IActionResult> RefreshToken(RefreshTokenRequest request, CancellationToken cancellationToken)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var response = await authService.RotateRefreshToken(request.RefreshToken, ipAddress, cancellationToken);
+        var response = await _authService.RotateRefreshToken(request.RefreshToken, ipAddress, cancellationToken);
         return Ok(response);
     }
 
@@ -36,13 +43,13 @@ public class UsersController(
             request.UserName = request.EmailId;
         }
 
-        var userId = await usersReader.FindByEmailIdAsync(request.EmailId, cancellationToken);
+        var userId = await _usersReader.FindByEmailIdAsync(request.EmailId, cancellationToken);
         if (userId > 0)
         {
             return Conflict($"user {request.EmailId} already exists");
         }
 
-        await authService.RegisterUser(request, cancellationToken);
+        await _authService.RegisterUser(request, cancellationToken);
         return Ok("User created. Please login");
     }
 }

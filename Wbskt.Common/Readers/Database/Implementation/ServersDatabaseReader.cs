@@ -10,7 +10,7 @@ internal sealed class ServersDatabaseReader : IServersDatabaseReader
 
     public ServersDatabaseReader(IConnectionStringProvider connectionStringProvider)
     {
-        _connectionStringProvider = connectionStringProvider;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<List<ServerRecord>> GetAllAsync(DateTime lastModified, CancellationToken cancellationToken)

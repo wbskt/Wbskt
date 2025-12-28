@@ -11,7 +11,7 @@ internal sealed class UserRefreshTokensWriter : IUserRefreshTokensWriter
 
     public UserRefreshTokensWriter(IConnectionStringProvider connectionStringProvider)
     {
-        _connectionStringProvider = connectionStringProvider;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task InsertAsync(RefreshTokenRecord refreshToken, CancellationToken cancellationToken)

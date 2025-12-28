@@ -8,8 +8,7 @@ internal sealed class ConnectionStringProvider : IConnectionStringProvider
 
     public ConnectionStringProvider(IConfiguration configuration)
     {
-        ArgumentNullException.ThrowIfNull(configuration);
-        _configuration = configuration;
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
     public string ConnectionString => _configuration["ConnectionStrings:Database"]!;

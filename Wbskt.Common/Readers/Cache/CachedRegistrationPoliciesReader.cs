@@ -11,8 +11,8 @@ internal sealed class CachedRegistrationPoliciesReader : IRegistrationPoliciesRe
 
     public CachedRegistrationPoliciesReader(IRegistrationPoliciesDatabaseReader databaseReader, ICacheService cacheService)
     {
-        _databaseReader = databaseReader;
-        _cacheService = cacheService;
+        _databaseReader = databaseReader ?? throw new ArgumentNullException(nameof(databaseReader));
+        _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
     }
 
     public Task<List<RegistrationPolicyRecord>> GetAllAsync(int userId, CancellationToken cancellationToken)

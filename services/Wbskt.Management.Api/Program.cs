@@ -35,10 +35,15 @@ public static class Program
         Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
 
         builder.Host.UseSerilog(Log.Logger);
-        builder.WebHost.UseKestrel().ConfigureKestrel((_, options) => { options.ConfigureHttpsDefaults(httpsOptions => { httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13; }); });
-
-        // Add Windows Service hosting
-        builder.Host.UseWindowsService();
+        builder.WebHost
+            .UseKestrel()
+            .ConfigureKestrel((_, options) =>
+            {
+                options.ConfigureHttpsDefaults(httpsOptions =>
+                {
+                    httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
+                });
+            });
 
         // Add services to the container.
         builder.Services
@@ -103,11 +108,10 @@ public static class Program
             app.UseHttpsRedirection();
         }
 
-        app.UseCors("AllowAll"); // make sure this is placed before app.UseAuthorization()
+        app.UseCors("AllowAll");
 
         app.UseAuthentication();
         app.UseAuthorization();
-        app.UseWebSockets();
 
         app.MapControllers();
 

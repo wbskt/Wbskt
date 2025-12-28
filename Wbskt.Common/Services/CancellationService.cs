@@ -11,21 +11,21 @@ public interface ICancellationService
 
 public sealed class CancellationService : ICancellationService
 {
-    private readonly CancellationTokenSource ctx = new();
+    private readonly CancellationTokenSource _ctx = new();
 
     public void InvokeOnShutdown(Action action)
     {
-        ctx.Token.Register(action);
+        _ctx.Token.Register(action);
     }
 
     public async Task Cancel()
     {
-        await ctx.CancelAsync();
-        ctx.Dispose();
+        await _ctx.CancelAsync();
+        _ctx.Dispose();
     }
 
     public CancellationToken GetToken()
     {
-        return ctx.Token;
+        return _ctx.Token;
     }
 }

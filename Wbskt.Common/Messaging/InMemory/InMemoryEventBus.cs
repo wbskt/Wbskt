@@ -22,14 +22,12 @@ public class InMemoryEventBus : IEventBus
 
         foreach (var handlerType in handlers)
         {
-            var handler = _serviceProvider.GetService(handlerType);
-            if (handler is null) continue;
-
-            var handleMethod = handlerType.GetMethod("HandleAsync", [eventType, typeof(CancellationToken)]);
-            if (handleMethod is not null)
+            if (_serviceProvider.GetService(handlerType) is not IEventHandler<IEvent> handler)
             {
-                await (Task)handleMethod.Invoke(handler, [@event, cancellationToken])!;
+                continue;
             }
+
+            await handler.HandleAsync(@event, cancellationToken);
         }
     }
 

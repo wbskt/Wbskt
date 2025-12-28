@@ -12,7 +12,7 @@ internal sealed class CachedServersReader : IServersReader
 
     public CachedServersReader(IServersDatabaseReader databaseReader)
     {
-        _databaseReader = databaseReader;
+        _databaseReader = databaseReader ?? throw new ArgumentNullException(nameof(databaseReader));
     }
 
     public async Task<List<ServerRecord>> GetAllAsync(CancellationToken cancellationToken)

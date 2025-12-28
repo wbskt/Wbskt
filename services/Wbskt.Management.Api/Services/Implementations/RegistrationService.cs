@@ -29,12 +29,12 @@ internal sealed class RegistrationService : IRegistrationService
         IConfiguration configuration,
         ICurrentUser currentUser)
     {
-        _policiesReader = policiesReader;
-        _clientsReader = clientsReader;
-        _clientsWriter = clientsWriter;
-        _serversReader = serversReader;
-        _configuration = configuration;
-        _currentUser = currentUser;
+        _policiesReader = policiesReader ?? throw new ArgumentNullException(nameof(policiesReader));
+        _clientsReader = clientsReader ?? throw new ArgumentNullException(nameof(clientsReader));
+        _clientsWriter = clientsWriter ?? throw new ArgumentNullException(nameof(clientsWriter));
+        _serversReader = serversReader ?? throw new ArgumentNullException(nameof(serversReader));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
     }
 
     public async Task<ClientRegistrationResponse> RegisterClientAsync(ClientRegistrationRequest request, CancellationToken cancellationToken)
@@ -46,7 +46,7 @@ internal sealed class RegistrationService : IRegistrationService
             throw WbsktExceptions.InvalidPolicyPin();
         }
 
-        if (policy.Expiry.HasValue && policy.Expiry.Value < DateTime.UtcNow)
+        if (policy.Expiry.HasValue && policy.Expiry.Value.ToUniversalTime() < DateTime.UtcNow)
         {
             throw WbsktExceptions.PolicyExpired();
         }

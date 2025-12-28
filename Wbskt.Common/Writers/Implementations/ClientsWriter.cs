@@ -15,7 +15,7 @@ internal sealed class ClientsWriter : IClientsWriter
 
     public ClientsWriter(IConnectionStringProvider connectionStringProvider)
     {
-        _connectionStringProvider = connectionStringProvider;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
     }
 
     public async Task<int> UpsertAsync(ClientRecord client, CancellationToken cancellationToken)

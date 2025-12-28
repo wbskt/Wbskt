@@ -21,10 +21,10 @@ internal sealed class RegistrationPoliciesWriter : IRegistrationPoliciesWriter
 
     public RegistrationPoliciesWriter(IConnectionStringProvider connectionStringProvider, IEventBus eventBus, IRegistrationPoliciesReader policiesReader, ICurrentUser currentUser)
     {
-        _connectionStringProvider = connectionStringProvider;
-        _eventBus = eventBus;
-        _policiesReader = policiesReader;
-        _currentUser = currentUser;
+        _connectionStringProvider = connectionStringProvider ?? throw new ArgumentNullException(nameof(connectionStringProvider));
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _policiesReader = policiesReader ?? throw new ArgumentNullException(nameof(policiesReader));
+        _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
     }
 
     public async Task<int> InsertAsync(RegistrationPolicyRecord policy, CancellationToken cancellationToken)

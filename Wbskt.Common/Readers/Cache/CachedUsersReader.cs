@@ -11,8 +11,8 @@ internal sealed class CachedUsersReader : IUsersReader
 
     public CachedUsersReader(IUsersDatabaseReader usersDatabaseReader, ICacheService cacheService)
     {
-        _usersDatabaseReader = usersDatabaseReader;
-        _cacheService = cacheService;
+        _usersDatabaseReader = usersDatabaseReader ?? throw new ArgumentNullException(nameof(usersDatabaseReader));
+        _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
     }
 
     public Task<UserRecord?> GetByIdAsync(int userId, CancellationToken cancellationToken)
