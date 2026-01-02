@@ -40,13 +40,13 @@ public class UsersController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.UserName))
         {
-            request.UserName = request.EmailId;
+            request.UserName = request.Email;
         }
 
-        var userId = await _usersReader.FindByEmailIdAsync(request.EmailId, cancellationToken);
+        var userId = await _usersReader.FindByEmailIdAsync(request.Email, cancellationToken);
         if (userId > 0)
         {
-            return Conflict($"user {request.EmailId} already exists");
+            return Conflict($"user {request.Email} already exists");
         }
 
         await _authService.RegisterUser(request, cancellationToken);

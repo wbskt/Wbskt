@@ -41,11 +41,11 @@ internal sealed class AuthService : IAuthService
 
     public async Task<UserLoginResponse> Login(UserLoginRequest loginRequest, string ipAddress, CancellationToken cancellationToken)
     {
-        var user = await _usersReader.GetByEmailIdAsync(loginRequest.EmailId, cancellationToken);
+        var user = await _usersReader.GetByEmailIdAsync(loginRequest.Email, cancellationToken);
 
         if (user == null)
         {
-            throw WbsktExceptions.UserNotFound(loginRequest.EmailId);
+            throw WbsktExceptions.UserNotFound(loginRequest.Email);
         }
 
         var result = _passwordHasher.VerifyHashedPassword(null!, user.PasswordHash, loginRequest.Password);
@@ -113,15 +113,15 @@ internal sealed class AuthService : IAuthService
 
     public async Task<UserRecord> RegisterUser(UserRegistrationRequest request, CancellationToken cancellationToken)
     {
-        var userId = await _usersReader.FindByEmailIdAsync(request.EmailId, cancellationToken);
+        var userId = await _usersReader.FindByEmailIdAsync(request.Email, cancellationToken);
         if (userId > 0)
         {
-            throw WbsktExceptions.EmailIdExists(request.EmailId);
+            throw WbsktExceptions.EmailIdExists(request.Email);
         }
 
         var user = new UserRecord
         {
-            Email = request.EmailId,
+            Email = request.Email,
             PasswordHash = _passwordHasher.HashPassword(null!, request.Password),
             Name = request.UserName
         };

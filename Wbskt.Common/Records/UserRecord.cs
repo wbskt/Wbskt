@@ -10,7 +10,7 @@ public record UserRecord
 
 public record UserLoginRequest
 {
-    public required string EmailId { get; set; }
+    public required string Email { get; set; }
 
     public required string Password { get; set; }
 }
