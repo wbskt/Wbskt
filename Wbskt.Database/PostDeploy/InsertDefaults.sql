@@ -21,7 +21,7 @@ ELSE
     BEGIN
         PRINT 'root user already exists, skipping creation';
     END
-
+GO
 IF NOT EXISTS (SELECT 1 FROM [dbo].[TriggerTypes] WHERE Id = 1)
 BEGIN
     INSERT INTO [dbo].[TriggerTypes] (Id, Name, Description) VALUES (1, 'Manual', 'Triggered by a direct user API call.');
