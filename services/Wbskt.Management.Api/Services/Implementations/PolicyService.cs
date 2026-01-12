@@ -56,10 +56,16 @@ internal sealed class PolicyService : IPolicyService
         return pin;
     }
 
-    public async Task<List<PolicyResponse>> GetPoliciesAsync(CancellationToken cancellationToken)
+    public async Task<PolicyListResponse> GetPoliciesAsync(CancellationToken cancellationToken)
     {
         var policies = await _policiesReader.GetAllAsync(_currentUser.Id, cancellationToken);
-        return policies.Select(ToPolicyResponse).ToList();
+        var responseItems = policies.Select(ToPolicyResponse).ToList();
+        
+        return new PolicyListResponse
+        {
+            TotalCount = responseItems.Count,
+            Items = responseItems
+        };
     }
 
     public async Task<PolicyResponse?> GetPolicyAsync(Guid refId, CancellationToken cancellationToken)

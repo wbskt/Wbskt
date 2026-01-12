@@ -75,7 +75,10 @@ public static class Program
 
         builder.Services.AddAuthorization();
 
-        builder.Services.AddControllers();
+        builder.Services.AddControllers().AddJsonOptions(jsonOptions =>
+        {
+            jsonOptions.JsonSerializerOptions.PropertyNamingPolicy = null;
+        });
 
         builder.Services.AddCors(options =>
         {
