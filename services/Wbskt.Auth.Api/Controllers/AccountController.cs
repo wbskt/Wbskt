@@ -20,22 +20,24 @@ public class AccountController : ControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterRequest model)
     {
         if (!ModelState.IsValid)
+        {
             return BadRequest(ModelState);
+        }
 
         var user = await _userManager.FindByEmailAsync(model.Email);
-        if (user == null)
+        if (user != null)
         {
-            user = new ApplicationUser { UserName = model.Email, Email = model.Email };
-            var result = await _userManager.CreateAsync(user, model.Password);
-
-            if (result.Succeeded)
-            {
-                // Assign default role
-                await _userManager.AddToRoleAsync(user, "User");
-            }
+            return Ok(new { Message = "If an account with this email does not already exist, it has been created." });
         }
-        
-        // Always return a generic success message to prevent user enumeration
+
+        user = new ApplicationUser { UserName = model.Email, Email = model.Email };
+        var result = await _userManager.CreateAsync(user, model.Password);
+
+        if (result.Succeeded)
+        {
+            await _userManager.AddToRoleAsync(user, "User");
+        }
+
         return Ok(new { Message = "If an account with this email does not already exist, it has been created." });
     }
 }

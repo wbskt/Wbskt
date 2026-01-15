@@ -16,21 +16,21 @@ namespace Wbskt.Auth.Api.Controllers;
 [Route("connect")]
 public class AuthorizationController : Controller
 {
-    private readonly IOpenIddictApplicationManager _applicationManager;
+    private readonly AuthDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly AuthDbContext _context;
+    private readonly IOpenIddictApplicationManager _applicationManager;
 
     public AuthorizationController(
-        IOpenIddictApplicationManager applicationManager,
+        AuthDbContext context,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        AuthDbContext context)
+        IOpenIddictApplicationManager applicationManager)
     {
-        _applicationManager = applicationManager;
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _context = context;
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+        _signInManager = signInManager ?? throw new ArgumentNullException(nameof(signInManager));
+        _applicationManager = applicationManager ?? throw new ArgumentNullException(nameof(applicationManager));
     }
 
     [HttpGet("authorize")]
