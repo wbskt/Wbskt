@@ -178,7 +178,6 @@ internal static class Program
             app.UseSwaggerUI();
         }
 
-        app.UseHttpsRedirection();
         app.UseStaticFiles();
 
         app.UseCors("Default");
