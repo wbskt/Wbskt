@@ -1,29 +1,57 @@
+using Serilog;
 using Wbskt.Common;
 using Wbskt.Common.Extensions;
 using Wbskt.Socket.Api.HostedServices;
 using Wbskt.Socket.Api.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+namespace Wbskt.Socket.Api;
 
-// Add services to the container.
-builder.Services.ConfigureCommonServices();
-builder.Services.AddSingleton<IClientConnectionManager, ClientConnectionManager>();
+internal static  class Program
+{
+    public static void Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = Directory.GetCurrentDirectory()
+        });
 
-builder.Services.AddSingleton<SendCommandToClientEventHandler>();
+        var programDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.Application.AppFolderName);
+        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogPath, programDataPath);
+        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogName, typeof(Program).Assembly.FullName);
 
-builder.Services.AddWbsktAuthentication(builder.Configuration);
+        if (!Directory.Exists(programDataPath))
+        {
+            Directory.CreateDirectory(programDataPath);
+        }
 
-builder.Services.AddControllers();
-builder.Services.AddHostedService<CommandListenerService>();
+        // Configure Serilog
+        var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "Config", "serilog.json");
+        builder.Configuration.AddJsonFile(serilogConfigPath, optional: false, reloadOnChange: true);
+        Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
+        builder.Host.UseSerilog(Log.Logger);
 
-var app = builder.Build();
+        // Add services to the container.
+        builder.Services.ConfigureCommonServices();
+        builder.Services.AddSingleton<IClientConnectionManager, ClientConnectionManager>();
 
-// Configure the HTTP request pipeline.
-app.UseWebSockets();
+        builder.Services.AddSingleton<SendCommandToClientEventHandler>();
 
-app.UseAuthentication();
-app.UseAuthorization();
+        builder.Services.AddWbsktAuthentication(builder.Configuration);
 
-app.MapControllers();
+        builder.Services.AddControllers();
+        builder.Services.AddHostedService<CommandListenerService>();
 
-app.Run();
+        var app = builder.Build();
+
+        // Configure the HTTP request pipeline.
+        app.UseWebSockets();
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        app.MapControllers();
+
+        app.Run();
+    }
+}

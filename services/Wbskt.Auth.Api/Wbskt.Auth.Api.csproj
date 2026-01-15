@@ -8,12 +8,23 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="OpenIddict.AspNetCore" />
     <PackageReference Include="OpenIddict.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Wbskt.Common\Wbskt.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\Config\serilog.json">
+      <Link>serilog.json</Link>
+    </Content>
   </ItemGroup>
 
 </Project>

@@ -22,4 +22,10 @@
     <ProjectReference Include="..\..\Wbskt.Common\Wbskt.Common.csproj"/>
     <ProjectReference Include="..\..\Wbskt.EventBus\Wbskt.EventBus.csproj"/>
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\Config\serilog.json">
+      <Link>serilog.json</Link>
+    </Content>
+  </ItemGroup>
 </Project>

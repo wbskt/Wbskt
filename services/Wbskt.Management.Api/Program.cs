@@ -15,13 +15,14 @@ using Wbskt.Management.Api.Services.Implementations;
 
 namespace Wbskt.Management.Api;
 
-public static class Program
+internal static class Program
 {
     private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.Application.AppFolderName);
 
     public static async Task Main(string[] args)
     {
         Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogPath, ProgramDataPath);
+        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogName, typeof(Program).Assembly.FullName);
         Environment.SetEnvironmentVariable(nameof(Constants.ServerType), nameof(Constants.ServerType.CoreServer));
 
         if (!Directory.Exists(ProgramDataPath))
@@ -29,26 +30,20 @@ public static class Program
             Directory.CreateDirectory(ProgramDataPath);
         }
 
-        var builder = WebApplication.CreateBuilder(args);
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = Directory.GetCurrentDirectory()
+        });
 
         // Configure Serilog
+        var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "Config", "serilog.json");
+        builder.Configuration.AddJsonFile(serilogConfigPath, optional: false, reloadOnChange: true);
         Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
-
         builder.Host.UseSerilog(Log.Logger);
-        builder.WebHost
-            .UseKestrel()
-            .ConfigureKestrel((_, options) =>
-            {
-                options.ConfigureHttpsDefaults(httpsOptions =>
-                {
-                    httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-                });
-            });
 
         // Add services to the container.
-        builder.Services
-            .AddDataProtection()
-            .DisableAutomaticKeyGeneration();
+        builder.Services.AddDataProtection().DisableAutomaticKeyGeneration();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<ICurrentUser, CurrentUser>();
 
@@ -69,17 +64,6 @@ public static class Program
             jsonOptions.JsonSerializerOptions.PropertyNamingPolicy = null;
         });
 
-        builder.Services.AddCors(options =>
-        {
-            options.AddPolicy("AllowAll",
-                policyBuilder =>
-                {
-                    policyBuilder.AllowAnyOrigin()
-                        .AllowAnyMethod()
-                        .AllowAnyHeader();
-                });
-        });
-
         var app = builder.Build();
 
         var eventBus = app.Services.GetRequiredService<IEventBus>();
@@ -93,14 +77,7 @@ public static class Program
 
         eventBus.Subscribe<WorkflowStepsChangedEvent, WorkflowStepsCacheHandler>();
 
-        // Configure the HTTP request pipeline.
         app.UseMiddleware<ExceptionMiddleware>();
-        if (!app.Environment.IsDevelopment())
-        {
-            app.UseHttpsRedirection();
-        }
-
-        app.UseCors("AllowAll");
 
         app.UseAuthentication();
         app.UseAuthorization();
