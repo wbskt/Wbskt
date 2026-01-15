@@ -52,9 +52,6 @@ public static class Program
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<ICurrentUser, CurrentUser>();
 
-        builder.Services.AddSingleton<IPasswordHasher<UserRecord>, PasswordHasher<UserRecord>>();
-
-        builder.Services.AddSingleton<IAuthService, AuthService>();
         builder.Services.AddSingleton<IPolicyService, PolicyService>();
         builder.Services.AddSingleton<IRegistrationService, RegistrationService>();
         
@@ -63,15 +60,7 @@ public static class Program
         builder.Services.AddSingleton<WorkflowCacheHandler>();
         builder.Services.AddSingleton<WorkflowStepsCacheHandler>();
 
-        builder.Services.AddAuthentication(opt =>
-            {
-                opt.DefaultAuthenticateScheme = Constants.AuthSchemes.UserScheme;
-                opt.DefaultChallengeScheme = Constants.AuthSchemes.UserScheme;
-            })
-            .AddUserAuthScheme(builder.Configuration)
-            .AddClientAuthScheme(builder.Configuration)
-            .AddSocketServerAuthScheme(builder.Configuration)
-            .AddAuthServerScheme(builder.Configuration);
+        builder.Services.AddWbsktAuthentication(builder.Configuration);
 
         builder.Services.AddAuthorization();
 

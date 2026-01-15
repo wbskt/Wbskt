@@ -276,6 +276,20 @@ public class AuthorizationController : Controller
 
         // Set the list of scopes granted to the client application.
         principal.SetScopes(scopes);
+        
+        // Set the audience (Resource Server)
+        principal.SetResources("wbskt_api");
+
+        // Identity adds "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+        // But OpenIddict needs "sub".
+        if (principal.Identity is ClaimsIdentity identity)
+        {
+            var userId = await _userManager.GetUserIdAsync(user);
+            if (!identity.HasClaim(c => c.Type == Claims.Subject))
+            {
+                identity.AddClaim(new Claim(Claims.Subject, userId));
+            }
+        }
 
         // --- Custom RBAC Logic ---
         // 1. Get User Roles
@@ -342,6 +356,11 @@ public class AuthorizationController : Controller
                 if (principal.HasScope(Scopes.Roles))
                     yield return Destinations.IdentityToken;
 
+                yield break;
+
+            case Claims.Subject:
+                yield return Destinations.AccessToken;
+                yield return Destinations.IdentityToken;
                 yield break;
             
             case "permission":

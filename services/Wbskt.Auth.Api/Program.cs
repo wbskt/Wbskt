@@ -56,6 +56,9 @@ public static class Program
                 options
                     .AddDevelopmentEncryptionCertificate()
                     .AddDevelopmentSigningCertificate();
+                
+                // Disable Access Token Encryption (Production: consider enabling if keys are shared)
+                options.DisableAccessTokenEncryption();
 
                 // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
                 options
@@ -73,6 +76,17 @@ public static class Program
 
         builder.Services.AddHostedService<Worker>();
 
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowAll",
+                policyBuilder =>
+                {
+                    policyBuilder.AllowAnyOrigin()
+                        .AllowAnyMethod()
+                        .AllowAnyHeader();
+                });
+        });
+
         var app = builder.Build();
 
         if (app.Environment.IsDevelopment())
@@ -83,6 +97,8 @@ public static class Program
 
         app.UseHttpsRedirection();
         app.UseStaticFiles();
+
+        app.UseCors("AllowAll");
 
         app.UseAuthentication();
         app.UseAuthorization();

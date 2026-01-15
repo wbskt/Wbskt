@@ -11,12 +11,7 @@ builder.Services.AddSingleton<IClientConnectionManager, ClientConnectionManager>
 
 builder.Services.AddSingleton<SendCommandToClientEventHandler>();
 
-builder.Services.AddAuthentication(opt =>
-    {
-        opt.DefaultAuthenticateScheme = Constants.AuthSchemes.ClientScheme;
-        opt.DefaultChallengeScheme = Constants.AuthSchemes.ClientScheme;
-    })
-    .AddClientAuthScheme(builder.Configuration);
+builder.Services.AddWbsktAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddHostedService<CommandListenerService>();

@@ -77,6 +77,46 @@ public class Worker : IHostedService
             }
         }
 
+        // --- Seed Scopes ---
+        var scopeManager = scope.ServiceProvider.GetRequiredService<IOpenIddictScopeManager>();
+        
+        if (await scopeManager.FindByNameAsync(Scopes.Email, cancellationToken) is null)
+        {
+            await scopeManager.CreateAsync(new OpenIddictScopeDescriptor
+            {
+                Name = Scopes.Email,
+                DisplayName = "Email access"
+            }, cancellationToken);
+        }
+
+        if (await scopeManager.FindByNameAsync(Scopes.Profile, cancellationToken) is null)
+        {
+            await scopeManager.CreateAsync(new OpenIddictScopeDescriptor
+            {
+                Name = Scopes.Profile,
+                DisplayName = "Profile access"
+            }, cancellationToken);
+        }
+
+        if (await scopeManager.FindByNameAsync(Scopes.Roles, cancellationToken) is null)
+        {
+            await scopeManager.CreateAsync(new OpenIddictScopeDescriptor
+            {
+                Name = Scopes.Roles,
+                DisplayName = "Roles access"
+            }, cancellationToken);
+        }
+
+        if (await scopeManager.FindByNameAsync(Scopes.OfflineAccess, cancellationToken) is null)
+        {
+            await scopeManager.CreateAsync(new OpenIddictScopeDescriptor
+            {
+                Name = Scopes.OfflineAccess,
+                DisplayName = "Offline access (Refresh Token)"
+            }, cancellationToken);
+        }
+
+        // --- Seed Applications ---
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 
         if (await manager.FindByClientIdAsync("postman", cancellationToken) is null)

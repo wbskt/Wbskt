@@ -49,12 +49,7 @@ builder.Services.AddHangfire(configuration => configuration
 // Add the Hangfire server.
 builder.Services.AddHangfireServer();
 
-builder.Services.AddAuthentication(opt =>
-    {
-        opt.DefaultAuthenticateScheme = Constants.AuthSchemes.AuthServerScheme;
-        opt.DefaultChallengeScheme = Constants.AuthSchemes.AuthServerScheme;
-    })
-    .AddAuthServerScheme(builder.Configuration);
+builder.Services.AddWbsktAuthentication(builder.Configuration);
 
 builder.Services.AddAuthorization();
 
