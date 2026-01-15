@@ -13,10 +13,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		Directory.Packages.props = Directory.Packages.props
 		nuget.config = nuget.config
 		global.json = global.json
-		README.md = README.md
 		LICENSE.txt = LICENSE.txt
 		GEMINI.md = GEMINI.md
-		PLANNING.md = PLANNING.md
 		DatabaseDeploy.bat = DatabaseDeploy.bat
 	EndProjectSection
 EndProject
