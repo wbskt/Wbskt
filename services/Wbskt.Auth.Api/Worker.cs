@@ -3,20 +3,30 @@ using OpenIddict.Abstractions;
 using Wbskt.Auth.Api.Data;
 using Wbskt.Auth.Api.Models;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using Wbskt.Common;
 
 namespace Wbskt.Auth.Api;
 
 public class Worker : IHostedService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _environment;
 
-    public Worker(IServiceProvider serviceProvider)
+    public Worker(IServiceProvider serviceProvider, IConfiguration configuration, IHostEnvironment environment)
     {
-        _serviceProvider = serviceProvider;
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        if (!_environment.IsDevelopment())
+        {
+            return;
+        }
+        
         using var scope = _serviceProvider.CreateScope();
 
         var context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
@@ -24,7 +34,7 @@ public class Worker : IHostedService
 
         // --- Seed Roles ---
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        var roles = new[] { "Admin", "User" };
+        var roles = new[] { Constants.Roles.Admin, Constants.Roles.User };
         foreach (var role in roles)
         {
             if (!await roleManager.RoleExistsAsync(role))
@@ -34,23 +44,23 @@ public class Worker : IHostedService
         }
 
         // --- Seed Permissions ---
-        var permissions = new[] 
-        { 
-            "workflow.read", "workflow.write", "workflow.delete",
-            "client.read", "client.write", "client.delete"
+        var permissions = new[]
+        {
+            Constants.Permissions.WorkflowRead, Constants.Permissions.WorkflowWrite, Constants.Permissions.WorkflowDelete,
+            Constants.Permissions.ClientRead, Constants.Permissions.ClientWrite, Constants.Permissions.ClientDelete
         };
 
         foreach (var code in permissions)
         {
             if (!context.Permissions.Any(p => p.Code == code))
             {
-                context.Permissions.Add(new Models.Permission { Code = code, Description = $"Allow {code}" });
+                context.Permissions.Add(new Permission { Code = code, Description = $"Allow {code}" });
             }
         }
         await context.SaveChangesAsync(cancellationToken);
 
         // --- Assign Permissions to Admin Role ---
-        var adminRole = await roleManager.FindByNameAsync("Admin");
+        var adminRole = await roleManager.FindByNameAsync(Constants.Roles.Admin);
         if (adminRole != null)
         {
             var allPermissions = context.Permissions.ToList();
@@ -58,7 +68,7 @@ public class Worker : IHostedService
             {
                 if (!context.RolePermissions.Any(rp => rp.RoleId == adminRole.Id && rp.PermissionId == perm.Id))
                 {
-                    context.RolePermissions.Add(new Models.RolePermission { RoleId = adminRole.Id, PermissionId = perm.Id });
+                    context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionId = perm.Id });
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
@@ -70,16 +80,16 @@ public class Worker : IHostedService
         if (await userManager.FindByEmailAsync(adminEmail) == null)
         {
             var user = new ApplicationUser { UserName = adminEmail, Email = adminEmail, EmailConfirmed = true };
-            var result = await userManager.CreateAsync(user, "Admin123!");
+            var result = await userManager.CreateAsync(user, _configuration["SeedUser:Password"]);
             if (result.Succeeded)
             {
-                await userManager.AddToRoleAsync(user, "Admin");
+                await userManager.AddToRoleAsync(user, Constants.Roles.Admin);
             }
         }
 
         // --- Seed Scopes ---
         var scopeManager = scope.ServiceProvider.GetRequiredService<IOpenIddictScopeManager>();
-        
+
         if (await scopeManager.FindByNameAsync(Scopes.Email, cancellationToken) is null)
         {
             await scopeManager.CreateAsync(new OpenIddictScopeDescriptor
@@ -119,12 +129,12 @@ public class Worker : IHostedService
         // --- Seed Applications ---
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 
-        if (await manager.FindByClientIdAsync("postman", cancellationToken) is null)
+        if (await manager.FindByClientIdAsync(Constants.Clients.Postman, cancellationToken) is null)
         {
             await manager.CreateAsync(new OpenIddictApplicationDescriptor
             {
-                ClientId = "postman",
-                ClientSecret = "postman-secret",
+                ClientId = Constants.Clients.Postman,
+                ClientSecret = _configuration["Postman:ClientSecret"],
                 DisplayName = "Postman",
                 Permissions =
                 {
@@ -138,12 +148,12 @@ public class Worker : IHostedService
                 }
             }, cancellationToken);
         }
-        
-         if (await manager.FindByClientIdAsync("wbskt-frontend", cancellationToken) is null)
+
+        if (await manager.FindByClientIdAsync(Constants.Clients.WbsktFrontend, cancellationToken) is null)
         {
             await manager.CreateAsync(new OpenIddictApplicationDescriptor
             {
-                ClientId = "wbskt-frontend",
+                ClientId = Constants.Clients.WbsktFrontend,
                 // No client secret for public clients (SPA) using PKCE
                 DisplayName = "WBSKT Frontend",
                 RedirectUris = { new Uri("https://localhost:3000/callback") },

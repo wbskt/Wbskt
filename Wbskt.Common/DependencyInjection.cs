@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Wbskt.Common.Messaging.InMemory;
 using Wbskt.Common.Messaging.RabbitMQ;
 using Wbskt.Common.Readers;
 using Wbskt.Common.Readers.Cache;
@@ -18,7 +19,8 @@ public static class DependencyInjection
         serviceCollection.AddMemoryCache();
         serviceCollection.AddSingleton<ICacheService, CacheService>();
         serviceCollection.AddSingleton<ICancellationService, CancellationService>();
-        serviceCollection.AddSingleton<IEventBus>(sp => new RabbitMQEventBus(sp, "localhost")); // todo: move to appSetting.json
+        // serviceCollection.AddSingleton<IEventBus>(sp => new RabbitMQEventBus(sp, "localhost")); // todo: move to appSetting.json
+        serviceCollection.AddSingleton<IEventBus>(sp => new InMemoryEventBus(sp)); // todo: move to appSetting.json
         
         serviceCollection.AddSingleton<IConnectionStringProvider, ConnectionStringProvider>();
 
@@ -58,8 +60,6 @@ public static class DependencyInjection
         // Workflow Step Executions
         serviceCollection.AddScoped<IWorkflowStepExecutionsReader, WorkflowStepExecutionsDatabaseReader>();
         serviceCollection.AddScoped<IWorkflowStepExecutionsWriter, WorkflowStepExecutionsDatabaseWriter>();
-
-
 
         // Servers
         serviceCollection.AddSingleton<IServersDatabaseReader, ServersDatabaseReader>();

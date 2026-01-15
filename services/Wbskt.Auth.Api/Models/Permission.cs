@@ -9,7 +9,7 @@ public class Permission
 
     [Required]
     [MaxLength(100)]
-    public string Code { get; set; } = string.Empty; // e.g., "workflow.create"
+    public string Code { get; set; } = string.Empty;
 
     [MaxLength(250)]
     public string? Description { get; set; }

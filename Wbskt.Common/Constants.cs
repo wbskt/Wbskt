@@ -60,4 +60,29 @@ public static class Constants
         public const string LogName = "LogName";
         public const string LogTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
     }
+
+    public static class Clients
+    {
+        public const string Postman = "postman";
+        public const string WbsktFrontend = "wbskt-frontend";
+    }
+
+    public static class Permissions
+    {
+        public const string PolicyRead = "policy.read";
+        public const string PolicyWrite = "policy.write";
+        public const string PolicyDelete = "policy.delete";
+        public const string WorkflowRead = "workflow.read";
+        public const string WorkflowWrite = "workflow.write";
+        public const string WorkflowDelete = "workflow.delete";
+        public const string ClientRead = "client.read";
+        public const string ClientWrite = "client.write";
+        public const string ClientDelete = "client.delete";
+    }
+
+    public static class Roles
+    {
+        public const string Admin = "Admin";
+        public const string User = "User";
+    }
 }

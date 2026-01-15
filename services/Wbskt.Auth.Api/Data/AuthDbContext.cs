@@ -6,12 +6,10 @@ namespace Wbskt.Auth.Api.Data;
 
 public class AuthDbContext : IdentityDbContext<ApplicationUser>
 {
-    public AuthDbContext(DbContextOptions<AuthDbContext> options)
-        : base(options)
-    {
-    }
+    public AuthDbContext(DbContextOptions<AuthDbContext> options) : base(options) { }
 
     public DbSet<Permission> Permissions { get; set; }
+
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -23,8 +21,7 @@ public class AuthDbContext : IdentityDbContext<ApplicationUser>
         // Add your customizations after calling base.OnModelCreating(builder);
         
         // Configure RolePermission composite key
-        builder.Entity<RolePermission>()
-            .HasKey(rp => new { rp.RoleId, rp.PermissionId });
+        builder.Entity<RolePermission>().HasKey(rp => new { rp.RoleId, rp.PermissionId });
 
         // This is required for OpenIddict to register its own tables
         builder.UseOpenIddict();

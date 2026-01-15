@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Wbskt.Auth.Api.Data;
 using Wbskt.Auth.Api.Models;
+using Wbskt.Auth.Api.Middleware;
 using Wbskt.Common;
 
 namespace Wbskt.Auth.Api;
@@ -46,7 +47,18 @@ internal static class Program
 
         // Configure Identity
         builder.Services
-            .AddIdentity<ApplicationUser, IdentityRole>()
+            .AddIdentity<ApplicationUser, IdentityRole>(options =>
+            {
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireNonAlphanumeric = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequiredLength = 8;
+
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.AllowedForNewUsers = true;
+            })
             .AddEntityFrameworkStores<AuthDbContext>()
             .AddDefaultTokenProviders();
 
@@ -75,12 +87,24 @@ internal static class Program
                 options.AllowRefreshTokenFlow();
 
                 // Register the signing and encryption credentials.
-                options
-                    .AddDevelopmentEncryptionCertificate()
-                    .AddDevelopmentSigningCertificate();
+                if (builder.Environment.IsDevelopment())
+                {
+                    options
+                        .AddDevelopmentEncryptionCertificate()
+                        .AddDevelopmentSigningCertificate();
+                }
+                else
+                {
+                    // TODO: Configure production certificates
+                    // options.AddEncryptionCertificate("thumbprint")
+                    // options.AddSigningCertificate("thumbprint");
+                }
                 
-                // Disable Access Token Encryption (Production: consider enabling if keys are shared)
-                options.DisableAccessTokenEncryption();
+                // Disable Access Token Encryption in Development
+                if (builder.Environment.IsDevelopment())
+                {
+                    options.DisableAccessTokenEncryption();
+                }
 
                 // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
                 options
@@ -100,16 +124,53 @@ internal static class Program
 
         builder.Services.AddCors(options =>
         {
-            options.AddPolicy("AllowAll",
+            options.AddPolicy("Default",
                 policyBuilder =>
                 {
-                    policyBuilder.AllowAnyOrigin()
-                        .AllowAnyMethod()
-                        .AllowAnyHeader();
-                });
+                    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                    if (allowedOrigins != null)
+                    {
+                        policyBuilder
+                            .WithOrigins(allowedOrigins)
+                            .AllowAnyMethod()
+                            .AllowAnyHeader();
+                    }
+                }
+            );
         });
 
         var app = builder.Build();
+
+        app.UseSecurityHeaders(policyCollection =>
+            policyCollection
+                .AddDefaultSecurityHeaders()
+                .AddContentSecurityPolicy(cspBuilder =>
+                {
+                    cspBuilder.AddDefaultSrc().Self();
+                    cspBuilder.AddObjectSrc().None();
+                    cspBuilder.AddFrameAncestors().None();
+                })
+                .AddPermissionsPolicy(policyBuilder =>
+                {
+                    policyBuilder.AddAccelerometer().None();
+                    policyBuilder.AddAutoplay().None();
+                    policyBuilder.AddCamera().None();
+                    policyBuilder.AddEncryptedMedia().None();
+                    policyBuilder.AddFullscreen().None();
+                    policyBuilder.AddGeolocation().None();
+                    policyBuilder.AddGyroscope().None();
+                    policyBuilder.AddMagnetometer().None();
+                    policyBuilder.AddMicrophone().None();
+                    policyBuilder.AddMidi().None();
+                    policyBuilder.AddPayment().None();
+                    policyBuilder.AddPictureInPicture().None();
+                    policyBuilder.AddSpeaker().None();
+                    policyBuilder.AddSyncXHR().None();
+                    policyBuilder.AddUsb().None();
+                    policyBuilder.AddVR().None();
+                }));
+
+        app.UseMiddleware<ErrorHandlingMiddleware>();
 
         if (app.Environment.IsDevelopment())
         {
@@ -120,7 +181,7 @@ internal static class Program
         app.UseHttpsRedirection();
         app.UseStaticFiles();
 
-        app.UseCors("AllowAll");
+        app.UseCors("Default");
 
         app.UseAuthentication();
         app.UseAuthorization();

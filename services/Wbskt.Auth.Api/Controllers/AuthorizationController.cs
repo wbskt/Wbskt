@@ -94,7 +94,11 @@ public class AuthorizationController : Controller
             if (result.Succeeded)
             {
                 // Redirect back to the original URL (which was /connect/authorize?...)
-                return Redirect(model.ReturnUrl ?? "/");
+                if (Url.IsLocalUrl(model.ReturnUrl))
+                {
+                    return Redirect(model.ReturnUrl);
+                }
+                return RedirectToAction("Index", "Home");
             }
         }
 
