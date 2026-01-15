@@ -16,6 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		LICENSE.txt = LICENSE.txt
 		GEMINI.md = GEMINI.md
 		DatabaseDeploy.bat = DatabaseDeploy.bat
+		.gitignore = .gitignore
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wbskt.EventBus", "Wbskt.EventBus\Wbskt.EventBus.csproj", "{1B3B7A4B-8A2B-4F4B-8A2B-8A2B8A2B8A2B}"
