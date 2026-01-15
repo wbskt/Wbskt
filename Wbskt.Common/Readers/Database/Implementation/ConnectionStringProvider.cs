@@ -11,5 +11,5 @@ internal sealed class ConnectionStringProvider : IConnectionStringProvider
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
-    public string ConnectionString => _configuration["ConnectionStrings:Database"]!;
+    public string ConnectionString => _configuration["ConnectionStrings:DefaultConnection"]!;
 }
