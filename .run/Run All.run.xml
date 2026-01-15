@@ -1,0 +1,10 @@
+﻿<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run All" type="CompoundRunConfigurationType">
+    <toRun name="Wbskt.Auth.Api: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Gateway.Api: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Management.Api: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Socket.Api: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Workflow.Api: dev" type="LaunchSettings" />
+    <method v="2" />
+  </configuration>
+</component>
