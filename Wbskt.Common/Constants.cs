@@ -78,11 +78,18 @@ public static class Constants
         public const string ClientRead = "client.read";
         public const string ClientWrite = "client.write";
         public const string ClientDelete = "client.delete";
+        public const string Permission = "permission";
+        public const string AspNetIdentitySecurityStamp = "AspNet.Identity.SecurityStamp";
     }
 
     public static class Roles
     {
         public const string Admin = "Admin";
         public const string User = "User";
+    }
+
+    public static class Audiences
+    {
+        public const string WbsktApi = "wbskt_api";
     }
 }

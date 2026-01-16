@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Wbskt.Auth.Api.Exceptions;
 
 namespace Wbskt.Auth.Api.Middleware;
 
@@ -29,10 +30,11 @@ public class ErrorHandlingMiddleware
 
             response.StatusCode = ex switch
             {
+                InvalidGrantException => (int)HttpStatusCode.BadRequest,
                 _ => (int)HttpStatusCode.InternalServerError
             };
 
-            var result = JsonSerializer.Serialize(new { message = "An unexpected error occurred." });
+            var result = JsonSerializer.Serialize(new { message = ex.Message });
             await response.WriteAsync(result);
         }
     }
