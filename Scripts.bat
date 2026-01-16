@@ -1,5 +1,12 @@
 @REM working dir = ./wbskt/Core
 
+@REM run a docker container with azuresqledge
+@REM sudo docker run -e "ACCEPT_EULA=1" \                                  
+@REM            -e "MSSQL_SA_PASSWORD=Welcome1234" \       
+@REM            -p 1433:1433 \
+@REM            --name azuresqledge \
+@REM            -d mcr.microsoft.com/azure-sql-edge
+
 dotnet build .\Wbskt.Database\Wbskt.Database.sqlproj -c Release       
 @REM dotnet build Wbskt.Database/Wbskt.Database.sqlproj -c Release       
 

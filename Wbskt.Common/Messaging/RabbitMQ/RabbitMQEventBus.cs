@@ -27,7 +27,7 @@ public class RabbitMQEventBus : IEventBus, IDisposable
         var eventName = @event.GetType().Name;
         var message = JsonSerializer.Serialize(@event, @event.GetType());
         var body = Encoding.UTF8.GetBytes(message);
-
+        
         _channel.BasicPublish(exchange: "wbskt_exchange",
                              routingKey: eventName,
                              basicProperties: null,
