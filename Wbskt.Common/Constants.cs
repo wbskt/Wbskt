@@ -64,7 +64,17 @@ public static class Constants
     public static class Clients
     {
         public const string Postman = "postman";
-        public const string WbsktFrontend = "wbskt-frontend";
+        public const string WbsktGateway = "wbskt_gateway";
+    }
+
+    public static class Scopes
+    {
+        public const string OpenId = "openid";
+        public const string Profile = "profile";
+        public const string Email = "email";
+        public const string Roles = "roles";
+        public const string OfflineAccess = "offline_access";
+        public const string WbsktApi = "wbskt_api";
     }
 
     public static class Permissions

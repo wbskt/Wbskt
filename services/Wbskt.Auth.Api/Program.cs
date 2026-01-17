@@ -107,10 +107,15 @@ internal static class Program
                 }
 
                 // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
-                options
+                var aspNetCoreBuilder = options
                     .UseAspNetCore()
                     .EnableAuthorizationEndpointPassthrough()
                     .EnableTokenEndpointPassthrough();
+                    
+                if (builder.Environment.IsDevelopment()) 
+                {
+                    aspNetCoreBuilder.DisableTransportSecurityRequirement();
+                }
             })
             // Register the OpenIddict validation components.
             .AddValidation(options =>
