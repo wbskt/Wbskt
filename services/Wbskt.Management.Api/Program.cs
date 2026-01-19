@@ -39,6 +39,8 @@ internal static class Program
         // Configure Serilog
         var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "Config", "serilog.json");
         builder.Configuration.AddJsonFile(serilogConfigPath, optional: false, reloadOnChange: true);
+        builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
+
         Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
         builder.Host.UseSerilog(Log.Logger);
 

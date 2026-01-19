@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using Serilog;
+using OpenIddict.EntityFrameworkCore;
 using Wbskt.Auth.Api.Data;
 using Wbskt.Auth.Api.Models;
 using Wbskt.Auth.Api.Middleware;
@@ -33,6 +35,11 @@ internal static class Program
         builder.Configuration.AddJsonFile(serilogConfigPath, optional: false, reloadOnChange: true);
         Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
         builder.Host.UseSerilog(Log.Logger);
+
+        // Configure Data Protection
+        builder.Services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(ProgramDataPath, "Auth-Keys")))
+            .SetApplicationName("Wbskt.Auth.Api");
 
         builder.Services.AddControllersWithViews();
         builder.Services.AddRazorPages();
@@ -78,7 +85,17 @@ internal static class Program
                 // Enable the authorization and token endpoints.
                 options
                     .SetAuthorizationEndpointUris("connect/authorize")
-                    .SetTokenEndpointUris("connect/token");
+                    .SetTokenEndpointUris("connect/token")
+                    .SetLogoutEndpointUris("connect/logout");
+
+                options.RegisterScopes(
+                    Constants.Scopes.Email,
+                    Constants.Scopes.Profile,
+                    Constants.Scopes.OfflineAccess,
+                    Constants.Scopes.OpenId,
+                    Constants.Scopes.Roles,
+                    Constants.Scopes.WbsktApi
+                );
 
                 // Enable flows.
                 options.AllowAuthorizationCodeFlow();
@@ -100,12 +117,6 @@ internal static class Program
                     // options.AddSigningCertificate("thumbprint");
                 }
                 
-                // Disable Access Token Encryption in Development
-                if (builder.Environment.IsDevelopment())
-                {
-                    options.DisableAccessTokenEncryption();
-                }
-
                 // Register the ASP.NET Core host and configure the ASP.NET Core-specific options.
                 var aspNetCoreBuilder = options
                     .UseAspNetCore()
@@ -151,7 +162,7 @@ internal static class Program
                 .AddDefaultSecurityHeaders()
                 .AddContentSecurityPolicy(cspBuilder =>
                 {
-                    cspBuilder.AddDefaultSrc().Self();
+                    cspBuilder.AddDefaultSrc().Self().UnsafeInline();
                     cspBuilder.AddObjectSrc().None();
                     cspBuilder.AddFrameAncestors().None();
                 })

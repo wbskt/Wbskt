@@ -41,7 +41,7 @@ internal static class Program
         .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
         {
             options.Cookie.HttpOnly = true;
-            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SameSite = SameSiteMode.Lax;
             options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; 
         })
         .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
@@ -75,7 +75,10 @@ internal static class Program
             };
         });
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("Authenticated", policy => policy.RequireAuthenticatedUser());
+        });
 
         // Add services to the container.
         var proxyConfig = builder.Configuration.GetSection("ReverseProxy");
@@ -114,6 +117,11 @@ internal static class Program
         {
             return Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
                 [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
+        });
+
+        app.MapGet("/", (System.Security.Claims.ClaimsPrincipal user) => 
+        {
+            return $"WBSKT Gateway Active. User: {user.Identity?.Name ?? "Anonymous"}";
         });
 
         app.MapReverseProxy();

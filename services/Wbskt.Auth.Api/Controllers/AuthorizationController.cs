@@ -22,17 +22,20 @@ public class AuthorizationController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly IOpenIddictApplicationManager _applicationManager;
+    private readonly ILogger<AuthorizationController> _logger;
 
     public AuthorizationController(
         AuthDbContext context,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        IOpenIddictApplicationManager applicationManager)
+        IOpenIddictApplicationManager applicationManager,
+        ILogger<AuthorizationController> logger)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
         _signInManager = signInManager ?? throw new ArgumentNullException(nameof(signInManager));
         _applicationManager = applicationManager ?? throw new ArgumentNullException(nameof(applicationManager));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     [HttpGet("authorize")]
@@ -134,10 +137,16 @@ public class AuthorizationController : Controller
 
     private async Task<IActionResult> HandleAuthorizationCodeGrantType(OpenIddictRequest request)
     {
+        _logger.LogInformation("Token Redemption Started for code: {Code}...", request.Code?.Substring(0, 5));
+
         // Retrieve the claims principal stored in the authorization code
-        var principal = (await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme)).Principal;
+        var authResult = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        var principal = authResult.Principal;
+        
         if (principal == null)
         {
+            var failureMessage = authResult.Failure?.Message ?? "Principal is null";
+            _logger.LogWarning("AuthenticateAsync failed during code redemption. Failure: {FailureMessage}", failureMessage);
             throw new InvalidGrantException("The token is no longer valid.");
         }
 
@@ -145,10 +154,10 @@ public class AuthorizationController : Controller
         var user = await _userManager.GetUserAsync(principal);
         if (user == null || !await _signInManager.CanSignInAsync(user))
         {
+            _logger.LogWarning("User validation failed during code redemption.");
             throw new InvalidGrantException("The user is no longer allowed to sign in.");
         }
 
-        // Ensure the user is still allowed to sign in.
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
