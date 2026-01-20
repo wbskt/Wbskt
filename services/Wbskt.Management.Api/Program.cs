@@ -22,7 +22,7 @@ internal static class Program
     public static async Task Main(string[] args)
     {
         Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogName, typeof(Program).Assembly.FullName);
+        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogName, typeof(Program).Namespace);
         Environment.SetEnvironmentVariable(nameof(Constants.ServerType), nameof(Constants.ServerType.CoreServer));
 
         if (!Directory.Exists(ProgramDataPath))

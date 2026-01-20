@@ -18,7 +18,7 @@ internal static  class Program
 
         var programDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constants.Application.AppFolderName);
         Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogPath, programDataPath);
-        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogName, typeof(Program).Assembly.FullName);
+        Environment.SetEnvironmentVariable(Constants.LoggingConstants.LogName, typeof(Program).Namespace);
 
         if (!Directory.Exists(programDataPath))
         {
