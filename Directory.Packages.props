@@ -1,7 +1,12 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NoWarn>$(NoWarn);NU1507</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="5.1.5" />
   </ItemGroup>
 </Project>

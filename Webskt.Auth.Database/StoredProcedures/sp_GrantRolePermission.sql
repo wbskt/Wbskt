@@ -1,0 +1,21 @@
+CREATE PROCEDURE [dbo].[sp_GrantRolePermission]
+    @RoleId INT,
+    @PermissionSlug NVARCHAR(100),
+    @IsDeny BIT
+AS
+BEGIN
+    DECLARE @PermissionId INT;
+    SELECT @PermissionId = Id FROM [dbo].[Permissions] WHERE Slug = @PermissionSlug;
+
+    IF @PermissionId IS NOT NULL
+    BEGIN
+        MERGE [dbo].[RolePermissions] AS target
+        USING (SELECT @RoleId AS RoleId, @PermissionId AS PermissionId) AS source
+        ON (target.RoleId = source.RoleId AND target.PermissionId = source.PermissionId)
+        WHEN MATCHED THEN
+            UPDATE SET IsDeny = @IsDeny
+        WHEN NOT MATCHED THEN
+            INSERT (RoleId, PermissionId, IsDeny)
+            VALUES (@RoleId, @PermissionId, @IsDeny);
+    END
+END

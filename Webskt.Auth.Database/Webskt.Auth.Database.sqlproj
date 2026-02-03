@@ -1,0 +1,27 @@
+<Project Sdk="MSBuild.Sdk.SqlProj/3.3.0">
+
+    <PropertyGroup>
+        <!-- Required for .NET 10 build to avoid CopyRefAssembly error -->
+        <TargetFramework>net10.0</TargetFramework>
+        <SqlServerVersion>Sql150</SqlServerVersion>
+        <IncludeCompositeObjects>true</IncludeCompositeObjects>
+        <EnableDefaultSqlItems>false</EnableDefaultSqlItems>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <SqlFiles Include="Tables\*.sql"/>
+        <SqlFiles Include="Types*\*.sql"/>
+        <SqlFiles Include="StoredProcedures\*.sql"/>
+        <SqlFiles Include="Views\*.sql"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PostDeploy Include="Scripts\Script.PostDeployment.sql"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Scripts\" />
+      <Folder Include="Tables\" />
+    </ItemGroup>
+
+</Project>
