@@ -1,4 +1,4 @@
-<Project Sdk="MSBuild.Sdk.SqlProj/3.3.0">
+<Project Sdk="MSBuild.Sdk.SqlProj/4.0.0">
 
     <PropertyGroup>
         <!-- Required for .NET 10 build to avoid CopyRefAssembly error -->
