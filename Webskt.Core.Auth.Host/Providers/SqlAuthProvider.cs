@@ -67,7 +67,7 @@ internal class SqlAuthProvider : IAuthProvider
     public async Task<int> InsertUserAsync(User user)
     {
         await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("User_Create", connection);
+        await using var command = new SqlCommand("dbo.User_Create", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Username", user.Username);
         command.Parameters.AddWithValue("@Email", user.Email);
