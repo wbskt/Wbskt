@@ -2,7 +2,7 @@ using Webskt.Core.Auth.Host.Models;
 
 namespace Webskt.Core.Auth.Host.Providers;
 
-public interface IAuthProvider
+internal interface IAuthProvider
 {
     Task<User> GetByEmailAsync(string email);
     Task<User> GetByIdAsync(int id);

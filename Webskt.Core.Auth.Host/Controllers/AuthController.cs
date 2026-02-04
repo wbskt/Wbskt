@@ -18,10 +18,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<string> Register(RegisterRequest request)
+    public async Task Register(RegisterRequest request)
     {
         await _authService.RegisterUserAsync(request.Username, request.Email, request.Password);
-        return "User registered successfully";
     }
 
     [HttpPost("login")]
@@ -44,7 +43,7 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("check-permission/{permissionSlug}")]
-    public async Task<object> CheckPermission(string permissionSlug)
+    public async Task<PermissionCheckResponse> CheckPermission(string permissionSlug)
     {
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
@@ -55,6 +54,6 @@ public class AuthController : ControllerBase
 
         var isAllowed = await _authService.VerifyPermissionAsync(userId, permissionSlug);
 
-        return new { permission = permissionSlug, allowed = isAllowed };
+        return new PermissionCheckResponse(permissionSlug, isAllowed);
     }
 }

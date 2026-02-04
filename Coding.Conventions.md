@@ -8,7 +8,8 @@
 * **No Null Returns:** Public functions must never return `null`. Use descriptive exceptions to handle missing data or
   logic failures.
 * **Controller Implementation:** Always use `async Task<T>` as the return type for controller actions (where `T` is the
-  DTO). Success responses return the data directly.
+  DTO). Use `async Task` (no generic) for actions that perform an operation without returning data. Success responses return the data directly.
+* **No Anonymous Returns:** Controller actions must never return `object` or anonymous types. Always define a named record or class for the response.
 * **Error Handling:** Failure responses and HTTP status codes for errors are managed exclusively by the global exception
   handler.
 
@@ -80,10 +81,13 @@ public class UserService : IUserService
 
 ### 1. Stored Procedure (SP) Naming
 
-| Purpose          | Pattern                      | Example             |
-|------------------|------------------------------|---------------------|
-| **Lookup ID**    | `[Entity]_FindBy_[Criteria]` | `User_FindBy_Email` |
-| **Fetch Record** | `[Entity]_GetBy_[Criteria]`  | `User_GetBy_Id`     |
+| Purpose           | Pattern                       | Example                  |
+|-------------------|-------------------------------|--------------------------|
+| **Lookup ID**     | `[Entity]_FindBy_[Criteria]`  | `User_FindBy_Email`      |
+| **Fetch Record**  | `[Entity]_GetBy_[Criteria]`   | `User_GetBy_Id`          |
+| **Create/Insert** | `[Entity]_[Create/Insert]`    | `User_Create`            |
+| **Link/Assign**   | `[Entity]_[Grant/Insert]`     | `RolePermission_Grant`   |
+| **Logic/Verify**  | `[Entity]_Verify`             | `Permission_Verify`      |
 
 ### 2. SQL Standards
 

@@ -2,16 +2,18 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Webskt.Core.Auth.Host.Models;
 using Webskt.Core.Auth.Host.Providers;
 
 namespace Webskt.Core.Auth.Host.Services;
 
-public class AuthService : IAuthService
+internal class AuthService : IAuthService
 {
     private readonly IAuthProvider _provider;
     private readonly IConfiguration _configuration;
+    private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(IAuthProvider provider, IConfiguration configuration)
     {
@@ -23,9 +25,18 @@ public class AuthService : IAuthService
     {
         var user = await _provider.GetByEmailAsync(email);
 
-        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+
+        if (verificationResult == PasswordVerificationResult.Failed)
         {
             throw new SecurityException("Invalid credentials.");
+        }
+
+        if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            // In a real scenario, we should update the hash in the DB here
+            // user.PasswordHash = _passwordHasher.HashPassword(user, password);
+            // await _provider.UpdateUserAsync(user);
         }
 
         if (!user.IsActive)
@@ -73,13 +84,13 @@ public class AuthService : IAuthService
 
     public async Task RegisterUserAsync(string username, string email, string password)
     {
-        var hash = BCrypt.Net.BCrypt.HashPassword(password);
         var user = new User 
         { 
             Username = username, 
-            Email = email, 
-            PasswordHash = hash 
+            Email = email 
         };
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
         await _provider.InsertUserAsync(user);
     }

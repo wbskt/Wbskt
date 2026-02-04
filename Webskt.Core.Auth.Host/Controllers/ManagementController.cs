@@ -17,44 +17,38 @@ public class ManagementController : ControllerBase
     }
 
     [HttpPost("roles")]
-    public async Task<string> CreateRole(string name, string description)
+    public async Task CreateRole(string name, string description)
     {
         await _authService.CreateRoleAsync(name, description);
-        return "Role created";
     }
 
     [HttpPost("groups")]
-    public async Task<string> CreateGroup(string name, int? parentGroupId)
+    public async Task CreateGroup(string name, int? parentGroupId)
     {
         await _authService.CreateGroupAsync(name, parentGroupId);
-        return "Group created";
     }
 
     [HttpPost("users/{userId}/groups/{groupId}")]
-    public async Task<string> AddUserToGroup(int userId, int groupId)
+    public async Task AddUserToGroup(int userId, int groupId)
     {
         await _authService.AddUserToGroupAsync(userId, groupId);
-        return "User added to group";
     }
 
     [HttpPost("permissions")]
-    public async Task<string> CreatePermission(string slug, string description)
+    public async Task CreatePermission(string slug, string description)
     {
         await _authService.CreatePermissionAsync(slug, description);
-        return "Permission created";
     }
 
     [HttpPost("roles/{roleId}/permissions")]
-    public async Task<string> GrantRolePermission(int roleId, string slug, bool isDeny = false)
+    public async Task GrantRolePermission(int roleId, string slug, bool isDeny = false)
     {
         await _authService.GrantRolePermissionAsync(roleId, slug, isDeny);
-        return "Permission granted to role";
     }
 
     [HttpPost("users/{userId}/permissions")]
-    public async Task<string> GrantUserPermission(int userId, string slug, bool isDeny = false)
+    public async Task GrantUserPermission(int userId, string slug, bool isDeny = false)
     {
         await _authService.GrantUserPermissionAsync(userId, slug, isDeny);
-        return "Permission granted to user";
     }
 }
