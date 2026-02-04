@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Core.Auth.Host", "We
 EndProject
 Project("{42EA0DBD-9CF1-443E-919E-BE9C484E4577}") = "Webskt.Auth.Database", "Webskt.Auth.Database\Webskt.Auth.Database.sqlproj", "{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Core.Constants", "Webskt.Core.Constants\Webskt.Core.Constants.csproj", "{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,22 @@ Global
 		{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204}.Release|x64.Build.0 = Release|Any CPU
 		{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204}.Release|x86.ActiveCfg = Release|Any CPU
 		{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204}.Release|x86.Build.0 = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|x64.Build.0 = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Debug|x86.Build.0 = Debug|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|ARM64.Build.0 = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x64.ActiveCfg = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x64.Build.0 = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x86.ActiveCfg = Release|Any CPU
+		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

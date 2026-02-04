@@ -1,17 +1,43 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
 using Webskt.Core.Auth.Host.Middleware;
 using Webskt.Core.Auth.Host.Providers;
 using Webskt.Core.Auth.Host.Services;
+using Webskt.Core.Constants;
 
 namespace Webskt.Core.Auth.Host;
 
 public static class Program
 {
+    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
+
     public static void Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        Environment.SetEnvironmentVariable(LoggingConstants.LogPath, ProgramDataPath);
+        Environment.SetEnvironmentVariable(LoggingConstants.LogName, typeof(Program).Namespace);
+
+        if (!Directory.Exists(ProgramDataPath))
+        {
+            Directory.CreateDirectory(ProgramDataPath);
+        }
+
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = Directory.GetCurrentDirectory()
+        });
+
+        // Configure Serilog
+        var serilogInBinConfigPath = Path.Combine(builder.Environment.ContentRootPath, "serilog.json");
+        var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "Config", "serilog.json");
+        builder.Configuration.AddJsonFile(serilogConfigPath, optional: true, reloadOnChange: true);
+        builder.Configuration.AddJsonFile(serilogInBinConfigPath, optional: true, reloadOnChange: true);
+        builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
+
+        Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
+        builder.Host.UseSerilog(Log.Logger);
 
         // Add services to the container.
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
@@ -19,22 +45,22 @@ public static class Program
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>
+        {
+            x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddJwtBearer(x =>
+        {
+            x.RequireHttpsMetadata = false;
+            x.SaveToken = true;
+            x.TokenValidationParameters = new TokenValidationParameters
             {
-                x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(x =>
-            {
-                x.RequireHttpsMetadata = false;
-                x.SaveToken = true;
-                x.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
-                    ValidateIssuer = false,
-                    ValidateAudience = false
-                };
-            });
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = false,
+                ValidateAudience = false
+            };
+        });
 
         builder.Services.AddAuthorization();
 
