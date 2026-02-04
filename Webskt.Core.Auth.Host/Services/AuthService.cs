@@ -21,18 +21,22 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> LoginAsync(string email, string password, string ipAddress)
     {
-        var user = await _provider.GetUserByEmailAsync(email);
-        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        var user = await _provider.GetByEmailAsync(email);
+
+        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
         {
-            throw new UnauthorizedAccessException("Invalid credentials.");
+            throw new SecurityException("Invalid credentials.");
         }
 
-        if (!user.IsActive) throw new UnauthorizedAccessException("User is inactive.");
+        if (!user.IsActive)
+        {
+            throw new SecurityException("User is inactive.");
+        }
 
         var accessToken = GenerateAccessToken(user);
         var refreshToken = GenerateRefreshToken(user.Id);
 
-        await _provider.SaveRefreshTokenAsync(refreshToken, ipAddress);
+        await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress);
 
         return new LoginResponse(accessToken, refreshToken.Token);
     }
@@ -40,59 +44,64 @@ public class AuthService : IAuthService
     public async Task<LoginResponse> RefreshTokenAsync(string token, string ipAddress)
     {
         var existingToken = await _provider.GetRefreshTokenAsync(token);
-        if (existingToken == null || !existingToken.IsActive)
-        {
-            throw new UnauthorizedAccessException("Invalid token.");
-        }
-        
-        // Revoke old token? Or just Rotate? For now, we just issue new.
-        // Ideally: Revoke existingToken.
 
-        var user = await _provider.GetUserByIdAsync(existingToken.UserId);
-        if (user == null || !user.IsActive) throw new UnauthorizedAccessException("User invalid.");
+        if (!existingToken.IsActive)
+        {
+            throw new SecurityException("Token is no longer active.");
+        }
+
+        var user = await _provider.GetByIdAsync(existingToken.UserId);
+
+        if (!user.IsActive)
+        {
+            throw new SecurityException("User is inactive.");
+        }
 
         var newAccessToken = GenerateAccessToken(user);
         var newRefreshToken = GenerateRefreshToken(user.Id);
-        
-        // In a real app, revoke the old one here
-        // await _provider.RevokeToken(existingToken.Id);
-        // And chain them via ReplacedByToken
 
-        await _provider.SaveRefreshTokenAsync(newRefreshToken, ipAddress);
+        // TODO: Publish TokenRotated event
+        await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress);
 
         return new LoginResponse(newAccessToken, newRefreshToken.Token);
     }
 
-    public async Task<bool> ValidatePermissionAsync(int userId, string permissionSlug)
+    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug)
     {
-        return await _provider.CheckPermissionAsync(userId, permissionSlug);
+        return await _provider.VerifyPermissionAsync(userId, permissionSlug);
     }
 
     public async Task RegisterUserAsync(string username, string email, string password)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword(password);
-        var user = new User { Username = username, Email = email, PasswordHash = hash };
-        await _provider.CreateUserAsync(user);
+        var user = new User 
+        { 
+            Username = username, 
+            Email = email, 
+            PasswordHash = hash 
+        };
+
+        await _provider.InsertUserAsync(user);
     }
 
     public async Task CreateRoleAsync(string name, string description)
     {
-        await _provider.CreateRoleAsync(name, description);
+        await _provider.InsertRoleAsync(name, description);
     }
 
     public async Task CreateGroupAsync(string name, int? parentGroupId)
     {
-        await _provider.CreateGroupAsync(name, parentGroupId);
+        await _provider.InsertGroupAsync(name, parentGroupId);
     }
 
     public async Task AddUserToGroupAsync(int userId, int groupId)
     {
-        await _provider.AddUserToGroupAsync(userId, groupId);
+        await _provider.InsertUserGroupAsync(userId, groupId);
     }
 
     public async Task CreatePermissionAsync(string slug, string description)
     {
-        await _provider.CreatePermissionAsync(slug, description);
+        await _provider.InsertPermissionAsync(slug, description);
     }
 
     public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny)
@@ -122,6 +131,7 @@ public class AuthService : IAuthService
             Expires = DateTime.UtcNow.AddMinutes(15),
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
         };
+
         var token = tokenHandler.CreateToken(descriptor);
         return tokenHandler.WriteToken(token);
     }
@@ -131,6 +141,7 @@ public class AuthService : IAuthService
         using var rng = RandomNumberGenerator.Create();
         var randomBytes = new byte[64];
         rng.GetBytes(randomBytes);
+
         return new RefreshToken
         {
             UserId = userId,

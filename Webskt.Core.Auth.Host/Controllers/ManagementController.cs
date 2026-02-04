@@ -17,44 +17,44 @@ public class ManagementController : ControllerBase
     }
 
     [HttpPost("roles")]
-    public async Task<IActionResult> CreateRole(string name, string description)
+    public async Task<string> CreateRole(string name, string description)
     {
         await _authService.CreateRoleAsync(name, description);
-        return Ok(new { message = "Role created" });
+        return "Role created";
     }
 
     [HttpPost("groups")]
-    public async Task<IActionResult> CreateGroup(string name, int? parentGroupId)
+    public async Task<string> CreateGroup(string name, int? parentGroupId)
     {
         await _authService.CreateGroupAsync(name, parentGroupId);
-        return Ok(new { message = "Group created" });
+        return "Group created";
     }
 
     [HttpPost("users/{userId}/groups/{groupId}")]
-    public async Task<IActionResult> AddUserToGroup(int userId, int groupId)
+    public async Task<string> AddUserToGroup(int userId, int groupId)
     {
         await _authService.AddUserToGroupAsync(userId, groupId);
-        return Ok(new { message = "User added to group" });
+        return "User added to group";
     }
 
     [HttpPost("permissions")]
-    public async Task<IActionResult> CreatePermission(string slug, string description)
+    public async Task<string> CreatePermission(string slug, string description)
     {
         await _authService.CreatePermissionAsync(slug, description);
-        return Ok(new { message = "Permission created" });
+        return "Permission created";
     }
 
     [HttpPost("roles/{roleId}/permissions")]
-    public async Task<IActionResult> GrantRolePermission(int roleId, string slug, bool isDeny = false)
+    public async Task<string> GrantRolePermission(int roleId, string slug, bool isDeny = false)
     {
         await _authService.GrantRolePermissionAsync(roleId, slug, isDeny);
-        return Ok(new { message = "Permission granted to role" });
+        return "Permission granted to role";
     }
 
     [HttpPost("users/{userId}/permissions")]
-    public async Task<IActionResult> GrantUserPermission(int userId, string slug, bool isDeny = false)
+    public async Task<string> GrantUserPermission(int userId, string slug, bool isDeny = false)
     {
         await _authService.GrantUserPermissionAsync(userId, slug, isDeny);
-        return Ok(new { message = "Permission granted to user" });
+        return "Permission granted to user";
     }
 }

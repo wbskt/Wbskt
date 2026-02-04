@@ -18,53 +18,43 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register(RegisterRequest request)
+    public async Task<string> Register(RegisterRequest request)
     {
         await _authService.RegisterUserAsync(request.Username, request.Email, request.Password);
-        return Ok(new { message = "User registered successfully" });
+        return "User registered successfully";
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login(LoginRequest request)
+    public async Task<LoginResponse> Login(LoginRequest request)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        try
-        {
-            var response = await _authService.LoginAsync(request.Email, request.Password, ipAddress);
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        var response = await _authService.LoginAsync(request.Email, request.Password, ipAddress);
+
+        return response;
     }
 
     [HttpPost("refresh-token")]
-    public async Task<IActionResult> RefreshToken([FromBody] string refreshToken)
+    public async Task<LoginResponse> RefreshToken([FromBody] string refreshToken)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        try
-        {
-            var response = await _authService.RefreshTokenAsync(refreshToken, ipAddress);
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        var response = await _authService.RefreshTokenAsync(refreshToken, ipAddress);
+
+        return response;
     }
 
     [Authorize]
     [HttpGet("check-permission/{permissionSlug}")]
-    public async Task<IActionResult> CheckPermission(string permissionSlug)
+    public async Task<object> CheckPermission(string permissionSlug)
     {
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
         if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
         {
-            return Unauthorized();
+            throw new SecurityException("Unauthorized access.");
         }
 
-        var isAllowed = await _authService.ValidatePermissionAsync(userId, permissionSlug);
-        return Ok(new { permission = permissionSlug, allowed = isAllowed });
+        var isAllowed = await _authService.VerifyPermissionAsync(userId, permissionSlug);
+
+        return new { permission = permissionSlug, allowed = isAllowed };
     }
 }

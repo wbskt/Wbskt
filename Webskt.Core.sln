@@ -10,6 +10,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		LICENSE.txt = LICENSE.txt
 		Scripts.bat = Scripts.bat
 		.gitignore = .gitignore
+		Coding.Conventions.md = Coding.Conventions.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Core.Auth.Host", "Webskt.Core.Auth.Host\Webskt.Core.Auth.Host.csproj", "{A2C4C08B-9C09-4E77-860D-45067577AD4E}"

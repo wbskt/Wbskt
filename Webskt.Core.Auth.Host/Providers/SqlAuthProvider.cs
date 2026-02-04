@@ -11,18 +11,18 @@ public class SqlAuthProvider : IAuthProvider
     public SqlAuthProvider(IConfiguration configuration)
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection") 
-                            ?? throw new ArgumentNullException(nameof(configuration));
+                            ?? throw new ArgumentNullException("Connection string 'DefaultConnection' not found.");
     }
 
-    public async Task<User?> GetUserByEmailAsync(string email)
+    public async Task<User> GetByEmailAsync(string email)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_GetUserByEmail", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("User_GetBy_Email", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Email", email);
 
         await connection.OpenAsync();
-        await using var reader = await command.ExecuteReaderAsync();
+        using var reader = await command.ExecuteReaderAsync();
         
         if (await reader.ReadAsync())
         {
@@ -36,18 +36,18 @@ public class SqlAuthProvider : IAuthProvider
             };
         }
 
-        return null;
+        throw new SecurityException($"User with email {email} not found.");
     }
 
-    public async Task<User?> GetUserByIdAsync(int id)
+    public async Task<User> GetByIdAsync(int id)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_GetUserById", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("User_GetBy_Id", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Id", id);
 
         await connection.OpenAsync();
-        await using var reader = await command.ExecuteReaderAsync();
+        using var reader = await command.ExecuteReaderAsync();
         
         if (await reader.ReadAsync())
         {
@@ -61,13 +61,13 @@ public class SqlAuthProvider : IAuthProvider
             };
         }
 
-        return null;
+        throw new SecurityException($"User with id {id} not found.");
     }
 
-    public async Task<int> CreateUserAsync(User user)
+    public async Task<int> InsertUserAsync(User user)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_CreateUser", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("User_Create", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Username", user.Username);
         command.Parameters.AddWithValue("@Email", user.Email);
@@ -82,10 +82,10 @@ public class SqlAuthProvider : IAuthProvider
         return (int)outputId.Value;
     }
 
-    public async Task SaveRefreshTokenAsync(RefreshToken token, string ipAddress)
+    public async Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_SaveRefreshToken", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("RefreshToken_Insert", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@UserId", token.UserId);
         command.Parameters.AddWithValue("@Token", token.Token);
@@ -101,15 +101,15 @@ public class SqlAuthProvider : IAuthProvider
         token.Id = (int)outputId.Value;
     }
 
-    public async Task<RefreshToken?> GetRefreshTokenAsync(string token)
+    public async Task<RefreshToken> GetRefreshTokenAsync(string token)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_GetRefreshToken", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("RefreshToken_GetBy_Token", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Token", token);
 
         await connection.OpenAsync();
-        await using var reader = await command.ExecuteReaderAsync();
+        using var reader = await command.ExecuteReaderAsync();
 
         if (await reader.ReadAsync())
         {
@@ -124,37 +124,41 @@ public class SqlAuthProvider : IAuthProvider
             };
         }
 
-        return null;
+        throw new SecurityException("Invalid refresh token.");
     }
 
-    public async Task<bool> CheckPermissionAsync(int userId, string permissionSlug)
+    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_CheckPermission", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("Permission_Verify", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@PermissionSlug", permissionSlug);
 
         await connection.OpenAsync();
         var result = await command.ExecuteScalarAsync();
-
-        if (result == null || result == DBNull.Value)
+        
+        if (result != null && result != DBNull.Value)
         {
-            return false;
+            // Logic requiring an empty line before this comment
+            if (result is bool b)
+            {
+                return b;
+            }
+
+            if (result is int i)
+            {
+                return i == 1;
+            }
         }
 
-        return result switch
-        {
-            bool b => b,
-            int i => i == 1,
-            _ => false
-        };
+        return false;
     }
 
-    public async Task CreateRoleAsync(string name, string description)
+    public async Task InsertRoleAsync(string name, string description)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_CreateRole", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("Role_Create", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
@@ -163,10 +167,10 @@ public class SqlAuthProvider : IAuthProvider
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task CreateGroupAsync(string name, int? parentGroupId)
+    public async Task InsertGroupAsync(string name, int? parentGroupId)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_CreateGroup", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("Group_Create", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@ParentGroupId", parentGroupId ?? (object)DBNull.Value);
@@ -175,10 +179,10 @@ public class SqlAuthProvider : IAuthProvider
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task AddUserToGroupAsync(int userId, int groupId)
+    public async Task InsertUserGroupAsync(int userId, int groupId)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_AddUserToGroup", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("UserGroup_Insert", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@GroupId", groupId);
@@ -187,10 +191,10 @@ public class SqlAuthProvider : IAuthProvider
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task CreatePermissionAsync(string slug, string description)
+    public async Task InsertPermissionAsync(string slug, string description)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_CreatePermission", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("Permission_Create", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@Slug", slug);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
@@ -201,8 +205,8 @@ public class SqlAuthProvider : IAuthProvider
 
     public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_GrantRolePermission", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("RolePermission_Grant", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@RoleId", roleId);
         command.Parameters.AddWithValue("@PermissionSlug", permissionSlug);
@@ -214,8 +218,8 @@ public class SqlAuthProvider : IAuthProvider
 
     public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("sp_GrantUserPermission", connection);
+        using var connection = new SqlConnection(_connectionString);
+        using var command = new SqlCommand("UserPermission_Grant", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@PermissionSlug", permissionSlug);
