@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Webskt.Core.Auth.Host.Models;
 using Webskt.Core.Auth.Host.Services;
 
 namespace Webskt.Core.Auth.Host.Controllers;
@@ -14,6 +15,24 @@ public class ManagementController : ControllerBase
     public ManagementController(IAuthService authService)
     {
         _authService = authService;
+    }
+
+    [HttpGet("roles")]
+    public async Task<IReadOnlyCollection<RoleResponse>> GetRoles()
+    {
+        return await _authService.GetRolesAsync();
+    }
+
+    [HttpGet("groups")]
+    public async Task<IReadOnlyCollection<GroupResponse>> GetGroups()
+    {
+        return await _authService.GetGroupsAsync();
+    }
+
+    [HttpGet("permissions")]
+    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissions()
+    {
+        return await _authService.GetPermissionsAsync();
     }
 
     [HttpPost("roles")]

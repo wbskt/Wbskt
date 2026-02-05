@@ -10,10 +10,17 @@
 * **Controller Implementation:** Always use `async Task<T>` as the return type for controller actions (where `T` is the
   DTO). Use `async Task` (no generic) for actions that perform an operation without returning data. Success responses return the data directly.
 * **No Anonymous Returns:** Controller actions must never return `object` or anonymous types. Always define a named record or class for the response.
+* **Collection Returns:** When returning a list or collection of items, always use `IReadOnlyCollection<T>` to signal that the result is an immutable snapshot.
 * **Error Handling:** Failure responses and HTTP status codes for errors are managed exclusively by the global exception
   handler.
 
-### 2. Naming Patterns
+### 2. Data Access Patterns
+
+* **Base Provider Pattern:** Do not repeat `SqlConnection` or `SqlCommand` boilerplate in every method. Inherit from a `BaseSqlProvider` (or equivalent) that encapsulates connection lifecycle, command execution, and mapping.
+* **SP Consistency:** Always use the full schema-qualified name (e.g., `dbo.`) when calling stored procedures from C# code.
+* **DRY Mappings:** Extract repeated entity mapping logic (e.g., `SqlDataReader` to `User`) into reusable private methods.
+
+### 3. Naming Patterns
 
 We distinguish between fetching IDs and fetching full data:
 

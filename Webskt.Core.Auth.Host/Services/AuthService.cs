@@ -82,6 +82,21 @@ internal class AuthService : IAuthService
         return await _provider.VerifyPermissionAsync(userId, permissionSlug);
     }
 
+    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync()
+    {
+        return await _provider.GetPermissionsAsync();
+    }
+
+    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync()
+    {
+        return await _provider.GetRolesAsync();
+    }
+
+    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync()
+    {
+        return await _provider.GetGroupsAsync();
+    }
+
     public async Task RegisterUserAsync(string username, string email, string password)
     {
         var user = new User 

@@ -10,6 +10,9 @@ internal interface IAuthProvider
     Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress);
     Task<RefreshToken> GetRefreshTokenAsync(string token);
     Task<bool> VerifyPermissionAsync(int userId, string permissionSlug);
+    Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync();
+    Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync();
+    Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync();
     Task InsertRoleAsync(string name, string description);
     Task InsertGroupAsync(string name, int? parentGroupId);
     Task InsertUserGroupAsync(int userId, int groupId);

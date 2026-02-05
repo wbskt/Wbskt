@@ -6,6 +6,7 @@ using Webskt.Core.Auth.Host.Middleware;
 using Webskt.Core.Auth.Host.Providers;
 using Webskt.Core.Auth.Host.Services;
 using Webskt.Core.Constants;
+using Scalar.AspNetCore;
 
 namespace Webskt.Core.Auth.Host;
 
@@ -82,9 +83,10 @@ public static class Program
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
-        }
 
-        app.UseHttpsRedirection();
+            // Map the Scalar UI endpoint (default is /scalar-api-reference)
+            app.MapScalarApiReference();
+        }
 
         app.UseAuthentication();
         app.UseAuthorization();

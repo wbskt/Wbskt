@@ -7,6 +7,9 @@ public interface IAuthService
     Task<LoginResponse> LoginAsync(string email, string password, string ipAddress);
     Task<LoginResponse> RefreshTokenAsync(string token, string ipAddress);
     Task<bool> VerifyPermissionAsync(int userId, string permissionSlug);
+    Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync();
+    Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync();
+    Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync();
     Task RegisterUserAsync(string username, string email, string password);
     Task CreateRoleAsync(string name, string description);
     Task CreateGroupAsync(string name, int? parentGroupId);
