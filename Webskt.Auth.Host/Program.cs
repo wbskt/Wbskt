@@ -6,6 +6,7 @@ using Scalar.AspNetCore;
 using Webskt.Auth.Host.Providers;
 using Webskt.Auth.Host.Services;
 using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 
 namespace Webskt.Auth.Host;
@@ -30,21 +31,7 @@ public static class Program
             ContentRootPath = Directory.GetCurrentDirectory()
         });
 
-        // Configure Serilog
-        var serilogInBinConfigPath = Path.Combine(builder.Environment.ContentRootPath, "serilog.json");
-        var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "Config", "serilog.json");
-
-        // Load the shared configuration from the central Config folder
-        builder.Configuration.AddJsonFile(serilogConfigPath, optional: true, reloadOnChange: true);
-
-        // Load the local configuration from the bin folder, overriding any shared settings
-        builder.Configuration.AddJsonFile(serilogInBinConfigPath, optional: true, reloadOnChange: true);
-
-        // Apply environment-specific overrides (e.g., Development or Production specific settings)
-        builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
-
-        Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
-        builder.Host.UseSerilog(Log.Logger);
+        builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
@@ -79,12 +66,10 @@ public static class Program
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
-        // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
 
-            // Map the Scalar UI endpoint (default is /scalar-api-reference)
             app.MapScalarApiReference();
         }
 

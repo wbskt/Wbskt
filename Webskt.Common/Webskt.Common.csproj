@@ -7,16 +7,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Reference Include="Microsoft.AspNetCore.Http.Abstractions">
-        <HintPath>..\..\..\..\.dotnet\shared\Microsoft.AspNetCore.App\10.0.2\Microsoft.AspNetCore.Http.Abstractions.dll</HintPath>
-      </Reference>
-      <Reference Include="Microsoft.Extensions.Logging.Abstractions">
-        <HintPath>..\..\..\..\.dotnet\shared\Microsoft.AspNetCore.App\10.0.2\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
-      </Reference>
+      <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
+      <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+      <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+      <PackageReference Include="Serilog" />
+      <PackageReference Include="Serilog.Settings.Configuration" />
     </ItemGroup>
 
 </Project>

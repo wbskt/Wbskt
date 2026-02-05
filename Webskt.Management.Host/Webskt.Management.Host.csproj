@@ -15,6 +15,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
+      <ProjectReference Include="..\Webskt.Common\Webskt.Common.csproj" />
     </ItemGroup>
 
     <ItemGroup>
