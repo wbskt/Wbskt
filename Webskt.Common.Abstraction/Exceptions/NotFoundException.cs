@@ -1,4 +1,4 @@
-namespace Webskt.Auth.Host.Models;
+namespace Webskt.Common.Abstraction.Exceptions;
 
 public class NotFoundException : Exception
 {

@@ -1,14 +1,12 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using Scalar.AspNetCore;
-using Webskt.Auth.Host.Providers;
-using Webskt.Auth.Host.Services;
+using Serilog;
 using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Middlewares;
 
-namespace Webskt.Auth.Host;
+namespace Webskt.Management.Host;
 
 public static class Program
 {
@@ -45,10 +43,6 @@ public static class Program
 
         Log.Logger = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
         builder.Host.UseSerilog(Log.Logger);
-
-        // Add services to the container.
-        builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
-        builder.Services.AddScoped<IAuthService, AuthService>();
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Webskt.Auth.Host.Models;
 using Webskt.Auth.Host.Providers;
+using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Auth.Host.Services;
 

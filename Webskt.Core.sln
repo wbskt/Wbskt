@@ -17,7 +17,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Auth.Host", "Webskt.
 EndProject
 Project("{42EA0DBD-9CF1-443E-919E-BE9C484E4577}") = "Webskt.Auth.Database", "Webskt.Auth.Database\Webskt.Auth.Database.sqlproj", "{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Common", "Webskt.Common\Webskt.Common.csproj", "{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Common.Abstraction", "Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj", "{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Management.Host", "Webskt.Management.Host\Webskt.Management.Host.csproj", "{512990B8-9039-4851-A561-9ABCFA7D495F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Common", "Webskt.Common\Webskt.Common.csproj", "{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -79,6 +83,38 @@ Global
 		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x64.Build.0 = Release|Any CPU
 		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x86.ActiveCfg = Release|Any CPU
 		{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}.Release|x86.Build.0 = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|x64.Build.0 = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Debug|x86.Build.0 = Debug|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|ARM64.Build.0 = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|x64.ActiveCfg = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|x64.Build.0 = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|x86.ActiveCfg = Release|Any CPU
+		{512990B8-9039-4851-A561-9ABCFA7D495F}.Release|x86.Build.0 = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|x64.Build.0 = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Debug|x86.Build.0 = Debug|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|ARM64.Build.0 = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|x64.ActiveCfg = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|x64.Build.0 = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|x86.ActiveCfg = Release|Any CPU
+		{7EB69D6C-3242-48E9-9C97-F8C53F14AF30}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

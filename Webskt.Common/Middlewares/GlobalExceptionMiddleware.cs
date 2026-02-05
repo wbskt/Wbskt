@@ -1,9 +1,12 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Webskt.Auth.Host.Models;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Abstraction.Models;
 
-namespace Webskt.Auth.Host.Middleware;
+namespace Webskt.Common.Middlewares;
 
 public class GlobalExceptionMiddleware
 {

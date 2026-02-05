@@ -1,4 +1,4 @@
-namespace Webskt.Auth.Host.Models;
+namespace Webskt.Common.Abstraction.Models;
 
 public record ErrorResponse(
     string Message, 

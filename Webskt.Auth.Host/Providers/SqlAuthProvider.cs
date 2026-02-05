@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Webskt.Auth.Host.Models;
+using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Auth.Host.Providers;
 

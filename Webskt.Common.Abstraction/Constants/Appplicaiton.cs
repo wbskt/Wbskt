@@ -1,4 +1,4 @@
-namespace Webskt.Common.Constants;
+namespace Webskt.Common.Abstraction.Constants;
 
 public static class Application
 {
