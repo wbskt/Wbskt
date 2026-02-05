@@ -1,4 +1,4 @@
-namespace Webskt.Core.Auth.Host.Models;
+namespace Webskt.Auth.Host.Models;
 
 public record PermissionResponse(string Slug, string? Description);
 public record RoleResponse(int Id, string Name, string? Description);

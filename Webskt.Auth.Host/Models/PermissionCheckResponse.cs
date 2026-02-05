@@ -1,3 +1,3 @@
-namespace Webskt.Core.Auth.Host.Models;
+namespace Webskt.Auth.Host.Models;
 
 public record PermissionCheckResponse(string Permission, bool Allowed);

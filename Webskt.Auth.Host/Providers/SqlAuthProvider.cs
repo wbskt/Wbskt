@@ -1,8 +1,8 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
-using Webskt.Core.Auth.Host.Models;
+using Webskt.Auth.Host.Models;
 
-namespace Webskt.Core.Auth.Host.Providers;
+namespace Webskt.Auth.Host.Providers;
 
 internal class SqlAuthProvider : BaseSqlProvider, IAuthProvider
 {

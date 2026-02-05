@@ -13,11 +13,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		Coding.Conventions.md = Coding.Conventions.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Core.Auth.Host", "Webskt.Core.Auth.Host\Webskt.Core.Auth.Host.csproj", "{A2C4C08B-9C09-4E77-860D-45067577AD4E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Auth.Host", "Webskt.Auth.Host\Webskt.Auth.Host.csproj", "{A2C4C08B-9C09-4E77-860D-45067577AD4E}"
 EndProject
 Project("{42EA0DBD-9CF1-443E-919E-BE9C484E4577}") = "Webskt.Auth.Database", "Webskt.Auth.Database\Webskt.Auth.Database.sqlproj", "{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Core.Constants", "Webskt.Core.Constants\Webskt.Core.Constants.csproj", "{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Common", "Webskt.Common\Webskt.Common.csproj", "{7AAEC4AE-6FBC-454D-A6B0-55B715732E4C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

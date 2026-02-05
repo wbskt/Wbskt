@@ -4,10 +4,10 @@ using System.Text;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
-using Webskt.Core.Auth.Host.Models;
-using Webskt.Core.Auth.Host.Providers;
+using Webskt.Auth.Host.Models;
+using Webskt.Auth.Host.Providers;
 
-namespace Webskt.Core.Auth.Host.Services;
+namespace Webskt.Auth.Host.Services;
 
 internal class AuthService : IAuthService
 {

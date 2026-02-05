@@ -22,7 +22,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Webskt.Core.Constants\Webskt.Core.Constants.csproj" />
+      <ProjectReference Include="..\Webskt.Common\Webskt.Common.csproj" />
     </ItemGroup>
 
 </Project>

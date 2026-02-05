@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Webskt.Core.Auth.Host.Models;
-using Webskt.Core.Auth.Host.Services;
+using Webskt.Auth.Host.Models;
+using Webskt.Auth.Host.Services;
 
-namespace Webskt.Core.Auth.Host.Controllers;
+namespace Webskt.Auth.Host.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]

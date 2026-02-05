@@ -2,13 +2,14 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using Webskt.Core.Auth.Host.Middleware;
-using Webskt.Core.Auth.Host.Providers;
-using Webskt.Core.Auth.Host.Services;
-using Webskt.Core.Constants;
+using Webskt.Common;
 using Scalar.AspNetCore;
+using Webskt.Auth.Host.Middleware;
+using Webskt.Auth.Host.Providers;
+using Webskt.Auth.Host.Services;
+using Webskt.Common.Constants;
 
-namespace Webskt.Core.Auth.Host;
+namespace Webskt.Auth.Host;
 
 public static class Program
 {
@@ -16,8 +17,8 @@ public static class Program
 
     public static void Main(string[] args)
     {
-        Environment.SetEnvironmentVariable(LoggingConstants.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(LoggingConstants.LogName, typeof(Program).Namespace);
+        Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
+        Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
 
         if (!Directory.Exists(ProgramDataPath))
         {

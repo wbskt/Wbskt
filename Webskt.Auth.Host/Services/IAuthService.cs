@@ -1,6 +1,6 @@
-using Webskt.Core.Auth.Host.Models;
+using Webskt.Auth.Host.Models;
 
-namespace Webskt.Core.Auth.Host.Services;
+namespace Webskt.Auth.Host.Services;
 
 public interface IAuthService
 {

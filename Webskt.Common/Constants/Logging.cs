@@ -1,6 +1,6 @@
-﻿namespace Webskt.Core.Constants;
+﻿namespace Webskt.Common.Constants;
 
-public static class LoggingConstants
+public static class Logging
 {
     public const string LogPath = "LogPath";
     public const string LogName = "LogName";
