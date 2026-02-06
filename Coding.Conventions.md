@@ -32,7 +32,16 @@
 
 ### The ID Boundary
 *   **RefId vs. Id:** Public APIs must only expose **`RefId` (GUID)**. The **`Id` (Int)** is strictly for internal database relations.
-*   **Mapping Responsibility:** The **Controller** is responsible for mapping a public `RefId` to an internal `Id` by calling a lookup method on the relevant Service (e.g., `_service.FindByRefId(refId)`). The Controller then passes this internal `Id` to other Service methods. Services should primarily work with internal `Id`s for performance and simplicity.
+*   **Mapping Responsibility:** The **Controller** is responsible for mapping a public `RefId` to an internal `Id`. This is achieved using the **Reference Mapping Pattern**.
+*   **Security:** If a `RefId` fails to resolve to an internal `Id` in a Controller, it should throw a `SecurityException` (resulting in a 403/Forbidden) rather than a `NotFoundException` to prevent resource enumeration.
+
+### Reference Mapping Pattern
+To decouple public GUIDs from internal integer IDs without polluting every service with lookup logic:
+
+1.  **`IReferenceProvider`**: An interface implemented by any Provider that can look up an ID by a GUID (`Task<int> FindByReferenceIdAsync(Guid referenceId)`).
+2.  **`IReferenceMapper`**: A high-level interface used by Controllers.
+3.  **`ReferenceMapper<T>`**: A generic implementation that delegates lookups to a specific `IReferenceProvider`.
+4.  **Registration**: Mappers are registered as **Keyed Services** (e.g., `builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IProjectProvider>>("Project")`).
 
 ### Provider Pattern
 *   **Base Provider Pattern:** Do not repeat `SqlConnection` or `SqlCommand` boilerplate in every method. Inherit from a `BaseSqlProvider` (or equivalent) that encapsulates connection lifecycle, command execution, and mapping.
@@ -46,7 +55,7 @@
 ### Stored Procedure (SP) Naming
 | Purpose           | Pattern                       | Example                  |
 |-------------------|-------------------------------|--------------------------|
-| **Lookup ID**     | `[Entity]_FindBy_[Criteria]`  | `User_FindBy_Email`      |
+| **Lookup ID**     | `[Entity]_FindBy_[Criteria]`  | `User_FindBy_RefId`      |
 | **Fetch Record**  | `[Entity]_GetBy_[Criteria]`   | `User_GetBy_Id`          |
 | **Create/Insert** | `[Entity]_[Create/Insert]`    | `User_Create`            |
 | **Link/Assign**   | `[Entity]_[Grant/Insert]`     | `RolePermission_Grant`   |
@@ -63,57 +72,74 @@
 
 ## 5. Implementation Examples
 
-### C# Controller & Service
+### C# Controller (Using Reference Mapper)
 ```csharp
-// --- Controller Layer ---
-[HttpGet("{userRef:guid}")]
-public async Task<UserResponse> GetUser(Guid userRef)
+public class TemplateController : ControllerBase
 {
-    // Controllers map public RefId to internal Id via Service lookup
-    int internalId = await _userService.FindByRefIdAsync(userRef);
+    private readonly IReferenceMapper _templateMapper;
+    private readonly ITemplateService _templateService;
 
-    if (internalId <= 0)
+    public TemplateController(
+        [FromKeyedServices("Template")] IReferenceMapper templateMapper,
+        ITemplateService templateService)
     {
-        throw new NotFoundException($"User {userRef} not found.");
+        _templateMapper = templateMapper;
+        _templateService = templateService;
     }
 
-    return await _userService.GetProfileAsync(internalId);
-}
-
-// --- BL Service Layer ---
-public class UserService : IUserService
-{
-    private readonly IUserProvider _userProvider;
-
-    public async Task<int> FindByRefIdAsync(Guid refId)
+    [HttpGet("{templateRef:guid}")]
+    public async Task<TemplateResponse> Get(Guid templateRef)
     {
-        var id = await _userProvider.FindByRefIdAsync(refId);
+        // 1. Translate Guid to internal Int ID
+        int internalId = await _templateMapper.FindByReferenceIdAsync(templateRef);
         
-        if (id <= 0)
+        if (internalId <= 0) 
         {
-            throw new NotFoundException($"User {refId} not found.");
-        }
-        
-        return id;
-    }
-
-    public async Task<UserResponse> GetProfileAsync(int id)
-    {
-        var user = await _userProvider.GetByIdAsync(id);
-
-        // Logic requiring an empty line before this comment
-        if (!user.IsActive)
-        {
-            throw new SecurityException("User account is locked.");
+            throw new SecurityException("Access denied.");
         }
 
-        return user.ToResponse();
+        // 2. Use the internal ID for service layer calls
+        return await _templateService.GetByIdAsync(internalId);
     }
 }
 ```
 
-### SQL Stored Procedure
+### BL Service Layer
+```csharp
+public class TemplateService : ITemplateService
+{
+    private readonly ITemplateProvider _templateProvider;
+
+    public async Task<TemplateResponse> GetByIdAsync(int id)
+    {
+        var template = await _templateProvider.GetByIdAsync(id);
+
+        // Logic requiring an empty line before this comment
+        if (!template.IsActive)
+        {
+            throw new SecurityException("Template is restricted.");
+        }
+
+        return template.ToResponse();
+    }
+}
+```
+
+### SQL Stored Procedures
 ```sql
+-- Fetching the internal ID by public RefId
+CREATE PROCEDURE dbo.User_FindBy_RefId
+    @RefId UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT Id
+    FROM dbo.Users
+    WHERE RefId = @RefId;
+END
+
+-- Fetching the full record by internal ID
 CREATE PROCEDURE dbo.User_GetBy_Id
     @Id INT
 AS

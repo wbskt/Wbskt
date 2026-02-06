@@ -6,6 +6,5 @@ public interface IRegistrationPolicyService
 {
     Task<IReadOnlyCollection<RegistrationPolicyResponse>> GetAllAsync();
     Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId);
-    Task<int> FindByRefIdAsync(Guid refId);
     Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request);
 }

@@ -10,6 +10,16 @@ internal class SqlAuthProvider : BaseSqlProvider, IAuthProvider
 {
     public SqlAuthProvider(IConfiguration configuration) : base(configuration) { }
 
+    public async Task<int> FindByReferenceIdAsync(Guid referenceId)
+    {
+        var result = await ExecuteScalarAsync<int>("dbo.User_FindBy_RefId", p =>
+        {
+            p.AddWithValue("@RefId", referenceId);
+        });
+
+        return result;
+    }
+
     public async Task<User> GetByEmailAsync(string email)
     {
         return await ExecuteSingleAsync(

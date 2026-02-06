@@ -1,0 +1,10 @@
+CREATE PROCEDURE dbo.User_FindBy_RefId
+    @RefId UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT Id
+    FROM dbo.Users
+    WHERE RefId = @RefId;
+END

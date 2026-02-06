@@ -27,11 +27,6 @@ public class RegistrationPolicyService : IRegistrationPolicyService
         return MapToResponse(policy);
     }
 
-    public async Task<int> FindByRefIdAsync(Guid refId)
-    {
-        return await _provider.FindByRefIdAsync(refId);
-    }
-
     public async Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))

@@ -12,6 +12,16 @@ public class ClientProvider : BaseSqlProvider, IClientProvider
     {
     }
 
+    public async Task<int> FindByReferenceIdAsync(Guid referenceId)
+    {
+        var result = await ExecuteScalarAsync<int>("dbo.Client_FindBy_RefId", p =>
+        {
+            p.AddWithValue("@RefId", referenceId);
+        });
+
+        return result;
+    }
+
     public async Task<int> GetRegisteredCountByPolicyIdAsync(int policyId)
     {
         var result = await ExecuteScalarAsync<int>("dbo.Client_GetCountBy_PolicyId", p =>

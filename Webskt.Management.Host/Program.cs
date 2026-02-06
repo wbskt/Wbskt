@@ -4,7 +4,9 @@ using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
 using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Logging;
+using Webskt.Common.Mappers;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
 using Webskt.Management.Host.Providers;
@@ -42,6 +44,10 @@ public static class Program
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+
+        // Register Keyed ReferenceMappers
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>

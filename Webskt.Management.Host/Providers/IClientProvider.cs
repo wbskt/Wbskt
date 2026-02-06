@@ -1,8 +1,9 @@
 using Webskt.Management.Host.Models;
+using Webskt.Common.Abstraction.Interfaces;
 
 namespace Webskt.Management.Host.Providers;
 
-public interface IClientProvider
+public interface IClientProvider : IReferenceProvider
 {
     Task<int> GetRegisteredCountByPolicyIdAsync(int policyId);
     Task<IReadOnlyCollection<Client>> GetAllAsync();

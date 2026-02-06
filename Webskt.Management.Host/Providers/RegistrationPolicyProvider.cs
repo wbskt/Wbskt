@@ -10,19 +10,12 @@ public class RegistrationPolicyProvider : BaseSqlProvider, IRegistrationPolicyPr
 {
     public RegistrationPolicyProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindByRefIdAsync(Guid refId)
+    public async Task<int> FindByReferenceIdAsync(Guid referenceId)
     {
-        var result = await ExecuteScalarAsync<int>("dbo.RegistrationPolicy_FindBy_RefId", p =>
+        return await ExecuteScalarAsync<int>("dbo.RegistrationPolicy_FindBy_RefId", p =>
         {
-            p.AddWithValue("@RefId", refId);
+            p.AddWithValue("@RefId", referenceId);
         });
-
-        if (result <= 0)
-        {
-            throw new NotFoundException($"Policy with RefId {refId} not found.");
-        }
-
-        return result;
     }
 
     public async Task<RegistrationPolicy> GetByRefIdAsync(Guid refId)

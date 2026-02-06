@@ -1,8 +1,9 @@
 using Webskt.Auth.Host.Models;
+using Webskt.Common.Abstraction.Interfaces;
 
 namespace Webskt.Auth.Host.Providers;
 
-internal interface IAuthProvider
+internal interface IAuthProvider : IReferenceProvider
 {
     Task<User> GetByEmailAsync(string email);
     Task<User> GetByIdAsync(int id);

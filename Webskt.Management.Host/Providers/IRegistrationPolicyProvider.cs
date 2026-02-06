@@ -1,10 +1,10 @@
 using Webskt.Management.Host.Models;
+using Webskt.Common.Abstraction.Interfaces;
 
 namespace Webskt.Management.Host.Providers;
 
-public interface IRegistrationPolicyProvider
+public interface IRegistrationPolicyProvider : IReferenceProvider
 {
-    Task<int> FindByRefIdAsync(Guid refId);
     Task<RegistrationPolicy> GetByRefIdAsync(Guid refId);
     Task<RegistrationPolicy> GetByPinAsync(string pin);
     Task<IReadOnlyCollection<RegistrationPolicy>> GetAllAsync();
