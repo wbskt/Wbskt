@@ -1,4 +1,5 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34902.65
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -29,6 +30,8 @@ EndProject
 Project("{42EA0DBD-9CF1-443E-919E-BE9C484E4577}") = "Webskt.Database", "Databases\Webskt.Database\Webskt.Database.sqlproj", "{E38051F5-0A79-4645-A1F0-15FBB0324B66}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Socket.Host", "Webskt.Socket.Host\Webskt.Socket.Host.csproj", "{E6B3A045-30BB-4A14-A1F9-0670867548D2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Client.Sdk", "Webskt.Client.Sdk\Webskt.Client.Sdk.csproj", "{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -154,15 +157,31 @@ Global
 		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x64.Build.0 = Release|Any CPU
 		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x86.ActiveCfg = Release|Any CPU
 		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x86.Build.0 = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|x64.Build.0 = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Debug|x86.Build.0 = Debug|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|ARM64.Build.0 = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x64.ActiveCfg = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x64.Build.0 = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x86.ActiveCfg = Release|Any CPU
+		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {A846868D-B5BE-41CD-8ABA-34F7807B92FE}
-	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204} = {19CDF3C0-4BD6-48AD-9B73-2F498AA6EC47}
 		{E38051F5-0A79-4645-A1F0-15FBB0324B66} = {19CDF3C0-4BD6-48AD-9B73-2F498AA6EC47}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A846868D-B5BE-41CD-8ABA-34F7807B92FE}
 	EndGlobalSection
 EndGlobal
