@@ -4,7 +4,6 @@ namespace Webskt.Management.Host.Providers;
 
 public interface IClientProvider
 {
-    Task<RegistrationPolicy> GetPolicyByPinAsync(string pin);
     Task<int> GetRegisteredCountByPolicyIdAsync(int policyId);
     Task<IReadOnlyCollection<Client>> GetAllAsync();
     Task<IReadOnlyCollection<Client>> GetByPolicyIdAsync(int policyId);

@@ -7,11 +7,13 @@ namespace Webskt.Management.Host.Services;
 
 public class ClientRegistrationService : IClientRegistrationService
 {
-    private readonly IClientProvider _provider;
+    private readonly IClientProvider _clientProvider;
+    private readonly IRegistrationPolicyProvider _policyProvider;
 
-    public ClientRegistrationService(IClientProvider provider)
+    public ClientRegistrationService(IClientProvider clientProvider, IRegistrationPolicyProvider policyProvider)
     {
-        _provider = provider;
+        _clientProvider = clientProvider;
+        _policyProvider = policyProvider;
     }
 
     public async Task<ClientRegistrationResponse> InitiateRegistrationAsync(ClientRegistrationRequest request)
@@ -22,12 +24,12 @@ public class ClientRegistrationService : IClientRegistrationService
         }
 
         // 1. Validate Policy
-        var policy = await _provider.GetPolicyByPinAsync(request.Pin);
+        var policy = await _policyProvider.GetByPinAsync(request.Pin);
 
         // 2. Check Capacity
         if (policy.MaxClients.HasValue)
         {
-            var currentCount = await _provider.GetRegisteredCountByPolicyIdAsync(policy.Id);
+            var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id);
             
             // Logic requiring an empty line before this comment
             if (currentCount >= policy.MaxClients.Value)
@@ -41,7 +43,7 @@ public class ClientRegistrationService : IClientRegistrationService
         var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
         // 4. Create Client
-        var client = await _provider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus);
+        var client = await _clientProvider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus);
 
         return new ClientRegistrationResponse(
             client.RefId,

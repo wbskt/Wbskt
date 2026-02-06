@@ -11,10 +11,12 @@ namespace Webskt.Management.Host.Controllers;
 public class ClientsController : ControllerBase
 {
     private readonly IClientService _clientService;
+    private readonly IRegistrationPolicyService _policyService;
 
-    public ClientsController(IClientService clientService)
+    public ClientsController(IClientService clientService, IRegistrationPolicyService policyService)
     {
         _clientService = clientService;
+        _policyService = policyService;
     }
 
     [HttpGet]
@@ -26,6 +28,7 @@ public class ClientsController : ControllerBase
     [HttpGet("policy/{policyRefId:guid}")]
     public async Task<IReadOnlyCollection<ClientResponse>> GetByPolicy(Guid policyRefId)
     {
-        return await _clientService.GetByPolicyRefIdAsync(policyRefId);
+        var policyId = await _policyService.FindByRefIdAsync(policyRefId);
+        return await _clientService.GetByPolicyIdAsync(policyId);
     }
 }

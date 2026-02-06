@@ -8,16 +8,8 @@ namespace Webskt.Management.Host.Providers;
 
 public class ClientProvider : BaseSqlProvider, IClientProvider
 {
-    private readonly IRegistrationPolicyProvider _policyProvider;
-
-    public ClientProvider(IConfiguration configuration, IRegistrationPolicyProvider policyProvider) : base(configuration)
+    public ClientProvider(IConfiguration configuration) : base(configuration)
     {
-        _policyProvider = policyProvider;
-    }
-
-    public async Task<RegistrationPolicy> GetPolicyByPinAsync(string pin)
-    {
-        return await _policyProvider.GetByPinAsync(pin);
     }
 
     public async Task<int> GetRegisteredCountByPolicyIdAsync(int policyId)

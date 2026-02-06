@@ -6,12 +6,10 @@ namespace Webskt.Management.Host.Services;
 public class ClientService : IClientService
 {
     private readonly IClientProvider _clientProvider;
-    private readonly IRegistrationPolicyProvider _policyProvider;
 
-    public ClientService(IClientProvider clientProvider, IRegistrationPolicyProvider policyProvider)
+    public ClientService(IClientProvider clientProvider)
     {
         _clientProvider = clientProvider;
-        _policyProvider = policyProvider;
     }
 
     public async Task<IReadOnlyCollection<ClientResponse>> GetAllAsync()
@@ -21,12 +19,9 @@ public class ClientService : IClientService
         return clients.Select(MapToResponse).ToList().AsReadOnly();
     }
 
-    public async Task<IReadOnlyCollection<ClientResponse>> GetByPolicyRefIdAsync(Guid policyRefId)
+    public async Task<IReadOnlyCollection<ClientResponse>> GetByPolicyIdAsync(int policyId)
     {
-        // 1. Resolve internal ID
-        int policyId = await _policyProvider.FindByRefIdAsync(policyRefId);
-
-        // 2. Fetch clients
+        // Fetch clients
         var clients = await _clientProvider.GetByPolicyIdAsync(policyId);
 
         return clients.Select(MapToResponse).ToList().AsReadOnly();

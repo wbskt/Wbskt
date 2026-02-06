@@ -32,11 +32,11 @@
 
 ### The ID Boundary
 *   **RefId vs. Id:** Public APIs must only expose **`RefId` (GUID)**. The **`Id` (Int)** is strictly for internal database relations.
-*   **Mapping Responsibility:** The **Controller** is the only layer allowed to map a public `RefId` to an internal `Id` via the Provider. Services and Providers should ideally work with internal `Id`s for performance.
+*   **Mapping Responsibility:** The **Controller** is responsible for mapping a public `RefId` to an internal `Id` by calling a lookup method on the relevant Service (e.g., `_service.FindByRefId(refId)`). The Controller then passes this internal `Id` to other Service methods. Services should primarily work with internal `Id`s for performance and simplicity.
 
 ### Provider Pattern
 *   **Base Provider Pattern:** Do not repeat `SqlConnection` or `SqlCommand` boilerplate in every method. Inherit from a `BaseSqlProvider` (or equivalent) that encapsulates connection lifecycle, command execution, and mapping.
-*   **SP Consistency:** Always use the full schema-qualified name (e.g., `dbo.`) when calling stored procedures from C# code.
+*   **No Cross-Provider Dependencies:** A Provider must never depend on or inject another Provider. If an operation requires data from multiple sources, it should be orchestrated in the Service layer.
 *   **DRY Mappings:** Extract repeated entity mapping logic (e.g., `SqlDataReader` to `User`) into reusable private methods.
 
 ---
@@ -69,8 +69,8 @@
 [HttpGet("{userRef:guid}")]
 public async Task<UserResponse> GetUser(Guid userRef)
 {
-    // Controllers map public RefId to internal Id
-    int internalId = await _userProvider.FindByRefIdAsync(userRef);
+    // Controllers map public RefId to internal Id via Service lookup
+    int internalId = await _userService.FindByRefIdAsync(userRef);
 
     if (internalId <= 0)
     {
@@ -84,6 +84,18 @@ public async Task<UserResponse> GetUser(Guid userRef)
 public class UserService : IUserService
 {
     private readonly IUserProvider _userProvider;
+
+    public async Task<int> FindByRefIdAsync(Guid refId)
+    {
+        var id = await _userProvider.FindByRefIdAsync(refId);
+        
+        if (id <= 0)
+        {
+            throw new NotFoundException($"User {refId} not found.");
+        }
+        
+        return id;
+    }
 
     public async Task<UserResponse> GetProfileAsync(int id)
     {
