@@ -39,4 +39,33 @@ public class JwtService : IJwtService
 
         return handler.CreateToken(descriptor);
     }
+
+    public async Task<ClaimsPrincipal> ValidateToken(string token)
+    {
+        var keyString = _configuration["Jwt:Key"];
+
+        if (string.IsNullOrEmpty(keyString))
+        {
+            throw new InvalidOperationException("JWT Key is not configured.");
+        }
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
+        var handler = new JsonWebTokenHandler();
+
+        var result = await handler.ValidateTokenAsync(token, new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ClockSkew = TimeSpan.Zero
+        });
+
+        if (!result.IsValid)
+        {
+            throw new SecurityTokenException("Invalid token.");
+        }
+
+        return new ClaimsPrincipal(result.ClaimsIdentity);
+    }
 }
