@@ -27,3 +27,7 @@ public record ClientResponse(
     ClientStatus Status,
     DateTime CreatedAt
 );
+
+public record ClientLoginRequest(Guid ClientRefId, string Secret);
+
+public record ClientLoginResponse(string AccessToken, int ExpiresIn);

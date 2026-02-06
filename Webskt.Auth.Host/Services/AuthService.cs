@@ -1,25 +1,23 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text;
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.IdentityModel.Tokens;
 using Webskt.Auth.Host.Models;
 using Webskt.Auth.Host.Providers;
 using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Security;
 
 namespace Webskt.Auth.Host.Services;
 
 internal class AuthService : IAuthService
 {
     private readonly IAuthProvider _provider;
-    private readonly IConfiguration _configuration;
+    private readonly IJwtService _jwtService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public AuthService(IAuthProvider provider, IConfiguration configuration)
+    public AuthService(IAuthProvider provider, IJwtService jwtService)
     {
         _provider = provider;
-        _configuration = configuration;
+        _jwtService = jwtService;
     }
 
     public async Task<LoginResponse> LoginAsync(string email, string password, string ipAddress)
@@ -145,21 +143,15 @@ internal class AuthService : IAuthService
 
     private string GenerateAccessToken(User user)
     {
-        var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]!);
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var descriptor = new SecurityTokenDescriptor
+        var claims = new[]
         {
-            Subject = new ClaimsIdentity([
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Email, user.Email)
-            ]),
-            Expires = DateTime.UtcNow.AddMinutes(15),
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim("type", "user")
         };
 
-        var token = tokenHandler.CreateToken(descriptor);
-        return tokenHandler.WriteToken(token);
+        return _jwtService.GenerateToken(claims, TimeSpan.FromMinutes(15));
     }
 
     private RefreshToken GenerateRefreshToken(int userId)

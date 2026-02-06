@@ -66,6 +66,20 @@ public class ClientProvider : BaseSqlProvider, IClientProvider
         return await GetByRefIdAsync(refId);
     }
 
+    public async Task<Client> VerifyAsync(Guid refId, string secret)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Client_Verify",
+            p => 
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@Secret", secret);
+            },
+            MapClient,
+            new SecurityException("Invalid client credentials.")
+        );
+    }
+
     private async Task<Client> GetByRefIdAsync(Guid refId)
     {
         return await ExecuteSingleAsync(

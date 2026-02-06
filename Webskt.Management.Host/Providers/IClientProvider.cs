@@ -9,4 +9,5 @@ public interface IClientProvider
     Task<IReadOnlyCollection<Client>> GetAllAsync();
     Task<IReadOnlyCollection<Client>> GetByPolicyIdAsync(int policyId);
     Task<Client> InsertClientAsync(int policyId, string name, string secret, ClientStatus status);
+    Task<Client> VerifyAsync(Guid refId, string secret);
 }

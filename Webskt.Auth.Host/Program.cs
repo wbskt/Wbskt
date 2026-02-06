@@ -8,6 +8,7 @@ using Webskt.Auth.Host.Services;
 using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
+using Webskt.Common.Security;
 
 namespace Webskt.Auth.Host;
 
@@ -34,6 +35,7 @@ public static class Program
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
+        builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
 
