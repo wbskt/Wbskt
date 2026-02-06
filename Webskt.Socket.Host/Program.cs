@@ -1,0 +1,57 @@
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
+using Serilog;
+using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Logging;
+using Webskt.Common.Middlewares;
+
+namespace Webskt.Socket.Host;
+
+public static class Program
+{
+    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
+
+    public static void Main(string[] args)
+    {
+        Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
+        Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
+
+        if (!Directory.Exists(ProgramDataPath))
+        {
+            Directory.CreateDirectory(ProgramDataPath);
+        }
+
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = Directory.GetCurrentDirectory()
+        });
+
+        builder.Host.UseSerilog(builder.CreateSerilog());
+
+        builder.Services.AddAuthorization();
+
+        builder.Services.AddControllers();
+
+        builder.Services.AddOpenApi();
+
+        var app = builder.Build();
+
+        app.UseMiddleware<GlobalExceptionMiddleware>();
+
+        if (app.Environment.IsDevelopment())
+        {
+            app.MapOpenApi();
+
+            app.MapScalarApiReference();
+        }
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        app.MapControllers();
+
+        app.Run();
+    }
+}

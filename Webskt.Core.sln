@@ -27,6 +27,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Databases", "Databases", "{
 EndProject
 Project("{42EA0DBD-9CF1-443E-919E-BE9C484E4577}") = "Webskt.Database", "Databases\Webskt.Database\Webskt.Database.sqlproj", "{E38051F5-0A79-4645-A1F0-15FBB0324B66}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Socket.Host", "Webskt.Socket.Host\Webskt.Socket.Host.csproj", "{E6B3A045-30BB-4A14-A1F9-0670867548D2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -135,6 +137,22 @@ Global
 		{E38051F5-0A79-4645-A1F0-15FBB0324B66}.Release|x64.Build.0 = Release|Any CPU
 		{E38051F5-0A79-4645-A1F0-15FBB0324B66}.Release|x86.ActiveCfg = Release|Any CPU
 		{E38051F5-0A79-4645-A1F0-15FBB0324B66}.Release|x86.Build.0 = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|x64.Build.0 = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Debug|x86.Build.0 = Debug|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|ARM64.Build.0 = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x64.ActiveCfg = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x64.Build.0 = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x86.ActiveCfg = Release|Any CPU
+		{E6B3A045-30BB-4A14-A1F9-0670867548D2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
