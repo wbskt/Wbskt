@@ -6,6 +6,8 @@ using Serilog;
 using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
+using Webskt.Management.Host.Providers;
+using Webskt.Management.Host.Services;
 
 namespace Webskt.Management.Host;
 
@@ -30,6 +32,12 @@ public static class Program
         });
 
         builder.Host.UseSerilog(builder.CreateSerilog());
+
+        // Add services to the container.
+        builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
+        builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
+        builder.Services.AddScoped<IClientProvider, ClientProvider>();
+        builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>

@@ -1,7 +1,8 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 
-namespace Webskt.Auth.Host.Providers;
+namespace Webskt.Common.Data;
 
 public abstract class BaseSqlProvider
 {

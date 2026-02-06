@@ -1,0 +1,13 @@
+CREATE TABLE dbo.RegistrationPolicies (
+    Id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    RefId UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() UNIQUE,
+    Pin NVARCHAR(10) NOT NULL UNIQUE,
+    Name NVARCHAR(100) NOT NULL,
+    MaxClients INT NULL,
+    AutoApproval BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2(0) NOT NULL DEFAULT GETUTCDATE()
+);
+GO
+
+CREATE INDEX IX_RegistrationPolicies_RefId ON dbo.RegistrationPolicies(RefId);
+GO
