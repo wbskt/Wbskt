@@ -6,6 +6,7 @@ BEGIN
     
     SELECT 
         Id, 
+        RefId,
         Username, 
         Email, 
         PasswordHash, 

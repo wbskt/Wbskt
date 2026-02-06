@@ -193,6 +193,7 @@ internal class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         return new User
         {
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             Username = reader.GetString(reader.GetOrdinal("Username")),
             Email = reader.GetString(reader.GetOrdinal("Email")),
             PasswordHash = reader.GetString(reader.GetOrdinal("PasswordHash")),
