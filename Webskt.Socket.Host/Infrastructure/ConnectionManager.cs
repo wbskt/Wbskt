@@ -26,8 +26,16 @@ public sealed class ConnectionManager : IConnectionManager
         {
             if (socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived)
             {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by manager", CancellationToken.None);
+                try
+                {
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by manager", CancellationToken.None);
+                }
+                catch
+                {
+                    // Ignore exceptions during close, we just want to ensure it's removed and disposed
+                }
             }
+            socket.Dispose();
         }
     }
 

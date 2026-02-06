@@ -9,6 +9,11 @@ public sealed class WbsktClient : IWbsktClient
     private readonly IClientStorage _storage;
     private readonly AuthClient _auth;
     private readonly SocketClient _socket;
+    private readonly CancellationTokenSource _cts = new();
+    
+    private bool _shouldReconnect = true;
+    private Guid? _resolvedRefId;
+    private string? _resolvedSecret;
 
     public event Action<string, object?>? OnCommandReceived;
     public event Action? OnConnected;
@@ -24,19 +29,71 @@ public sealed class WbsktClient : IWbsktClient
         // Forward internal events to public surface
         _socket.OnMessageReceived += (action, payload) => OnCommandReceived?.Invoke(action, payload);
         _socket.OnConnected += () => OnConnected?.Invoke();
-        _socket.OnDisconnected += () => OnDisconnected?.Invoke();
+        _socket.OnDisconnected += HandleDisconnect;
     }
 
     public async Task StartAsync()
     {
-        // 1. Resolve Credentials (Load or Register)
-        var (refId, secret) = await ResolveCredentialsAsync();
+        _shouldReconnect = true;
+        await ConnectInternalAsync();
+        
+        // Start background monitor for reconnection
+        _ = Task.Run(MonitorReconnectionAsync, _cts.Token);
+    }
 
-        // 2. Obtain JWT
-        var token = await _auth.LoginAsync(refId, secret);
+    private async Task ConnectInternalAsync()
+    {
+        try
+        {
+            // 1. Resolve Credentials (Load or Register) if not already done
+            if (!_resolvedRefId.HasValue)
+            {
+                (_resolvedRefId, _resolvedSecret) = await ResolveCredentialsAsync();
+            }
 
-        // 3. Connect to real-time gateway
-        await _socket.ConnectAsync(token);
+            // 2. Obtain JWT
+            var token = await _auth.LoginAsync(_resolvedRefId.Value, _resolvedSecret!);
+
+            // 3. Connect to real-time gateway
+            await _socket.ConnectAsync(token);
+        }
+        catch (Exception)
+        {
+            // Reconnection monitor will handle retries
+            throw;
+        }
+    }
+
+    private void HandleDisconnect()
+    {
+        OnDisconnected?.Invoke();
+    }
+
+    private async Task MonitorReconnectionAsync()
+    {
+        var backoff = TimeSpan.FromSeconds(2);
+        var maxBackoff = TimeSpan.FromMinutes(1);
+
+        while (!_cts.Token.IsCancellationRequested)
+        {
+            await Task.Delay(5000, _cts.Token);
+
+            if (_shouldReconnect)
+            {
+                // Note: SocketClient internal state handles whether it's already connected
+                try
+                {
+                    await ConnectInternalAsync();
+                    backoff = TimeSpan.FromSeconds(2); // Reset backoff on success
+                }
+                catch
+                {
+                    // Exponential backoff
+                    await Task.Delay(backoff, _cts.Token);
+                    backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, maxBackoff.Ticks));
+                }
+            }
+        }
     }
 
     public async Task SendTelemetryAsync(string type, object payload)
@@ -70,7 +127,10 @@ public sealed class WbsktClient : IWbsktClient
 
     public async ValueTask DisposeAsync()
     {
+        _shouldReconnect = false;
+        _cts.Cancel();
         _auth.Dispose();
         await _socket.DisposeAsync();
+        _cts.Dispose();
     }
 }

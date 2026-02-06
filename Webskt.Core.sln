@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Socket.Host", "Websk
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Client.Sdk", "Webskt.Client.Sdk\Webskt.Client.Sdk.csproj", "{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Simulator", "Webskt.Simulator\Webskt.Simulator.csproj", "{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -173,6 +175,22 @@ Global
 		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x64.Build.0 = Release|Any CPU
 		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x86.ActiveCfg = Release|Any CPU
 		{D6DA58DF-6AB0-45AC-A38F-B17DF94CC2B2}.Release|x86.Build.0 = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|x64.Build.0 = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Debug|x86.Build.0 = Debug|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|ARM64.Build.0 = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|x64.ActiveCfg = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|x64.Build.0 = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|x86.ActiveCfg = Release|Any CPU
+		{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

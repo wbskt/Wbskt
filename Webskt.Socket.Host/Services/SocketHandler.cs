@@ -45,29 +45,40 @@ public sealed class SocketHandler : ISocketHandler
 
         try
         {
-            await ReceiveLoopAsync(clientRefId, webSocket);
+            // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
+            await ReceiveLoopAsync(clientRefId, webSocket, context.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Connection for client {ClientRefId} was cancelled.", clientRefId);
+        }
+        catch (WebSocketException ex)
+        {
+            _logger.LogWarning("WebSocket error for client {ClientRefId}: {Message}", clientRefId, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in WebSocket loop for client {ClientRefId}.", clientRefId);
+            _logger.LogError(ex, "Unexpected error in WebSocket loop for client {ClientRefId}.", clientRefId);
         }
         finally
         {
             await _connectionManager.RemoveConnectionAsync(clientRefId);
-            _logger.LogInformation("Client {ClientRefId} disconnected.", clientRefId);
+            _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
         }
     }
 
-    private async Task ReceiveLoopAsync(Guid clientRefId, WebSocket webSocket)
+    private async Task ReceiveLoopAsync(Guid clientRefId, WebSocket webSocket, CancellationToken cancellationToken)
     {
         var buffer = new byte[1024 * 4];
 
-        while (webSocket.State == WebSocketState.Open)
+        while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
         {
-            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
+                _logger.LogInformation("Client {ClientRefId} initiated close.", clientRefId);
+                await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
                 break;
             }
 
@@ -76,7 +87,6 @@ public sealed class SocketHandler : ISocketHandler
                 var messageJson = Encoding.UTF8.GetString(buffer, 0, result.Count);
                 _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, messageJson);
 
-                // Process message (In the future, publish to Event Bus)
                 try
                 {
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
@@ -87,7 +97,7 @@ public sealed class SocketHandler : ISocketHandler
                 }
                 catch (JsonException ex)
                 {
-                    _logger.LogWarning(ex, "Invalid JSON received from client {ClientRefId}.", clientRefId);
+                    _logger.LogWarning("Invalid JSON received from client {ClientRefId}: {Error}", clientRefId, ex.Message);
                 }
             }
         }

@@ -6,8 +6,8 @@ namespace Webskt.Client.Sdk.Internal;
 
 internal sealed class SocketClient : IAsyncDisposable
 {
-    private readonly ClientWebSocket _webSocket = new();
-    private readonly CancellationTokenSource _cts = new();
+    private ClientWebSocket _webSocket = new();
+    private CancellationTokenSource _cts = new();
     private readonly string _baseUrl;
 
     public event Action<string, object?>? OnMessageReceived;
@@ -21,6 +21,18 @@ internal sealed class SocketClient : IAsyncDisposable
 
     public async Task ConnectAsync(string token)
     {
+        if (_webSocket.State == WebSocketState.Open) return;
+
+        // Reset state for new connection
+        if (_cts.IsCancellationRequested)
+        {
+            _cts.Dispose();
+            _cts = new CancellationTokenSource();
+        }
+
+        _webSocket?.Dispose();
+        _webSocket = new ClientWebSocket();
+
         var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws?access_token={token}");
         await _webSocket.ConnectAsync(uri, _cts.Token);
         OnConnected?.Invoke();
@@ -34,7 +46,16 @@ internal sealed class SocketClient : IAsyncDisposable
 
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
-        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, _cts.Token);
+        
+        try
+        {
+            await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, _cts.Token);
+        }
+        catch (Exception)
+        {
+            await AbortAsync();
+            throw;
+        }
     }
 
     private async Task ReceiveLoopAsync()
@@ -45,7 +66,12 @@ internal sealed class SocketClient : IAsyncDisposable
             while (_webSocket.State == WebSocketState.Open && !_cts.Token.IsCancellationRequested)
             {
                 var result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
-                if (result.MessageType == WebSocketMessageType.Close) break;
+                
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", _cts.Token);
+                    break;
+                }
 
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
@@ -62,20 +88,27 @@ internal sealed class SocketClient : IAsyncDisposable
                 }
             }
         }
-        catch { /* Handle/Log error */ }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
         finally
         {
+            await AbortAsync();
             OnDisconnected?.Invoke();
+        }
+    }
+
+    private async Task AbortAsync()
+    {
+        if (_webSocket.State != WebSocketState.Closed && _webSocket.State != WebSocketState.Aborted)
+        {
+            try { _webSocket.Abort(); } catch { }
         }
     }
 
     public async ValueTask DisposeAsync()
     {
         _cts.Cancel();
-        if (_webSocket.State == WebSocketState.Open)
-        {
-            await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-        }
+        await AbortAsync();
         _webSocket.Dispose();
         _cts.Dispose();
     }
