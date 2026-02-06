@@ -15,7 +15,7 @@ internal sealed class AuthClient : IDisposable
         _httpClient = new HttpClient { BaseAddress = new Uri(config.BaseApiUrl) };
     }
 
-    public async Task<(Guid RefId, string Secret)> RegisterAsync()
+    public async Task<(Guid ClientRefId, string Secret)> RegisterAsync()
     {
         var response = await _httpClient.PostAsJsonAsync("api/client-registrations/initiate", new
         {
@@ -29,7 +29,7 @@ internal sealed class AuthClient : IDisposable
         }
 
         var result = await response.Content.ReadFromJsonAsync<RegistrationResult>();
-        return result != null ? (result.RefId, result.Secret) : throw new InvalidOperationException("Invalid registration response.");
+        return result != null ? (result.ClientRefId, result.Secret) : throw new InvalidOperationException("Invalid registration response.");
     }
 
     public async Task<string> LoginAsync(Guid clientRefId, string secret)
@@ -51,6 +51,6 @@ internal sealed class AuthClient : IDisposable
 
     public void Dispose() => _httpClient.Dispose();
 
-    private record RegistrationResult(Guid RefId, string Secret);
+    private record RegistrationResult(Guid ClientRefId, string Secret);
     private record LoginResult(string AccessToken);
 }
