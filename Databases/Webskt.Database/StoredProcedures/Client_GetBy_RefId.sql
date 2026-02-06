@@ -5,13 +5,15 @@ BEGIN
     SET NOCOUNT ON;
 
     SELECT 
-        Id,
-        RefId,
-        PolicyId,
-        Name,
-        Secret,
-        Status,
-        CreatedAt
-    FROM dbo.Clients
-    WHERE RefId = @RefId;
+        c.Id,
+        c.RefId,
+        c.PolicyId,
+        p.RefId AS PolicyRefId,
+        c.Name,
+        c.Secret,
+        c.Status,
+        c.CreatedAt
+    FROM dbo.Clients c
+    INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id
+    WHERE c.RefId = @RefId;
 END

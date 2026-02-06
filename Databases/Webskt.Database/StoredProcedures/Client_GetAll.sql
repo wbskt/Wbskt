@@ -9,6 +9,7 @@ BEGIN
         c.PolicyId,
         p.RefId AS PolicyRefId,
         c.Name,
+        '********' AS Secret,
         c.Status,
         c.CreatedAt
     FROM dbo.Clients c
