@@ -30,6 +30,24 @@ public class ClientProvider : BaseSqlProvider, IClientProvider
         return result;
     }
 
+    public async Task<IReadOnlyCollection<Client>> GetAllAsync()
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Client_GetAll",
+            null,
+            MapClient
+        );
+    }
+
+    public async Task<IReadOnlyCollection<Client>> GetByPolicyIdAsync(int policyId)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Client_GetBy_PolicyId",
+            p => p.AddWithValue("@PolicyId", policyId),
+            MapClient
+        );
+    }
+
     public async Task<Client> InsertClientAsync(int policyId, string name, string secret, ClientStatus status)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Client_Create", p =>
@@ -65,6 +83,7 @@ public class ClientProvider : BaseSqlProvider, IClientProvider
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
             PolicyId = reader.GetInt32(reader.GetOrdinal("PolicyId")),
+            PolicyRefId = reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
             Secret = reader.GetString(reader.GetOrdinal("Secret")),
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),

@@ -38,6 +38,7 @@ public static class Program
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
+        builder.Services.AddScoped<IClientService, ClientService>();
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>

@@ -5,6 +5,7 @@ public class Client
     public int Id { get; set; }
     public Guid RefId { get; set; }
     public int PolicyId { get; set; }
+    public Guid PolicyRefId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Secret { get; set; } = string.Empty;
     public ClientStatus Status { get; set; }
@@ -17,4 +18,12 @@ public record ClientRegistrationResponse(
     Guid ClientRefId, 
     string Secret, 
     ClientStatus Status
+);
+
+public record ClientResponse(
+    Guid ClientRefId,
+    Guid PolicyRefId,
+    string Name,
+    ClientStatus Status,
+    DateTime CreatedAt
 );
