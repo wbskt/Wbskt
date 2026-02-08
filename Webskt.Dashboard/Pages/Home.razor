@@ -1,0 +1,77 @@
+@page "/"
+@inject ApiClient Api
+
+<h3 class="fw-bold mb-4">Platform Overview</h3>
+
+<div class="row g-4 mb-5">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary-subtle text-primary p-3 rounded-3 me-3">
+                        <i class="bi bi-cpu fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1 small text-uppercase fw-bold">Total Devices</h6>
+                        <h3 class="mb-0 fw-bold">@(_devices?.Count ?? 0)</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center">
+                    <div class="bg-success-subtle text-success p-3 rounded-3 me-3">
+                        <i class="bi bi-wifi fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1 small text-uppercase fw-bold">Online Now</h6>
+                        <h3 class="mb-0 fw-bold">@(_devices?.Count(d => d.Status == ClientStatus.Registered) ?? 0)</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center">
+                    <div class="bg-info-subtle text-info p-3 rounded-3 me-3">
+                        <i class="bi bi-shield-check fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1 small text-uppercase fw-bold">Active Policies</h6>
+                        <h3 class="mb-0 fw-bold">@(_policies?.Count ?? 0)</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 border-0">
+                <h6 class="mb-0 fw-bold">Recent System Activity</h6>
+            </div>
+            <div class="card-body py-5 text-center text-muted">
+                <i class="bi bi-activity fs-1 mb-3 d-block opacity-25"></i>
+                <p>Live event stream will appear here as devices interact with the platform.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyCollection<ClientResponse>? _devices;
+    private IReadOnlyCollection<RegistrationPolicyResponse>? _policies;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _devices = await Api.GetClientsAsync();
+        _policies = await Api.GetPoliciesAsync();
+    }
+}

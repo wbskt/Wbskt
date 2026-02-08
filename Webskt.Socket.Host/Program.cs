@@ -38,12 +38,25 @@ public static class Program
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
 
         builder.Services.AddAuthorization();
+
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.AllowAnyOrigin()
+                      .AllowAnyHeader()
+                      .AllowAnyMethod();
+            });
+        });
+
         builder.Services.AddControllers();
         builder.Services.AddOpenApi();
 
         var app = builder.Build();
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
+
+        app.UseCors();
 
         if (app.Environment.IsDevelopment())
         {

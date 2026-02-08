@@ -1,16 +1,26 @@
-namespace Webskt.Management.Host.Models;
+namespace Webskt.Common.Abstraction.Models.Management;
 
-public class Client
+public enum ClientStatus : byte
 {
-    public int Id { get; set; }
-    public Guid RefId { get; set; }
-    public int PolicyId { get; set; }
-    public Guid PolicyRefId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Secret { get; set; } = string.Empty;
-    public ClientStatus Status { get; set; }
-    public DateTime CreatedAt { get; set; }
+    Pending = 0,
+    Registered = 1,
+    Revoked = 2
 }
+
+public record RegistrationPolicyRequest(
+    string Name, 
+    int? MaxClients, 
+    bool AutoApproval = true
+);
+
+public record RegistrationPolicyResponse(
+    Guid RefId, 
+    string Pin, 
+    string Name, 
+    int? MaxClients, 
+    bool AutoApproval,
+    DateTime CreatedAt
+);
 
 public record ClientRegistrationRequest(string Pin, string Name);
 

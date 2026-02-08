@@ -1,0 +1,43 @@
+@inherits LayoutComponentBase
+@inject Webskt.Dashboard.Services.AuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="page">
+    <div class="sidebar shadow-sm">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 border-bottom bg-white">
+            <span class="text-muted small">WBSKT Platform Gateway</span>
+            <div class="ms-auto d-flex align-items-center">
+                <button class="btn btn-sm btn-outline-danger" @onclick="Logout">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </button>
+            </div>
+        </div>
+
+        <article class="content px-4 py-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Navigation.Uri.Contains("/login"))
+        {
+            if (!await AuthService.IsAuthenticatedAsync())
+            {
+                Navigation.NavigateTo("login");
+            }
+        }
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("login");
+    }
+}

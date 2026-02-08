@@ -1,3 +1,4 @@
+using Webskt.Common.Abstraction.Models.Management;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Webskt.Common.Data;

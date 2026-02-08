@@ -70,6 +70,16 @@ public static class Program
 
         builder.Services.AddAuthorization();
 
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.AllowAnyOrigin()
+                      .AllowAnyHeader()
+                      .AllowAnyMethod();
+            });
+        });
+
         builder.Services.AddControllers();
 
         builder.Services.AddOpenApi();
@@ -77,6 +87,8 @@ public static class Program
         var app = builder.Build();
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
+
+        app.UseCors();
 
         if (app.Environment.IsDevelopment())
         {
