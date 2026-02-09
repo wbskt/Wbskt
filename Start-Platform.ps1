@@ -20,11 +20,8 @@ $MgmtProc = Start-Process dotnet -ArgumentList "run --project Webskt.Management.
 Write-Host "Starting Socket Host [7020]..." -ForegroundColor Yellow
 $SockProc = Start-Process dotnet -ArgumentList "run --project Webskt.Socket.Host/Webskt.Socket.Host.csproj" -PassThru
 
-Write-Host "Starting Dashboard [7030]..." -ForegroundColor Yellow
-$DashProc = Start-Process dotnet -ArgumentList "run --project Webskt.Dashboard/Webskt.Dashboard.csproj --urls https://localhost:7030" -PassThru
-
-Write-Host "Waiting 15 seconds for services to initialize..." -ForegroundColor Gray
-Start-Sleep -Seconds 15
+Write-Host "Waiting 10 seconds for services to initialize..." -ForegroundColor Gray
+Start-Sleep -Seconds 10
 
 # 3. Start the Simulator in the foreground
 Write-Host "Launching Simulator..." -ForegroundColor Green
@@ -35,4 +32,3 @@ Write-Host "Shutting down services..." -ForegroundColor Red
 Stop-Process -Id $AuthProc.Id -ErrorAction SilentlyContinue
 Stop-Process -Id $MgmtProc.Id -ErrorAction SilentlyContinue
 Stop-Process -Id $SockProc.Id -ErrorAction SilentlyContinue
-Stop-Process -Id $DashProc.Id -ErrorAction SilentlyContinue
