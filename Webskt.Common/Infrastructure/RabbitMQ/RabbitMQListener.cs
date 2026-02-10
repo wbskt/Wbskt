@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,7 +63,7 @@ public sealed class RabbitMQListener : BackgroundService
             await _channel.QueueBindAsync(queueName.QueueName, _options.ExchangeName, "#", cancellationToken: stoppingToken);
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
-            consumer.ReceivedAsync += async (model, ea) =>
+            consumer.ReceivedAsync += async (_, ea) =>
             {
                 try
                 {
@@ -79,11 +78,11 @@ public sealed class RabbitMQListener : BackgroundService
                         return;
                     }
 
-                    var @event = JsonSerializer.Deserialize(message, eventType) as IEvent;
-                    if (@event == null) return;
-
                     // 2. Resolve Handlers
                     var handlerTypes = _resolver.GetHandlerTypes(eventType);
+
+                    var @event = JsonSerializer.Deserialize(message, eventType) as IEvent;
+                    if (@event == null) return;
 
                     // 3. Execute each handler in a NEW SCOPE
                     foreach (var handlerType in handlerTypes)
