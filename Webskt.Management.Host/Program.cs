@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
 using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Abstraction.Events.Shared;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Events;
 using Webskt.Common.Logging;
@@ -47,8 +48,8 @@ public static class Program
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
 
         // Event Bus
-        builder.Services.AddRabbitMQEventBus();
-        builder.Services.AddEventHandlers(typeof(Program).Assembly);
+        builder.Services.AddRabbitMQEventBus(builder.Configuration);
+        builder.Services.AddWebsktEventHandlers();
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
