@@ -5,6 +5,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Common.Events;
 using Webskt.Common.Logging;
 using Webskt.Common.Mappers;
 using Webskt.Common.Middlewares;
@@ -44,6 +45,10 @@ public static class Program
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+
+        // Event Bus
+        builder.Services.AddRabbitMQEventBus();
+        builder.Services.AddEventHandlers(typeof(Program).Assembly);
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");

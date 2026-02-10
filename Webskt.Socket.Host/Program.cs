@@ -1,6 +1,7 @@
 using Scalar.AspNetCore;
 using Serilog;
 using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Events;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
@@ -36,6 +37,10 @@ public static class Program
         builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
+
+        // Event Bus
+        builder.Services.AddRabbitMQEventBus();
+        builder.Services.AddEventHandlers(typeof(Program).Assembly);
 
         builder.Services.AddAuthorization();
 

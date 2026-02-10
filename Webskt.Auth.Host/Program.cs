@@ -6,6 +6,7 @@ using Scalar.AspNetCore;
 using Webskt.Auth.Host.Providers;
 using Webskt.Auth.Host.Services;
 using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Events;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
@@ -38,6 +39,10 @@ public static class Program
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
+
+        // Event Bus
+        builder.Services.AddRabbitMQEventBus();
+        builder.Services.AddEventHandlers(typeof(Program).Assembly);
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>
