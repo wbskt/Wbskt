@@ -3,43 +3,46 @@ using Webskt.Common.Abstraction.Events;
 
 namespace Webskt.Common.Events;
 
-public class EventHandlerResolver
+public sealed class EventHandlerResolver
 {
-    // Maps "Event Type" -> List of "Handler Service Types"
-    private static readonly ConcurrentDictionary<Type, IReadOnlyCollection<Type>> Cache = new();
+    private readonly ConcurrentDictionary<Type, IReadOnlyCollection<Type>> _handlerCache = new();
+    private readonly IReadOnlyDictionary<string, Type> _nameToTypeMap;
+    private readonly IReadOnlyCollection<HandlerDescriptor> _descriptors;
 
-    // The raw registration data: "TEvent defined in interface" -> "Handler Implementation Type"
-    // e.g. IEvent -> EventsDatabaseLogHandler
-    private static readonly List<(Type EventType, Type HandlerType)> Registrations = [];
+    public EventHandlerResolver(IEnumerable<HandlerDescriptor> descriptors)
+    {
+        _descriptors = descriptors.ToList().AsReadOnly();
+        
+        // Pre-build the name cache for O(1) routing key resolution
+        _nameToTypeMap = _descriptors
+            .Select(d => d.EventType)
+            .Distinct()
+            .ToDictionary(t => t.FullName ?? t.Name, t => t);
+    }
+
+    public Type? GetEventType(string typeName)
+    {
+        return _nameToTypeMap.GetValueOrDefault(typeName);
+    }
 
     public IReadOnlyCollection<Type> GetHandlerTypes(Type runtimeEventType)
     {
-        return Cache.GetOrAdd(runtimeEventType, ResolveHandlerTypes);
-    }
-
-    internal static void Register(Type eventType, Type handlerType)
-    {
-        Registrations.Add((eventType, handlerType));
-        Cache.Clear(); // Invalidate cache on new registrations (though this mostly happens at startup)
+        return _handlerCache.GetOrAdd(runtimeEventType, ResolveHandlerTypes);
     }
 
     private IReadOnlyCollection<Type> ResolveHandlerTypes(Type runtimeEventType)
     {
         var handlers = new HashSet<Type>();
 
-        // Find all registrations where the registered EventType is assignable from the RuntimeEventType
-        // This covers:
-        // 1. Exact match (Registered: UserCreated, Runtime: UserCreated)
-        // 2. Inheritance (Registered: BaseEvent, Runtime: ChildEvent)
-        // 3. Interfaces (Registered: IEvent, Runtime: UserCreated)
-        foreach (var (registeredEventType, handlerType) in Registrations)
+        // Polymorphic support: finds handlers where the registered type is assignable from the actual event
+        foreach (var descriptor in _descriptors)
         {
-            if (registeredEventType.IsAssignableFrom(runtimeEventType))
+            if (descriptor.EventType.IsAssignableFrom(runtimeEventType))
             {
-                handlers.Add(handlerType);
+                handlers.Add(descriptor.HandlerType);
             }
         }
 
-        return handlers.ToList();
+        return handlers.ToList().AsReadOnly();
     }
 }

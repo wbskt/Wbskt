@@ -72,8 +72,8 @@ public sealed class RabbitMQListener : BackgroundService
                     var message = Encoding.UTF8.GetString(body);
                     var routingKey = ea.RoutingKey;
 
-                    // 1. Resolve actual Event Type
-                    var eventType = ResolveEventType(routingKey);
+                    // 1. Resolve actual Event Type (O(1) lookup)
+                    var eventType = _resolver.GetEventType(routingKey);
                     if (eventType == null) 
                     {
                         return;
@@ -89,12 +89,25 @@ public sealed class RabbitMQListener : BackgroundService
                     foreach (var handlerType in handlerTypes)
                     {
                         using var scope = _serviceProvider.CreateScope();
-                        var handler = scope.ServiceProvider.GetRequiredService(handlerType);
-                        
-                        var method = handlerType.GetMethod("HandleAsync");
+                        var handlerService = scope.ServiceProvider.GetRequiredService(handlerType);
+
+                        /* 
+                           NOTE FOR FUTURE TESTING:
+                           The following cast will return NULL for specific handlers (e.g., IEventHandler<DeviceCommandEvent>).
+                           Even though DeviceCommandEvent is an IEvent, C# contravariance (the 'in' keyword) does not 
+                           allow casting a specific handler to a general one to prevent type-safety violations 
+                           (e.g., accidentally passing a UserEvent into a DeviceCommandHandler).
+                           
+                           var handler = handlerService as IEventHandler<IEvent>;
+                           if (handler == null) { // This will be true for specific handlers }
+                        */
+
+                        // We use reflection to call the generic HandleAsync method because we have already
+                        // manually verified the type compatibility in the EventHandlerResolver.
+                        var method = handlerType.GetMethod(nameof(IEventHandler<>.HandleAsync));
                         if (method != null)
                         {
-                            await (Task)method.Invoke(handler, [@event, stoppingToken])!;
+                            await (Task)method.Invoke(handlerService, [@event, stoppingToken])!;
                         }
                     }
                 }
@@ -114,14 +127,6 @@ public sealed class RabbitMQListener : BackgroundService
         {
             _logger.LogCritical(ex, "RabbitMQ Listener failed to start.");
         }
-    }
-
-    private static Type? ResolveEventType(string fullName)
-    {
-        // Search all loaded assemblies for the type name
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .Select(a => a.GetType(fullName))
-            .FirstOrDefault(t => t != null);
     }
 
     public override void Dispose()

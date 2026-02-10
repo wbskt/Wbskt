@@ -31,8 +31,6 @@ public static class EventBusExtensions
 
     public static void AddEventHandlers(this IServiceCollection services, Assembly assembly)
     {
-        services.TryAddSingleton<EventHandlerResolver>();
-
         var concreteTypes = assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false });
 
@@ -47,15 +45,16 @@ public static class EventBusExtensions
                 continue;
             }
 
-            // Register metadata for each event type it handles
             foreach (var @interface in handlerInterfaces)
             {
                 var eventType = @interface.GetGenericArguments()[0];
-                EventHandlerResolver.Register(eventType, type);
+                // Register metadata as a singleton descriptor that the Resolver will consume
+                services.AddSingleton(new HandlerDescriptor(eventType, type));
             }
 
-            // Register the concrete handler type so it can be resolved from a scope
             services.TryAddScoped(type);
         }
     }
 }
+
+public record HandlerDescriptor(Type EventType, Type HandlerType);
