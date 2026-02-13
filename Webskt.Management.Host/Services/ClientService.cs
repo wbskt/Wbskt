@@ -1,3 +1,5 @@
+using Webskt.Common.Abstraction.Events;
+using Webskt.Common.Abstraction.Events.Shared;
 using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
@@ -10,11 +12,16 @@ internal sealed class ClientService : IClientService
 {
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
+    private readonly IEventBus _eventBus;
 
-    public ClientService(IClientProvider clientProvider, IRegistrationPolicyProvider policyProvider)
+    public ClientService(
+        IClientProvider clientProvider, 
+        IRegistrationPolicyProvider policyProvider,
+        IEventBus eventBus)
     {
         _clientProvider = clientProvider;
         _policyProvider = policyProvider;
+        _eventBus = eventBus;
     }
 
     public async Task<IPagedList<ClientResponse>> GetAllAsync(ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
@@ -34,8 +41,9 @@ internal sealed class ClientService : IClientService
     public async Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default)
     {
         var client = await _clientProvider.GetByIdAsync(id, cancellationToken);
+        var oldStatus = client.Status;
 
-        if (client.Status == status)
+        if (oldStatus == status)
         {
             return;
         }
@@ -56,6 +64,8 @@ internal sealed class ClientService : IClientService
         }
 
         await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
+
+        await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, oldStatus, status), cancellationToken);
     }
 
     private static ClientResponse MapToResponse(Client c)

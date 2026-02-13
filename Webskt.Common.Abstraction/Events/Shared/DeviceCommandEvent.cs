@@ -4,4 +4,4 @@ public record DeviceCommandEvent(
     Guid TargetClientRefId, 
     string Action, 
     object? Payload = null
-) : BaseEvent;
+) : DeviceControlEvent(TargetClientRefId);
