@@ -16,15 +16,18 @@ public class ClientsController : ControllerBase
 {
     private readonly IClientService _clientService;
     private readonly IReferenceMapper _policyMapper;
+    private readonly IReferenceMapper _clientMapper;
     private readonly IEventBus _eventBus;
 
     public ClientsController(
         IClientService clientService, 
         [FromKeyedServices("RegistrationPolicy")] IReferenceMapper policyMapper,
+        [FromKeyedServices("Client")] IReferenceMapper clientMapper,
         IEventBus eventBus)
     {
         _clientService = clientService;
         _policyMapper = policyMapper;
+        _clientMapper = clientMapper;
         _eventBus = eventBus;
     }
 
@@ -45,6 +48,19 @@ public class ClientsController : ControllerBase
         }
 
         return await _clientService.GetByPolicyIdAsync(policyId);
+    }
+
+    [HttpPut("{clientRefId:guid}/approve")]
+    public async Task Approve(Guid clientRefId)
+    {
+        var id = await _clientMapper.FindByReferenceIdAsync(clientRefId);
+
+        if (id <= 0)
+        {
+            throw new SecurityException($"Access denied for client {clientRefId}.");
+        }
+
+        await _clientService.ApproveAsync(id);
     }
 
     [HttpPost("{clientRefId:guid}/command")]

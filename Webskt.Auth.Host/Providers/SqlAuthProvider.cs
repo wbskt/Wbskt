@@ -6,7 +6,7 @@ using Webskt.Common.Data;
 
 namespace Webskt.Auth.Host.Providers;
 
-internal class SqlAuthProvider : BaseSqlProvider, IAuthProvider
+internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
 {
     public SqlAuthProvider(IConfiguration configuration) : base(configuration) { }
 

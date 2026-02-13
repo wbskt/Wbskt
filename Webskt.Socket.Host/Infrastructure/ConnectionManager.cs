@@ -11,7 +11,7 @@ public interface IConnectionManager
     IReadOnlyCollection<Guid> GetConnectedClients();
 }
 
-public sealed class ConnectionManager : IConnectionManager
+internal sealed class ConnectionManager : IConnectionManager
 {
     private readonly ConcurrentDictionary<Guid, WebSocket> _connections = new();
 

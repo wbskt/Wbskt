@@ -5,7 +5,7 @@ using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Management.Host.Services;
 
-public class RegistrationPolicyService : IRegistrationPolicyService
+internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 {
     private readonly IRegistrationPolicyProvider _provider;
 

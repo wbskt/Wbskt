@@ -7,7 +7,7 @@ using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Management.Host.Providers;
 
-public class RegistrationPolicyProvider : BaseSqlProvider, IRegistrationPolicyProvider
+internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistrationPolicyProvider
 {
     public RegistrationPolicyProvider(IConfiguration configuration) : base(configuration) { }
 

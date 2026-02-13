@@ -4,7 +4,7 @@ using Webskt.Management.Host.Providers;
 
 namespace Webskt.Management.Host.Services;
 
-public class ClientService : IClientService
+internal sealed class ClientService : IClientService
 {
     private readonly IClientProvider _clientProvider;
 
@@ -26,6 +26,11 @@ public class ClientService : IClientService
         var clients = await _clientProvider.GetByPolicyIdAsync(policyId);
 
         return clients.Select(MapToResponse).ToList().AsReadOnly();
+    }
+
+    public async Task ApproveAsync(int id)
+    {
+        await _clientProvider.UpdateStatusAsync(id, ClientStatus.Registered);
     }
 
     private static ClientResponse MapToResponse(Client c)

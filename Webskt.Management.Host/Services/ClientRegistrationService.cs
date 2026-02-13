@@ -1,12 +1,11 @@
 using Webskt.Common.Abstraction.Models.Management;
 using System.Security.Cryptography;
-using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Providers;
 using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Management.Host.Services;
 
-public class ClientRegistrationService : IClientRegistrationService
+internal sealed class ClientRegistrationService : IClientRegistrationService
 {
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;

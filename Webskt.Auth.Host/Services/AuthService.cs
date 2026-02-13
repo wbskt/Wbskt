@@ -9,7 +9,7 @@ using Webskt.Common.Security;
 
 namespace Webskt.Auth.Host.Services;
 
-internal class AuthService : IAuthService
+internal sealed class AuthService : IAuthService
 {
     private readonly IAuthProvider _provider;
     private readonly IJwtService _jwtService;

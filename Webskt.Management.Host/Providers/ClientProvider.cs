@@ -7,7 +7,7 @@ using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Management.Host.Providers;
 
-public class ClientProvider : BaseSqlProvider, IClientProvider
+internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
 {
     public ClientProvider(IConfiguration configuration) : base(configuration)
     {
@@ -81,6 +81,15 @@ public class ClientProvider : BaseSqlProvider, IClientProvider
             MapClient,
             new SecurityException("Invalid client credentials.")
         );
+    }
+
+    public async Task UpdateStatusAsync(int id, ClientStatus status)
+    {
+        await ExecuteNonQueryAsync("dbo.Client_UpdateStatus", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@Status", (byte)status);
+        });
     }
 
     private async Task<Client> GetByRefIdAsync(Guid refId)

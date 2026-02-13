@@ -11,4 +11,5 @@ public interface IClientProvider : IReferenceProvider
     Task<IReadOnlyCollection<Client>> GetByPolicyIdAsync(int policyId);
     Task<Client> InsertClientAsync(int policyId, string name, string secret, ClientStatus status);
     Task<Client> VerifyAsync(Guid refId, string secret);
+    Task UpdateStatusAsync(int id, ClientStatus status);
 }

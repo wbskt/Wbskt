@@ -12,7 +12,7 @@ public interface ISocketHandler
     Task HandleAsync(HttpContext context);
 }
 
-public sealed class SocketHandler : ISocketHandler
+internal sealed class SocketHandler : ISocketHandler
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<SocketHandler> _logger;

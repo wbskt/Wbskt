@@ -1,13 +1,12 @@
 using Webskt.Common.Abstraction.Models.Management;
 using System.Security.Claims;
 using Webskt.Common.Security;
-using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Providers;
 using Webskt.Common.Abstraction.Exceptions;
 
 namespace Webskt.Management.Host.Services;
 
-public class ClientAuthService : IClientAuthService
+internal sealed class ClientAuthService : IClientAuthService
 {
     private readonly IClientProvider _provider;
     private readonly IJwtService _jwtService;
