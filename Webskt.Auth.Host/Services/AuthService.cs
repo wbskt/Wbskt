@@ -58,8 +58,12 @@ internal sealed class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            // We don't have the userId here if the email lookup failed, 
-            // but we could publish a more general SecurityAlertEvent here in the future
+            await _eventBus.PublishAsync(new SecurityAlertEvent(
+                "LoginFailure", 
+                $"Unexpected error during login for {email}: {ex.Message}", 
+                ipAddress,
+                $"Email: {email}"), cancellationToken);
+            
             throw;
         }
     }
