@@ -2,6 +2,7 @@ using Webskt.Common.Abstraction.Models.Management;
 using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Providers;
 using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Abstraction.Models;
 
 namespace Webskt.Management.Host.Services;
 
@@ -14,28 +15,28 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         _provider = provider;
     }
 
-    public async Task<IReadOnlyCollection<RegistrationPolicyResponse>> GetAllAsync()
+    public async Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var policies = await _provider.GetAllAsync();
+        var pagedPolicies = await _provider.GetAllAsync(autoApproval, name, skip, take, cancellationToken);
         
-        return policies.Select(MapToResponse).ToList().AsReadOnly();
+        return new PagedList<RegistrationPolicyResponse>(pagedPolicies.Select(MapToResponse), pagedPolicies.TotalCount);
     }
 
-    public async Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId)
+    public async Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
-        var policy = await _provider.GetByRefIdAsync(refId);
+        var policy = await _provider.GetByRefIdAsync(refId, cancellationToken);
         
         return MapToResponse(policy);
     }
 
-    public async Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request)
+    public async Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             throw new ValidationException("Policy name is required.");
         }
 
-        var policy = await _provider.InsertAsync(request);
+        var policy = await _provider.InsertAsync(request, cancellationToken);
         
         return MapToResponse(policy);
     }

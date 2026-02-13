@@ -1,6 +1,6 @@
 using Webskt.Common.Abstraction.Models.Management;
 using Microsoft.AspNetCore.Mvc;
-using Webskt.Management.Host.Models;
+using Webskt.Common.Abstraction.Models;
 using Webskt.Management.Host.Services;
 
 namespace Webskt.Management.Host.Controllers;
@@ -17,20 +17,32 @@ public class RegistrationPoliciesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IReadOnlyCollection<RegistrationPolicyResponse>> GetAll()
+    public async Task<ListResponse<RegistrationPolicyResponse>> GetAll(
+        [FromQuery] bool? autoApproval,
+        [FromQuery] string? name,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 100,
+        CancellationToken cancellationToken = default)
     {
-        return await _policyService.GetAllAsync();
+        var pagedData = await _policyService.GetAllAsync(autoApproval, name, skip, take, cancellationToken);
+
+        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
+
+        return new ListResponse<RegistrationPolicyResponse>
+        {
+            Items = pagedData
+        };
     }
 
     [HttpGet("{refId:guid}")]
-    public async Task<RegistrationPolicyResponse> Get(Guid refId)
+    public async Task<RegistrationPolicyResponse> Get(Guid refId, CancellationToken cancellationToken)
     {
-        return await _policyService.GetByRefIdAsync(refId);
+        return await _policyService.GetByRefIdAsync(refId, cancellationToken);
     }
 
     [HttpPost]
-    public async Task<RegistrationPolicyResponse> Create(RegistrationPolicyRequest request)
+    public async Task<RegistrationPolicyResponse> Create(RegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        return await _policyService.CreateAsync(request);
+        return await _policyService.CreateAsync(request, cancellationToken);
     }
 }

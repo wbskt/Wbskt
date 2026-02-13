@@ -16,7 +16,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         _policyProvider = policyProvider;
     }
 
-    public async Task<ClientRegistrationResponse> InitiateRegistrationAsync(ClientRegistrationRequest request)
+    public async Task<ClientRegistrationResponse> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Pin))
         {
@@ -24,12 +24,12 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         }
 
         // 1. Validate Policy
-        var policy = await _policyProvider.GetByPinAsync(request.Pin);
+        var policy = await _policyProvider.GetByPinAsync(request.Pin, cancellationToken);
 
         // 2. Check Capacity
         if (policy.MaxClients.HasValue)
         {
-            var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id);
+            var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id, cancellationToken);
             
             // Logic requiring an empty line before this comment
             if (currentCount >= policy.MaxClients.Value)
@@ -43,7 +43,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
         // 4. Create Client
-        var client = await _clientProvider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus);
+        var client = await _clientProvider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus, cancellationToken);
 
         return new ClientRegistrationResponse(
             client.RefId,

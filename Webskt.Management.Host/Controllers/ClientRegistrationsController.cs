@@ -1,6 +1,5 @@
 using Webskt.Common.Abstraction.Models.Management;
 using Microsoft.AspNetCore.Mvc;
-using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Services;
 
 namespace Webskt.Management.Host.Controllers;
@@ -17,8 +16,8 @@ public class ClientRegistrationsController : ControllerBase
     }
 
     [HttpPost("initiate")]
-    public async Task<ClientRegistrationResponse> Initiate(ClientRegistrationRequest request)
+    public async Task<ClientRegistrationResponse> Initiate(ClientRegistrationRequest request, CancellationToken cancellationToken)
     {
-        return await _registrationService.InitiateRegistrationAsync(request);
+        return await _registrationService.InitiateRegistrationAsync(request, cancellationToken);
     }
 }

@@ -21,9 +21,9 @@ internal sealed class AuthService : IAuthService
         _jwtService = jwtService;
     }
 
-    public async Task<LoginResponse> LoginAsync(string email, string password, string ipAddress)
+    public async Task<LoginResponse> LoginAsync(string email, string password, string ipAddress, CancellationToken cancellationToken = default)
     {
-        var user = await _provider.GetByEmailAsync(email);
+        var user = await _provider.GetByEmailAsync(email, cancellationToken);
 
         var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
 
@@ -47,21 +47,21 @@ internal sealed class AuthService : IAuthService
         var accessToken = GenerateAccessToken(user);
         var refreshToken = GenerateRefreshToken(user.Id);
 
-        await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress);
+        await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
 
         return new LoginResponse(accessToken, refreshToken.Token);
     }
 
-    public async Task<LoginResponse> RefreshTokenAsync(string token, string ipAddress)
+    public async Task<LoginResponse> RefreshTokenAsync(string token, string ipAddress, CancellationToken cancellationToken = default)
     {
-        var existingToken = await _provider.GetRefreshTokenAsync(token);
+        var existingToken = await _provider.GetRefreshTokenAsync(token, cancellationToken);
 
         if (!existingToken.IsActive)
         {
             throw new SecurityException("Token is no longer active.");
         }
 
-        var user = await _provider.GetByIdAsync(existingToken.UserId);
+        var user = await _provider.GetByIdAsync(existingToken.UserId, cancellationToken);
 
         if (!user.IsActive)
         {
@@ -72,32 +72,32 @@ internal sealed class AuthService : IAuthService
         var newRefreshToken = GenerateRefreshToken(user.Id);
 
         // TODO: Publish TokenRotated event
-        await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress);
+        await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
 
         return new LoginResponse(newAccessToken, newRefreshToken.Token);
     }
 
-    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug)
+    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug, CancellationToken cancellationToken = default)
     {
-        return await _provider.VerifyPermissionAsync(userId, permissionSlug);
+        return await _provider.VerifyPermissionAsync(userId, permissionSlug, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync()
+    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync(CancellationToken cancellationToken = default)
     {
-        return await _provider.GetPermissionsAsync();
+        return await _provider.GetPermissionsAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync()
+    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
-        return await _provider.GetRolesAsync();
+        return await _provider.GetRolesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync()
+    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync(CancellationToken cancellationToken = default)
     {
-        return await _provider.GetGroupsAsync();
+        return await _provider.GetGroupsAsync(cancellationToken);
     }
 
-    public async Task RegisterUserAsync(string username, string email, string password)
+    public async Task RegisterUserAsync(string username, string email, string password, CancellationToken cancellationToken = default)
     {
         var user = new User 
         { 
@@ -107,38 +107,38 @@ internal sealed class AuthService : IAuthService
 
         user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
-        await _provider.InsertUserAsync(user);
+        await _provider.InsertUserAsync(user, cancellationToken);
     }
 
-    public async Task CreateRoleAsync(string name, string description)
+    public async Task CreateRoleAsync(string name, string description, CancellationToken cancellationToken = default)
     {
-        await _provider.InsertRoleAsync(name, description);
+        await _provider.InsertRoleAsync(name, description, cancellationToken);
     }
 
-    public async Task CreateGroupAsync(string name, int? parentGroupId)
+    public async Task CreateGroupAsync(string name, int? parentGroupId, CancellationToken cancellationToken = default)
     {
-        await _provider.InsertGroupAsync(name, parentGroupId);
+        await _provider.InsertGroupAsync(name, parentGroupId, cancellationToken);
     }
 
-    public async Task AddUserToGroupAsync(int userId, int groupId)
+    public async Task AddUserToGroupAsync(int userId, int groupId, CancellationToken cancellationToken = default)
     {
-        await _provider.InsertUserGroupAsync(userId, groupId);
+        await _provider.InsertUserGroupAsync(userId, groupId, cancellationToken);
     }
 
-    public async Task CreatePermissionAsync(string slug, string description)
+    public async Task CreatePermissionAsync(string slug, string description, CancellationToken cancellationToken = default)
     {
-        await _provider.InsertPermissionAsync(slug, description);
+        await _provider.InsertPermissionAsync(slug, description, cancellationToken);
     }
 
-    public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny)
+    public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
-        await _provider.GrantRolePermissionAsync(roleId, permissionSlug, isDeny);
+        await _provider.GrantRolePermissionAsync(roleId, permissionSlug, isDeny, cancellationToken);
         // TODO: Publish RolePermissionsChanged event
     }
 
-    public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny)
+    public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
-        await _provider.GrantUserPermissionAsync(userId, permissionSlug, isDeny);
+        await _provider.GrantUserPermissionAsync(userId, permissionSlug, isDeny, cancellationToken);
         // TODO: Publish UserPermissionsChanged event
     }
 

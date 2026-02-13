@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Webskt.Common.Data;
 using Webskt.Management.Host.Models;
 using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Abstraction.Models;
 
 namespace Webskt.Management.Host.Providers;
 
@@ -11,44 +12,54 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
 {
     public RegistrationPolicyProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindByReferenceIdAsync(Guid referenceId)
+    public async Task<int> FindByReferenceIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.RegistrationPolicy_FindBy_RefId", p =>
         {
             p.AddWithValue("@RefId", referenceId);
-        });
+        }, cancellationToken);
     }
 
-    public async Task<RegistrationPolicy> GetByRefIdAsync(Guid refId)
+    public async Task<RegistrationPolicy> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.RegistrationPolicy_GetBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             MapPolicy,
-            new NotFoundException($"Policy with RefId {refId} not found.")
+            new NotFoundException($"Policy with RefId {refId} not found."),
+            cancellationToken
         );
     }
 
-    public async Task<RegistrationPolicy> GetByPinAsync(string pin)
+    public async Task<RegistrationPolicy> GetByPinAsync(string pin, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.RegistrationPolicy_GetBy_Pin",
             p => p.AddWithValue("@Pin", pin),
             MapPolicy,
-            new SecurityException("Invalid registration PIN.")
+            new SecurityException("Invalid registration PIN."),
+            cancellationToken
         );
     }
 
-    public async Task<IReadOnlyCollection<RegistrationPolicy>> GetAllAsync()
+    public async Task<IPagedList<RegistrationPolicy>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
-        return await ExecuteCollectionAsync(
+        return await ExecutePagedCollectionAsync(
             "dbo.RegistrationPolicy_GetAll",
-            null,
-            MapPolicy
+            p =>
+            {
+                p.AddWithValue("@AutoApproval", (object?)autoApproval ?? DBNull.Value);
+                p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            MapPolicy,
+            cancellationToken
         );
     }
 
-    public async Task<RegistrationPolicy> InsertAsync(RegistrationPolicyRequest request)
+    public async Task<RegistrationPolicy> InsertAsync(RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Create", p =>
         {
@@ -59,12 +70,12 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             p.Add("@Pin", SqlDbType.NVarChar, 10).Direction = ParameterDirection.Output;
-        });
+        }, cancellationToken);
 
         var refId = (Guid)parameters["@RefId"].Value;
 
         // Fetch the full record to return complete data (including CreatedAt)
-        return await GetByRefIdAsync(refId);
+        return await GetByRefIdAsync(refId, cancellationToken);
     }
 
     private static RegistrationPolicy MapPolicy(SqlDataReader reader)

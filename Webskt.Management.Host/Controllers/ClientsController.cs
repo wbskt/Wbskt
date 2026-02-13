@@ -4,6 +4,7 @@ using Webskt.Common.Abstraction.Events;
 using Webskt.Common.Abstraction.Events.Shared;
 using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.Management.Host.Services;
 
@@ -32,42 +33,67 @@ public class ClientsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IReadOnlyCollection<ClientResponse>> GetAll()
+    public async Task<ListResponse<ClientResponse>> GetAll(
+        [FromQuery] ClientStatus? status,
+        [FromQuery] string? name,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 100,
+        CancellationToken cancellationToken = default)
     {
-        return await _clientService.GetAllAsync();
+        var pagedData = await _clientService.GetAllAsync(status, name, skip, take, cancellationToken);
+        
+        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
+
+        return new ListResponse<ClientResponse>
+        {
+            Items = pagedData
+        };
     }
 
     [HttpGet("policy/{policyRefId:guid}")]
-    public async Task<IReadOnlyCollection<ClientResponse>> GetByPolicy(Guid policyRefId)
+    public async Task<ListResponse<ClientResponse>> GetByPolicy(
+        Guid policyRefId,
+        [FromQuery] ClientStatus? status,
+        [FromQuery] string? name,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 100,
+        CancellationToken cancellationToken = default)
     {
-        var policyId = await _policyMapper.FindByReferenceIdAsync(policyRefId);
+        var policyId = await _policyMapper.FindByReferenceIdAsync(policyRefId, cancellationToken);
         
         if (policyId <= 0)
         {
             throw new SecurityException($"Access denied for policy {policyRefId}.");
         }
 
-        return await _clientService.GetByPolicyIdAsync(policyId);
+        var pagedData = await _clientService.GetByPolicyIdAsync(policyId, status, name, skip, take, cancellationToken);
+
+        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
+
+        return new ListResponse<ClientResponse>
+        {
+            Items = pagedData
+        };
     }
 
     [HttpPatch("{clientRefId:guid}/status")]
-    public async Task UpdateStatus(Guid clientRefId, UpdateClientStatusRequest request)
+    public async Task UpdateStatus(Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        var id = await _clientMapper.FindByReferenceIdAsync(clientRefId);
+        var id = await _clientMapper.FindByReferenceIdAsync(clientRefId, cancellationToken);
 
         if (id <= 0)
         {
             throw new SecurityException($"Access denied for client {clientRefId}.");
         }
 
-        await _clientService.UpdateStatusAsync(id, request.Status);
+        await _clientService.UpdateStatusAsync(id, request.Status, cancellationToken);
     }
 
     [HttpPost("{clientRefId:guid}/command")]
-    public async Task SendCommand(Guid clientRefId, DeviceCommandRequest request)
+    public async Task SendCommand(Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
         // In a real scenario, we might verify if the client belongs to the user here
-        await _eventBus.PublishAsync(new DeviceCommandEvent(clientRefId, request.Action, request.Payload));
+        await _eventBus.PublishAsync(new DeviceCommandEvent(clientRefId, request.Action, request.Payload), cancellationToken);
     }
 }
 

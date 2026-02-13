@@ -4,7 +4,6 @@ using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
 using Webskt.Common.Abstraction.Constants;
-using Webskt.Common.Abstraction.Events.Shared;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Events;
 using Webskt.Common.Logging;

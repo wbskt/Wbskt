@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Webskt.Common.Abstraction.Events;
 
 namespace Webskt.Common.Events;
 

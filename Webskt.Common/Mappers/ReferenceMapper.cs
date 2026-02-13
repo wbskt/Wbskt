@@ -11,8 +11,8 @@ public sealed class ReferenceMapper<T> : IReferenceMapper where T : class, IRefe
         _referenceProvider = target ?? throw new ArgumentNullException(nameof(target));
     }
 
-    public Task<int> FindByReferenceIdAsync(Guid referenceId)
+    public Task<int> FindByReferenceIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
-        return _referenceProvider.FindByReferenceIdAsync(referenceId);
+        return _referenceProvider.FindByReferenceIdAsync(referenceId, cancellationToken);
     }
 }

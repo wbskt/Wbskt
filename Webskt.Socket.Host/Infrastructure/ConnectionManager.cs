@@ -6,7 +6,7 @@ namespace Webskt.Socket.Host.Infrastructure;
 public interface IConnectionManager
 {
     void AddConnection(Guid clientRefId, WebSocket socket);
-    Task RemoveConnectionAsync(Guid clientRefId);
+    Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default);
     WebSocket? GetConnection(Guid clientRefId);
     IReadOnlyCollection<Guid> GetConnectedClients();
 }
@@ -20,7 +20,7 @@ internal sealed class ConnectionManager : IConnectionManager
         _connections.TryAdd(clientRefId, socket);
     }
 
-    public async Task RemoveConnectionAsync(Guid clientRefId)
+    public async Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default)
     {
         if (_connections.TryRemove(clientRefId, out var socket))
         {
@@ -28,7 +28,7 @@ internal sealed class ConnectionManager : IConnectionManager
             {
                 try
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by manager", CancellationToken.None);
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by manager", cancellationToken);
                 }
                 catch
                 {

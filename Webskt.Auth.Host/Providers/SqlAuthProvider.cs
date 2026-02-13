@@ -10,37 +10,39 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
 {
     public SqlAuthProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindByReferenceIdAsync(Guid referenceId)
+    public async Task<int> FindByReferenceIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
         var result = await ExecuteScalarAsync<int>("dbo.User_FindBy_RefId", p =>
         {
             p.AddWithValue("@RefId", referenceId);
-        });
+        }, cancellationToken);
 
         return result;
     }
 
-    public async Task<User> GetByEmailAsync(string email)
+    public async Task<User> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.User_GetBy_Email",
             p => p.AddWithValue("@Email", email),
             MapUser,
-            new SecurityException($"User with email {email} not found.")
+            new SecurityException($"User with email {email} not found."),
+            cancellationToken
         );
     }
 
-    public async Task<User> GetByIdAsync(int id)
+    public async Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.User_GetBy_Id",
             p => p.AddWithValue("@Id", id),
             MapUser,
-            new SecurityException($"User with id {id} not found.")
+            new SecurityException($"User with id {id} not found."),
+            cancellationToken
         );
     }
 
-    public async Task<int> InsertUserAsync(User user)
+    public async Task<int> InsertUserAsync(User user, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.User_Create", p =>
         {
@@ -48,12 +50,12 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.AddWithValue("@Email", user.Email);
             p.AddWithValue("@PasswordHash", user.PasswordHash);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
-        });
+        }, cancellationToken);
 
         return (int)parameters["@Id"].Value;
     }
 
-    public async Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress)
+    public async Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.RefreshToken_Insert", p =>
         {
@@ -62,28 +64,29 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.AddWithValue("@Expires", token.Expires);
             p.AddWithValue("@CreatedByIp", ipAddress ?? (object)DBNull.Value);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
-        });
+        }, cancellationToken);
 
         token.Id = (int)parameters["@Id"].Value;
     }
 
-    public async Task<RefreshToken> GetRefreshTokenAsync(string token)
+    public async Task<RefreshToken> GetRefreshTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.RefreshToken_GetBy_Token",
             p => p.AddWithValue("@Token", token),
             MapRefreshToken,
-            new SecurityException("Invalid refresh token.")
+            new SecurityException("Invalid refresh token."),
+            cancellationToken
         );
     }
 
-    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug)
+    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug, CancellationToken cancellationToken = default)
     {
         var result = await ExecuteScalarAsync<object>("dbo.Permission_Verify", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@PermissionSlug", permissionSlug);
-        });
+        }, cancellationToken);
 
         return result switch
         {
@@ -94,7 +97,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         };
     }
 
-    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync()
+    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync(CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Permission_GetAll",
@@ -102,11 +105,12 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             r => new PermissionResponse(
                 r.GetString(r.GetOrdinal("Slug")),
                 r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description"))
-            )
+            ),
+            cancellationToken
         );
     }
 
-    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync()
+    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Role_GetAll",
@@ -115,11 +119,12 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
                 r.GetInt32(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("Name")),
                 r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description"))
-            )
+            ),
+            cancellationToken
         );
     }
 
-    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync()
+    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync(CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Group_GetAll",
@@ -128,64 +133,65 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
                 r.GetInt32(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("Name")),
                 r.IsDBNull(r.GetOrdinal("ParentGroupId")) ? null : r.GetInt32(r.GetOrdinal("ParentGroupId"))
-            )
+            ),
+            cancellationToken
         );
     }
 
-    public async Task InsertRoleAsync(string name, string description)
+    public async Task InsertRoleAsync(string name, string description, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Role_Create", p =>
         {
             p.AddWithValue("@Name", name);
             p.AddWithValue("@Description", description ?? (object)DBNull.Value);
-        });
+        }, cancellationToken);
     }
 
-    public async Task InsertGroupAsync(string name, int? parentGroupId)
+    public async Task InsertGroupAsync(string name, int? parentGroupId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Group_Create", p =>
         {
             p.AddWithValue("@Name", name);
             p.AddWithValue("@ParentGroupId", parentGroupId ?? (object)DBNull.Value);
-        });
+        }, cancellationToken);
     }
 
-    public async Task InsertUserGroupAsync(int userId, int groupId)
+    public async Task InsertUserGroupAsync(int userId, int groupId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.UserGroup_Insert", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@GroupId", groupId);
-        });
+        }, cancellationToken);
     }
 
-    public async Task InsertPermissionAsync(string slug, string description)
+    public async Task InsertPermissionAsync(string slug, string description, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Permission_Create", p =>
         {
             p.AddWithValue("@Slug", slug);
             p.AddWithValue("@Description", description ?? (object)DBNull.Value);
-        });
+        }, cancellationToken);
     }
 
-    public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny)
+    public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.RolePermission_Grant", p =>
         {
             p.AddWithValue("@RoleId", roleId);
             p.AddWithValue("@PermissionSlug", permissionSlug);
             p.AddWithValue("@IsDeny", isDeny);
-        });
+        }, cancellationToken);
     }
 
-    public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny)
+    public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.UserPermission_Grant", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@PermissionSlug", permissionSlug);
             p.AddWithValue("@IsDeny", isDeny);
-        });
+        }, cancellationToken);
     }
 
     private static User MapUser(SqlDataReader reader)

@@ -1,6 +1,5 @@
 using Webskt.Common.Abstraction.Models.Management;
 using Microsoft.AspNetCore.Mvc;
-using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Services;
 
 namespace Webskt.Management.Host.Controllers;
@@ -17,8 +16,8 @@ public class ClientAuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ClientLoginResponse> Login(ClientLoginRequest request)
+    public async Task<ClientLoginResponse> Login(ClientLoginRequest request, CancellationToken cancellationToken)
     {
-        return await _authService.LoginAsync(request);
+        return await _authService.LoginAsync(request, cancellationToken);
     }
 }

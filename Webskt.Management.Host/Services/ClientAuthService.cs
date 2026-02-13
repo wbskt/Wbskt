@@ -17,10 +17,10 @@ internal sealed class ClientAuthService : IClientAuthService
         _jwtService = jwtService;
     }
 
-    public async Task<ClientLoginResponse> LoginAsync(ClientLoginRequest request)
+    public async Task<ClientLoginResponse> LoginAsync(ClientLoginRequest request, CancellationToken cancellationToken = default)
     {
         // 1. Verify credentials
-        var client = await _provider.VerifyAsync(request.ClientRefId, request.Secret);
+        var client = await _provider.VerifyAsync(request.ClientRefId, request.Secret, cancellationToken);
 
         // 2. Check status
         if (client.Status != ClientStatus.Registered)

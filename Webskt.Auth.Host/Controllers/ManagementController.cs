@@ -18,56 +18,56 @@ public class ManagementController : ControllerBase
     }
 
     [HttpGet("roles")]
-    public async Task<IReadOnlyCollection<RoleResponse>> GetRoles()
+    public async Task<IReadOnlyCollection<RoleResponse>> GetRoles(CancellationToken cancellationToken)
     {
-        return await _authService.GetRolesAsync();
+        return await _authService.GetRolesAsync(cancellationToken);
     }
 
     [HttpGet("groups")]
-    public async Task<IReadOnlyCollection<GroupResponse>> GetGroups()
+    public async Task<IReadOnlyCollection<GroupResponse>> GetGroups(CancellationToken cancellationToken)
     {
-        return await _authService.GetGroupsAsync();
+        return await _authService.GetGroupsAsync(cancellationToken);
     }
 
     [HttpGet("permissions")]
-    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissions()
+    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissions(CancellationToken cancellationToken)
     {
-        return await _authService.GetPermissionsAsync();
+        return await _authService.GetPermissionsAsync(cancellationToken);
     }
 
     [HttpPost("roles")]
-    public async Task CreateRole(string name, string description)
+    public async Task CreateRole(string name, string description, CancellationToken cancellationToken)
     {
-        await _authService.CreateRoleAsync(name, description);
+        await _authService.CreateRoleAsync(name, description, cancellationToken);
     }
 
     [HttpPost("groups")]
-    public async Task CreateGroup(string name, int? parentGroupId)
+    public async Task CreateGroup(string name, int? parentGroupId, CancellationToken cancellationToken)
     {
-        await _authService.CreateGroupAsync(name, parentGroupId);
+        await _authService.CreateGroupAsync(name, parentGroupId, cancellationToken);
     }
 
     [HttpPost("users/{userId}/groups/{groupId}")]
-    public async Task AddUserToGroup(int userId, int groupId)
+    public async Task AddUserToGroup(int userId, int groupId, CancellationToken cancellationToken)
     {
-        await _authService.AddUserToGroupAsync(userId, groupId);
+        await _authService.AddUserToGroupAsync(userId, groupId, cancellationToken);
     }
 
     [HttpPost("permissions")]
-    public async Task CreatePermission(string slug, string description)
+    public async Task CreatePermission(string slug, string description, CancellationToken cancellationToken)
     {
-        await _authService.CreatePermissionAsync(slug, description);
+        await _authService.CreatePermissionAsync(slug, description, cancellationToken);
     }
 
     [HttpPost("roles/{roleId}/permissions")]
-    public async Task GrantRolePermission(int roleId, string slug, bool isDeny = false)
+    public async Task GrantRolePermission(int roleId, string slug, CancellationToken cancellationToken, bool isDeny = false)
     {
-        await _authService.GrantRolePermissionAsync(roleId, slug, isDeny);
+        await _authService.GrantRolePermissionAsync(roleId, slug, isDeny, cancellationToken);
     }
 
     [HttpPost("users/{userId}/permissions")]
-    public async Task GrantUserPermission(int userId, string slug, bool isDeny = false)
+    public async Task GrantUserPermission(int userId, string slug, CancellationToken cancellationToken, bool isDeny = false)
     {
-        await _authService.GrantUserPermissionAsync(userId, slug, isDeny);
+        await _authService.GrantUserPermissionAsync(userId, slug, isDeny, cancellationToken);
     }
 }

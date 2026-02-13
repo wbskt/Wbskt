@@ -1,11 +1,11 @@
+using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
-using Webskt.Management.Host.Models;
 
 namespace Webskt.Management.Host.Services;
 
 public interface IRegistrationPolicyService
 {
-    Task<IReadOnlyCollection<RegistrationPolicyResponse>> GetAllAsync();
-    Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId);
-    Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request);
+    Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
 }

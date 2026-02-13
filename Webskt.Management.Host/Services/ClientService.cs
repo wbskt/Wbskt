@@ -1,4 +1,5 @@
 using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Providers;
@@ -16,24 +17,23 @@ internal sealed class ClientService : IClientService
         _policyProvider = policyProvider;
     }
 
-    public async Task<IReadOnlyCollection<ClientResponse>> GetAllAsync()
+    public async Task<IPagedList<ClientResponse>> GetAllAsync(ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var clients = await _clientProvider.GetAllAsync();
+        var pagedClients = await _clientProvider.GetAllAsync(status, name, skip, take, cancellationToken);
         
-        return clients.Select(MapToResponse).ToList().AsReadOnly();
+        return new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
     }
 
-    public async Task<IReadOnlyCollection<ClientResponse>> GetByPolicyIdAsync(int policyId)
+    public async Task<IPagedList<ClientResponse>> GetByPolicyIdAsync(int policyId, ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
-        // Fetch clients
-        var clients = await _clientProvider.GetByPolicyIdAsync(policyId);
+        var pagedClients = await _clientProvider.GetByPolicyIdAsync(policyId, status, name, skip, take, cancellationToken);
 
-        return clients.Select(MapToResponse).ToList().AsReadOnly();
+        return new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
     }
 
-    public async Task UpdateStatusAsync(int id, ClientStatus status)
+    public async Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default)
     {
-        var client = await _clientProvider.GetByIdAsync(id);
+        var client = await _clientProvider.GetByIdAsync(id, cancellationToken);
 
         if (client.Status == status)
         {
@@ -42,11 +42,11 @@ internal sealed class ClientService : IClientService
 
         if (status == ClientStatus.Registered)
         {
-            var policy = await _policyProvider.GetByRefIdAsync(client.PolicyRefId);
+            var policy = await _policyProvider.GetByRefIdAsync(client.PolicyRefId, cancellationToken);
 
             if (policy.MaxClients.HasValue)
             {
-                var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id);
+                var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id, cancellationToken);
 
                 if (currentCount >= policy.MaxClients.Value)
                 {
@@ -55,7 +55,7 @@ internal sealed class ClientService : IClientService
             }
         }
 
-        await _clientProvider.UpdateStatusAsync(id, status);
+        await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
     }
 
     private static ClientResponse MapToResponse(Client c)
