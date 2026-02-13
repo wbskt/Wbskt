@@ -16,6 +16,9 @@
     <ItemGroup>
       <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
       <ProjectReference Include="..\Webskt.Common\Webskt.Common.csproj" />
+      <ProjectReference Include="..\Webskt.EventBus\Webskt.EventBus.csproj" />
+      <ProjectReference Include="..\Webskt.EventBus.RabbitMQ\Webskt.EventBus.RabbitMQ.csproj" />
+      <ProjectReference Include="..\Webskt.Events\Webskt.Events.csproj" />
     </ItemGroup>
 
     <ItemGroup>

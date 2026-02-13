@@ -8,11 +8,11 @@ using Webskt.Auth.Host.Providers;
 using Webskt.Auth.Host.Services;
 using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Abstraction.Interfaces;
-using Webskt.Common.Events;
 using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
+using Webskt.EventBus.RabbitMQ;
 
 namespace Webskt.Auth.Host;
 

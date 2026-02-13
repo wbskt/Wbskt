@@ -2,9 +2,9 @@ using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using Webskt.Common.Abstraction.Events;
-using Webskt.Common.Abstraction.Events.Shared;
-using Webskt.Socket.Host.Events;
+using Webskt.EventBus.Abstractions;
+using Webskt.Events.Shared;
+using Webskt.Events.Socket;
 using Webskt.Socket.Host.Infrastructure;
 using Webskt.Socket.Host.Models;
 

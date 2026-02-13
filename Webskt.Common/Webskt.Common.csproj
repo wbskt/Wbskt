@@ -8,6 +8,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
+      <ProjectReference Include="..\Webskt.EventBus\Webskt.EventBus.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -17,7 +18,6 @@
       <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
       <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
       <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
-      <PackageReference Include="RabbitMQ.Client" />
       <PackageReference Include="Serilog" />
       <PackageReference Include="Serilog.Settings.Configuration" />
     </ItemGroup>
