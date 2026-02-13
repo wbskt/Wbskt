@@ -44,7 +44,6 @@ public static class Program
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
-        builder.Services.AddTransient<IStartupTask, EventBusInitializationStartupTask>();
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>

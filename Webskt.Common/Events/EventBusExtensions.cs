@@ -3,6 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Webskt.Common.Abstraction.Events;
+using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Common.Data;
+using Webskt.Common.Infrastructure;
 using Webskt.Common.Infrastructure.RabbitMQ;
 
 namespace Webskt.Common.Events;
@@ -22,6 +25,14 @@ public static class EventBusExtensions
         services.TryAddSingleton<EventHandlerResolver>();
         services.AddSingleton<IEventBus, RabbitMQBus>();
         services.AddHostedService<RabbitMQListener>();
+
+        // Event Persistence and Registry
+        services.AddSingleton<IEventProvider, EventProvider>();
+        services.AddSingleton<IEventRegistry, EventRegistry>();
+        
+        // Register Startup Tasks
+        services.AddTransient<IStartupTask, EventBusInitializationStartupTask>();
+        services.AddTransient<IStartupTask, EventRegistryStartupTask>();
     }
 
     /// <summary>

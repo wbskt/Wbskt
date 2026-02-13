@@ -42,7 +42,6 @@ public static class Program
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
-        builder.Services.AddTransient<IStartupTask, EventBusInitializationStartupTask>();
 
         builder.Services.AddAuthorization();
 
