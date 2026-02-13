@@ -7,6 +7,7 @@ namespace Webskt.Management.Host.Providers;
 public interface IClientProvider : IReferenceProvider
 {
     Task<int> GetRegisteredCountByPolicyIdAsync(int policyId);
+    Task<Client> GetByIdAsync(int id);
     Task<IReadOnlyCollection<Client>> GetAllAsync();
     Task<IReadOnlyCollection<Client>> GetByPolicyIdAsync(int policyId);
     Task<Client> InsertClientAsync(int policyId, string name, string secret, ClientStatus status);

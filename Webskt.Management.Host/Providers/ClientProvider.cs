@@ -33,6 +33,16 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return result;
     }
 
+    public async Task<Client> GetByIdAsync(int id)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Client_GetBy_Id",
+            p => p.AddWithValue("@Id", id),
+            MapClient,
+            new NotFoundException($"Client with Id {id} not found.")
+        );
+    }
+
     public async Task<IReadOnlyCollection<Client>> GetAllAsync()
     {
         return await ExecuteCollectionAsync(

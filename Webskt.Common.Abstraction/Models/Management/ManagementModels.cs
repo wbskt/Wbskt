@@ -4,7 +4,8 @@ public enum ClientStatus : byte
 {
     Pending = 0,
     Registered = 1,
-    Revoked = 2
+    Revoked = 2,
+    Rejected = 3
 }
 
 public record RegistrationPolicyRequest(

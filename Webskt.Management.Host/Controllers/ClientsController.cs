@@ -50,8 +50,8 @@ public class ClientsController : ControllerBase
         return await _clientService.GetByPolicyIdAsync(policyId);
     }
 
-    [HttpPut("{clientRefId:guid}/approve")]
-    public async Task Approve(Guid clientRefId)
+    [HttpPatch("{clientRefId:guid}/status")]
+    public async Task UpdateStatus(Guid clientRefId, UpdateClientStatusRequest request)
     {
         var id = await _clientMapper.FindByReferenceIdAsync(clientRefId);
 
@@ -60,7 +60,7 @@ public class ClientsController : ControllerBase
             throw new SecurityException($"Access denied for client {clientRefId}.");
         }
 
-        await _clientService.ApproveAsync(id);
+        await _clientService.UpdateStatusAsync(id, request.Status);
     }
 
     [HttpPost("{clientRefId:guid}/command")]
@@ -70,5 +70,7 @@ public class ClientsController : ControllerBase
         await _eventBus.PublishAsync(new DeviceCommandEvent(clientRefId, request.Action, request.Payload));
     }
 }
+
+public record UpdateClientStatusRequest(ClientStatus Status);
 
 public record DeviceCommandRequest(string Action, object? Payload = null);

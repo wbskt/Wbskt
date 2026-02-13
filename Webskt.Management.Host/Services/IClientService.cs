@@ -6,5 +6,5 @@ public interface IClientService
 {
     Task<IReadOnlyCollection<ClientResponse>> GetAllAsync();
     Task<IReadOnlyCollection<ClientResponse>> GetByPolicyIdAsync(int policyId);
-    Task ApproveAsync(int id);
+    Task UpdateStatusAsync(int id, ClientStatus status);
 }
