@@ -2,6 +2,9 @@ using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Webskt.Common.Abstraction.Events;
+using Webskt.Common.Abstraction.Events.Shared;
+using Webskt.Socket.Host.Events;
 using Webskt.Socket.Host.Infrastructure;
 using Webskt.Socket.Host.Models;
 
@@ -16,11 +19,13 @@ internal sealed class SocketHandler : ISocketHandler
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<SocketHandler> _logger;
+    private readonly IEventBus _eventBus;
 
-    public SocketHandler(IConnectionManager connectionManager, ILogger<SocketHandler> logger)
+    public SocketHandler(IConnectionManager connectionManager, ILogger<SocketHandler> logger, IEventBus eventBus)
     {
         _connectionManager = connectionManager;
         _logger = logger;
+        _eventBus = eventBus;
     }
 
     public async Task HandleAsync(HttpContext context)
@@ -42,6 +47,7 @@ internal sealed class SocketHandler : ISocketHandler
         _connectionManager.AddConnection(clientRefId, webSocket);
         
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
+        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId), context.RequestAborted);
 
         try
         {
@@ -62,8 +68,9 @@ internal sealed class SocketHandler : ISocketHandler
         }
         finally
         {
-            await _connectionManager.RemoveConnectionAsync(clientRefId);
+            await _connectionManager.RemoveConnectionAsync(clientRefId, context.RequestAborted);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
+            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, "Socket closed"), CancellationToken.None);
         }
     }
 
@@ -92,7 +99,7 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        // TODO: Dispatch to Workflow Engine
+                        await _eventBus.PublishAsync(new DeviceMessageReceivedEvent(clientRefId, "Generic", messageJson), cancellationToken);
                     }
                 }
                 catch (JsonException ex)

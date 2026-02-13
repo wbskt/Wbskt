@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
+using Webskt.Auth.Host.Events;
 using Webskt.Auth.Host.Models;
 using Webskt.Auth.Host.Providers;
+using Webskt.Common.Abstraction.Events;
 using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models.Auth;
 using Webskt.Common.Security;
@@ -13,43 +15,53 @@ internal sealed class AuthService : IAuthService
 {
     private readonly IAuthProvider _provider;
     private readonly IJwtService _jwtService;
+    private readonly IEventBus _eventBus;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public AuthService(IAuthProvider provider, IJwtService jwtService)
+    public AuthService(IAuthProvider provider, IJwtService jwtService, IEventBus eventBus)
     {
         _provider = provider;
         _jwtService = jwtService;
+        _eventBus = eventBus;
     }
 
     public async Task<LoginResponse> LoginAsync(string email, string password, string ipAddress, CancellationToken cancellationToken = default)
     {
-        var user = await _provider.GetByEmailAsync(email, cancellationToken);
-
-        var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
-
-        if (verificationResult == PasswordVerificationResult.Failed)
+        try 
         {
-            throw new SecurityException("Invalid credentials.");
-        }
+            var user = await _provider.GetByEmailAsync(email, cancellationToken);
+            var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
 
-        if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+            if (verificationResult == PasswordVerificationResult.Failed)
+            {
+                await _eventBus.PublishAsync(new UserLoginEvent(user.Id, ipAddress, false, "Invalid password"), cancellationToken);
+                throw new SecurityException("Invalid credentials.");
+            }
+
+            if (!user.IsActive)
+            {
+                await _eventBus.PublishAsync(new UserLoginEvent(user.Id, ipAddress, false, "User inactive"), cancellationToken);
+                throw new SecurityException("User is inactive.");
+            }
+
+            var accessToken = GenerateAccessToken(user);
+            var refreshToken = GenerateRefreshToken(user.Id);
+
+            await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
+            await _eventBus.PublishAsync(new UserLoginEvent(user.Id, ipAddress, true), cancellationToken);
+
+            return new LoginResponse(accessToken, refreshToken.Token);
+        }
+        catch (SecurityException)
         {
-            // In a real scenario, we should update the hash in the DB here
-            // user.PasswordHash = _passwordHasher.HashPassword(user, password);
-            // await _provider.UpdateUserAsync(user);
+            throw;
         }
-
-        if (!user.IsActive)
+        catch (Exception ex)
         {
-            throw new SecurityException("User is inactive.");
+            // We don't have the userId here if the email lookup failed, 
+            // but we could publish a more general SecurityAlertEvent here in the future
+            throw;
         }
-
-        var accessToken = GenerateAccessToken(user);
-        var refreshToken = GenerateRefreshToken(user.Id);
-
-        await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
-
-        return new LoginResponse(accessToken, refreshToken.Token);
     }
 
     public async Task<LoginResponse> RefreshTokenAsync(string token, string ipAddress, CancellationToken cancellationToken = default)
@@ -71,8 +83,8 @@ internal sealed class AuthService : IAuthService
         var newAccessToken = GenerateAccessToken(user);
         var newRefreshToken = GenerateRefreshToken(user.Id);
 
-        // TODO: Publish TokenRotated event
         await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
+        await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, ipAddress), cancellationToken);
 
         return new LoginResponse(newAccessToken, newRefreshToken.Token);
     }
@@ -107,7 +119,9 @@ internal sealed class AuthService : IAuthService
 
         user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
-        await _provider.InsertUserAsync(user, cancellationToken);
+        var userId = await _provider.InsertUserAsync(user, cancellationToken);
+
+        await _eventBus.PublishAsync(new UserRegisteredEvent(userId, username, email), cancellationToken);
     }
 
     public async Task CreateRoleAsync(string name, string description, CancellationToken cancellationToken = default)
@@ -133,13 +147,15 @@ internal sealed class AuthService : IAuthService
     public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
         await _provider.GrantRolePermissionAsync(roleId, permissionSlug, isDeny, cancellationToken);
-        // TODO: Publish RolePermissionsChanged event
+        
+        await _eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
     }
 
     public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
         await _provider.GrantUserPermissionAsync(userId, permissionSlug, isDeny, cancellationToken);
-        // TODO: Publish UserPermissionsChanged event
+        
+        await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId), cancellationToken);
     }
 
     private string GenerateAccessToken(User user)

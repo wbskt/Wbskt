@@ -11,35 +11,53 @@ public sealed class DeviceCommandHandler : IEventHandler<DeviceCommandEvent>
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<DeviceCommandHandler> _logger;
+    private readonly IEventBus _eventBus;
 
-    public DeviceCommandHandler(IConnectionManager connectionManager, ILogger<DeviceCommandHandler> logger)
+    public DeviceCommandHandler(IConnectionManager connectionManager, ILogger<DeviceCommandHandler> logger, IEventBus eventBus)
     {
         _connectionManager = connectionManager;
         _logger = logger;
+        _eventBus = eventBus;
     }
 
     public async Task HandleAsync(DeviceCommandEvent @event, CancellationToken ct)
     {
         var socket = _connectionManager.GetConnection(@event.TargetClientRefId);
 
-        if (socket == null || socket.State != WebSocketState.Open)
+        if (socket == null)
         {
             _logger.LogDebug("Received command for {ClientRefId} but it is not connected to this node.", @event.TargetClientRefId);
             return;
         }
 
-        _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", @event.Action, @event.TargetClientRefId);
-
-        var message = new
+        if (socket.State != WebSocketState.Open)
         {
-            type = "command",
-            action = @event.Action,
-            payload = @event.Payload
-        };
+            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, "Socket not open"), ct);
+            return;
+        }
 
-        var json = JsonSerializer.Serialize(message);
-        var bytes = Encoding.UTF8.GetBytes(json);
+        try
+        {
+            _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", @event.Action, @event.TargetClientRefId);
 
-        await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+            var message = new
+            {
+                type = "command",
+                action = @event.Action,
+                payload = @event.Payload
+            };
+
+            var json = JsonSerializer.Serialize(message);
+            var bytes = Encoding.UTF8.GetBytes(json);
+
+            await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+
+            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(@event.TargetClientRefId, @event.Action), ct);
+        }
+        catch (Exception ex)
+        {
+            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, ex.Message), ct);
+            throw;
+        }
     }
 }

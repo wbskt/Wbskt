@@ -1,18 +1,22 @@
-using Webskt.Common.Abstraction.Models.Management;
-using Webskt.Management.Host.Models;
-using Webskt.Management.Host.Providers;
+using Webskt.Common.Abstraction.Events;
 using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models;
+using Webskt.Common.Abstraction.Models.Management;
+using Webskt.Management.Host.Events;
+using Webskt.Management.Host.Models;
+using Webskt.Management.Host.Providers;
 
 namespace Webskt.Management.Host.Services;
 
 internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 {
     private readonly IRegistrationPolicyProvider _provider;
+    private readonly IEventBus _eventBus;
 
-    public RegistrationPolicyService(IRegistrationPolicyProvider provider)
+    public RegistrationPolicyService(IRegistrationPolicyProvider provider, IEventBus eventBus)
     {
         _provider = provider;
+        _eventBus = eventBus;
     }
 
     public async Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default)
@@ -38,6 +42,8 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         var policy = await _provider.InsertAsync(request, cancellationToken);
         
+        await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, policy.Name), cancellationToken);
+
         return MapToResponse(policy);
     }
 

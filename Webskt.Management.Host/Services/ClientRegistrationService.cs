@@ -2,6 +2,8 @@ using Webskt.Common.Abstraction.Models.Management;
 using System.Security.Cryptography;
 using Webskt.Management.Host.Providers;
 using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Abstraction.Events;
+using Webskt.Common.Abstraction.Events.Shared;
 
 namespace Webskt.Management.Host.Services;
 
@@ -9,11 +11,16 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
 {
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
+    private readonly IEventBus _eventBus;
 
-    public ClientRegistrationService(IClientProvider clientProvider, IRegistrationPolicyProvider policyProvider)
+    public ClientRegistrationService(
+        IClientProvider clientProvider, 
+        IRegistrationPolicyProvider policyProvider,
+        IEventBus eventBus)
     {
         _clientProvider = clientProvider;
         _policyProvider = policyProvider;
+        _eventBus = eventBus;
     }
 
     public async Task<ClientRegistrationResponse> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
@@ -44,6 +51,14 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
 
         // 4. Create Client
         var client = await _clientProvider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus, cancellationToken);
+
+        // 5. Publish Events
+        await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, policy.RefId, client.Name), cancellationToken);
+
+        if (policy.AutoApproval)
+        {
+            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, ClientStatus.Pending, ClientStatus.Registered), cancellationToken);
+        }
 
         return new ClientRegistrationResponse(
             client.RefId,
