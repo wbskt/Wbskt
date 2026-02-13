@@ -1,7 +1,6 @@
 using System.Data;
 using Microsoft.Extensions.Configuration;
 using Webskt.Common.Abstraction.Interfaces;
-using Webskt.EventBus.Abstractions;
 
 namespace Webskt.Common.Data;
 
