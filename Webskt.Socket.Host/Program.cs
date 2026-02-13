@@ -1,10 +1,13 @@
 using Scalar.AspNetCore;
 using Serilog;
 using Webskt.Common.Abstraction.Constants;
+using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Events;
+using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
+using Webskt.Socket.Host.Extensions;
 using Webskt.Socket.Host.Infrastructure;
 using Webskt.Socket.Host.Middleware;
 using Webskt.Socket.Host.Services;
@@ -15,15 +18,10 @@ public static class Program
 {
     private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
 
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
         Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
-
-        if (!Directory.Exists(ProgramDataPath))
-        {
-            Directory.CreateDirectory(ProgramDataPath);
-        }
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -42,6 +40,10 @@ public static class Program
         builder.Services.AddRabbitMQEventBus(builder.Configuration);
         builder.Services.AddWebsktEventHandlers();
 
+        // Startup Tasks
+        builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
+        builder.Services.AddTransient<IStartupTask, EventBusInitializationStartupTask>();
+
         builder.Services.AddAuthorization();
 
         builder.Services.AddCors(options =>
@@ -58,6 +60,8 @@ public static class Program
         builder.Services.AddOpenApi();
 
         var app = builder.Build();
+
+        await app.RunStartupTasksAsync();
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -87,6 +91,6 @@ public static class Program
 
         app.MapControllers();
 
-        app.Run();
+        await app.RunAsync();
     }
 }

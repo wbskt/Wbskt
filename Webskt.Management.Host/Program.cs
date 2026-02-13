@@ -6,10 +6,12 @@ using Serilog;
 using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Events;
+using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
 using Webskt.Common.Mappers;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
+using Webskt.Management.Host.Extensions;
 using Webskt.Management.Host.Providers;
 using Webskt.Management.Host.Services;
 
@@ -19,15 +21,10 @@ public static class Program
 {
     private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
 
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
         Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
-
-        if (!Directory.Exists(ProgramDataPath))
-        {
-            Directory.CreateDirectory(ProgramDataPath);
-        }
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -53,6 +50,10 @@ public static class Program
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
+
+        // Startup Tasks
+        builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
+        builder.Services.AddTransient<IStartupTask, EventBusInitializationStartupTask>();
 
         var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>
@@ -91,6 +92,8 @@ public static class Program
 
         var app = builder.Build();
 
+        await app.RunStartupTasksAsync();
+
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
         app.UseCors();
@@ -107,6 +110,6 @@ public static class Program
 
         app.MapControllers();
 
-        app.Run();
+        await app.RunAsync();
     }
 }

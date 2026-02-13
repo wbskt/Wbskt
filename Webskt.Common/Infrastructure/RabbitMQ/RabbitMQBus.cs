@@ -18,6 +18,11 @@ public sealed class RabbitMQBus : IEventBus, IDisposable
         _options = options.Value;
     }
 
+    public async Task InitializeAsync(CancellationToken ct = default)
+    {
+        await EnsureConnectionAsync();
+    }
+
     public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
         await EnsureConnectionAsync();

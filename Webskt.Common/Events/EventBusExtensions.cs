@@ -41,7 +41,7 @@ public static class EventBusExtensions
         return services;
     }
 
-    public static void AddEventHandlers(this IServiceCollection services, Assembly assembly)
+    private static void AddEventHandlers(this IServiceCollection services, Assembly assembly)
     {
         // 1. Discover and register all Event Types in this assembly
         var eventTypes = assembly.GetTypes()
