@@ -60,7 +60,7 @@ public static class EventBusExtensions
             });
         });
 
-        // 6. Register IEventBus Wrapper
-        services.AddScoped<IEventBus, MassTransitEventBus>();
+        // 6. Register IEventBus Wrapper as Singleton
+        services.AddSingleton<IEventBus, MassTransitEventBus>();
     }
 }

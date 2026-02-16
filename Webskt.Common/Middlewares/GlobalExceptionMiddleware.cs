@@ -14,7 +14,6 @@ public class GlobalExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
-    private readonly IEventBus _eventBus;
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -23,15 +22,13 @@ public class GlobalExceptionMiddleware
 
     public GlobalExceptionMiddleware(
         RequestDelegate next, 
-        ILogger<GlobalExceptionMiddleware> logger,
-        IEventBus eventBus)
+        ILogger<GlobalExceptionMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _eventBus = eventBus;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IEventBus eventBus)
     {
         try
         {
@@ -40,7 +37,7 @@ public class GlobalExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
-            await HandleExceptionAsync(context, ex, _eventBus);
+            await HandleExceptionAsync(context, ex, eventBus);
         }
     }
 

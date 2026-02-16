@@ -5,15 +5,15 @@ namespace Webskt.EventBus.RabbitMQ;
 
 internal sealed class MassTransitEventBus : IEventBus
 {
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IBus _bus;
 
-    public MassTransitEventBus(IPublishEndpoint publishEndpoint)
+    public MassTransitEventBus(IBus bus)
     {
-        _publishEndpoint = publishEndpoint;
+        _bus = bus;
     }
 
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
-        return _publishEndpoint.Publish(@event, ct);
+        return _bus.Publish(@event, ct);
     }
 }

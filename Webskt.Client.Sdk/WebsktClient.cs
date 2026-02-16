@@ -3,7 +3,7 @@ using Webskt.Client.Sdk.Models;
 
 namespace Webskt.Client.Sdk;
 
-public sealed class WbsktClient : IWbsktClient
+public sealed class WebsktClient : IWbsktClient
 {
     private readonly ClientConfig _config;
     private readonly IClientStorage _storage;
@@ -19,7 +19,7 @@ public sealed class WbsktClient : IWbsktClient
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
-    public WbsktClient(ClientConfig config, IClientStorage storage)
+    public WebsktClient(ClientConfig config, IClientStorage storage)
     {
         _config = config;
         _storage = storage;

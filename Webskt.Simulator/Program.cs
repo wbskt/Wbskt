@@ -14,7 +14,7 @@ var config = new ClientConfig(
 );
 
 var storage = new FileClientStorage();
-await using var client = new WbsktClient(config, storage);
+await using var client = new WebsktClient(config, storage);
 
 client.OnConnected += () => 
 {
