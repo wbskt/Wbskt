@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
@@ -21,21 +22,29 @@ public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
 
     public async Task Consume(ConsumeContext<IEvent> context)
     {
-        var @event = context.Message;
         try
         {
-            var eventType = @event.GetType();
-            // We use the event's type name as the ID lookup was part of the old registry system.
-            // With MassTransit, we can just log the type name directly or query the DB for the ID if needed.
-            // For now, I'll rely on the existing GetOrInsertEventIdAsync logic in IEventProvider which is efficient.
-            var eventId = await _eventProvider.GetOrInsertEventIdAsync(eventType.Name, context.CancellationToken);
-            var eventData = JsonSerializer.Serialize(@event, eventType);
+            // 1. Get the actual concrete event name from MassTransit's metadata
+            var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
+            var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
 
-            await _eventProvider.InsertEventLogAsync(eventId, eventData, @event.CreatedAtUtc, context.CancellationToken);
+            // 2. Get the raw JSON body and extract ONLY the event payload
+            var bodyBytes = context.ReceiveContext.GetBody();
+            using var doc = JsonDocument.Parse(bodyBytes);
+            
+            // MassTransit wraps the event in a "message" property in its JSON envelope.
+            // If it exists, we take just that part. Otherwise, we take the whole body as a fallback.
+            var eventData = doc.RootElement.TryGetProperty("message", out var messageNode) 
+                ? messageNode.GetRawText() 
+                : Encoding.UTF8.GetString(bodyBytes);
+
+            // 3. Persist to database
+            var eventId = await _eventProvider.GetOrInsertEventIdAsync(eventName, context.CancellationToken);
+            await _eventProvider.InsertEventLogAsync(eventId, eventData, context.Message.CreatedAtUtc, context.CancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to log event {@Event} to database.", @event);
+            _logger.LogWarning(ex, "Failed to log event to database.");
         }
     }
 }
