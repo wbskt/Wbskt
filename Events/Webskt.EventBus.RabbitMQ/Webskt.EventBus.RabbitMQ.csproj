@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Webskt.EventBus\Webskt.EventBus.csproj" />
-    <ProjectReference Include="..\Webskt.Common\Webskt.Common.csproj" />
+    <ProjectReference Include="..\..\Webskt.Common\Webskt.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

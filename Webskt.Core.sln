@@ -35,11 +35,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Client.Sdk", "Webskt
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Simulator", "Webskt.Simulator\Webskt.Simulator.csproj", "{E5E0EE3C-D189-400B-B59C-1B47A0AE51FC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.EventBus", "Webskt.EventBus\Webskt.EventBus.csproj", "{A9E0B750-FD38-4918-81D1-4EFB294D225E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.EventBus", "Events\Webskt.EventBus\Webskt.EventBus.csproj", "{A9E0B750-FD38-4918-81D1-4EFB294D225E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.EventBus.RabbitMQ", "Webskt.EventBus.RabbitMQ\Webskt.EventBus.RabbitMQ.csproj", "{67EE11D7-E90A-4B5E-9008-836176E6EED2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.EventBus.RabbitMQ", "Events\Webskt.EventBus.RabbitMQ\Webskt.EventBus.RabbitMQ.csproj", "{67EE11D7-E90A-4B5E-9008-836176E6EED2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Events", "Webskt.Events\Webskt.Events.csproj", "{0302509D-000A-4ED7-A9E4-49E45604C83E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Events", "Events\Webskt.Events\Webskt.Events.csproj", "{0302509D-000A-4ED7-A9E4-49E45604C83E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Events", "Events", "{2AC2B0A2-F7D4-4157-8B61-D15BF9B2640E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -252,6 +254,9 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{0BDA3368-1DC5-4C33-ACA2-8FE06F7EF204} = {19CDF3C0-4BD6-48AD-9B73-2F498AA6EC47}
 		{E38051F5-0A79-4645-A1F0-15FBB0324B66} = {19CDF3C0-4BD6-48AD-9B73-2F498AA6EC47}
+		{A9E0B750-FD38-4918-81D1-4EFB294D225E} = {2AC2B0A2-F7D4-4157-8B61-D15BF9B2640E}
+		{67EE11D7-E90A-4B5E-9008-836176E6EED2} = {2AC2B0A2-F7D4-4157-8B61-D15BF9B2640E}
+		{0302509D-000A-4ED7-A9E4-49E45604C83E} = {2AC2B0A2-F7D4-4157-8B61-D15BF9B2640E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A846868D-B5BE-41CD-8ABA-34F7807B92FE}
