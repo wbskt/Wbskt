@@ -2,7 +2,6 @@ using System.Reflection;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Webskt.Common.Data;
 using Webskt.EventBus.Abstractions;
 using Webskt.EventBus.Handlers;
 
@@ -13,10 +12,10 @@ public static class EventBusExtensions
     public static void AddRabbitMQEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
+        bool enableDbLogging = false,
         Action<RabbitMQOptions>? configure = null)
     {
-        // 1. Persistence Implementation (From Common)
-        services.AddWebsktDataServices();
+        services.AddEventBusCore();
 
         var options = new RabbitMQOptions();
         configuration.GetSection("RabbitMQ").Bind(options);
@@ -24,10 +23,12 @@ public static class EventBusExtensions
 
         services.AddMassTransit(x =>
         {
-            // 2. Register Global Logger Consumer
-            x.AddConsumer<DatabaseEventLoggerHandler>();
+            if (enableDbLogging)
+            {
+                x.AddConsumer<DatabaseEventLoggerHandler, DatabaseEventLoggerHandlerDefinition>();
+            }
 
-            // 3. Discover and Register Consumers from Host Assemblies
+            // 1. Discover and Register Consumers from Host Assemblies
             var entryAssembly = Assembly.GetEntryAssembly();
             if (entryAssembly != null)
             {
@@ -38,7 +39,8 @@ public static class EventBusExtensions
                 
                 assemblies.Add(entryAssembly);
 
-                x.AddConsumers(assemblies.ToArray());
+                // Filter out the global logger from dynamic discovery
+                x.AddConsumers(type => type != typeof(DatabaseEventLoggerHandler), assemblies.ToArray());
             }
 
             x.UsingRabbitMq((context, cfg) =>
@@ -49,18 +51,14 @@ public static class EventBusExtensions
                     h.Password(options.Password);
                 });
 
-                // 4. Configure Shared Queue for Audit Log (Competing Consumer)
-                cfg.ReceiveEndpoint("event-audit-log", e =>
-                {
-                    e.ConfigureConsumer<DatabaseEventLoggerHandler>(context);
-                });
-
-                // 5. Configure Broadcast Queues for everything else (Instance Specific)
+                // 2. Configure Endpoints automatically
+                // This will use the DatabaseEventLoggerHandlerDefinition for the logger (shared queue)
+                // and create temporary/anonymous queues for everything else (broadcast)
                 cfg.ConfigureEndpoints(context);
             });
         });
 
-        // 6. Register IEventBus Wrapper as Singleton
+        // 3. Register IEventBus Wrapper as Singleton
         services.AddSingleton<IEventBus, MassTransitEventBus>();
     }
 }

@@ -6,7 +6,7 @@ namespace Webskt.Common.Data;
 
 public static class DataServiceExtensions
 {
-    public static void AddWebsktDataServices(this IServiceCollection services)
+    public static void AddWebsktEventDataServices(this IServiceCollection services)
     {
         services.TryAddSingleton<IEventProvider, EventProvider>();
     }
