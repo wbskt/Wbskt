@@ -10,7 +10,6 @@ using Webskt.Common.Logging;
 using Webskt.Common.Mappers;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
-using Webskt.EventBus;
 using Webskt.EventBus.RabbitMQ;
 using Webskt.Management.Host.Extensions;
 using Webskt.Management.Host.Providers;
@@ -46,7 +45,6 @@ public static class Program
 
         // Event Bus
         builder.Services.AddRabbitMQEventBus(builder.Configuration);
-        builder.Services.AddWebsktEventHandlers();
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");

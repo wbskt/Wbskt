@@ -1,13 +1,14 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using MassTransit;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Shared;
 using Webskt.Socket.Host.Infrastructure;
 
 namespace Webskt.Socket.Host.Handlers;
 
-public sealed class DeviceCommandHandler : IEventHandler<DeviceCommandEvent>
+public sealed class DeviceCommandHandler : IConsumer<DeviceCommandEvent>
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<DeviceCommandHandler> _logger;
@@ -20,8 +21,11 @@ public sealed class DeviceCommandHandler : IEventHandler<DeviceCommandEvent>
         _eventBus = eventBus;
     }
 
-    public async Task HandleAsync(DeviceCommandEvent @event, CancellationToken ct)
+    public async Task Consume(ConsumeContext<DeviceCommandEvent> context)
     {
+        var @event = context.Message;
+        var ct = context.CancellationToken;
+
         var socket = _connectionManager.GetConnection(@event.TargetClientRefId);
 
         if (socket == null)

@@ -16,3 +16,7 @@ dotnet build .\Webskt.Database.Auth\Webskt.Database.Auth.sqlproj -c Release
 sqlpackage /Action:publish /SourceFile:".\Webskt.Database.Auth\bin\Release\net10.0\Webskt.Database.Auth.dacpac" /TargetConnectionString:"Data Source=localhost;Database=Webskt.Database.Auth;Persist Security Info=True;User ID=sa;PWD=Welcome1234;Pooling=False;Connect Timeout=60;Encrypt=False;Trust Server Certificate=False"
 
 sqlpackage /Action:publish /SourceFile:"./Webskt.Database.Auth/bin/Release/net10.0/Webskt.Database.Auth.dacpac" /TargetConnectionString:"Data Source=localhost;Database=Webskt.Database.Auth;Persist Security Info=True;User ID=sa;PWD=Welcome1234;Pooling=False;Connect Timeout=60;Encrypt=False;Trust Server Certificate=False"
+
+docker run -d --name webskt-rabbitmq -p 5672:5672 -p 15672:15672 -e RABBITMQ_DEFAULT_USER=guest -e RABBITMQ_DEFAULT_PASS=guest --restart unless-stopped rabbitmq:3-management
+
+docker run -e "ACCEPT_EULA=1" -e "MSSQL_SA_PASSWORD=Welcome1234" -p 1433:1433 --name azuresqledge -d mcr.microsoft.com/azure-sql-edge

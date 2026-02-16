@@ -6,7 +6,6 @@ using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
-using Webskt.EventBus;
 using Webskt.EventBus.RabbitMQ;
 using Webskt.Socket.Host.Extensions;
 using Webskt.Socket.Host.Infrastructure;
@@ -39,7 +38,6 @@ public static class Program
 
         // Event Bus
         builder.Services.AddRabbitMQEventBus(builder.Configuration);
-        builder.Services.AddWebsktEventHandlers();
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

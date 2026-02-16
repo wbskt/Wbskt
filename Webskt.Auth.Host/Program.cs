@@ -12,7 +12,6 @@ using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
-using Webskt.EventBus;
 using Webskt.EventBus.RabbitMQ;
 
 namespace Webskt.Auth.Host;
@@ -41,7 +40,6 @@ public static class Program
 
         // Event Bus
         builder.Services.AddRabbitMQEventBus(builder.Configuration);
-        builder.Services.AddWebsktEventHandlers();
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
