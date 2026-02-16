@@ -14,6 +14,8 @@ internal sealed class SocketClient : IAsyncDisposable
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
+    public bool IsConnected => _webSocket.State == WebSocketState.Open;
+
     public SocketClient(string baseUrl)
     {
         _baseUrl = baseUrl;

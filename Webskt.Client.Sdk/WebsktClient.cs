@@ -76,22 +76,23 @@ public sealed class WebsktClient : IWbsktClient
 
         while (!_cts.Token.IsCancellationRequested)
         {
-            await Task.Delay(5000, _cts.Token);
-
-            if (_shouldReconnect)
+            // If we shouldn't reconnect or we're already connected, just wait.
+            if (!_shouldReconnect || _socket.IsConnected)
             {
-                // Note: SocketClient internal state handles whether it's already connected
-                try
-                {
-                    await ConnectInternalAsync();
-                    backoff = TimeSpan.FromSeconds(2); // Reset backoff on success
-                }
-                catch
-                {
-                    // Exponential backoff
-                    await Task.Delay(backoff, _cts.Token);
-                    backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, maxBackoff.Ticks));
-                }
+                await Task.Delay(5000, _cts.Token);
+                continue;
+            }
+
+            try
+            {
+                await ConnectInternalAsync();
+                backoff = TimeSpan.FromSeconds(2); // Reset backoff on success
+            }
+            catch (Exception)
+            {
+                // Wait with exponential backoff if connection fails
+                await Task.Delay(backoff, _cts.Token);
+                backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, maxBackoff.Ticks));
             }
         }
     }
