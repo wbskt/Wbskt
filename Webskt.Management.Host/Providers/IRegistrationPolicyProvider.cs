@@ -10,5 +10,6 @@ public interface IRegistrationPolicyProvider : IReferenceProvider
     Task<RegistrationPolicy> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task<RegistrationPolicy> GetByPinAsync(string pin, CancellationToken cancellationToken = default);
     Task<IPagedList<RegistrationPolicy>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default);
-    Task<RegistrationPolicy> InsertAsync(RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicy> InsertAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+    Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default);
 }

@@ -1,6 +1,7 @@
 CREATE TABLE dbo.EventLogs (
     Id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
     EventId INT NOT NULL,
+    WorkspaceId INT NULL,
     EventData NVARCHAR(MAX) NULL, -- JSON payload
     CreatedAt DATETIME2(0) NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT FK_EventLogs_Events FOREIGN KEY (EventId) REFERENCES dbo.Events(Id)

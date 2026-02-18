@@ -10,6 +10,7 @@ using Webskt.Common.Abstraction.Constants;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
+using Webskt.Common.Mappers;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
 using Webskt.EventBus.RabbitMQ;
@@ -37,6 +38,11 @@ public static class Program
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
+        builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
+        builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+
+        // Register Keyed ReferenceMappers
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>("Workspace");
 
         // Event Bus
         builder.Services.AddRabbitMQEventBus(builder.Configuration);

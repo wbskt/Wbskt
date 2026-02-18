@@ -14,7 +14,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
     {
     }
 
-    public async Task<int> FindByReferenceIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
+    public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
         var result = await ExecuteScalarAsync<int>("dbo.Client_FindBy_RefId", p =>
         {

@@ -12,7 +12,7 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
 {
     public RegistrationPolicyProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindByReferenceIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
+    public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.RegistrationPolicy_FindBy_RefId", p =>
         {
@@ -59,10 +59,11 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         );
     }
 
-    public async Task<RegistrationPolicy> InsertAsync(RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
+    public async Task<RegistrationPolicy> InsertAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Create", p =>
         {
+            p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@Name", request.Name);
             p.AddWithValue("@MaxClients", request.MaxClients ?? (object)DBNull.Value);
             p.AddWithValue("@AutoApproval", request.AutoApproval);
@@ -84,6 +85,7 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         {
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
+            WorkspaceId = reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
             Pin = reader.GetString(reader.GetOrdinal("Pin")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
             MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),

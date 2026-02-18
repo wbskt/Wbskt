@@ -51,6 +51,7 @@ public static class Program
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceReferenceProvider>>("Workspace");
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

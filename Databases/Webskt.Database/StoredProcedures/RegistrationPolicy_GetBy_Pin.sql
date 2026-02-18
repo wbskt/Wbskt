@@ -7,6 +7,7 @@ BEGIN
     SELECT 
         Id,
         RefId,
+        WorkspaceId,
         Pin,
         Name,
         MaxClients,

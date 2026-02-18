@@ -19,13 +19,14 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         return (int)parameters["@Id"].Value;
     }
 
-    public async Task InsertEventLogAsync(int eventId, string eventData, DateTime createdAtUtc, CancellationToken cancellationToken = default)
+    public async Task InsertEventLogAsync(int eventId, string eventData, DateTime createdAtUtc, int? workspaceId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.EventLogs_Insert", p =>
         {
             p.AddWithValue("@EventId", eventId);
             p.AddWithValue("@EventData", eventData);
             p.AddWithValue("@CreatedAtUtc", createdAtUtc);
+            p.AddWithValue("@WorkspaceId", (object?)workspaceId ?? DBNull.Value);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
         }, cancellationToken);
     }

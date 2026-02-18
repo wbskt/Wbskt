@@ -33,14 +33,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return MapToResponse(policy);
     }
 
-    public async Task<RegistrationPolicyResponse> CreateAsync(RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
+    public async Task<RegistrationPolicyResponse> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             throw new ValidationException("Policy name is required.");
         }
 
-        var policy = await _provider.InsertAsync(request, cancellationToken);
+        var policy = await _provider.InsertAsync(workspaceId, request, cancellationToken);
         
         await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, policy.Name), cancellationToken);
 

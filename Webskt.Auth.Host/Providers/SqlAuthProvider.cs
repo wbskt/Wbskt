@@ -10,14 +10,12 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
 {
     public SqlAuthProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> FindByReferenceIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
+    public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteScalarAsync<int>("dbo.User_FindBy_RefId", p =>
+        return await ExecuteScalarAsync<int>("dbo.User_FindBy_RefId", p =>
         {
             p.AddWithValue("@RefId", referenceId);
         }, cancellationToken);
-
-        return result;
     }
 
     public async Task<User> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
@@ -193,7 +191,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.AddWithValue("@IsDeny", isDeny);
         }, cancellationToken);
     }
-
+    
     private static User MapUser(SqlDataReader reader)
     {
         return new User

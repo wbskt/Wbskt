@@ -1,4 +1,5 @@
 CREATE PROCEDURE dbo.RegistrationPolicy_Create
+    @WorkspaceId INT,
     @Name NVARCHAR(100),
     @MaxClients INT = NULL,
     @AutoApproval BIT = 1,
@@ -11,26 +12,25 @@ BEGIN
 
     -- Generate a random 6-character alphanumeric PIN
     SET @Pin = UPPER(LEFT(REPLACE(NEWID(), '-', ''), 6));
-
-    -- Ensure uniqueness (simple retry logic or just assume NEWID entropy is enough for 6 chars for now)
-    -- In production, a more robust generator would be used.
+    SET @RefId = NEWID();
 
     INSERT INTO dbo.RegistrationPolicies (
+        WorkspaceId,
+        RefId,
         Name,
         MaxClients,
         AutoApproval,
         Pin
     )
     VALUES (
+        @WorkspaceId,
+        @RefId,
         @Name,
         @MaxClients,
         @AutoApproval,
         @Pin
     );
 
-    SELECT 
-        @Id = Id,
-        @RefId = RefId
-    FROM dbo.RegistrationPolicies
-    WHERE Id = SCOPE_IDENTITY();
+    SET @Id = SCOPE_IDENTITY();
 END
+GO

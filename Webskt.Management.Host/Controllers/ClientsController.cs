@@ -59,7 +59,7 @@ public class ClientsController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        var policyId = await _policyMapper.FindByReferenceIdAsync(policyRefId, cancellationToken);
+        var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
         
         if (policyId <= 0)
         {
@@ -79,7 +79,7 @@ public class ClientsController : ControllerBase
     [HttpPatch("{clientRefId:guid}/status")]
     public async Task UpdateStatus(Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        var id = await _clientMapper.FindByReferenceIdAsync(clientRefId, cancellationToken);
+        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
 
         if (id <= 0)
         {

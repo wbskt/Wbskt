@@ -14,4 +14,5 @@ public interface IClientProvider : IReferenceProvider
     Task<Client> InsertClientAsync(int policyId, string name, string secret, ClientStatus status, CancellationToken cancellationToken = default);
     Task<Client> VerifyAsync(Guid refId, string secret, CancellationToken cancellationToken = default);
     Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default);
+    Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default);
 }
