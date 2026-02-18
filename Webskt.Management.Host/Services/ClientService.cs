@@ -38,9 +38,14 @@ internal sealed class ClientService : IClientService
         return new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
     }
 
-    public async Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default)
+    public async Task UpdateStatusAsync(int workspaceId, int id, ClientStatus status, CancellationToken cancellationToken = default)
     {
         var client = await _clientProvider.GetByIdAsync(id, cancellationToken);
+        if (client.WorkspaceId != workspaceId)
+        {
+            throw new SecurityException("Client does not belong to this workspace.");
+        }
+        
         var oldStatus = client.Status;
 
         if (oldStatus == status)

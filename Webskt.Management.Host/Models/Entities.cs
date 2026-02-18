@@ -18,6 +18,7 @@ public class Client
 {
     public int Id { get; set; }
     public Guid RefId { get; set; }
+    public int WorkspaceId { get; set; }
     public int PolicyId { get; set; }
     public Guid PolicyRefId { get; set; }
     public string Name { get; set; } = string.Empty;

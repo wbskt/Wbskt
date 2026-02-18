@@ -15,6 +15,7 @@ using Webskt.EventBus.RabbitMQ;
 using Webskt.Management.Host.Extensions;
 using Webskt.Management.Host.Providers;
 using Webskt.Management.Host.Services;
+using Webskt.Management.Host.Services.Clients;
 
 namespace Webskt.Management.Host;
 
@@ -43,6 +44,8 @@ public static class Program
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+        builder.Services.AddScoped<IAuthServiceClient, AuthServiceClient>();
+        
         builder.Services.AddWebsktEventDataServices();
 
         // Event Bus

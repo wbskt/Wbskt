@@ -18,6 +18,7 @@ BEGIN
     SELECT 
         c.Id,
         c.RefId,
+        p.WorkspaceId,
         c.PolicyId,
         p.RefId AS PolicyRefId,
         c.Name,

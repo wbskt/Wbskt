@@ -139,6 +139,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         {
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
+            WorkspaceId = reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
             PolicyId = reader.GetInt32(reader.GetOrdinal("PolicyId")),
             PolicyRefId = reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
