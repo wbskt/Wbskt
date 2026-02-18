@@ -23,7 +23,10 @@ internal sealed class SocketClient : IAsyncDisposable
 
     public async Task ConnectAsync(string token)
     {
-        if (_webSocket.State == WebSocketState.Open) return;
+        if (_webSocket.State == WebSocketState.Open)
+        {
+            return;
+        }
 
         // Reset state for new connection
         if (_cts.IsCancellationRequested)
@@ -44,7 +47,10 @@ internal sealed class SocketClient : IAsyncDisposable
 
     public async Task SendAsync(object message)
     {
-        if (_webSocket.State != WebSocketState.Open) throw new InvalidOperationException("Socket not connected.");
+        if (_webSocket.State != WebSocketState.Open)
+        {
+            throw new InvalidOperationException("Socket not connected.");
+        }
 
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);

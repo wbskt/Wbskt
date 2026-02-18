@@ -64,7 +64,10 @@ internal sealed class WorkspaceService : IWorkspaceService
     private int GetCurrentUserId()
     {
         var user = _httpContextAccessor.HttpContext?.User;
-        if (user == null) throw new SecurityException("User not found.");
+        if (user == null)
+        {
+            throw new SecurityException("User not found.");
+        }
 
         var userIdString = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))

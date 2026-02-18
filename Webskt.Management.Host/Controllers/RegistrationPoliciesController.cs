@@ -52,7 +52,10 @@ public class RegistrationPoliciesController : ControllerBase
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies:read", cancellationToken);
         
         var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
-        if (policyId <= 0) throw new NotFoundException("Policy not found.");
+        if (policyId <= 0)
+        {
+            throw new NotFoundException("Policy not found.");
+        }
 
         var policy = await _policyService.GetByIdAsync(policyId, cancellationToken);
         if (policy.WorkspaceId != workspaceId)

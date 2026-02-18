@@ -57,32 +57,50 @@ BEGIN
 END
 GO
 
--- Users (Root)
-IF NOT EXISTS (SELECT 1 FROM [dbo].[Users] WHERE [Email] = 'admin@wbskt.com')
+-- Users (Root with enforced ID)
+SET IDENTITY_INSERT [dbo].[Users] ON;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Users] WHERE [Id] = 1)
 BEGIN
-
     -- Password is 'Password123!'
-    DECLARE @RootEmail NVARCHAR(100) = 'admin@wbskt.com';
-    DECLARE @RootUsername NVARCHAR(50) = 'root';
-    DECLARE @PasswordHash NVARCHAR(255) = 'AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ==';
-
-    INSERT INTO [dbo].[Users] ([Username], [Email], [PasswordHash], [IsActive])
-    VALUES (@RootUsername, @RootEmail, @PasswordHash, 1);
+    INSERT INTO [dbo].[Users] ([Id], [Username], [Email], [PasswordHash], [IsActive])
+    VALUES (1, 'root', 'admin@wbskt.com', 'AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ==', 1);
 END
 GO
 
--- UserRoles (Root is Admin)
-IF EXISTS (SELECT 1 FROM [dbo].[Users] WHERE [Email] = 'admin@wbskt.com')
-BEGIN
-    DECLARE @RootUserId_UR INT = (SELECT [Id] FROM [dbo].[Users] WHERE [Email] = 'admin@wbskt.com');
-    DECLARE @AdminRoleId_UR INT = (SELECT [Id] FROM [dbo].[Roles] WHERE [Name] = 'Admin');
+SET IDENTITY_INSERT [dbo].[Users] OFF;
+GO
 
-    IF (@RootUserId_UR IS NOT NULL AND @AdminRoleId_UR IS NOT NULL)
+-- UserRoles (Root is Admin)
+IF EXISTS (SELECT 1 FROM [dbo].[Users] WHERE [Id] = 1)
+BEGIN
+    DECLARE @AdminRoleId_UR INT = (SELECT [Id] FROM [dbo].[Roles] WHERE [Name] = 'Admin');
+    IF @AdminRoleId_UR IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [dbo].[UserRoles] WHERE [UserId] = 1 AND [RoleId] = @AdminRoleId_UR)
     BEGIN
-        IF NOT EXISTS (SELECT 1 FROM [dbo].[UserRoles] WHERE [UserId] = @RootUserId_UR AND [RoleId] = @AdminRoleId_UR)
-        BEGIN
-            INSERT INTO [dbo].[UserRoles] ([UserId], [RoleId]) VALUES (@RootUserId_UR, @AdminRoleId_UR);
-        END
+        INSERT INTO [dbo].[UserRoles] ([UserId], [RoleId]) VALUES (1, @AdminRoleId_UR);
     END
+END
+GO
+
+-- Default Workspace (with enforced ID)
+SET IDENTITY_INSERT [dbo].[Workspaces] ON;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Workspaces] WHERE [Id] = 1)
+BEGIN
+    INSERT INTO [dbo].[Workspaces] ([Id], [RefId], [Name], [Description], [OwnerUserId])
+    VALUES (1, NEWID(), 'Default Workspace', 'Default workspace for the primary administrator.', 1);
+END
+GO
+
+SET IDENTITY_INSERT [dbo].[Workspaces] OFF;
+GO
+
+-- Default Workspace Member
+IF NOT EXISTS (SELECT 1 FROM [dbo].[WorkspaceMembers] WHERE [WorkspaceId] = 1 AND [UserId] = 1)
+BEGIN
+    INSERT INTO [dbo].[WorkspaceMembers] ([WorkspaceId], [UserId], [Role])
+    VALUES (1, 1, 2); -- Role 2 = Admin
 END
 GO
