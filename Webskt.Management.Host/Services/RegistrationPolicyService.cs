@@ -33,6 +33,11 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return MapToResponse(policy);
     }
 
+    public async Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    {
+        return await _provider.GetByIdAsync(id, cancellationToken);
+    }
+
     public async Task<RegistrationPolicyResponse> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))

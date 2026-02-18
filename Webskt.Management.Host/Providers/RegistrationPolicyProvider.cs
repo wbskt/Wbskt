@@ -31,6 +31,17 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         );
     }
 
+    public async Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.RegistrationPolicy_GetBy_Id",
+            p => p.AddWithValue("@Id", id),
+            MapPolicy,
+            new NotFoundException($"Policy with Id {id} not found."),
+            cancellationToken
+        );
+    }
+
     public async Task<RegistrationPolicy> GetByPinAsync(string pin, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(

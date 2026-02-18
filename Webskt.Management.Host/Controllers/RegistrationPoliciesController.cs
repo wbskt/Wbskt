@@ -1,5 +1,7 @@
 using Webskt.Common.Abstraction.Models.Management;
 using Microsoft.AspNetCore.Mvc;
+using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Abstraction.Models;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
@@ -12,13 +14,15 @@ public class RegistrationPoliciesController : ControllerBase
 {
     private readonly IRegistrationPolicyService _policyService;
     private readonly IAuthServiceClient _authClient;
+    private readonly IReferenceMapper _policyMapper;
 
     public RegistrationPoliciesController(
         IRegistrationPolicyService policyService,
-        IAuthServiceClient authClient)
+        IAuthServiceClient authClient, [FromKeyedServices("RegistrationPolicy")]IReferenceMapper policyMapper)
     {
         _policyService = policyService;
         _authClient = authClient;
+        _policyMapper = policyMapper;
     }
 
     [HttpGet]
@@ -45,8 +49,25 @@ public class RegistrationPoliciesController : ControllerBase
     [HttpGet("{refId:guid}")]
     public async Task<RegistrationPolicyResponse> Get(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies:read", cancellationToken);
-        return await _policyService.GetByRefIdAsync(refId, cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies:read", cancellationToken);
+        
+        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
+        if (policyId <= 0) throw new NotFoundException("Policy not found.");
+
+        var policy = await _policyService.GetByIdAsync(policyId, cancellationToken);
+        if (policy.WorkspaceId != workspaceId)
+        {
+            throw new SecurityException("Policy does not belong to the specified workspace.");
+        }
+        
+        return new RegistrationPolicyResponse(
+            policy.RefId,
+            policy.Pin,
+            policy.Name,
+            policy.MaxClients,
+            policy.AutoApproval,
+            policy.CreatedAt
+        );
     }
 
     [HttpPost]

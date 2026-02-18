@@ -20,16 +20,23 @@ public class ClientsController : ControllerBase
     private readonly IReferenceMapper _clientMapper;
     private readonly IAuthServiceClient _authClient;
     private readonly IEventBus _eventBus;
+    private readonly IReferenceMapper _policyMapper;
+    private readonly IRegistrationPolicyService _policyService;
 
     public ClientsController(
         IClientService clientService,
         [FromKeyedServices("Client")] IReferenceMapper clientMapper,
-        IAuthServiceClient authClient, IEventBus eventBus)
+        IAuthServiceClient authClient, 
+        IEventBus eventBus,
+        [FromKeyedServices("RegistrationPolicy")] IReferenceMapper policyMapper,
+        IRegistrationPolicyService policyService)
     {
         _clientService = clientService;
         _clientMapper = clientMapper;
         _authClient = authClient;
         _eventBus = eventBus;
+        _policyMapper = policyMapper;
+        _policyService = policyService;
     }
 
     [HttpGet]
@@ -53,8 +60,39 @@ public class ClientsController : ControllerBase
         };
     }
 
-    // This endpoint needs to be re-evaluated as it mixes workspace and policy contexts
-    // [HttpGet("policy/{policyRefId:guid}")]
+    [HttpGet("policy/{policyRefId:guid}")]
+    public async Task<ListResponse<ClientResponse>> GetByPolicy(
+        Guid workspaceRef,
+        Guid policyRefId,
+        [FromQuery] ClientStatus? status,
+        [FromQuery] string? name,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 100,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Authorize workspace access
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients:read", cancellationToken);
+
+        // 2. Resolve Policy RefId
+        var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
+        if (policyId <= 0)
+        {
+            throw new SecurityException("Access denied for policy.");
+        }
+
+        // 3. !! CRITICAL !! Verify Policy belongs to Workspace
+        var policy = await _policyService.GetByIdAsync(policyId, cancellationToken);
+        if (policy.WorkspaceId != workspaceId)
+        {
+            throw new SecurityException("Policy does not belong to the specified workspace.");
+        }
+
+        // 4. All checks pass, get the data
+        var pagedData = await _clientService.GetByPolicyIdAsync(policyId, status, name, skip, take, cancellationToken);
+
+        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
+        return new ListResponse<ClientResponse> { Items = pagedData };
+    }
 
     [HttpPatch("{clientRefId:guid}/status")]
     public async Task UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
