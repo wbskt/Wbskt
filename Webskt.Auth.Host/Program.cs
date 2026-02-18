@@ -40,6 +40,7 @@ public static class Program
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+        builder.Services.AddHttpContextAccessor();
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>("Workspace");

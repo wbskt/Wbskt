@@ -25,6 +25,18 @@ public class WorkspacesController : ControllerBase
         _workspaceMapper = workspaceMapper;
     }
 
+    [HttpPost("resolve")]
+    public async Task<ResolvedWorkspaceResponse> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
+    {
+        var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(request.WorkspaceRef, cancellationToken);
+        if (workspaceId <= 0)
+        {
+            throw new SecurityException("Invalid workspace.");
+        }
+        await _workspaceService.AuthorizeAsync(workspaceId, request.RequiredPermission, cancellationToken);
+        return new ResolvedWorkspaceResponse(workspaceId);
+    }
+
     [HttpGet]
     public async Task<IReadOnlyCollection<WorkspaceResponse>> GetWorkspaces(CancellationToken cancellationToken)
     {
