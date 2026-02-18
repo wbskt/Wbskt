@@ -44,7 +44,12 @@ public static class Program
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
-        builder.Services.AddScoped<IAuthServiceClient, AuthServiceClient>();
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>
+        {
+            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"] 
+                                         ?? throw new ArgumentNullException("Services:Auth configuration is missing."));
+        });
         
         builder.Services.AddWebsktEventDataServices();
 
@@ -54,7 +59,6 @@ public static class Program
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceReferenceProvider>>("Workspace");
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
