@@ -47,7 +47,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         var policy = await _provider.InsertAsync(workspaceId, request, cancellationToken);
         
-        await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, policy.Name), cancellationToken);
+        await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, workspaceId, policy.Name), cancellationToken);
 
         return MapToResponse(policy);
     }

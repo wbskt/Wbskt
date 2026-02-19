@@ -48,7 +48,7 @@ public class ClientsController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients:read", cancellationToken);
+        await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.read", cancellationToken);
         
         var pagedData = await _clientService.GetAllAsync(status, name, skip, take, cancellationToken);
         
@@ -71,7 +71,7 @@ public class ClientsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         // 1. Authorize workspace access
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients:read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.read", cancellationToken);
 
         // 2. Resolve Policy RefId
         var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
@@ -97,7 +97,7 @@ public class ClientsController : ControllerBase
     [HttpPatch("{clientRefId:guid}/status")]
     public async Task UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients:update", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.update", cancellationToken);
         var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
 
         if (id <= 0)
@@ -111,8 +111,8 @@ public class ClientsController : ControllerBase
     [HttpPost("{clientRefId:guid}/command")]
     public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
-        await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients:command", cancellationToken);
-        await _eventBus.PublishAsync(new DeviceCommandEvent(clientRefId, request.Action, request.Payload), cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.command", cancellationToken);
+        await _eventBus.PublishAsync(new DeviceCommandEvent(clientRefId, request.Action, workspaceId, request.Payload), cancellationToken);
     }
 }
 

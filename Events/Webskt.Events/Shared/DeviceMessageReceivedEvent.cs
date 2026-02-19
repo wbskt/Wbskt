@@ -7,4 +7,4 @@ public record DeviceMessageReceivedEvent(
     int WorkspaceId,
     string MessageType, 
     string Payload
-) : DeviceDataEvent(ClientRefId);
+) : DeviceDataEvent(ClientRefId, WorkspaceId);

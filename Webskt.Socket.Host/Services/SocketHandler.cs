@@ -37,6 +37,7 @@ internal sealed class SocketHandler : ISocketHandler
         }
 
         var clientRefIdString = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var workspaceId = int.Parse(context.User.FindFirst("workspace_id")!.Value);
         if (!Guid.TryParse(clientRefIdString, out var clientRefId))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -47,12 +48,12 @@ internal sealed class SocketHandler : ISocketHandler
         _connectionManager.AddConnection(clientRefId, webSocket);
         
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
-        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId), context.RequestAborted);
+        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, workspaceId), context.RequestAborted);
 
         try
         {
             // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
-            await ReceiveLoopAsync(clientRefId, webSocket, context, context.RequestAborted);
+            await ReceiveLoopAsync(clientRefId, webSocket, workspaceId, context.RequestAborted);
         }
         catch (OperationCanceledException)
         {
@@ -70,11 +71,11 @@ internal sealed class SocketHandler : ISocketHandler
         {
             await _connectionManager.RemoveConnectionAsync(clientRefId, context.RequestAborted);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
-            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, "Socket closed"), CancellationToken.None);
+            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, workspaceId, "Socket closed"), CancellationToken.None);
         }
     }
 
-    private async Task ReceiveLoopAsync(Guid clientRefId, WebSocket webSocket, HttpContext context,
+    private async Task ReceiveLoopAsync(Guid clientRefId, WebSocket webSocket, int workspaceId,
         CancellationToken cancellationToken)
     {
         var buffer = new byte[1024 * 4];
@@ -100,7 +101,6 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        var workspaceId = int.Parse(context.User.FindFirst("workspace_id")!.Value);
                         await _eventBus.PublishAsync(new DeviceMessageReceivedEvent(clientRefId, workspaceId, "Generic", messageJson), cancellationToken);
                     }
                 }

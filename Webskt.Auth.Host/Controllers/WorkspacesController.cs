@@ -8,7 +8,7 @@ using Webskt.Common.Abstraction.Interfaces;
 
 namespace Webskt.Auth.Host.Controllers;
 
-[Route("api/workspaces")]
+[Route("api/[controller]")]
 [ApiController]
 [Authorize]
 public class WorkspacesController : ControllerBase

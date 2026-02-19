@@ -36,7 +36,7 @@ public sealed class DeviceCommandHandler : IConsumer<DeviceCommandEvent>
 
         if (socket.State != WebSocketState.Open)
         {
-            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, "Socket not open"), ct);
+            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, @event.WorkspaceId, "Socket not open"), ct);
             return;
         }
 
@@ -56,11 +56,11 @@ public sealed class DeviceCommandHandler : IConsumer<DeviceCommandEvent>
 
             await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
 
-            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(@event.TargetClientRefId, @event.Action), ct);
+            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(@event.TargetClientRefId, @event.Action, @event.WorkspaceId), ct);
         }
         catch (Exception ex)
         {
-            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, ex.Message), ct);
+            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, @event.WorkspaceId, ex.Message), ct);
             throw;
         }
     }

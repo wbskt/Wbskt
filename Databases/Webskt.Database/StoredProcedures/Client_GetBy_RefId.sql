@@ -9,6 +9,7 @@ BEGIN
         c.RefId,
         c.PolicyId,
         p.RefId AS PolicyRefId,
+        p.WorkspaceId,
         c.Name,
         c.Secret,
         c.Status,

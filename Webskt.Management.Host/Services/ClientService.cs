@@ -70,7 +70,7 @@ internal sealed class ClientService : IClientService
 
         await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
 
-        await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, oldStatus, status), cancellationToken);
+        await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, oldStatus, status), cancellationToken);
     }
 
     private static ClientResponse MapToResponse(Client c)

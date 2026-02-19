@@ -5,5 +5,6 @@ namespace Webskt.Events.Shared;
 public record DeviceCommandEvent(
     Guid TargetClientRefId, 
     string Action, 
+    int WorkspaceId,
     object? Payload = null
-) : DeviceControlEvent(TargetClientRefId);
+) : DeviceControlEvent(TargetClientRefId, WorkspaceId);

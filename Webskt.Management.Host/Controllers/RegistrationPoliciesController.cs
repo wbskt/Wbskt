@@ -34,7 +34,7 @@ public class RegistrationPoliciesController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies:read", cancellationToken);
+        await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.read", cancellationToken);
 
         var pagedData = await _policyService.GetAllAsync(autoApproval, name, skip, take, cancellationToken);
 
@@ -49,7 +49,7 @@ public class RegistrationPoliciesController : ControllerBase
     [HttpGet("{refId:guid}")]
     public async Task<RegistrationPolicyResponse> Get(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies:read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.read", cancellationToken);
         
         var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
         if (policyId <= 0)
@@ -76,7 +76,7 @@ public class RegistrationPoliciesController : ControllerBase
     [HttpPost]
     public async Task<RegistrationPolicyResponse> Create(Guid workspaceRef, RegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies:create", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.manage", cancellationToken);
         return await _policyService.CreateAsync(workspaceId, request, cancellationToken);
     }
 }

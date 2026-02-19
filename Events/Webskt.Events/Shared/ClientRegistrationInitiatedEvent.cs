@@ -5,5 +5,6 @@ namespace Webskt.Events.Shared;
 public record ClientRegistrationInitiatedEvent(
     Guid ClientRefId, 
     Guid PolicyRefId, 
+    int WorkspaceId,
     string Name
-) : ClientLifecycleEvent(ClientRefId);
+) : ClientLifecycleEvent(ClientRefId, WorkspaceId);
