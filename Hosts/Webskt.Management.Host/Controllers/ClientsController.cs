@@ -120,7 +120,7 @@ public class ClientsController : ControllerBase
     public async Task Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.ping", cancellationToken);
-        await _eventBus.PublishAsync(new DevicePingCommand(clientRefId, workspaceId, DateTime.UtcNow), cancellationToken);
+        await _eventBus.PublishAsync(new DevicePingEvent(clientRefId, workspaceId, DateTime.UtcNow), cancellationToken);
     }
 }
 

@@ -3,12 +3,14 @@ using System.Text;
 using System.Text.Json;
 using MassTransit;
 using Webskt.EventBus.Abstractions;
+using Webskt.Events.Abstractions;
 using Webskt.Events.Shared;
+using Webskt.Events.Socket;
 using Webskt.Socket.Host.Infrastructure;
 
 namespace Webskt.Socket.Host.Handlers;
 
-public sealed class DeviceCommandHandler : IConsumer<DeviceCommandEvent>
+public sealed class DeviceCommandHandler : IConsumer<DeviceControlEvent>
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<DeviceCommandHandler> _logger;
@@ -21,47 +23,53 @@ public sealed class DeviceCommandHandler : IConsumer<DeviceCommandEvent>
         _eventBus = eventBus;
     }
 
-    public async Task Consume(ConsumeContext<DeviceCommandEvent> context)
+    public async Task Consume(ConsumeContext<DeviceControlEvent> context)
     {
-        var @event = context.Message;
-        var ct = context.CancellationToken;
-
-        var socket = _connectionManager.GetConnection(@event.TargetClientRefId);
-
-        if (socket == null)
+        var socket = _connectionManager.GetConnection(context.Message.ClientRefId);
+        if (socket?.State != WebSocketState.Open)
         {
-            _logger.LogDebug("Received command for {ClientRefId} but it is not connected to this node.", @event.TargetClientRefId);
-            return;
-        }
-
-        if (socket.State != WebSocketState.Open)
-        {
-            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, @event.WorkspaceId, "Socket not open"), ct);
+            _logger.LogDebug("Received command for {ClientRefId} but it is not connected or open.", context.Message.ClientRefId);
             return;
         }
 
         try
         {
-            _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", @event.Action, @event.TargetClientRefId);
-
-            var message = new
+            switch (context.Message)
             {
-                type = "command",
-                action = @event.Action,
-                payload = @event.Payload
-            };
+                case DevicePingEvent ping:
+                    await HandlePingAsync(socket, ping, context.CancellationToken);
+                    break;
+            
+                case DeviceCommandEvent command:
+                    await HandleCommandAsync(socket, command, context.CancellationToken);
+                    break;
+            }
 
-            var json = JsonSerializer.Serialize(message);
-            var bytes = Encoding.UTF8.GetBytes(json);
-
-            await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
-
-            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(@event.TargetClientRefId, @event.Action, @event.WorkspaceId), ct);
+            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(context.Message.ClientRefId, context.Message.Action, context.Message.WorkspaceId), context.CancellationToken);
         }
         catch (Exception ex)
         {
-            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(@event.TargetClientRefId, @event.Action, @event.WorkspaceId, ex.Message), ct);
-            throw;
+            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(context.Message.ClientRefId, context.Message.Action, context.Message.WorkspaceId, ex.Message), context.CancellationToken);
         }
+    }
+
+    private async Task HandlePingAsync(WebSocket socket, DevicePingEvent ping, CancellationToken ct)
+    {
+        var message = new { type = "command", action = ping.Action, payload = new { timestamp = ping.PingTime } };
+        var json = JsonSerializer.Serialize(message);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+    }
+
+    private async Task HandleCommandAsync(WebSocket socket, DeviceCommandEvent command, CancellationToken ct)
+    {
+
+        _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", command.Action, command.ClientRefId);
+
+        var message = new { type = "command", action = command.Action, payload = command.Payload };
+        var json = JsonSerializer.Serialize(message);
+        var bytes = Encoding.UTF8.GetBytes(json);
+
+        await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
     }
 }

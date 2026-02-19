@@ -7,4 +7,4 @@ public record DeviceCommandEvent(
     string Action, 
     int WorkspaceId,
     object? Payload = null
-) : DeviceControlEvent(TargetClientRefId, WorkspaceId);
+) : DeviceControlEvent(TargetClientRefId, WorkspaceId, Action);
