@@ -16,6 +16,7 @@ using Webskt.Management.Host.Extensions;
 using Webskt.Management.Host.Providers;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
+using Webskt.Management.Host.Hubs;
 
 namespace Webskt.Management.Host;
 
@@ -95,7 +96,7 @@ public static class Program
         });
 
         builder.Services.AddControllers();
-
+        builder.Services.AddSignalR();
         builder.Services.AddOpenApi();
 
         var app = builder.Build();
@@ -117,6 +118,7 @@ public static class Program
         app.UseAuthorization();
 
         app.MapControllers();
+        app.MapHub<NotificationHub>("/hubs/notifications");
 
         await app.RunAsync();
     }
