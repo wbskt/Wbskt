@@ -35,7 +35,7 @@ internal sealed class SocketClient : IAsyncDisposable
             _cts = new CancellationTokenSource();
         }
 
-        _webSocket?.Dispose();
+        _webSocket.Dispose();
         _webSocket = new ClientWebSocket();
 
         var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws?access_token={token}");
@@ -81,36 +81,43 @@ internal sealed class SocketClient : IAsyncDisposable
                     break;
                 }
 
-                if (result.MessageType == WebSocketMessageType.Text)
+                if (result.MessageType != WebSocketMessageType.Text)
                 {
-                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    var doc = JsonDocument.Parse(json);
-                    var type = doc.RootElement.GetProperty("type").GetString();
-                    
-                    if (type == "command")
-                    {
-                        var action = doc.RootElement.GetProperty("action").GetString();
-                        var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p : null;
+                    continue;
+                }
 
-                        if (action == "ping")
-                        {
-                            var pongPayload = new 
-                            { 
-                                type = "pong",
-                                originalTimestamp = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime()
-                            };
-                            await SendAsync(pongPayload);
-                        }
-                        else
-                        {
-                            OnMessageReceived?.Invoke(action ?? "unknown", payload);
-                        }
-                    }
+                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                var doc = JsonDocument.Parse(json);
+                var type = doc.RootElement.GetProperty("type").GetString();
+
+                if (type != "command")
+                {
+                    continue;
+                }
+
+                var action = doc.RootElement.GetProperty("action").GetString();
+                var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p : null;
+
+                if (action == "ping")
+                {
+                    var pongPayload = new 
+                    { 
+                        type = "pong",
+                        originalTimestamp = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime()
+                    };
+                    await SendAsync(pongPayload);
+                }
+                else
+                {
+                    OnMessageReceived?.Invoke(action ?? "unknown", payload);
                 }
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception) { }
+        catch (Exception)
+        {
+            // ignored
+        }
         finally
         {
             await AbortAsync();
@@ -118,17 +125,25 @@ internal sealed class SocketClient : IAsyncDisposable
         }
     }
 
-    private async Task AbortAsync()
+    private Task AbortAsync()
     {
-        if (_webSocket.State != WebSocketState.Closed && _webSocket.State != WebSocketState.Aborted)
+        if (_webSocket.State is WebSocketState.Closed or WebSocketState.Aborted)
         {
-            try { _webSocket.Abort(); } catch { }
+            return Task.CompletedTask;
         }
+
+        try { _webSocket.Abort(); }
+        catch
+        {
+            // ignored
+        }
+
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
     {
-        _cts.Cancel();
+        await _cts.CancelAsync();
         await AbortAsync();
         _webSocket.Dispose();
         _cts.Dispose();

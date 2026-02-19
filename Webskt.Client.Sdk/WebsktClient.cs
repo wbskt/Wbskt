@@ -76,7 +76,7 @@ public sealed class WebsktClient : IWbsktClient
 
         while (!_cts.Token.IsCancellationRequested)
         {
-            // If we shouldn't reconnect or we're already connected, just wait.
+            // If we shouldn't reconnect, or we're already connected, just wait.
             if (!_shouldReconnect || _socket.IsConnected)
             {
                 await Task.Delay(5000, _cts.Token);
@@ -129,7 +129,7 @@ public sealed class WebsktClient : IWbsktClient
     public async ValueTask DisposeAsync()
     {
         _shouldReconnect = false;
-        _cts.Cancel();
+        await _cts.CancelAsync();
         _auth.Dispose();
         await _socket.DisposeAsync();
         _cts.Dispose();
