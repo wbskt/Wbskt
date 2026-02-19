@@ -1,5 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Webskt.Events.Socket;
+using Webskt.Management.Host.Services.Clients;
 
 namespace Webskt.Management.Host.Hubs;
 
@@ -10,14 +11,21 @@ public interface INotificationClient
     // Add more client methods for other event types here
 }
 
+[Authorize]
 public class NotificationHub : Hub<INotificationClient>
 {
-    // When a client connects, add them to a group based on their workspace.
-    // The workspace ID should be passed as a query parameter or from the JWT claims.
-    // For MVP, we'll assume the client passes the workspace ID when joining.
-    public async Task JoinWorkspace(string workspaceId)
+    public async Task JoinWorkspace(string workspaceRef)
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, workspaceId);
+        // The user is already authenticated by the [Authorize] attribute.
+        // We can resolve scoped services directly from the Hub's context.
+        var authClient = Context.GetHttpContext()!
+            .RequestServices.GetRequiredService<IAuthServiceClient>();
+            
+        // The AuthenticationForwardingHandler will automatically add the user's token.
+        await authClient.ResolveWorkspaceAsync(Guid.Parse(workspaceRef), "workspaces:join");
+
+        // If the above call fails, it will throw, and the user won't be added to the group.
+        await Groups.AddToGroupAsync(Context.ConnectionId, workspaceRef);
     }
 
     public async Task LeaveWorkspace(string workspaceId)
