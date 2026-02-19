@@ -122,6 +122,16 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
+    public async Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Client_UpdatePresence", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@IsConnected", isConnected);
+            p.AddWithValue("@LastActivityAt", lastActivityAt);
+        }, cancellationToken);
+    }
+
     private async Task<Client> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(

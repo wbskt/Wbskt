@@ -91,7 +91,20 @@ internal sealed class SocketClient : IAsyncDisposable
                     {
                         var action = doc.RootElement.GetProperty("action").GetString();
                         var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p : null;
-                        OnMessageReceived?.Invoke(action ?? "unknown", payload);
+
+                        if (action == "ping")
+                        {
+                            var pongPayload = new 
+                            { 
+                                type = "pong",
+                                originalTimestamp = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime()
+                            };
+                            await SendAsync(pongPayload);
+                        }
+                        else
+                        {
+                            OnMessageReceived?.Invoke(action ?? "unknown", payload);
+                        }
                     }
                 }
             }
