@@ -5,13 +5,13 @@ using Serilog.Core;
 
 namespace Webskt.Common.Logging;
 
-public static class SerilogConfigurationExtention
+public static class SerilogConfigurationExtension
 {
     public static Logger CreateSerilog(this IHostApplicationBuilder builder)
     {
         // Configure Serilog
         var serilogInBinConfigPath = Path.Combine(builder.Environment.ContentRootPath, "serilog.json");
-        var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "Config", "serilog.json");
+        var serilogConfigPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "Config", "serilog.json");
 
         // Load the shared configuration from the central Config folder
         builder.Configuration.AddJsonFile(serilogConfigPath, optional: true, reloadOnChange: true);
