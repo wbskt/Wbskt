@@ -14,15 +14,15 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
-      <ProjectReference Include="..\Webskt.Common\Webskt.Common.csproj" />
-      <ProjectReference Include="..\Events\Webskt.EventBus\Webskt.EventBus.csproj" />
-      <ProjectReference Include="..\Events\Webskt.EventBus.RabbitMQ\Webskt.EventBus.RabbitMQ.csproj" />
-      <ProjectReference Include="..\Events\Webskt.Events\Webskt.Events.csproj" />
+      <ProjectReference Include="..\..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
+      <ProjectReference Include="..\..\Webskt.Common\Webskt.Common.csproj" />
+      <ProjectReference Include="..\..\Events\Webskt.EventBus\Webskt.EventBus.csproj" />
+      <ProjectReference Include="..\..\Events\Webskt.EventBus.RabbitMQ\Webskt.EventBus.RabbitMQ.csproj" />
+      <ProjectReference Include="..\..\Events\Webskt.Events\Webskt.Events.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\Config\serilog.json">
+      <Content Include="..\..\Config\serilog.json">
         <Link>serilog.json</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
