@@ -3,6 +3,7 @@
     <toRun name="Webskt.Auth.Host: dev" type="LaunchSettings" />
     <toRun name="Webskt.Management.Host: dev" type="LaunchSettings" />
     <toRun name="Webskt.Socket.Host: dev" type="LaunchSettings" />
+    <toRun name="Webskt.Workflow.Engine.Host: dev" type="LaunchSettings" />
     <method v="2" />
   </configuration>
 </component>

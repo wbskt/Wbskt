@@ -47,6 +47,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Hosts", "Hosts", "{491F8B64
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Workflow.Engine.Host", "Hosts\Webskt.Workflow.Engine.Host\Webskt.Workflow.Engine.Host.csproj", "{A399F695-B612-4753-A305-DCFC270E3952}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webskt.Workflow.Abstraction", "Webskt.Workflow.Abstraction\Webskt.Workflow.Abstraction.csproj", "{944347BF-4F1E-4500-85E5-D2D67EEC3061}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -267,6 +269,22 @@ Global
 		{A399F695-B612-4753-A305-DCFC270E3952}.Release|x64.Build.0 = Release|Any CPU
 		{A399F695-B612-4753-A305-DCFC270E3952}.Release|x86.ActiveCfg = Release|Any CPU
 		{A399F695-B612-4753-A305-DCFC270E3952}.Release|x86.Build.0 = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|x64.Build.0 = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Debug|x86.Build.0 = Debug|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|Any CPU.Build.0 = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|ARM64.Build.0 = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|x64.ActiveCfg = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|x64.Build.0 = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|x86.ActiveCfg = Release|Any CPU
+		{944347BF-4F1E-4500-85E5-D2D67EEC3061}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
