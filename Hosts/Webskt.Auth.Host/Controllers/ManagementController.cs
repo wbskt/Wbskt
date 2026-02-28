@@ -5,7 +5,7 @@ using Webskt.Auth.Host.Services;
 
 namespace Webskt.Auth.Host.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/management")]
 [ApiController]
 [Authorize]
 public class ManagementController : ControllerBase

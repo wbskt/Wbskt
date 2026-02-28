@@ -8,7 +8,7 @@ using Webskt.Common.Abstraction.Models.Auth;
 
 namespace Webskt.Auth.Host.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/auth")]
 [ApiController]
 public class AuthController : ControllerBase
 {
