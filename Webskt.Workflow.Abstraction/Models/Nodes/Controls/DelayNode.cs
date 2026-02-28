@@ -2,7 +2,7 @@ using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Controls;
 
-public class DelayNode : BaseControl
+public sealed class DelayNode : BaseControl
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [

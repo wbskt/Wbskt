@@ -2,7 +2,7 @@ using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Actions;
 
-public class EmailNotificationNode : BaseAction
+public sealed class EmailNotificationNode : BaseAction
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [

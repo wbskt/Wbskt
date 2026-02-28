@@ -1,9 +1,13 @@
 using System.Text.Json.Serialization;
+using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Expressions;
 
-public abstract class BinaryExpression : WorkflowExpression
+public sealed class BinaryExpression : WorkflowExpression
 {
+    [JsonPropertyName("op")]
+    public BinaryOperator Operator { get; set; }
+
     [JsonPropertyName("left")]
     public WorkflowExpression Left { get; set; } = default!;
 

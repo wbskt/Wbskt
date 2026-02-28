@@ -2,7 +2,7 @@ using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Actions;
 
-public class TelegramNotificationNode : BaseAction
+public sealed class TelegramNotificationNode : BaseAction
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [

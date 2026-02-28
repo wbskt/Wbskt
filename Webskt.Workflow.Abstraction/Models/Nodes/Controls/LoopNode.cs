@@ -2,7 +2,7 @@ using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Controls;
 
-public class LoopNode : BaseControl
+public sealed class LoopNode : BaseControl
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [

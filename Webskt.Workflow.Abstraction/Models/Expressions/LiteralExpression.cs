@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace Webskt.Workflow.Abstraction.Models.Expressions;
 
-public class BooleanLiteralExpression : WorkflowExpression
+public sealed class LiteralExpression : WorkflowExpression
 {
     [JsonPropertyName("value")]
-    public bool Value { get; set; }
+    public object? Value { get; set; }
 }

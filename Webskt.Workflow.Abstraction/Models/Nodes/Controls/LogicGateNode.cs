@@ -3,7 +3,7 @@ using Webskt.Workflow.Abstraction.Models.Expressions;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Controls;
 
-public class LogicGateNode : BaseControl
+public sealed class LogicGateNode : BaseControl
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [
