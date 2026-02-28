@@ -13,3 +13,9 @@ public enum ScheduleUnit
     Hours = 2,
     Days = 3
 }
+
+public enum PortDirection
+{
+    In = 0,
+    Out = 1
+}
