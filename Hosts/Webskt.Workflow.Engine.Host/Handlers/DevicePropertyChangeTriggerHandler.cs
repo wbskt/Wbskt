@@ -1,12 +1,12 @@
 using System.Text.Json;
 using MassTransit;
-using Webskt.Events.Shared;
+using Webskt.Events.Device;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
 
 namespace Webskt.Workflow.Engine.Host.Handlers;
 
-public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DeviceMessageReceivedEvent>
+public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DevicePropertyUpdatedEvent>
 {
     private readonly IWorkflowRuntimeRegistry _registry;
     private readonly IWorkflowEngine _engine;
@@ -22,15 +22,8 @@ public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DeviceMessage
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<DeviceMessageReceivedEvent> context)
+    public async Task Consume(ConsumeContext<DevicePropertyUpdatedEvent> context)
     {
-        // Only handle PropertyChange messages
-        // TODO: review
-        if (!context.Message.MessageType.Equals("PropertyChange", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
         var deviceRefId = context.Message.ClientRefId;
         var triggerKey = $"device:{deviceRefId}".ToLowerInvariant();
         
@@ -44,8 +37,8 @@ public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DeviceMessage
         var triggerContext = new DevicePropertyChangeTriggerContext 
         { 
             DeviceRefId = deviceRefId,
-            PropertyName = "unknown", // To be refined based on event payload structure
-            NewValue = ParsePayload(context.Message.Payload)
+            PropertyName = context.Message.PropertyName,
+            NewValue = ParsePayload(context.Message.NewValue)
         };
 
         var startTasks = workflows

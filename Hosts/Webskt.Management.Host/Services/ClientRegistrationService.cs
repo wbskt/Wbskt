@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using Webskt.Management.Host.Providers;
 using Webskt.Common.Abstraction.Exceptions;
 using Webskt.EventBus.Abstractions;
-using Webskt.Events.Shared;
 
 namespace Webskt.Management.Host.Services;
 

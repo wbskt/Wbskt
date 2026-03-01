@@ -1,12 +1,12 @@
 using System.Text.Json;
 using MassTransit;
-using Webskt.Events.Shared;
+using Webskt.Events.Device;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
 
 namespace Webskt.Workflow.Engine.Host.Handlers;
 
-public sealed class DeviceTelemetryTriggerHandler : IConsumer<DeviceMessageReceivedEvent>
+public sealed class DeviceTelemetryTriggerHandler : IConsumer<DeviceTelemetryReceivedEvent>
 {
     private readonly IWorkflowRuntimeRegistry _registry;
     private readonly IWorkflowEngine _engine;
@@ -22,14 +22,8 @@ public sealed class DeviceTelemetryTriggerHandler : IConsumer<DeviceMessageRecei
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<DeviceMessageReceivedEvent> context)
+    public async Task Consume(ConsumeContext<DeviceTelemetryReceivedEvent> context)
     {
-        // Only handle Telemetry messages
-        if (!context.Message.MessageType.Equals("Telemetry", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
         var deviceRefId = context.Message.ClientRefId;
         var triggerKey = $"device:{deviceRefId}".ToLowerInvariant();
         

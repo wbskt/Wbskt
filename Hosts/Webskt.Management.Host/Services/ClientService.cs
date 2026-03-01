@@ -2,7 +2,6 @@ using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.EventBus.Abstractions;
-using Webskt.Events.Shared;
 using Webskt.Management.Host.Models;
 using Webskt.Management.Host.Providers;
 

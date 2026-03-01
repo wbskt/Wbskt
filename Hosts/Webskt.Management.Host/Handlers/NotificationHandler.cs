@@ -1,6 +1,5 @@
 using MassTransit;
 using Microsoft.AspNetCore.SignalR;
-using Webskt.Events.Socket;
 using Webskt.Management.Host.Hubs;
 
 namespace Webskt.Management.Host.Handlers;

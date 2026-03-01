@@ -5,8 +5,6 @@ using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.EventBus.Abstractions;
-using Webskt.Events.Shared;
-using Webskt.Events.Socket;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
 

@@ -1,10 +1,10 @@
 using Webskt.Events.Abstractions;
 
-namespace Webskt.Events.Shared;
+namespace Webskt.Events.Device;
 
-public record DeviceMessageReceivedEvent(
+public record DevicePropertyUpdatedEvent(
     Guid ClientRefId, 
     int WorkspaceId,
-    string MessageType, 
-    string Payload
+    string PropertyName,
+    string NewValue
 ) : DeviceDataEvent(ClientRefId, WorkspaceId);

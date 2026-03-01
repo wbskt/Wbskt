@@ -1,5 +1,4 @@
 using MassTransit;
-using Webskt.Events.Socket;
 using Webskt.Management.Host.Providers;
 
 namespace Webskt.Management.Host.Handlers;
