@@ -1,6 +1,6 @@
 namespace Webskt.Workflow.Engine.Host.Models.TriggerContexts;
 
-public sealed class DevicePropertyChangeTriggerContext : DeviceTriggerContext
+public sealed class ClientPropertyChangeTriggerContext : ClientTriggerContext
 {
     public required string PropertyName { get; init; }
 

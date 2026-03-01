@@ -5,7 +5,7 @@ using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.EventBus.Abstractions;
-using Webskt.Events.Device;
+using Webskt.Events.Client;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
 
@@ -112,14 +112,14 @@ public class ClientsController : ControllerBase
     public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.command", cancellationToken);
-        await _eventBus.PublishAsync(new DeviceCommandSentEvent(clientRefId, workspaceId, request.CommandName, request.Payload), cancellationToken);
+        await _eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, workspaceId, request.CommandName, request.Payload), cancellationToken);
     }
 
     [HttpPost("{clientRefId:guid}/ping")]
     public async Task Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.ping", cancellationToken);
-        await _eventBus.PublishAsync(new DevicePingEvent(clientRefId, workspaceId, DateTime.UtcNow), cancellationToken);
+        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, workspaceId, DateTime.UtcNow), cancellationToken);
     }
 }
 

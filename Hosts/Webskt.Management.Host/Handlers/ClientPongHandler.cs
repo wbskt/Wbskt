@@ -1,20 +1,19 @@
 using MassTransit;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Client;
-using Webskt.Events.Device;
 
 namespace Webskt.Management.Host.Handlers;
 
-internal sealed class DevicePongHandler : IConsumer<DevicePongEvent>
+internal sealed class ClientPongHandler : IConsumer<ClientPongEvent>
 {
     private readonly IEventBus _eventBus;
 
-    public DevicePongHandler(IEventBus eventBus)
+    public ClientPongHandler(IEventBus eventBus)
     {
         _eventBus = eventBus;
     }
 
-    public async Task Consume(ConsumeContext<DevicePongEvent> context)
+    public async Task Consume(ConsumeContext<ClientPongEvent> context)
     {
         var pong = context.Message;
         var roundTrip = (DateTime.UtcNow - pong.OriginalPingTime).TotalMilliseconds;

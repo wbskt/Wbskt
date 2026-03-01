@@ -1,31 +1,37 @@
 using System.Text.Json;
 using MassTransit;
-using Webskt.Events.Device;
+using Webskt.Events.Client;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
 
 namespace Webskt.Workflow.Engine.Host.Handlers;
 
-public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DevicePropertyUpdatedEvent>
+public sealed class ClientPayloadTriggerHandler : IConsumer<ClientPayloadReceivedEvent>
 {
     private readonly IWorkflowRuntimeRegistry _registry;
     private readonly IWorkflowEngine _engine;
-    private readonly ILogger<DevicePropertyChangeTriggerHandler> _logger;
+    private readonly ILogger<ClientPayloadTriggerHandler> _logger;
 
-    public DevicePropertyChangeTriggerHandler(
+    public ClientPayloadTriggerHandler(
         IWorkflowRuntimeRegistry registry,
         IWorkflowEngine engine,
-        ILogger<DevicePropertyChangeTriggerHandler> logger)
+        ILogger<ClientPayloadTriggerHandler> logger)
     {
         _registry = registry;
         _engine = engine;
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<DevicePropertyUpdatedEvent> context)
+    public async Task Consume(ConsumeContext<ClientPayloadReceivedEvent> context)
     {
+        // Safety check: ensure it's actually telemetry
+        if (!context.Message.MessageType.Equals("Telemetry", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         var deviceRefId = context.Message.ClientRefId;
-        var triggerKey = $"device:{deviceRefId}".ToLowerInvariant();
+        var triggerKey = $"client:{deviceRefId}".ToLowerInvariant();
         
         var workflows = _registry.GetWorkflows(triggerKey);
 
@@ -34,11 +40,10 @@ public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DevicePropert
             return;
         }
 
-        var triggerContext = new DevicePropertyChangeTriggerContext 
+        var triggerContext = new ClientPayloadTriggerContext 
         { 
             DeviceRefId = deviceRefId,
-            PropertyName = context.Message.PropertyName,
-            NewValue = ParsePayload(context.Message.NewValue)
+            Data = ParsePayload(context.Message.Payload) 
         };
 
         var startTasks = workflows
@@ -51,7 +56,7 @@ public sealed class DevicePropertyChangeTriggerHandler : IConsumer<DevicePropert
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to start workflow {WorkflowRefId} for property change from device {ClientRefId}", 
+                    _logger.LogError(ex, "Failed to start workflow {WorkflowRefId} for payload from client {ClientRefId}", 
                         workflow.WorkflowRefId, deviceRefId);
                 }
             });

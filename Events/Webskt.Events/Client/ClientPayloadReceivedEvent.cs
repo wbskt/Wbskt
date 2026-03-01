@@ -1,10 +1,10 @@
 using Webskt.Events.Abstractions;
 
-namespace Webskt.Events.Device;
+namespace Webskt.Events.Client;
 
-public record DeviceTelemetryReceivedEvent(
+public record ClientPayloadReceivedEvent(
     Guid ClientRefId, 
     int WorkspaceId,
     string MessageType,
     string Payload
-) : DeviceDataEvent(ClientRefId, WorkspaceId);
+) : ClientEvent(ClientRefId, WorkspaceId);
