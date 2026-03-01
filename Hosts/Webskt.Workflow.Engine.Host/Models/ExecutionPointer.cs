@@ -1,6 +1,6 @@
-using Webskt.Workflow.Abstraction.Enums;
+using Webskt.Workflow.Engine.Host.Enums;
 
-namespace Webskt.Workflow.Abstraction.Models;
+namespace Webskt.Workflow.Engine.Host.Models;
 
 public sealed class ExecutionPointer
 {
@@ -26,3 +26,4 @@ public sealed class ExecutionPointer
     /// </summary>
     public string? ErrorMessage { get; set; }
 }
+

@@ -1,8 +1,8 @@
-using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Abstraction.Models.Nodes;
-using ExecutionContext = Webskt.Workflow.Abstraction.Models.ExecutionContext;
+using Webskt.Workflow.Engine.Host.Models;
+using ExecutionContext = Webskt.Workflow.Engine.Host.Models.ExecutionContext;
 
-namespace Webskt.Workflow.Abstraction.Interfaces;
+namespace Webskt.Workflow.Engine.Host.Interfaces;
 
 /// <summary>
 /// Defines the logic for executing a specific type of workflow node.
@@ -14,3 +14,4 @@ public interface IWorkflowNodeExecutor
     /// </summary>
     Task<NodeExecutionResult> ExecuteAsync(BaseNode node, ExecutionContext context);
 }
+

@@ -1,4 +1,4 @@
-namespace Webskt.Workflow.Abstraction.Models;
+namespace Webskt.Workflow.Engine.Host.Models;
 
 public sealed class ExecutionContext
 {
@@ -13,19 +13,13 @@ public sealed class ExecutionContext
     public Guid PointerId { get; }
     public Guid InstanceId => _instance.InstanceId;
 
-    /// <summary>
-    /// Read-only access to what triggered the workflow.
-    /// </summary>
     public object? TriggerData => _instance.TriggerData;
 
-    /// <summary>
-    /// Read/Write access to the shared instance state.
-    /// </summary>
     public object? GetState(string key) => _instance.State.GetValueOrDefault(key);
     
     public void SetState(string key, object? value)
     {
-        lock (_instance.State) // Ensure thread-safety for parallel branches
+        lock (_instance.State)
         {
             _instance.State[key] = value;
         }

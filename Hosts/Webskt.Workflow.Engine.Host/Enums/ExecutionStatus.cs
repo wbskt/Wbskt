@@ -1,4 +1,4 @@
-namespace Webskt.Workflow.Abstraction.Enums;
+namespace Webskt.Workflow.Engine.Host.Enums;
 
 public enum WorkflowStatus
 {
