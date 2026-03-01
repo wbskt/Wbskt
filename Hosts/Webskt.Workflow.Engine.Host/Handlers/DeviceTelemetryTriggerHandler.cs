@@ -24,6 +24,12 @@ public sealed class DeviceTelemetryTriggerHandler : IConsumer<DeviceTelemetryRec
 
     public async Task Consume(ConsumeContext<DeviceTelemetryReceivedEvent> context)
     {
+        // Safety check: ensure it's actually telemetry
+        if (!context.Message.MessageType.Equals("Telemetry", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         var deviceRefId = context.Message.ClientRefId;
         var triggerKey = $"device:{deviceRefId}".ToLowerInvariant();
         

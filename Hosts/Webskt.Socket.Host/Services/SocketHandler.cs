@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Webskt.EventBus.Abstractions;
+using Webskt.Events.Client;
 using Webskt.Socket.Host.Infrastructure;
 using Webskt.Socket.Host.Models;
 

@@ -1,5 +1,7 @@
 using MassTransit;
 using Webskt.EventBus.Abstractions;
+using Webskt.Events.Client;
+using Webskt.Events.Device;
 
 namespace Webskt.Management.Host.Handlers;
 

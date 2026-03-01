@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models;
 using Webskt.EventBus.Abstractions;
+using Webskt.Events.System;
 
 namespace Webskt.Common.Middlewares;
 

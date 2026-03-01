@@ -5,6 +5,7 @@ namespace Webskt.Events.Device;
 public record DevicePropertyUpdatedEvent(
     Guid ClientRefId, 
     int WorkspaceId,
+    string MessageType,
     string PropertyName,
     string NewValue
 ) : DeviceDataEvent(ClientRefId, WorkspaceId);

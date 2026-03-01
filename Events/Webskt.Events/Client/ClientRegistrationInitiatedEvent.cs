@@ -3,7 +3,7 @@ using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Client;
 
-public record ClientRegistrationStartedEvent(
+public record ClientRegistrationInitiatedEvent(
     Guid ClientRefId, 
     int WorkspaceId,
     Guid PolicyRefId

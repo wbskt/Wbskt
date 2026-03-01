@@ -4,6 +4,7 @@ using System.Text.Json;
 using MassTransit;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
+using Webskt.Events.Device;
 using Webskt.Socket.Host.Infrastructure;
 
 namespace Webskt.Socket.Host.Handlers;

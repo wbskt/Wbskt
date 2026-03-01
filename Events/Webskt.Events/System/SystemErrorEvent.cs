@@ -3,7 +3,9 @@ using Webskt.EventBus.Abstractions;
 namespace Webskt.Events.System;
 
 public record SystemErrorEvent(
-    string Component,
-    string ErrorMessage,
-    string? StackTrace = null
+    string ErrorType, 
+    string Message, 
+    string? StackTrace, 
+    string? RequestPath, 
+    string? RequestId
 ) : BaseEvent;
