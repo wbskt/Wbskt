@@ -1,3 +1,4 @@
+using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Services;
 
@@ -9,6 +10,9 @@ public static class WorkflowEngineExtensions
     {
         services.AddSingleton<IWorkflowRuntimeRegistry, WorkflowRuntimeRegistry>();
         services.AddScoped<IWorkflowEngine, WorkflowEngine>();
+
+        // Registry Initialization Task
+        services.AddTransient<IStartupTask, WorkflowRegistryInitializationTask>();
         
         return services;
     }
