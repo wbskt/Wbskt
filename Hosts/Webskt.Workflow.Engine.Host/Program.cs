@@ -32,6 +32,9 @@ public static class Program
         // Event Bus
         builder.Services.AddRabbitMQEventBus(builder.Configuration);
 
+        // Workflow Engine
+        builder.Services.AddWorkflowEngine();
+
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
 
