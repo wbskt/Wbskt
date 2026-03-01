@@ -1,4 +1,5 @@
 using Webskt.Workflow.Engine.Host.Enums;
+using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
 
 namespace Webskt.Workflow.Engine.Host.Models;
 
@@ -8,7 +9,7 @@ public sealed class WorkflowInstance
     public Guid WorkflowRefId { get; set; }
     public int WorkspaceId { get; set; }
 
-    public object? TriggerData { get; set; }
+    public BaseTriggerContext? TriggerContext { get; set; }
 
     public Dictionary<string, object?> State { get; set; } = new();
 
