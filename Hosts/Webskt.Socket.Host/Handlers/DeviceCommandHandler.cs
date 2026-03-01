@@ -39,33 +39,33 @@ public sealed class DeviceCommandHandler : IConsumer<DeviceControlEvent>
                     await HandlePingAsync(socket, ping, context.CancellationToken);
                     break;
             
-                case DeviceCommandEvent command:
+                case DeviceCommandSentEvent command:
                     await HandleCommandAsync(socket, command, context.CancellationToken);
                     break;
             }
 
-            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(context.Message.ClientRefId, context.Message.Action, context.Message.WorkspaceId), context.CancellationToken);
+            await _eventBus.PublishAsync(new DeviceCommandDeliveredEvent(context.Message.ClientRefId, context.Message.WorkspaceId, context.Message.CommandName), context.CancellationToken);
         }
         catch (Exception ex)
         {
-            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(context.Message.ClientRefId, context.Message.Action, context.Message.WorkspaceId, ex.Message), context.CancellationToken);
+            await _eventBus.PublishAsync(new DeviceCommandFailedEvent(context.Message.ClientRefId, context.Message.WorkspaceId,context.Message.CommandName, ex.Message), context.CancellationToken);
         }
     }
 
     private async Task HandlePingAsync(WebSocket socket, DevicePingEvent ping, CancellationToken ct)
     {
-        var message = new { type = "command", action = ping.Action, payload = new { timestamp = ping.PingTime } };
+        var message = new { type = "command", action = ping.CommandName, payload = new { timestamp = ping.PingTime } };
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
         await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
     }
 
-    private async Task HandleCommandAsync(WebSocket socket, DeviceCommandEvent command, CancellationToken ct)
+    private async Task HandleCommandAsync(WebSocket socket, DeviceCommandSentEvent command, CancellationToken ct)
     {
 
-        _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", command.Action, command.ClientRefId);
+        _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", command.CommandName, command.ClientRefId);
 
-        var message = new { type = "command", action = command.Action, payload = command.Payload };
+        var message = new { type = "command", action = command.CommandName, payload = command.Payload };
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
 

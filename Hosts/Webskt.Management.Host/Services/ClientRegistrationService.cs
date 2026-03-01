@@ -53,11 +53,11 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var client = await _clientProvider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus, cancellationToken);
 
         // 5. Publish Events
-        await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, policy.RefId, client.WorkspaceId, client.Name), cancellationToken);
+        await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.WorkspaceId, policy.RefId, client.Name), cancellationToken);
 
         if (policy.AutoApproval)
         {
-            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, ClientStatus.Pending, ClientStatus.Registered), cancellationToken);
+            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, ClientStatus.Registered), cancellationToken);
         }
 
         return new ClientRegistrationResponse(

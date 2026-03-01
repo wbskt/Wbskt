@@ -6,8 +6,6 @@ using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Device;
-using Webskt.Events.Shared;
-using Webskt.Events.Socket;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
 
@@ -114,7 +112,7 @@ public class ClientsController : ControllerBase
     public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.command", cancellationToken);
-        await _eventBus.PublishAsync(new DeviceCommandEvent(clientRefId, request.Action, workspaceId, request.Payload), cancellationToken);
+        await _eventBus.PublishAsync(new DeviceCommandSentEvent(clientRefId, workspaceId, request.CommandName, request.Payload), cancellationToken);
     }
 
     [HttpPost("{clientRefId:guid}/ping")]
@@ -127,4 +125,4 @@ public class ClientsController : ControllerBase
 
 public record UpdateClientStatusRequest(ClientStatus Status);
 
-public record DeviceCommandRequest(string Action, object? Payload = null);
+public record DeviceCommandRequest(string CommandName, string Payload);

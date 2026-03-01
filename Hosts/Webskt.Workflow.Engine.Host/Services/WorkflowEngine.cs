@@ -4,6 +4,7 @@ using Webskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Webskt.Workflow.Engine.Host.Enums;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models;
+using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
 using ExecutionContext = Webskt.Workflow.Engine.Host.Models.ExecutionContext;
 
 namespace Webskt.Workflow.Engine.Host.Services;
@@ -19,7 +20,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         _logger = logger;
     }
 
-    public async Task<WorkflowInstance> StartAsync(WorkflowDefinition definition, object? triggerData)
+    public async Task<WorkflowInstance> StartAsync(WorkflowDefinition definition, BaseTriggerContext triggerData)
     {
         _logger.LogInformation("Starting workflow {WorkflowName} ({WorkflowRefId})", definition.Name, definition.WorkflowRefId);
 
@@ -27,7 +28,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         {
             WorkflowRefId = definition.WorkflowRefId,
             WorkspaceId = definition.WorkspaceId,
-            TriggerData = triggerData,
+            TriggerContext = triggerData,
             State = new Dictionary<string, object?>(definition.InitialState)
         };
 

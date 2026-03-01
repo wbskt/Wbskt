@@ -6,5 +6,6 @@ namespace Webskt.Events.Client;
 public record ClientRegistrationInitiatedEvent(
     Guid ClientRefId, 
     int WorkspaceId,
-    Guid PolicyRefId
+    Guid PolicyRefId,
+    string Name
 ) : BaseEvent;

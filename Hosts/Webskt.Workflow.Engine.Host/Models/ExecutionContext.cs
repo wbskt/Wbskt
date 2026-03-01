@@ -1,3 +1,5 @@
+using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
+
 namespace Webskt.Workflow.Engine.Host.Models;
 
 public sealed class ExecutionContext
@@ -13,7 +15,7 @@ public sealed class ExecutionContext
     public Guid PointerId { get; }
     public Guid InstanceId => _instance.InstanceId;
 
-    public object? TriggerData => _instance.TriggerData;
+    public BaseTriggerContext? TriggerContext => _instance.TriggerContext;
 
     public object? GetState(string key) => _instance.State.GetValueOrDefault(key);
     

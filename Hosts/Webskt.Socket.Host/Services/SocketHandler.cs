@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Client;
+using Webskt.Events.Device;
 using Webskt.Socket.Host.Infrastructure;
 using Webskt.Socket.Host.Models;
 
@@ -100,7 +101,7 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        await _eventBus.PublishAsync(new DeviceMessageReceivedEvent(clientRefId, workspaceId, "Generic", messageJson), cancellationToken);
+                        await _eventBus.PublishAsync(new DeviceTelemetryReceivedEvent(clientRefId, workspaceId, "Generic", messageJson), cancellationToken);
                     }
                 }
                 catch (JsonException ex)
