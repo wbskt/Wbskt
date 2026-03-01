@@ -8,6 +8,8 @@ public abstract record PermissionEvent : AuthEvent;
 
 public abstract record RegistrationPolicyEvent(Guid PolicyRefId, int WorkspaceId) : BaseEvent;
 
+public abstract record WorkflowEvent(Guid WorkflowRefId, int WorkspaceId) : BaseEvent;
+
 public abstract record ClientLifecycleEvent(Guid ClientRefId, int WorkspaceId) : BaseEvent;
 public abstract record DeviceDataEvent(Guid ClientRefId, int WorkspaceId) : ClientLifecycleEvent(ClientRefId, WorkspaceId);
 public abstract record DeviceControlEvent(Guid ClientRefId, int WorkspaceId, string Action) : ClientLifecycleEvent(ClientRefId, WorkspaceId);
