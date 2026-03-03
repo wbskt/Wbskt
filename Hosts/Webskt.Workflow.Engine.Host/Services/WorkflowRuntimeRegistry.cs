@@ -7,7 +7,7 @@ namespace Webskt.Workflow.Engine.Host.Services;
 
 public sealed class WorkflowRuntimeRegistry : IWorkflowRuntimeRegistry
 {
-    // Key: TriggerKey (e.g. "device:guid"), Value: Set of WorkflowRefIds
+    // Key: TriggerKey (e.g. "client:guid"), Value: Set of WorkflowRefIds
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _triggerMap = new();
     
     // Key: WorkflowRefId, Value: The actual definition
@@ -107,7 +107,7 @@ public sealed class WorkflowRuntimeRegistry : IWorkflowRuntimeRegistry
             switch (node)
             {
                 case DeviceTriggerNode deviceTrigger:
-                    yield return $"device:{deviceTrigger.ClientRefId}".ToLowerInvariant();
+                    yield return $"client:{deviceTrigger.ClientRefId}".ToLowerInvariant();
                     break;
                 case TimerScheduleNode timerTrigger:
                     yield return "timer:system";

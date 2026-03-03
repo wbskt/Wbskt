@@ -100,7 +100,7 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        await _eventBus.PublishAsync(new ClientPayloadReceivedEvent(clientRefId, workspaceId, "Generic", messageJson), cancellationToken);
+                        await _eventBus.PublishAsync(new ClientPayloadReceivedEvent(clientRefId, workspaceId, message.Type, messageJson), cancellationToken);
                     }
                 }
                 catch (JsonException ex)

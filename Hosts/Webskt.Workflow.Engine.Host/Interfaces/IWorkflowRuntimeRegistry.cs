@@ -8,7 +8,7 @@ namespace Webskt.Workflow.Engine.Host.Interfaces;
 public interface IWorkflowRuntimeRegistry
 {
     /// <summary>
-    /// Retrieves all enabled workflows associated with a specific trigger key (e.g. "device:guid").
+    /// Retrieves all enabled workflows associated with a specific trigger key (e.g. "client:guid").
     /// </summary>
     IReadOnlyCollection<WorkflowDefinition> GetWorkflows(string triggerKey);
 

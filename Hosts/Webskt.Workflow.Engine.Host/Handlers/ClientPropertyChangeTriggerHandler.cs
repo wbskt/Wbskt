@@ -25,7 +25,7 @@ public sealed class ClientPropertyChangeTriggerHandler : IConsumer<ClientPropert
     public async Task Consume(ConsumeContext<ClientPropertyUpdatedEvent> context)
     {
         var deviceRefId = context.Message.ClientRefId;
-        var triggerKey = $"device:{deviceRefId}".ToLowerInvariant();
+        var triggerKey = $"client:{deviceRefId}".ToLowerInvariant();
         
         var workflows = _registry.GetWorkflows(triggerKey);
 
