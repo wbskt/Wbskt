@@ -18,7 +18,7 @@ public sealed class WorkflowDefinition
 
     public WorkflowConcurrencyPolicy Concurrency { get; set; } = WorkflowConcurrencyPolicy.AllowParallel;
 
-    public Dictionary<string, object> InitialState { get; set; } = new();
+    public Dictionary<string, object?> InitialState { get; set; } = new();
 
     public DateTime CreatedAt { get; set; }
 }
