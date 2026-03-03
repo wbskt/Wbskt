@@ -5,6 +5,7 @@ using Webskt.Workflow.Engine.Host.Enums;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models;
 using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
+using Webskt.Workflow.Abstraction.Enums;
 using ExecutionContext = Webskt.Workflow.Engine.Host.Models.ExecutionContext;
 
 namespace Webskt.Workflow.Engine.Host.Services;
@@ -20,7 +21,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         _logger = logger;
     }
 
-    public async Task<WorkflowInstance> StartAsync(WorkflowDefinition definition, BaseTriggerContext triggerData)
+    public async Task<WorkflowInstance> StartAsync(WorkflowDefinition definition, BaseTriggerContext triggerContext)
     {
         _logger.LogInformation("Starting workflow {WorkflowName} ({WorkflowRefId})", definition.Name, definition.WorkflowRefId);
 
@@ -28,14 +29,26 @@ public sealed class WorkflowEngine : IWorkflowEngine
         {
             WorkflowRefId = definition.WorkflowRefId,
             WorkspaceId = definition.WorkspaceId,
-            TriggerContext = triggerData,
+            TriggerContext = triggerContext,
             State = new Dictionary<string, object?>(definition.InitialState)
         };
 
-        // Find all triggers in the definition
-        var triggers = definition.Nodes.OfType<BaseTrigger>().ToList();
-        
-        foreach (var trigger in triggers)
+        // 1. Find ONLY the trigger nodes that match the context
+        var matchingTriggers = definition.Nodes
+            .OfType<BaseTrigger>()
+            .Where(node => NodeMatchesContext(node, triggerContext))
+            .ToList();
+
+        if (matchingTriggers.Count == 0)
+        {
+            _logger.LogWarning("No matching trigger nodes found for workflow {WorkflowRefId} with context {ContextType}", 
+                definition.WorkflowRefId, triggerContext.GetType().Name);
+            
+            instance.Status = WorkflowStatus.Completed; // Nothing to do
+            return instance;
+        }
+
+        foreach (var trigger in matchingTriggers)
         {
             var pointer = new ExecutionPointer { NodeId = trigger.NodeId };
             instance.Pointers.Add(pointer);
@@ -71,7 +84,6 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 var context = new ExecutionContext(instance, pointer.PointerId);
 
                 // Resolve the executor for this specific node type
-                // Note: We'll need to implement this dynamic resolution logic
                 var executor = ResolveExecutor(node);
                 
                 var result = await executor.ExecuteAsync(node, context);
@@ -97,7 +109,10 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     .Where(e => e.Source.NodeId == node.NodeId && result.ActivatedPortIds.Contains(e.Source.PortId))
                     .ToList();
 
-                if (nextEdges.Count == 0) break;
+                if (nextEdges.Count == 0)
+                {
+                    break;
+                }
 
                 // Handle Fan-out: 
                 // The FIRST edge reuses the current pointer.
@@ -131,20 +146,53 @@ public sealed class WorkflowEngine : IWorkflowEngine
         }
     }
 
+    private bool NodeMatchesContext(BaseTrigger node, BaseTriggerContext context)
+    {
+        return (node, context) switch
+        {
+            (DeviceTriggerNode dtn, ClientPayloadTriggerContext cpc) => 
+                dtn.ClientRefId == cpc.DeviceRefId && dtn.TriggerType == DeviceTriggerType.OnTelemetry,
+                
+            (DeviceTriggerNode dtn, ClientPropertyChangeTriggerContext dpc) => 
+                dtn.ClientRefId == dpc.DeviceRefId && dtn.TriggerType == DeviceTriggerType.OnPropertyChange &&
+                (string.IsNullOrEmpty(dtn.PropertyName) || dtn.PropertyName == dpc.PropertyName),
+                
+            // TODO: Add TimerScheduleNode matching
+            _ => false
+        };
+    }
+
     private IWorkflowNodeExecutor ResolveExecutor(BaseNode node)
     {
-        // This will be replaced with a proper Registry/Factory
-        // For now, it's a placeholder
-        throw new NotImplementedException($"Executor for node type {node.GetType().Name} is not registered.");
+        // Use naming convention: [NodeTypeName]Executor
+        // e.g. LogicGateNode -> LogicGateExecutor
+        var nodeName = node.GetType().Name;
+        var executorName = nodeName.Replace("Node", "Executor");
+        
+        // Find by name in the DI container (using keyed services or assembly scanning)
+        // For the MVP, we can use a simple map or type-based resolution
+        var executorType = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(a => a.GetTypes())
+            .FirstOrDefault(t => typeof(IWorkflowNodeExecutor).IsAssignableFrom(t) && t.Name == executorName);
+
+        if (executorType == null)
+        {
+            throw new InvalidOperationException($"No executor found for node type {nodeName}. Expected {executorName}.");
+        }
+
+        return (IWorkflowNodeExecutor)ActivatorUtilities.CreateInstance(_serviceProvider, executorType);
     }
 
     private void CheckWorkflowCompletion(WorkflowInstance instance)
     {
-        if (instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted))
+        lock (instance.Pointers)
         {
-            instance.Status = WorkflowStatus.Completed;
-            instance.FinishedAt = DateTime.UtcNow;
-            _logger.LogInformation("Workflow instance {InstanceId} completed.", instance.InstanceId);
+            if (instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted))
+            {
+                instance.Status = WorkflowStatus.Completed;
+                instance.FinishedAt = DateTime.UtcNow;
+                _logger.LogInformation("Workflow instance {InstanceId} completed.", instance.InstanceId);
+            }
         }
     }
 }
