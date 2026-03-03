@@ -1,3 +1,6 @@
+using Webskt.EventBus.Abstractions;
+using Webskt.Events.Workflow;
+using Webskt.Workflow.Abstraction.Enums;
 using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Abstraction.Models.Nodes;
 using Webskt.Workflow.Abstraction.Models.Nodes.Triggers;
@@ -5,7 +8,6 @@ using Webskt.Workflow.Engine.Host.Enums;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models;
 using Webskt.Workflow.Engine.Host.Models.TriggerContexts;
-using Webskt.Workflow.Abstraction.Enums;
 using ExecutionContext = Webskt.Workflow.Engine.Host.Models.ExecutionContext;
 
 namespace Webskt.Workflow.Engine.Host.Services;
@@ -13,17 +15,22 @@ namespace Webskt.Workflow.Engine.Host.Services;
 public sealed class WorkflowEngine : IWorkflowEngine
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowEngine> _logger;
 
-    public WorkflowEngine(IServiceProvider serviceProvider, ILogger<WorkflowEngine> logger)
+    public WorkflowEngine(
+        IServiceProvider serviceProvider, 
+        IEventBus eventBus,
+        ILogger<WorkflowEngine> logger)
     {
         _serviceProvider = serviceProvider;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
     public async Task<WorkflowInstance> StartAsync(WorkflowDefinition definition, BaseTriggerContext triggerContext)
     {
-        _logger.LogInformation("Starting workflow {WorkflowName} ({WorkflowRefId})", definition.Name, definition.WorkflowRefId);
+        _logger.LogDebug("Starting workflow {WorkflowName} ({WorkflowRefId})", definition.Name, definition.WorkflowRefId);
 
         var instance = new WorkflowInstance
         {
@@ -33,7 +40,9 @@ public sealed class WorkflowEngine : IWorkflowEngine
             State = new Dictionary<string, object?>(definition.InitialState)
         };
 
-        // 1. Find ONLY the trigger nodes that match the context
+        await _eventBus.PublishAsync(new WorkflowInstanceStartedEvent(
+            instance.InstanceId, instance.WorkflowRefId, instance.WorkspaceId));
+
         var matchingTriggers = definition.Nodes
             .OfType<BaseTrigger>()
             .Where(node => NodeMatchesContext(node, triggerContext))
@@ -44,7 +53,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
             _logger.LogWarning("No matching trigger nodes found for workflow {WorkflowRefId} with context {ContextType}", 
                 definition.WorkflowRefId, triggerContext.GetType().Name);
             
-            instance.Status = WorkflowStatus.Completed; // Nothing to do
+            await CompleteWorkflowAsync(instance);
             return instance;
         }
 
@@ -53,7 +62,6 @@ public sealed class WorkflowEngine : IWorkflowEngine
             var pointer = new ExecutionPointer { NodeId = trigger.NodeId };
             instance.Pointers.Add(pointer);
             
-            // Start execution for this trigger branch
             _ = ExecutePointerAsync(instance, pointer, definition);
         }
 
@@ -62,7 +70,6 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
     public Task ResumeAsync(Guid instanceId)
     {
-        // TODO: Load instance from store and find pointers with ResumeAt <= Now
         throw new NotImplementedException("Resume logic requires a persistent InstanceStore.");
     }
 
@@ -75,23 +82,21 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 var node = definition.Nodes.FirstOrDefault(n => n.NodeId == pointer.NodeId);
                 if (node == null)
                 {
-                    pointer.Status = ExecutionStatus.Faulted;
-                    pointer.ErrorMessage = $"Node {pointer.NodeId} not found in definition.";
+                    await FailPointerAsync(instance, pointer, $"Node {pointer.NodeId} not found.");
                     break;
                 }
 
-                // Create the safe execution context
                 var context = new ExecutionContext(instance, pointer.PointerId);
-
-                // Resolve the executor for this specific node type
                 var executor = ResolveExecutor(node);
                 
+                await _eventBus.PublishAsync(new NodeExecutionStartedEvent(
+                    instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, node.GetType().Name, node.Name));
+
                 var result = await executor.ExecuteAsync(node, context);
 
                 if (!result.IsSuccess)
                 {
-                    pointer.Status = ExecutionStatus.Faulted;
-                    pointer.ErrorMessage = result.ErrorMessage;
+                    await FailPointerAsync(instance, pointer, result.ErrorMessage ?? "Unknown node error.");
                     break;
                 }
 
@@ -102,7 +107,9 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     break;
                 }
 
-                // Node completed successfully. Find next steps.
+                await _eventBus.PublishAsync(new NodeExecutionCompletedEvent(
+                    instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, result.ActivatedPortIds));
+
                 pointer.Status = ExecutionStatus.Completed;
 
                 var nextEdges = definition.Edges
@@ -136,13 +143,11 @@ public sealed class WorkflowEngine : IWorkflowEngine
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing pointer {PointerId} at node {NodeId}", pointer.PointerId, pointer.NodeId);
-            pointer.Status = ExecutionStatus.Faulted;
-            pointer.ErrorMessage = ex.Message;
+            await FailPointerAsync(instance, pointer, ex.Message);
         }
         finally
         {
-            CheckWorkflowCompletion(instance);
+            await CheckWorkflowCompletionAsync(instance);
         }
     }
 
@@ -164,35 +169,45 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
     private IWorkflowNodeExecutor ResolveExecutor(BaseNode node)
     {
-        // Use naming convention: [NodeTypeName]Executor
-        // e.g. LogicGateNode -> LogicGateExecutor
-        var nodeName = node.GetType().Name;
-        var executorName = nodeName.Replace("Node", "Executor");
+        var executor = _serviceProvider.GetKeyedService<IWorkflowNodeExecutor>(node.GetType().Name);
         
-        // Find by name in the DI container (using keyed services or assembly scanning)
-        // For the MVP, we can use a simple map or type-based resolution
-        var executorType = AppDomain.CurrentDomain.GetAssemblies()
-            .SelectMany(a => a.GetTypes())
-            .FirstOrDefault(t => typeof(IWorkflowNodeExecutor).IsAssignableFrom(t) && t.Name == executorName);
-
-        if (executorType == null)
+        if (executor == null)
         {
-            throw new InvalidOperationException($"No executor found for node type {nodeName}. Expected {executorName}.");
+            throw new InvalidOperationException($"No executor registered for node type {node.GetType().Name}");
         }
 
-        return (IWorkflowNodeExecutor)ActivatorUtilities.CreateInstance(_serviceProvider, executorType);
+        return executor;
     }
 
-    private void CheckWorkflowCompletion(WorkflowInstance instance)
+    private async Task FailPointerAsync(WorkflowInstance instance, ExecutionPointer pointer, string message)
     {
+        pointer.Status = ExecutionStatus.Faulted;
+        pointer.ErrorMessage = message;
+        
+        await _eventBus.PublishAsync(new NodeExecutionFailedEvent(
+            instance.WorkspaceId, instance.InstanceId, pointer.PointerId, pointer.NodeId, message));
+    }
+
+    private async Task CheckWorkflowCompletionAsync(WorkflowInstance instance)
+    {
+        bool isComplete;
         lock (instance.Pointers)
         {
-            if (instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted))
-            {
-                instance.Status = WorkflowStatus.Completed;
-                instance.FinishedAt = DateTime.UtcNow;
-                _logger.LogInformation("Workflow instance {InstanceId} completed.", instance.InstanceId);
-            }
+            isComplete = instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted);
         }
+
+        if (isComplete)
+        {
+            await CompleteWorkflowAsync(instance);
+        }
+    }
+
+    private async Task CompleteWorkflowAsync(WorkflowInstance instance)
+    {
+        instance.Status = WorkflowStatus.Completed;
+        instance.FinishedAt = DateTime.UtcNow;
+
+        await _eventBus.PublishAsync(new WorkflowInstanceCompletedEvent(
+            instance.InstanceId, instance.WorkflowRefId, instance.WorkspaceId, instance.Status.ToString()));
     }
 }
