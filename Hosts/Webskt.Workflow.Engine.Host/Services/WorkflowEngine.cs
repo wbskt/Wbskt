@@ -104,6 +104,10 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 {
                     pointer.Status = ExecutionStatus.Waiting;
                     pointer.ResumeAt = result.WaitUntil;
+
+                    await _eventBus.PublishAsync(new NodeExecutionWaitingEvent(
+                        instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, result.WaitUntil.Value));
+                    
                     break;
                 }
 
