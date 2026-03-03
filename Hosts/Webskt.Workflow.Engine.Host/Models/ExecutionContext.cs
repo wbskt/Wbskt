@@ -15,7 +15,16 @@ public sealed class ExecutionContext
     public Guid PointerId { get; }
     public Guid InstanceId => _instance.InstanceId;
 
+    /// <summary>
+    /// The typed context that started this workflow.
+    /// </summary>
     public BaseTriggerContext? TriggerContext => _instance.TriggerContext;
+
+    /// <summary>
+    /// The direct output from the PREVIOUS node in this specific branch.
+    /// Useful for chaining nodes without creating explicit variables.
+    /// </summary>
+    public object? LastNodeOutput { get; set; }
 
     public object? GetState(string key) => _instance.State.GetValueOrDefault(key);
     

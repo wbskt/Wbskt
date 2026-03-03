@@ -25,5 +25,10 @@ public sealed class ExecutionPointer
     /// If this branch fails, store the error here.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The sequence of NodeIds visited by this specific pointer.
+    /// </summary>
+    public List<Guid> StepHistory { get; init; } = [];
 }
 

@@ -60,7 +60,11 @@ public sealed class WorkflowEngine : IWorkflowEngine
         foreach (var trigger in matchingTriggers)
         {
             var pointer = new ExecutionPointer { NodeId = trigger.NodeId };
-            instance.Pointers.Add(pointer);
+            
+            lock (instance.Pointers)
+            {
+                instance.Pointers.Add(pointer);
+            }
             
             _ = ExecutePointerAsync(instance, pointer, definition);
         }
@@ -77,6 +81,9 @@ public sealed class WorkflowEngine : IWorkflowEngine
     {
         try
         {
+            // Track intermediate output between nodes in this branch
+            object? lastOutput = null;
+
             while (pointer.Status == ExecutionStatus.Active)
             {
                 var node = definition.Nodes.FirstOrDefault(n => n.NodeId == pointer.NodeId);
@@ -86,7 +93,14 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     break;
                 }
 
-                var context = new ExecutionContext(instance, pointer.PointerId);
+                // Update Breadcrumbs
+                pointer.StepHistory.Add(node.NodeId);
+
+                var context = new ExecutionContext(instance, pointer.PointerId)
+                {
+                    LastNodeOutput = lastOutput
+                };
+
                 var executor = ResolveExecutor(node);
                 
                 await _eventBus.PublishAsync(new NodeExecutionStartedEvent(
@@ -111,6 +125,9 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     break;
                 }
 
+                // Update output for the next node
+                // (Note: Currently NodeExecutionResult doesn't have an output object, we should add it if needed)
+                
                 await _eventBus.PublishAsync(new NodeExecutionCompletedEvent(
                     instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, result.ActivatedPortIds));
 
@@ -133,13 +150,24 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     var edge = nextEdges[i];
                     if (i == 0)
                     {
+                        // Reuse current pointer for the first branch
                         pointer.NodeId = edge.Target.NodeId;
                         pointer.Status = ExecutionStatus.Active;
                     }
                     else
                     {
-                        var newPointer = new ExecutionPointer { NodeId = edge.Target.NodeId };
-                        instance.Pointers.Add(newPointer);
+                        // Spawn new pointers for additional parallel branches
+                        var newPointer = new ExecutionPointer 
+                        { 
+                            NodeId = edge.Target.NodeId,
+                            StepHistory = new List<Guid>(pointer.StepHistory) // Clone history
+                        };
+
+                        lock (instance.Pointers)
+                        {
+                            instance.Pointers.Add(newPointer);
+                        }
+
                         _ = ExecutePointerAsync(instance, newPointer, definition);
                     }
                 }
@@ -194,13 +222,20 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
     private async Task CheckWorkflowCompletionAsync(WorkflowInstance instance)
     {
-        bool isComplete;
+        bool shouldComplete = false;
+
         lock (instance.Pointers)
         {
-            isComplete = instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted);
+            // Only proceed if all branches are finished AND the workflow isn't already marked completed
+            if (instance.Status == WorkflowStatus.Running && 
+                instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted))
+            {
+                instance.Status = WorkflowStatus.Completed;
+                shouldComplete = true;
+            }
         }
 
-        if (isComplete)
+        if (shouldComplete)
         {
             await CompleteWorkflowAsync(instance);
         }
@@ -208,10 +243,11 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
     private async Task CompleteWorkflowAsync(WorkflowInstance instance)
     {
-        instance.Status = WorkflowStatus.Completed;
         instance.FinishedAt = DateTime.UtcNow;
 
         await _eventBus.PublishAsync(new WorkflowInstanceCompletedEvent(
             instance.InstanceId, instance.WorkflowRefId, instance.WorkspaceId, instance.Status.ToString()));
+        
+        _logger.LogDebug("Workflow instance {InstanceId} finished with status {Status}", instance.InstanceId, instance.Status);
     }
 }
