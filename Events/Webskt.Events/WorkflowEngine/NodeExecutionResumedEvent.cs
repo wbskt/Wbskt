@@ -1,11 +1,10 @@
 using Webskt.Events.Abstractions;
 
-namespace Webskt.Events.Workflow;
+namespace Webskt.Events.WorkflowEngine;
 
-public record NodeExecutionWaitingEvent(
+public record NodeExecutionResumedEvent(
     int WorkspaceId,
     Guid InstanceId,
     Guid PointerId,
-    Guid NodeId,
-    DateTime WaitUntil
+    Guid NodeId
 ) : WorkspaceEvent(WorkspaceId);

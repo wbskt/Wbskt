@@ -1,6 +1,6 @@
 using Webskt.Events.Abstractions;
 
-namespace Webskt.Events.Workflow;
+namespace Webskt.Events.WorkflowEngine;
 
 public record NodeExecutionStartedEvent(
     int WorkspaceId,

@@ -1,5 +1,5 @@
 using Webskt.EventBus.Abstractions;
-using Webskt.Events.Workflow;
+using Webskt.Events.WorkflowEngine;
 using Webskt.Workflow.Abstraction.Enums;
 using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Abstraction.Models.Nodes;
@@ -222,7 +222,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
     private async Task CheckWorkflowCompletionAsync(WorkflowInstance instance)
     {
-        bool shouldComplete = false;
+        var shouldComplete = false;
 
         lock (instance.Pointers)
         {

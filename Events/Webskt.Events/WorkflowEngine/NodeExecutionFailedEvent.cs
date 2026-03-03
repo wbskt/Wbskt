@@ -1,11 +1,11 @@
 using Webskt.Events.Abstractions;
 
-namespace Webskt.Events.Workflow;
+namespace Webskt.Events.WorkflowEngine;
 
-public record NodeExecutionCompletedEvent(
+public record NodeExecutionFailedEvent(
     int WorkspaceId,
     Guid InstanceId,
     Guid PointerId,
     Guid NodeId,
-    List<string> ActivatedPorts
+    string ErrorMessage
 ) : WorkspaceEvent(WorkspaceId);
