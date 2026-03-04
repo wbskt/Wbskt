@@ -10,9 +10,7 @@ namespace Webskt.Management.Host.Providers;
 
 internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
 {
-    public ClientProvider(IConfiguration configuration) : base(configuration)
-    {
-    }
+    public ClientProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {

@@ -1,0 +1,18 @@
+CREATE TABLE dbo.Workflows (
+    Id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    RefId UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() UNIQUE,
+    WorkspaceId INT NOT NULL,
+    Name NVARCHAR(100) NOT NULL,
+    Description NVARCHAR(500) NOT NULL DEFAULT '',
+    IsEnabled BIT NOT NULL DEFAULT 1,
+    Version INT NOT NULL DEFAULT 1,
+    DefinitionJson NVARCHAR(MAX) NOT NULL DEFAULT '{}',
+    CreatedAt DATETIME2(0) NOT NULL DEFAULT GETUTCDATE()
+);
+GO
+
+CREATE INDEX IX_Workflows_RefId ON dbo.Workflows(RefId);
+GO
+
+CREATE INDEX IX_Workflows_WorkspaceId ON dbo.Workflows(WorkspaceId);
+GO

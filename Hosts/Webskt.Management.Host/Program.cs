@@ -42,6 +42,8 @@ public static class Program
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
+        builder.Services.AddScoped<IWorkflowProvider, WorkflowProvider>();
+        builder.Services.AddScoped<IWorkflowService, WorkflowService>();
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
@@ -63,6 +65,7 @@ public static class Program
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkflowProvider>>("Workflow");
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
