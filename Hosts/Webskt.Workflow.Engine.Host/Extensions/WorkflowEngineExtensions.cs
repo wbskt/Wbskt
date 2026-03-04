@@ -6,14 +6,13 @@ namespace Webskt.Workflow.Engine.Host.Extensions;
 
 public static class WorkflowEngineExtensions
 {
-    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services)
+    public static void AddWorkflowEngine(this IServiceCollection services)
     {
         services.AddSingleton<IWorkflowRuntimeRegistry, WorkflowRuntimeRegistry>();
+        services.AddSingleton<IWorkflowExpressionEvaluator, WorkflowExpressionEvaluator>();
         services.AddScoped<IWorkflowEngine, WorkflowEngine>();
 
         // Registry Initialization Task
         services.AddTransient<IStartupTask, WorkflowRegistryInitializationTask>();
-        
-        return services;
     }
 }
