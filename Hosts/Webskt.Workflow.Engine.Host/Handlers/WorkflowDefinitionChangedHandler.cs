@@ -1,8 +1,8 @@
 using MassTransit;
 using Webskt.Events.Management;
 using Webskt.Workflow.Engine.Host.Interfaces;
-using Webskt.Workflow.Providers;
 using Webskt.Workflow.Mappers;
+using Webskt.Workflow.Providers;
 
 namespace Webskt.Workflow.Engine.Host.Handlers;
 

@@ -66,7 +66,10 @@ public sealed class ClientPayloadTriggerHandler : IConsumer<ClientPayloadReceive
 
     private static object? ParsePayload(string payload)
     {
-        if (string.IsNullOrWhiteSpace(payload)) return null;
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
 
         try 
         {

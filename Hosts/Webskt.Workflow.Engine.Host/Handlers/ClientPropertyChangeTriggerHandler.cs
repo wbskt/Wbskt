@@ -61,7 +61,10 @@ public sealed class ClientPropertyChangeTriggerHandler : IConsumer<ClientPropert
 
     private static object? ParsePayload(string payload)
     {
-        if (string.IsNullOrWhiteSpace(payload)) return null;
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
 
         try 
         {

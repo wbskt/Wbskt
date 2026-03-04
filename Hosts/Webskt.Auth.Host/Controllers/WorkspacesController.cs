@@ -1,6 +1,6 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 using Webskt.Auth.Host.Models;
 using Webskt.Auth.Host.Services;
 using Webskt.Common.Abstraction.Exceptions;

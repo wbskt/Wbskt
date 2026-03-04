@@ -52,7 +52,10 @@ public sealed partial class WorkflowExpressionEvaluator
         {
             foreach (var element in enumerable)
             {
-                if (Equals(element, item)) return true;
+                if (Equals(element, item))
+                {
+                    return true;
+                }
             }
         }
 
