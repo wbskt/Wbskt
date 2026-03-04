@@ -44,7 +44,7 @@ Represents the external event that woke up the engine. It is **Typed** to ensure
 - **`ClientPropertyChangeTriggerContext`**: Contains specific property names and their new values.
 
 ### B. `WorkflowInstance` (The Container)
-The persistent record of a single execution run.
+The record of a single execution run (currently in-memory).
 - **`InstanceId`**: Unique to this specific performance.
 - **`State`**: Live memory (variables) shared by all parallel branches within this instance.
 - **`Pointers`**: A list of `ExecutionPointer` objects tracking exactly where the engine is currently working.
@@ -77,7 +77,7 @@ The engine processes every `Active` pointer in a loop:
 ### Step 3: Branching & Fan-out
 Based on the `NodeExecutionResult`:
 - **Faulted**: The pointer is marked as `Faulted` and stops.
-- **Waiting**: The pointer is marked as `Waiting` with a `ResumeAt` timestamp (for `DelayNode`).
+- **Waiting**: The pointer is marked as `Waiting` with a `ResumeAt` timestamp (for `DelayNode`). (Note: Resume logic is currently pending persistence implementation).
 - **Success**: The engine looks up all `Edges` where `Source.PortId` matches the ports activated by the node.
   - **Single Edge**: The current pointer moves to the `TargetNode`.
   - **Multiple Edges**: The engine "Forks." It reuses the current pointer for the first edge and spawns **New Parallel Pointers** for the others.
