@@ -2,7 +2,7 @@ using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Triggers;
 
-public sealed class DeviceTriggerNode : BaseTrigger
+public sealed class DeviceTriggerNode : BaseTriggerNode
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [

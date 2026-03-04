@@ -2,7 +2,7 @@ using Webskt.Workflow.Abstraction.Enums;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Triggers;
 
-public sealed class TimerScheduleNode : BaseTrigger
+public sealed class TimerScheduleNode : BaseTriggerNode
 {
     public sealed override List<PortDefinition> Ports { get; set; } =
     [

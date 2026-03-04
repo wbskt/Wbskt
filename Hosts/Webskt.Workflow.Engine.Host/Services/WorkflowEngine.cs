@@ -44,7 +44,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
             instance.InstanceId, instance.WorkflowRefId, instance.WorkspaceId));
 
         var matchingTriggers = definition.Nodes
-            .OfType<BaseTrigger>()
+            .OfType<BaseTriggerNode>()
             .Where(node => NodeMatchesContext(node, triggerContext))
             .ToList();
 
@@ -183,7 +183,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         }
     }
 
-    private bool NodeMatchesContext(BaseTrigger node, BaseTriggerContext context)
+    private static bool NodeMatchesContext(BaseTriggerNode node, BaseTriggerContext context)
     {
         return (node, context) switch
         {
