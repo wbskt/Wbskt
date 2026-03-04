@@ -31,15 +31,71 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'policies.read')
+    BEGIN
+        INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('policies.read', 'Read registration policies');
+    END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'policies.manage')
 BEGIN
     INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('policies.manage', 'Manage registration policies');
 END
 GO
 
+-- Clients Permissions
 IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'clients.manage')
 BEGIN
     INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('clients.manage', 'Manage clients');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'clients.read')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('clients.read', 'Read clients');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'clients.update')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('clients.update', 'Update client status');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'clients.command')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('clients.command', 'Send commands to clients');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'clients.ping')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('clients.ping', 'Ping clients');
+END
+GO
+
+-- Workflow Permissions
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'workflows.read')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('workflows.read', 'Read workflows');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'workflows.create')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('workflows.create', 'Create workflows');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'workflows.update')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('workflows.update', 'Update workflows');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'workflows.delete')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('workflows.delete', 'Delete workflows');
 END
 GO
 
