@@ -1,9 +1,8 @@
-using System.Text.Json;
 using MassTransit;
 using Webskt.Events.Management;
-using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Providers;
+using Webskt.Workflow.Mappers;
 
 namespace Webskt.Workflow.Engine.Host.Handlers;
 
@@ -33,7 +32,7 @@ public sealed class WorkflowDefinitionChangedHandler :
         try
         {
             var entity = await _provider.GetByRefIdAsync(context.Message.WorkflowRefId);
-            var definition = MapToDefinition(entity);
+            var definition = entity.ToDefinition();
             
             if (definition != null)
             {
@@ -53,7 +52,7 @@ public sealed class WorkflowDefinitionChangedHandler :
         try
         {
             var entity = await _provider.GetByRefIdAsync(context.Message.WorkflowRefId);
-            var definition = MapToDefinition(entity);
+            var definition = entity.ToDefinition();
             
             if (definition != null)
             {
@@ -73,21 +72,5 @@ public sealed class WorkflowDefinitionChangedHandler :
         _registry.UnregisterWorkflow(context.Message.WorkflowRefId);
 
         return Task.CompletedTask;
-    }
-
-    private static WorkflowDefinition? MapToDefinition(Webskt.Workflow.Entities.WorkflowEntity entity)
-    {
-        var definition = JsonSerializer.Deserialize<WorkflowDefinition>(entity.DefinitionJson);
-        if (definition != null)
-        {
-            definition.WorkflowRefId = entity.RefId;
-            definition.WorkspaceId = entity.WorkspaceId;
-            definition.Name = entity.Name;
-            definition.Description = entity.Description;
-            definition.IsEnabled = entity.IsEnabled;
-            definition.Version = entity.Version;
-            definition.CreatedAt = entity.CreatedAt;
-        }
-        return definition;
     }
 }

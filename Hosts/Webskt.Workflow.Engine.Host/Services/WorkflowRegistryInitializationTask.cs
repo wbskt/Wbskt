@@ -3,6 +3,7 @@ using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Providers;
+using Webskt.Workflow.Mappers;
 
 namespace Webskt.Workflow.Engine.Host.Services;
 
@@ -33,26 +34,14 @@ public sealed class WorkflowRegistryInitializationTask : IStartupTask
 
             foreach (var entity in entities)
             {
-                try
+                var definition = entity.ToDefinition();
+                if (definition != null)
                 {
-                    var definition = JsonSerializer.Deserialize<WorkflowDefinition>(entity.DefinitionJson);
-                    if (definition != null)
-                    {
-                        // Sync DB-level fields
-                        definition.WorkflowRefId = entity.RefId;
-                        definition.WorkspaceId = entity.WorkspaceId;
-                        definition.Name = entity.Name;
-                        definition.Description = entity.Description;
-                        definition.IsEnabled = entity.IsEnabled;
-                        definition.Version = entity.Version;
-                        definition.CreatedAt = entity.CreatedAt;
-
-                        definitions.Add(definition);
-                    }
+                    definitions.Add(definition);
                 }
-                catch (JsonException ex)
+                else
                 {
-                    _logger.LogWarning(ex, "Failed to deserialize workflow {WorkflowRefId}. Skipping.", entity.RefId);
+                    _logger.LogWarning("Failed to deserialize workflow {WorkflowRefId}. Skipping.", entity.RefId);
                 }
             }
             

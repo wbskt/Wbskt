@@ -4,6 +4,7 @@ using Webskt.EventBus.Abstractions;
 using Webskt.Events.Management;
 using Webskt.Management.Host.Models;
 using Webskt.Workflow.Providers;
+using Webskt.Workflow.Mappers;
 using Webskt.Workflow.Abstraction.Models;
 
 namespace Webskt.Management.Host.Services;
@@ -46,32 +47,14 @@ internal sealed class WorkflowService : IWorkflowService
             throw new SecurityException("Access denied to workflow.");
         }
 
-        try
+        var definition = workflow.ToDefinition();
+        if (definition == null)
         {
-            // Deserialize the blueprint from the DB
-            var definition = JsonSerializer.Deserialize<WorkflowDefinition>(workflow.DefinitionJson);
-            
-            if (definition == null)
-            {
-                throw new InternalServerException("Failed to deserialize workflow definition.");
-            }
-
-            // Sync database-level fields into the definition object
-            definition.WorkflowRefId = workflow.RefId;
-            definition.WorkspaceId = workflow.WorkspaceId;
-            definition.Name = workflow.Name;
-            definition.Description = workflow.Description;
-            definition.IsEnabled = workflow.IsEnabled;
-            definition.Version = workflow.Version;
-            definition.CreatedAt = workflow.CreatedAt;
-
-            return definition;
+            _logger.LogError("Invalid JSON in database for workflow {Id}", id);
+            throw new InternalServerException("Workflow definition is corrupted or invalid.");
         }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Invalid JSON in database for workflow {Id}", id);
-            throw new InternalServerException("Workflow definition is corrupted.");
-        }
+
+        return definition;
     }
 
     public async Task<WorkflowSummaryResponse> CreateAsync(int workspaceId, CreateWorkflowRequest request, CancellationToken cancellationToken = default)
