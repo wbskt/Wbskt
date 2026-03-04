@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi"/>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
         <PackageReference Include="Scalar.AspNetCore" />
         <PackageReference Include="Serilog.AspNetCore" />
     </ItemGroup>
@@ -17,6 +17,7 @@
       <ProjectReference Include="..\..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
       <ProjectReference Include="..\..\Webskt.Common\Webskt.Common.csproj" />
       <ProjectReference Include="..\..\Webskt.Workflow.Abstraction\Webskt.Workflow.Abstraction.csproj" />
+      <ProjectReference Include="..\..\Webskt.Workflow\Webskt.Workflow.csproj" />
     </ItemGroup>
 
     <ItemGroup>

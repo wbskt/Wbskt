@@ -3,7 +3,7 @@ using Webskt.Common.Abstraction.Exceptions;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Management;
 using Webskt.Management.Host.Models;
-using Webskt.Management.Host.Providers;
+using Webskt.Workflow.Providers;
 using Webskt.Workflow.Abstraction.Models;
 
 namespace Webskt.Management.Host.Services;
@@ -81,7 +81,7 @@ internal sealed class WorkflowService : IWorkflowService
             throw new ValidationException("Workflow name is required.");
         }
 
-        var workflow = await _provider.InsertAsync(workspaceId, request, cancellationToken);
+        var workflow = await _provider.InsertAsync(workspaceId, request.Name, request.Description, cancellationToken);
         
         await _eventBus.PublishAsync(new WorkflowCreatedEvent(workflow.RefId, workspaceId), cancellationToken);
 

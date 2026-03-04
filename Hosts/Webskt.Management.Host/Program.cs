@@ -14,6 +14,7 @@ using Webskt.Common.Security;
 using Webskt.EventBus.RabbitMQ;
 using Webskt.Management.Host.Extensions;
 using Webskt.Management.Host.Providers;
+using Webskt.Workflow.Providers;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
 using Webskt.Management.Host.Hubs;

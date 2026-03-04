@@ -1,6 +1,9 @@
+using System.Text.Json;
 using MassTransit;
 using Webskt.Events.Management;
+using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Engine.Host.Interfaces;
+using Webskt.Workflow.Providers;
 
 namespace Webskt.Workflow.Engine.Host.Handlers;
 
@@ -10,12 +13,12 @@ public sealed class WorkflowDefinitionChangedHandler :
     IConsumer<WorkflowDeletedEvent>
 {
     private readonly IWorkflowRuntimeRegistry _registry;
-    private readonly IWorkflowDefinitionProvider _provider;
+    private readonly IWorkflowProvider _provider;
     private readonly ILogger<WorkflowDefinitionChangedHandler> _logger;
 
     public WorkflowDefinitionChangedHandler(
         IWorkflowRuntimeRegistry registry,
-        IWorkflowDefinitionProvider provider,
+        IWorkflowProvider provider,
         ILogger<WorkflowDefinitionChangedHandler> logger)
     {
         _registry = registry;
@@ -29,8 +32,13 @@ public sealed class WorkflowDefinitionChangedHandler :
 
         try
         {
-            var definition = await _provider.GetByRefIdAsync(context.Message.WorkflowRefId);
-            _registry.RegisterWorkflow(definition);
+            var entity = await _provider.GetByRefIdAsync(context.Message.WorkflowRefId);
+            var definition = MapToDefinition(entity);
+            
+            if (definition != null)
+            {
+                _registry.RegisterWorkflow(definition);
+            }
         }
         catch (Exception ex)
         {
@@ -44,8 +52,13 @@ public sealed class WorkflowDefinitionChangedHandler :
 
         try
         {
-            var definition = await _provider.GetByRefIdAsync(context.Message.WorkflowRefId);
-            _registry.RegisterWorkflow(definition);
+            var entity = await _provider.GetByRefIdAsync(context.Message.WorkflowRefId);
+            var definition = MapToDefinition(entity);
+            
+            if (definition != null)
+            {
+                _registry.RegisterWorkflow(definition);
+            }
         }
         catch (Exception ex)
         {
@@ -60,5 +73,21 @@ public sealed class WorkflowDefinitionChangedHandler :
         _registry.UnregisterWorkflow(context.Message.WorkflowRefId);
 
         return Task.CompletedTask;
+    }
+
+    private static WorkflowDefinition? MapToDefinition(Webskt.Workflow.Entities.WorkflowEntity entity)
+    {
+        var definition = JsonSerializer.Deserialize<WorkflowDefinition>(entity.DefinitionJson);
+        if (definition != null)
+        {
+            definition.WorkflowRefId = entity.RefId;
+            definition.WorkspaceId = entity.WorkspaceId;
+            definition.Name = entity.Name;
+            definition.Description = entity.Description;
+            definition.IsEnabled = entity.IsEnabled;
+            definition.Version = entity.Version;
+            definition.CreatedAt = entity.CreatedAt;
+        }
+        return definition;
     }
 }

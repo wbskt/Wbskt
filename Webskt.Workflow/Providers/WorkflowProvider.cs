@@ -1,9 +1,10 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using Webskt.Common.Data;
-using Webskt.Management.Host.Models;
+using Webskt.Workflow.Entities;
 
-namespace Webskt.Management.Host.Providers;
+namespace Webskt.Workflow.Providers;
 
 public sealed class WorkflowProvider : BaseSqlProvider, IWorkflowProvider
 {
@@ -17,7 +18,7 @@ public sealed class WorkflowProvider : BaseSqlProvider, IWorkflowProvider
             cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<Models.Workflow>> GetAllByWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<WorkflowEntity>> GetAllByWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Workflow_GetAllBy_Workspace",
@@ -26,7 +27,7 @@ public sealed class WorkflowProvider : BaseSqlProvider, IWorkflowProvider
             cancellationToken);
     }
 
-    public async Task<Models.Workflow> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<WorkflowEntity> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.Workflow_GetBy_Id",
@@ -36,15 +37,15 @@ public sealed class WorkflowProvider : BaseSqlProvider, IWorkflowProvider
             cancellationToken);
     }
 
-    public async Task<Models.Workflow> InsertAsync(int workspaceId, CreateWorkflowRequest request, CancellationToken cancellationToken = default)
+    public async Task<WorkflowEntity> InsertAsync(int workspaceId, string name, string? description, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.Workflow_Create",
             p =>
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
-                p.AddWithValue("@Name", request.Name);
-                p.AddWithValue("@Description", request.Description ?? string.Empty);
+                p.AddWithValue("@Name", name);
+                p.AddWithValue("@Description", description ?? string.Empty);
             },
             MapWorkflow,
             null,
@@ -74,9 +75,28 @@ public sealed class WorkflowProvider : BaseSqlProvider, IWorkflowProvider
             cancellationToken);
     }
 
-    private static Models.Workflow MapWorkflow(SqlDataReader reader)
+    public async Task<IReadOnlyCollection<WorkflowEntity>> GetAllEnabledAsync(CancellationToken cancellationToken = default)
     {
-        return new Models.Workflow
+        return await ExecuteCollectionAsync(
+            "dbo.Workflow_GetAllEnabled",
+            null,
+            MapWorkflow,
+            cancellationToken);
+    }
+
+    public async Task<WorkflowEntity> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Workflow_GetBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            MapWorkflow,
+            null,
+            cancellationToken);
+    }
+
+    private static WorkflowEntity MapWorkflow(SqlDataReader reader)
+    {
+        return new WorkflowEntity
         {
             Id = reader.GetInt32("Id"),
             RefId = reader.GetGuid("RefId"),

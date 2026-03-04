@@ -1,6 +1,6 @@
-namespace Webskt.Management.Host.Models;
+namespace Webskt.Workflow.Entities;
 
-public sealed class Workflow
+public sealed class WorkflowEntity
 {
     public int Id { get; set; }
     public Guid RefId { get; set; }
