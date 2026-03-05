@@ -7,7 +7,7 @@ public sealed class WebhookNotificationNode : BaseAction
     public sealed override List<PortDefinition> Ports { get; set; } =
     [
         new PortDefinition { PortId = PortNames.In, Direction = PortDirection.In },
-        new PortDefinition { PortId = PortNames.Out, Direction = PortDirection.Out }
+        new PortDefinition { PortId = PortNames.OnResponse, Direction = PortDirection.Out }
     ];
 
     public string Url { get; set; } = string.Empty;

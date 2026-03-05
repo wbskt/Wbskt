@@ -1,21 +1,44 @@
 using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Webskt.Workflow.Abstraction.Models.Nodes.Controls;
+using Webskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Services;
 using Webskt.Workflow.Engine.Host.Services.ExpressionEvaluators;
+using Webskt.Workflow.Engine.Host.Services.NodeExecutors;
 using Webskt.Workflow.Providers;
 
 namespace Webskt.Workflow.Engine.Host.Extensions;
 
 public static class WorkflowEngineExtensions
 {
-    public static void AddWorkflowEngine(this IServiceCollection services)
+    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services)
     {
         services.AddSingleton<IWorkflowRuntimeRegistry, WorkflowRuntimeRegistry>();
         services.AddSingleton<IWorkflowExpressionEvaluator, WorkflowExpressionEvaluator>();
         services.AddScoped<IWorkflowEngine, WorkflowEngine>();
         services.AddScoped<IWorkflowProvider, WorkflowProvider>();
 
+        // Register Node Executors using Keyed Services
+        // Triggers
+        services.AddKeyedScoped<IWorkflowNodeExecutor, DeviceTriggerExecutor>(nameof(DeviceTriggerNode));
+        
+        // Controls
+        services.AddKeyedScoped<IWorkflowNodeExecutor, LogicGateExecutor>(nameof(LogicGateNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, VariableExecutor>(nameof(VariableNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, DelayExecutor>(nameof(DelayNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, LoopExecutor>(nameof(LoopNode));
+        
+        // Actions
+        services.AddKeyedScoped<IWorkflowNodeExecutor, SendCommandActionExecutor>(nameof(SendCommandActionNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, ToastNotificationExecutor>(nameof(ToastNotificationNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, EmailNotificationExecutor>(nameof(EmailNotificationNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, TelegramNotificationExecutor>(nameof(TelegramNotificationNode));
+        services.AddKeyedScoped<IWorkflowNodeExecutor, WebhookNotificationExecutor>(nameof(WebhookNotificationNode));
+
         // Registry Initialization Task
         services.AddTransient<IStartupTask, WorkflowRegistryInitializationTask>();
+
+        return services;
     }
 }

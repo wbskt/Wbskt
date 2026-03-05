@@ -1,4 +1,5 @@
 using Webskt.Workflow.Abstraction.Enums;
+using Webskt.Workflow.Abstraction.Models.Expressions;
 
 namespace Webskt.Workflow.Abstraction.Models.Nodes.Controls;
 
@@ -11,6 +12,6 @@ public sealed class LoopNode : BaseControl
         new PortDefinition { PortId = PortNames.Completed, Direction = PortDirection.Out }
     ];
 
-    public string ItemsExpression { get; set; } = string.Empty;
+    public WorkflowExpression? ItemsExpression { get; set; }
     public string IteratorName { get; set; } = "item";
 }

@@ -11,4 +11,5 @@ public static class PortNames
     public const string Completed = "completed";
     public const string OnTelemetry = "on_telemetry";
     public const string OnPropertyChange = "on_property_change";
+    public const string OnResponse = "on_response_change";
 }

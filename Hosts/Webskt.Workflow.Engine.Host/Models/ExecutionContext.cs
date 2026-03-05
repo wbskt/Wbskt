@@ -14,6 +14,7 @@ public sealed class ExecutionContext
 
     public Guid PointerId { get; }
     public Guid InstanceId => _instance.InstanceId;
+    public int WorkspaceId => _instance.WorkspaceId;
 
     /// <summary>
     /// The typed context that started this workflow.
