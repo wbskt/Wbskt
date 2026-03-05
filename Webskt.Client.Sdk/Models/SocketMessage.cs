@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Webskt.Socket.Host.Models;
+namespace Webskt.Client.Sdk.Models;
 
 /// <summary>
 /// Represents a message exchanged between the client and server.

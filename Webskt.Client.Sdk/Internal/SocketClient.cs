@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using Webskt.Client.Sdk.Models;
 
 namespace Webskt.Client.Sdk.Internal;
 
@@ -45,7 +46,7 @@ internal sealed class SocketClient : IAsyncDisposable
         _ = Task.Run(ReceiveLoopAsync, _cts.Token);
     }
 
-    public async Task SendAsync(object message)
+    public async Task SendAsync(SocketMessage message)
     {
         if (_webSocket.State != WebSocketState.Open)
         {
@@ -102,10 +103,9 @@ internal sealed class SocketClient : IAsyncDisposable
                 {
                     var pongPayload = new 
                     { 
-                        type = "pong",
                         originalTimestamp = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime()
                     };
-                    await SendAsync(pongPayload);
+                    await SendAsync(new SocketMessage("pong", pongPayload));
                 }
                 else
                 {

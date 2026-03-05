@@ -99,11 +99,11 @@ public sealed class WebsktClient : IWbsktClient
 
     public async Task SendTelemetryAsync(string type, object payload)
     {
-        await _socket.SendAsync(new
-        {
-            type = "telemetry",
-            payload = new { subType = type, data = payload }
-        });
+        await _socket.SendAsync(new SocketMessage("telemetry", new 
+        { 
+            subType = type, 
+            data = payload 
+        }));
     }
 
     private async Task<(Guid RefId, string Secret)> ResolveCredentialsAsync()
