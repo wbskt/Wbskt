@@ -10,6 +10,7 @@
         <SqlFiles Include="StoredProcedures\*.sql" />
         <SqlFiles Include="Tables\*.sql" />
         <SqlFiles Include="Types\*.sql" />
+        <SqlFiles Include="Views\*.sql" />
     </ItemGroup>
 
     <ItemGroup>
