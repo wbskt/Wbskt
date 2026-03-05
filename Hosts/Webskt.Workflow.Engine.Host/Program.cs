@@ -34,6 +34,7 @@ public static class Program
 
         // Workflow Engine
         builder.Services.AddWorkflowEngine();
+        builder.Services.AddHttpClient();
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
