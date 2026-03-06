@@ -8,11 +8,12 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
 {
     public EventProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<int> GetOrInsertEventIdAsync(string eventName, CancellationToken cancellationToken = default)
+    public async Task<int> GetOrInsertEventIdAsync(string eventName, short criticality, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Events_GetOrInsert", p =>
         {
             p.AddWithValue("@EventName", eventName);
+            p.AddWithValue("@EventCriticality", criticality);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
         }, cancellationToken);
 

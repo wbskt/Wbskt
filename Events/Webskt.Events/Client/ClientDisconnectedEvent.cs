@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Client;
 
-public record ClientDisconnectedEvent(Guid ClientRefId, int WorkspaceId, string Reason) : ClientEvent(ClientRefId, WorkspaceId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record ClientDisconnectedEvent(Guid ClientRefId, int WorkspaceId, string Reason) : ClientEvent(ClientRefId, WorkspaceId);

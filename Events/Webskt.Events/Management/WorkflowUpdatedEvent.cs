@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Management;
 
-public record WorkflowUpdatedEvent(Guid WorkflowRefId, int WorkspaceId) : WorkflowEvent(WorkflowRefId, WorkspaceId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record WorkflowUpdatedEvent(Guid WorkflowRefId, int WorkspaceId) : WorkflowEvent(WorkflowRefId, WorkspaceId);

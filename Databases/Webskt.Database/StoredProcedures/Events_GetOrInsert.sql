@@ -1,5 +1,6 @@
 CREATE PROCEDURE dbo.Events_GetOrInsert 
     @EventName NVARCHAR(100),
+    @EventCriticality SMALLINT,
     @Id INT OUTPUT
 AS
 BEGIN
@@ -11,8 +12,8 @@ BEGIN
 
     IF @Id IS NULL
     BEGIN
-        INSERT INTO dbo.Events (EventName) 
-        VALUES (@EventName);
+        INSERT INTO dbo.Events (EventName, EventCriticality) 
+        VALUES (@EventName, @EventCriticality);
         
         SET @Id = SCOPE_IDENTITY();
     END

@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Auth;
 
-public record UserLoginEvent(int UserId, string IpAddress, bool Success, string? FailureReason = null) : UserEvent(UserId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record UserLoginEvent(int UserId, string IpAddress, bool Success, string? FailureReason = null) : UserEvent(UserId);

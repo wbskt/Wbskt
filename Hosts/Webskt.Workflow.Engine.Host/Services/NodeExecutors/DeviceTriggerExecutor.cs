@@ -1,6 +1,5 @@
 using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Abstraction.Models.Nodes;
-using Webskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Engine.Host.Models;
 using Webskt.Workflow.Engine.Host.Models.TriggerContexts;

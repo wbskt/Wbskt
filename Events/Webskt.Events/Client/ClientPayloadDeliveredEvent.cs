@@ -1,8 +1,10 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Client;
 
-public record ClientPayloadDeliveredEvent(
+[EventCriticality(EventCriticality.Info)]
+public sealed record ClientPayloadDeliveredEvent(
     Guid ClientRefId, 
     int WorkspaceId,
     string MessageType

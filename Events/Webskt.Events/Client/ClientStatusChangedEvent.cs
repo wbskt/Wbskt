@@ -1,6 +1,8 @@
 using Webskt.Common.Abstraction.Models.Management;
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Client;
 
-public record ClientStatusChangedEvent(Guid ClientRefId, int WorkspaceId, ClientStatus Status) : ClientEvent(ClientRefId, WorkspaceId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record ClientStatusChangedEvent(Guid ClientRefId, int WorkspaceId, ClientStatus Status) : ClientEvent(ClientRefId, WorkspaceId);

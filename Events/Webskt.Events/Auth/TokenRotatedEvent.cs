@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Auth;
 
-public record TokenRotatedEvent(int UserId, string IpAddress) : UserEvent(UserId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record TokenRotatedEvent(int UserId, string IpAddress) : UserEvent(UserId);

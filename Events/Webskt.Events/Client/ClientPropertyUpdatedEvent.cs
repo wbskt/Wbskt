@@ -1,8 +1,10 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Client;
 
-public record ClientPropertyUpdatedEvent(
+[EventCriticality(EventCriticality.Info)]
+public sealed record ClientPropertyUpdatedEvent(
     Guid ClientRefId, 
     int WorkspaceId,
     string PropertyName,

@@ -7,6 +7,7 @@ CREATE VIEW dbo.ViewEvents
 AS
 SELECT 
     E.EventName, 
+    E.EventCriticality,
     EL.CreatedAt, 
     EL.WorkspaceId, 
     EL.EventData 

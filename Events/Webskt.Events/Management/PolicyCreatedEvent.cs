@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Management;
 
-public record PolicyCreatedEvent(Guid PolicyRefId, int WorkspaceId, string Name) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record PolicyCreatedEvent(Guid PolicyRefId, int WorkspaceId, string Name) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);

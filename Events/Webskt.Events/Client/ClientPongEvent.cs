@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Client;
 
-public record ClientPongEvent(Guid ClientRefId, int WorkspaceId, DateTime OriginalPingTime) : ClientEvent(ClientRefId, WorkspaceId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record ClientPongEvent(Guid ClientRefId, int WorkspaceId, DateTime OriginalPingTime) : ClientEvent(ClientRefId, WorkspaceId);

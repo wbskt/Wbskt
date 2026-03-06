@@ -1,8 +1,10 @@
 using Webskt.EventBus.Abstractions;
+using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.System;
 
-public record SystemErrorEvent(
+[EventCriticality(EventCriticality.Error)]
+public sealed record SystemErrorEvent(
     string ErrorType, 
     string Message, 
     string? StackTrace, 

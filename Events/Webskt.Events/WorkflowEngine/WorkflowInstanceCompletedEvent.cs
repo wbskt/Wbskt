@@ -1,8 +1,10 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.WorkflowEngine;
 
-public record WorkflowInstanceCompletedEvent(
+[EventCriticality(EventCriticality.Info)]
+public sealed record WorkflowInstanceCompletedEvent(
     Guid InstanceId, 
     Guid WorkflowRefId, 
     int WorkspaceId,

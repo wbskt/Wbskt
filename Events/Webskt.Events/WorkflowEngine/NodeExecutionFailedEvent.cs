@@ -1,8 +1,10 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.WorkflowEngine;
 
-public record NodeExecutionFailedEvent(
+[EventCriticality(EventCriticality.Error)]
+public sealed record NodeExecutionFailedEvent(
     int WorkspaceId,
     Guid InstanceId,
     Guid PointerId,

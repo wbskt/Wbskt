@@ -1,5 +1,7 @@
+using Webskt.EventBus.Abstractions;
 using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.Auth;
 
-public record UserPermissionsChangedEvent(int UserId) : UserEvent(UserId);
+[EventCriticality(EventCriticality.Info)]
+public sealed record UserPermissionsChangedEvent(int UserId) : UserEvent(UserId);
