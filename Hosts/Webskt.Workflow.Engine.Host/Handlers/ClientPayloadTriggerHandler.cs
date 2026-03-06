@@ -63,7 +63,6 @@ public sealed class ClientPayloadTriggerHandler : IConsumer<ClientPayloadReceive
             });
 
         await Task.WhenAll(startTasks);
-        _logger.LogTrace("DONE - ClientPayloadTriggerHandler - client: {client}, data: {data}", context.Message.ClientRefId, context.Message.Payload);
     }
 
     private static object? ParsePayload(string payload)

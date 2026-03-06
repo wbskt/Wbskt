@@ -12,14 +12,14 @@ namespace Webskt.Workflow.Engine.Host.Extensions;
 
 public static class WorkflowEngineExtensions
 {
-    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services)
+    public static void AddWorkflowEngine(this IServiceCollection services)
     {
         services.AddSingleton<IWorkflowRuntimeRegistry, WorkflowRuntimeRegistry>();
         services.AddSingleton<IWorkflowExpressionEvaluator, WorkflowExpressionEvaluator>();
-        services.AddScoped<IWorkflowEngine, WorkflowEngine>();
+        services.AddSingleton<IWorkflowEngine, WorkflowEngine>();
         services.AddScoped<IWorkflowProvider, WorkflowProvider>();
 
-        // Register Node Executors using Keyed Services
+        // Register Node Executors using Keyed Scopes
         // Triggers
         services.AddKeyedScoped<IWorkflowNodeExecutor, DeviceTriggerExecutor>(nameof(DeviceTriggerNode));
         
@@ -38,7 +38,5 @@ public static class WorkflowEngineExtensions
 
         // Registry Initialization Task
         services.AddTransient<IStartupTask, WorkflowRegistryInitializationTask>();
-
-        return services;
     }
 }

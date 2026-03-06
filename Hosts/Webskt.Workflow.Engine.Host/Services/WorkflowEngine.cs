@@ -14,24 +14,22 @@ namespace Webskt.Workflow.Engine.Host.Services;
 
 public sealed class WorkflowEngine : IWorkflowEngine
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowEngine> _logger;
 
     public WorkflowEngine(
-        IServiceProvider serviceProvider, 
+        IServiceScopeFactory scopeFactory, 
         IEventBus eventBus,
         ILogger<WorkflowEngine> logger)
     {
-        _serviceProvider = serviceProvider;
-        _eventBus = eventBus;
+        _scopeFactory = scopeFactory;
+        _eventBus = eventBus; // TODO: will this fail? like the scope. check when future you have time
         _logger = logger;
     }
 
     public async Task<WorkflowInstance> StartAsync(WorkflowDefinition definition, BaseTriggerContext triggerContext)
     {
-        _logger.LogDebug("Starting workflow {WorkflowName} ({WorkflowRefId})", definition.Name, definition.WorkflowRefId);
-
         var instance = new WorkflowInstance
         {
             WorkflowRefId = definition.WorkflowRefId,
@@ -66,6 +64,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 instance.Pointers.Add(pointer);
             }
             
+            // Fire and forget, but each branch manages its own scope
             _ = ExecutePointerAsync(instance, pointer, definition);
         }
 
@@ -79,6 +78,10 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
     private async Task ExecutePointerAsync(WorkflowInstance instance, ExecutionPointer pointer, WorkflowDefinition definition)
     {
+        // 1. Create a new scope for this specific branch
+        using var scope = _scopeFactory.CreateScope();
+        var serviceProvider = scope.ServiceProvider;
+
         try
         {
             // Track intermediate output between nodes in this branch
@@ -101,7 +104,8 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     LastNodeOutput = lastOutput
                 };
 
-                var executor = ResolveExecutor(node);
+                // Resolve the executor from the CURRENT branch scope
+                var executor = ResolveExecutor(node, serviceProvider);
                 
                 await _eventBus.PublishAsync(new NodeExecutionStartedEvent(
                     instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, node.GetType().Name, node.Name));
@@ -168,6 +172,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                             instance.Pointers.Add(newPointer);
                         }
 
+                        // Recursively spawn a NEW parallel branch with its OWN scope
                         _ = ExecutePointerAsync(instance, newPointer, definition);
                     }
                 }
@@ -199,9 +204,9 @@ public sealed class WorkflowEngine : IWorkflowEngine
         };
     }
 
-    private IWorkflowNodeExecutor ResolveExecutor(BaseNode node)
+    private static IWorkflowNodeExecutor ResolveExecutor(BaseNode node, IServiceProvider provider)
     {
-        var executor = _serviceProvider.GetKeyedService<IWorkflowNodeExecutor>(node.GetType().Name);
+        var executor = provider.GetKeyedService<IWorkflowNodeExecutor>(node.GetType().Name);
         
         if (executor == null)
         {
@@ -216,7 +221,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         pointer.Status = ExecutionStatus.Faulted;
         pointer.ErrorMessage = message;
         
-        _logger.LogWarning("Node execution failed. Reason: {message}", message);
+        _logger.LogWarning("Node execution failed for Instance {InstanceId}: {message}", instance.InstanceId, message);
         await _eventBus.PublishAsync(new NodeExecutionFailedEvent(
             instance.WorkspaceId, instance.InstanceId, pointer.PointerId, pointer.NodeId, message));
     }
