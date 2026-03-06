@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Webskt.EventBus.Abstractions;
 
-namespace Webskt.EventBus.Handlers;
+namespace Webskt.Management.Host.Services.Events;
 
 public sealed class EventRegistry : IEventRegistry
 {

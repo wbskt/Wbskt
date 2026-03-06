@@ -1,6 +1,6 @@
 using MassTransit;
 
-namespace Webskt.EventBus.Handlers;
+namespace Webskt.Management.Host.Handlers.Events;
 
 public sealed class DatabaseEventLoggerHandlerDefinition : ConsumerDefinition<DatabaseEventLoggerHandler>
 {
@@ -12,7 +12,7 @@ public sealed class DatabaseEventLoggerHandlerDefinition : ConsumerDefinition<Da
 
     protected override void ConfigureConsumer(IReceiveEndpointConfigurator endpointConfigurator, IConsumerConfigurator<DatabaseEventLoggerHandler> consumerConfigurator, IRegistrationContext context)
     {
-        // Optional: Configure retries or other endpoint-specific settings here
+        // Configure retries for the audit log endpoint
         endpointConfigurator.UseMessageRetry(r => r.Interval(5, TimeSpan.FromSeconds(2)));
     }
 }

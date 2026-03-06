@@ -1,10 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="MassTransit" />
     <PackageReference Include="MassTransit.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

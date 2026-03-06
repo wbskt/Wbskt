@@ -57,7 +57,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
 
         if (policy.AutoApproval)
         {
-            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, ClientStatus.Registered), cancellationToken);
+            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, (byte)ClientStatus.Registered), cancellationToken);
         }
 
         return new ClientRegistrationResponse(

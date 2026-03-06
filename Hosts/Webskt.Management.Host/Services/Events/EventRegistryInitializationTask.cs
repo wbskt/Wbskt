@@ -1,9 +1,8 @@
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.EventBus.Abstractions;
 
-namespace Webskt.EventBus.Handlers;
+namespace Webskt.Management.Host.Services.Events;
 
 public sealed class EventRegistryInitializationTask : IStartupTask
 {

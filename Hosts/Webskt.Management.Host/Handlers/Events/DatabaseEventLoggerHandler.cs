@@ -1,11 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using MassTransit;
-using Microsoft.Extensions.Logging;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.EventBus.Abstractions;
 
-namespace Webskt.EventBus.Handlers;
+namespace Webskt.Management.Host.Handlers.Events;
 
 public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
 {
@@ -30,7 +29,6 @@ public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
             var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
             var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
 
-            // 1. Get ID from the high-speed registry (strictly)
             var eventId = _registry.GetEventId(eventName);
 
             if (eventId <= 0)
@@ -39,7 +37,6 @@ public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
                 return;
             }
 
-            // 2. Extract event data
             var bodyBytes = context.ReceiveContext.GetBody();
             using var doc = JsonDocument.Parse(bodyBytes);
             
@@ -53,7 +50,6 @@ public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
                 workspaceId = id;
             }
 
-            // 3. Log to database
             await _eventProvider.InsertEventLogAsync(eventId, eventData, context.Message.CreatedAtUtc, workspaceId, context.CancellationToken);
         }
         catch (Exception ex)
