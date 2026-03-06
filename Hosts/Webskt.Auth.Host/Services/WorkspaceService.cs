@@ -1,6 +1,6 @@
 using Webskt.Auth.Host.Models;
 using Webskt.Auth.Host.Providers;
-using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Foundation.Abstraction.Exceptions;
 
 namespace Webskt.Auth.Host.Services;
 

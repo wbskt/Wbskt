@@ -3,10 +3,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.System;
+using Webskt.Foundation.Abstraction.Exceptions;
 
 namespace Webskt.Common.Middlewares;
 

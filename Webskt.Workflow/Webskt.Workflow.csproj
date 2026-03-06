@@ -9,7 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Webskt.Workflow.Abstraction\Webskt.Workflow.Abstraction.csproj" />
     <ProjectReference Include="..\Webskt.Common\Webskt.Common.csproj" />
-    <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
   </ItemGroup>
 
 </Project>

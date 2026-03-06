@@ -1,4 +1,4 @@
-using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Foundation.Abstraction;
 using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Engine.Host.Interfaces;
 using Webskt.Workflow.Mappers;

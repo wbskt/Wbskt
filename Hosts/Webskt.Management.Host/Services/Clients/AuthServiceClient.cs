@@ -1,4 +1,4 @@
-using Webskt.Common.Abstraction.Exceptions;
+using Webskt.Foundation.Abstraction.Exceptions;
 
 namespace Webskt.Management.Host.Services.Clients;
 

@@ -1,4 +1,4 @@
-using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Foundation.Abstraction;
 using Webskt.Workflow.Entities;
 
 namespace Webskt.Workflow.Providers;

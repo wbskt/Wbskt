@@ -1,6 +1,7 @@
 using System.Reflection;
 using Webskt.Common.Abstraction.Interfaces;
 using Webskt.EventBus.Abstractions;
+using Webskt.Foundation.Abstraction;
 
 namespace Webskt.Management.Host.Services.Events;
 

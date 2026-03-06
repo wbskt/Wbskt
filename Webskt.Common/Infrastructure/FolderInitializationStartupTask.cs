@@ -1,5 +1,5 @@
-using Webskt.Common.Abstraction.Constants;
-using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Foundation.Abstraction;
+using Webskt.Foundation.Abstraction.Constants;
 
 namespace Webskt.Common.Infrastructure;
 

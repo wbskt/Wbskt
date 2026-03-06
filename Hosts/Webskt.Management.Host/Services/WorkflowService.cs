@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Webskt.Common.Abstraction.Exceptions;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Management;
+using Webskt.Foundation.Abstraction.Exceptions;
 using Webskt.Management.Host.Models;
 using Webskt.Workflow.Abstraction.Models;
 using Webskt.Workflow.Mappers;

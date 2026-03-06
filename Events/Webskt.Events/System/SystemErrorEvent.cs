@@ -1,5 +1,4 @@
 using Webskt.EventBus.Abstractions;
-using Webskt.Events.Abstractions;
 
 namespace Webskt.Events.System;
 

@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Webskt.Common.Abstraction.Exceptions;
-using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Abstraction.Models;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Client;
+using Webskt.Foundation.Abstraction;
+using Webskt.Foundation.Abstraction.Exceptions;
 using Webskt.Management.Host.Services;
 using Webskt.Management.Host.Services.Clients;
 

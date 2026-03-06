@@ -1,5 +1,5 @@
 using Webskt.Auth.Host.Models;
-using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Foundation.Abstraction;
 
 namespace Webskt.Auth.Host.Providers;
 

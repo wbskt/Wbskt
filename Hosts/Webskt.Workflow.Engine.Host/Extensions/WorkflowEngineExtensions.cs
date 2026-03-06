@@ -1,4 +1,4 @@
-using Webskt.Common.Abstraction.Interfaces;
+using Webskt.Foundation.Abstraction;
 using Webskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Webskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Webskt.Workflow.Abstraction.Models.Nodes.Triggers;

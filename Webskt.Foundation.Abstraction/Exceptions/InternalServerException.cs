@@ -1,4 +1,4 @@
-namespace Webskt.Common.Abstraction.Exceptions;
+namespace Webskt.Foundation.Abstraction.Exceptions;
 
 public class InternalServerException : Exception
 {

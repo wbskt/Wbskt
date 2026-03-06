@@ -8,11 +8,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Webskt.EventBus\Webskt.EventBus.csproj" />
-    <ProjectReference Include="..\..\Webskt.Common\Webskt.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MassTransit.RabbitMQ" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
   </ItemGroup>
 
 </Project>

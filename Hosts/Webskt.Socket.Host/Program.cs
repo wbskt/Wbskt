@@ -1,12 +1,12 @@
 using Scalar.AspNetCore;
 using Serilog;
-using Webskt.Common.Abstraction.Constants;
-using Webskt.Common.Abstraction.Interfaces;
 using Webskt.Common.Infrastructure;
 using Webskt.Common.Logging;
 using Webskt.Common.Middlewares;
 using Webskt.Common.Security;
 using Webskt.EventBus.RabbitMQ;
+using Webskt.Foundation.Abstraction;
+using Webskt.Foundation.Abstraction.Constants;
 using Webskt.Socket.Host.Extensions;
 using Webskt.Socket.Host.Infrastructure;
 using Webskt.Socket.Host.Middleware;

@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
-using Webskt.Common.Abstraction.Exceptions;
 using Webskt.Common.Abstraction.Models.Management;
 using Webskt.EventBus.Abstractions;
 using Webskt.Events.Client;
+using Webskt.Foundation.Abstraction.Exceptions;
 using Webskt.Management.Host.Providers;
 
 namespace Webskt.Management.Host.Services;

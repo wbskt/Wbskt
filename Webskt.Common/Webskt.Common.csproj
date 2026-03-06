@@ -10,6 +10,7 @@
       <ProjectReference Include="..\Webskt.Common.Abstraction\Webskt.Common.Abstraction.csproj" />
       <ProjectReference Include="..\Events\Webskt.EventBus\Webskt.EventBus.csproj" />
       <ProjectReference Include="..\Events\Webskt.Events\Webskt.Events.csproj" />
+      <ProjectReference Include="..\Webskt.Foundation.Abstraction\Webskt.Foundation.Abstraction.csproj" />
     </ItemGroup>
 
     <ItemGroup>

@@ -1,4 +1,4 @@
-namespace Webskt.Common.Abstraction.Interfaces;
+namespace Webskt.Foundation.Abstraction;
 
 public interface IStartupTask
 {

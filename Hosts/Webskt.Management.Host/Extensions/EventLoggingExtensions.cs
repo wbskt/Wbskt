@@ -1,6 +1,6 @@
 using MassTransit;
-using Webskt.Common.Abstraction.Interfaces;
 using Webskt.EventBus.Abstractions;
+using Webskt.Foundation.Abstraction;
 using Webskt.Management.Host.Handlers.Events;
 using Webskt.Management.Host.Services.Events;
 
