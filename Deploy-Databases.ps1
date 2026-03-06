@@ -4,7 +4,7 @@
     Works on Windows, macOS, and Linux.
 
 .DESCRIPTION
-    1. Builds Webskt.Database.Auth and Webskt.Database projects.
+    1. Builds Wbskt.Database.Auth and Wbskt.Database projects.
     2. Publishes the resulting DACPACs to the specified SQL Server.
 
 .PARAMETER Server
@@ -67,14 +67,14 @@ if (-not (Test-Command "sqlpackage")) {
 # Define Projects (Relative Paths)
 $Projects = @(
     @{
-        Name = "Webskt.Database.Auth";
-        Path = "Databases/Webskt.Database.Auth/Webskt.Database.Auth.sqlproj";
-        DbName = "Webskt.Database.Auth"
+        Name = "Wbskt.Database.Auth";
+        Path = "Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj";
+        DbName = "Wbskt.Database.Auth"
     },
     @{
-        Name = "Webskt.Database";
-        Path = "Databases/Webskt.Database/Webskt.Database.sqlproj";
-        DbName = "Webskt.Database"
+        Name = "Wbskt.Database";
+        Path = "Databases/Wbskt.Database/Wbskt.Database.sqlproj";
+        DbName = "Wbskt.Database"
     }
 )
 

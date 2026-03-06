@@ -1,0 +1,13 @@
+using Wbskt.Common.Abstraction.Models;
+using Wbskt.Common.Abstraction.Models.Management;
+using Wbskt.Management.Host.Models;
+
+namespace Wbskt.Management.Host.Services;
+
+public interface IRegistrationPolicyService
+{
+    Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicyResponse> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+}

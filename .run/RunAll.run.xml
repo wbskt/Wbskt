@@ -1,9 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="RunAll" type="CompoundRunConfigurationType">
-    <toRun name="Webskt.Auth.Host: dev" type="LaunchSettings" />
-    <toRun name="Webskt.Management.Host: dev" type="LaunchSettings" />
-    <toRun name="Webskt.Socket.Host: dev" type="LaunchSettings" />
-    <toRun name="Webskt.Workflow.Engine.Host: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Auth.Host: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Management.Host: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Socket.Host: dev" type="LaunchSettings" />
+    <toRun name="Wbskt.Workflow.Engine.Host: dev" type="LaunchSettings" />
     <method v="2" />
   </configuration>
 </component>

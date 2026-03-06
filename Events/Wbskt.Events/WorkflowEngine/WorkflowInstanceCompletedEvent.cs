@@ -1,0 +1,12 @@
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
+
+namespace Wbskt.Events.WorkflowEngine;
+
+[EventCriticality(EventCriticality.Info)]
+public sealed record WorkflowInstanceCompletedEvent(
+    Guid InstanceId, 
+    Guid WorkflowRefId, 
+    int WorkspaceId,
+    string Status
+) : WorkspaceEvent(WorkspaceId);
