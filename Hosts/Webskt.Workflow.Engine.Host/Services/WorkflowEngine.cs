@@ -216,6 +216,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         pointer.Status = ExecutionStatus.Faulted;
         pointer.ErrorMessage = message;
         
+        _logger.LogWarning("Node execution failed. Reason: {message}", message);
         await _eventBus.PublishAsync(new NodeExecutionFailedEvent(
             instance.WorkspaceId, instance.InstanceId, pointer.PointerId, pointer.NodeId, message));
     }
@@ -227,10 +228,16 @@ public sealed class WorkflowEngine : IWorkflowEngine
         lock (instance.Pointers)
         {
             // Only proceed if all branches are finished AND the workflow isn't already marked completed
-            if (instance.Status == WorkflowStatus.Running && 
-                instance.Pointers.All(p => p.Status == ExecutionStatus.Completed || p.Status == ExecutionStatus.Faulted))
+            if (instance.Status == WorkflowStatus.Running && instance.Pointers.All(p => p.Status is ExecutionStatus.Completed or ExecutionStatus.Faulted))
             {
-                instance.Status = WorkflowStatus.Completed;
+                if (instance.Pointers.Any(p => p.Status == ExecutionStatus.Faulted))
+                {
+                    instance.Status = WorkflowStatus.Failed;
+                }
+                else
+                {
+                    instance.Status = WorkflowStatus.Completed;
+                }
                 shouldComplete = true;
             }
         }

@@ -24,6 +24,7 @@ public sealed class ClientPayloadTriggerHandler : IConsumer<ClientPayloadReceive
 
     public async Task Consume(ConsumeContext<ClientPayloadReceivedEvent> context)
     {
+        _logger.LogTrace("ClientPayloadTriggerHandler triggered with client: {client}, data: {data}", context.Message.ClientRefId, context.Message.Payload);
         // Safety check: ensure it's actually telemetry
         if (!context.Message.MessageType.Equals("Telemetry", StringComparison.OrdinalIgnoreCase))
         {
@@ -62,6 +63,7 @@ public sealed class ClientPayloadTriggerHandler : IConsumer<ClientPayloadReceive
             });
 
         await Task.WhenAll(startTasks);
+        _logger.LogTrace("DONE - ClientPayloadTriggerHandler - client: {client}, data: {data}", context.Message.ClientRefId, context.Message.Payload);
     }
 
     private static object? ParsePayload(string payload)
