@@ -2,6 +2,7 @@ using System.Reflection;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Webskt.Common.Abstraction.Interfaces;
 using Webskt.EventBus.Abstractions;
 using Webskt.EventBus.Handlers;
 
@@ -16,6 +17,12 @@ public static class EventBusExtensions
         Action<RabbitMQOptions>? configure = null)
     {
         services.AddEventBusCore();
+
+        if (enableDbLogging)
+        {
+            services.AddSingleton<IEventRegistry, EventRegistry>();
+            services.AddTransient<IStartupTask, EventRegistryInitializationTask>();
+        }
 
         var options = new RabbitMQOptions();
         configuration.GetSection("RabbitMQ").Bind(options);
@@ -52,8 +59,6 @@ public static class EventBusExtensions
                 });
 
                 // 2. Configure Endpoints automatically
-                // This will use the DatabaseEventLoggerHandlerDefinition for the logger (shared queue)
-                // and create temporary/anonymous queues for everything else (broadcast)
                 cfg.ConfigureEndpoints(context);
             });
         });

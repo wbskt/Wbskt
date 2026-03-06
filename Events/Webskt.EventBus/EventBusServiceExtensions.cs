@@ -6,7 +6,6 @@ public static class EventBusServiceExtensions
 {
     public static void AddEventBusCore(this IServiceCollection services)
     {
-        // Core initialization logic for EventBus if any.
-        // Currently MassTransit handles most things.
+        // Add common, non-DB specific event bus registrations here
     }
 }
