@@ -12,6 +12,7 @@
         <PackageReference Include="Scalar.AspNetCore" />
         <PackageReference Include="Microsoft.Data.SqlClient" />
         <PackageReference Include="Serilog.AspNetCore" />
+        <PackageReference Include="Serilog.Enrichers.Thread" />
     </ItemGroup>
 
     <ItemGroup>
