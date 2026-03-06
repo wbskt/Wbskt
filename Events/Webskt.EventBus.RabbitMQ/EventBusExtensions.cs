@@ -11,17 +11,21 @@ public static class EventBusExtensions
     public static void AddRabbitMQEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
-        Action<RabbitMQOptions>? configure = null)
+        Action<IBusRegistrationConfigurator>? configureBus = null,
+        Action<RabbitMQOptions>? configureOptions = null)
     {
         services.AddEventBusCore();
 
         var options = new RabbitMQOptions();
         configuration.GetSection("RabbitMQ").Bind(options);
-        configure?.Invoke(options);
+        configureOptions?.Invoke(options);
 
         services.AddMassTransit(x =>
         {
-            // Discover and Register Consumers from Host Assemblies
+            // 1. Allow the caller to add specific consumers/definitions
+            configureBus?.Invoke(x);
+
+            // 2. Discover and Register Consumers from Host Assemblies
             var entryAssembly = Assembly.GetEntryAssembly();
             if (entryAssembly != null)
             {

@@ -8,15 +8,15 @@ namespace Webskt.Management.Host.Extensions;
 
 public static class EventLoggingExtensions
 {
-    public static void AddDatabaseEventLogging(this IServiceCollection services)
+    public static Action<IBusRegistrationConfigurator> AddDatabaseEventLogging(this IServiceCollection services)
     {
         services.AddSingleton<IEventRegistry, EventRegistry>();
         services.AddTransient<IStartupTask, EventRegistryInitializationTask>();
 
-        // Manually add the consumer to the MassTransit configuration
-        services.AddMassTransit(x =>
+        // Return the action so it can be passed into AddRabbitMQEventBus
+        return x =>
         {
             x.AddConsumer<DatabaseEventLoggerHandler, DatabaseEventLoggerHandlerDefinition>();
-        });
+        };
     }
 }
