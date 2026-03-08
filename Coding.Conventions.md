@@ -64,8 +64,8 @@ To decouple public GUIDs from internal integer IDs without polluting every servi
 ### SQL Standards
 *   **Keywords:** Use **UPPERCASE** (e.g., `SELECT`, `INSERT`, `WHERE`).
 *   **Schema:** Always use the `dbo.` prefix.
-*   **Precision:** Use `DATETIME2(0)` for all standard timestamps (e.g., `CreatedAt`, `ModifiedAt`) unless sub-second precision is specifically required.
-*   **Audit Columns:** Every new table must include a `CreatedAt DATETIME2(0) NOT NULL DEFAULT GETUTCDATE()` column.
+*   **Precision:** Use `DATETIME2(3)` for all standard timestamps (e.g., `CreatedAt`, `ModifiedAt`) unless sub-second precision is specifically required.
+*   **Audit Columns:** Every new table must include a `CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME()` column.
 *   **Formatting:** List columns explicitly (no `SELECT *`) with one column per line for better git diffs.
 
 ---

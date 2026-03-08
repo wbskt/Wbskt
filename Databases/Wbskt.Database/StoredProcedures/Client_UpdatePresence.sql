@@ -1,7 +1,7 @@
 CREATE PROCEDURE dbo.Client_UpdatePresence
     @Id INT,
     @IsConnected BIT,
-    @LastActivityAt DATETIME2(0)
+    @LastActivityAt DATETIME2(3)
 AS
 BEGIN
     SET NOCOUNT ON;

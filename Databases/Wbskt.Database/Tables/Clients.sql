@@ -6,8 +6,8 @@ CREATE TABLE dbo.Clients (
     Secret NVARCHAR(255) NOT NULL,
     Status TINYINT NOT NULL DEFAULT 0, -- 0: Pending, 1: Registered, 2: Revoked
     IsConnected BIT NOT NULL DEFAULT 0,
-    LastActivityAt DATETIME2(0) NULL,
-    CreatedAt DATETIME2(0) NOT NULL DEFAULT GETUTCDATE(),
+    LastActivityAt DATETIME2(3) NULL,
+    CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_Clients_RegistrationPolicies FOREIGN KEY (PolicyId) REFERENCES dbo.RegistrationPolicies(Id)
 );
 GO

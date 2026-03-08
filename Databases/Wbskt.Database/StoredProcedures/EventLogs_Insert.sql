@@ -1,7 +1,7 @@
 CREATE PROCEDURE dbo.EventLogs_Insert 
     @EventId INT,
     @EventData NVARCHAR(MAX),
-    @CreatedAtUtc DATETIME2(0),
+    @CreatedAtUtc DATETIME2(3),
     @WorkspaceId INT,
     @Id INT OUTPUT
 AS
