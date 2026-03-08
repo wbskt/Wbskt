@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -5,5 +6,5 @@ namespace Wbskt.Workflow.Abstraction.Models.Expressions;
 public sealed class LiteralExpression : WorkflowExpression
 {
     [JsonPropertyName("value")]
-    public object? Value { get; set; }
+    public JsonElement? Value { get; set; }
 }
