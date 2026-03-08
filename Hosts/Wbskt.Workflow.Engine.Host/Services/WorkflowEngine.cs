@@ -51,6 +51,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
             _logger.LogWarning("No matching trigger nodes found for workflow {WorkflowRefId} with context {ContextType}", 
                 definition.WorkflowRefId, triggerContext.GetType().Name);
             
+            instance.Status = WorkflowStatus.Completed;
             await CompleteWorkflowAsync(instance);
             return instance;
         }
