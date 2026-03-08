@@ -1,3 +1,4 @@
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
@@ -28,9 +29,9 @@ public sealed class VariableExecutor : IWorkflowNodeExecutor
 
         object? resultValue = null;
 
-        switch (varNode.Operation.ToLowerInvariant())
+        switch (varNode.Operation)
         {
-            case "set":
+            case VariableOperation.Set:
                 if (varNode.Expression != null)
                 {
                     resultValue = _evaluator.Evaluate(varNode.Expression, context);
@@ -38,19 +39,19 @@ public sealed class VariableExecutor : IWorkflowNodeExecutor
                 }
                 break;
 
-            case "get":
+            case VariableOperation.Get:
                 resultValue = context.GetState(varName);
                 context.LastNodeOutput = resultValue;
                 break;
 
-            case "increment":
+            case VariableOperation.Increment:
                 var currentInc = Convert.ToDouble(context.GetState(varName) ?? 0);
                 var incBy = varNode.Expression != null ? Convert.ToDouble(_evaluator.Evaluate(varNode.Expression, context) ?? 1) : 1;
                 resultValue = currentInc + incBy;
                 context.SetState(varName, resultValue);
                 break;
 
-            case "decrement":
+            case VariableOperation.Decrement:
                 var currentDec = Convert.ToDouble(context.GetState(varName) ?? 0);
                 var decBy = varNode.Expression != null ? Convert.ToDouble(_evaluator.Evaluate(varNode.Expression, context) ?? 1) : 1;
                 resultValue = currentDec - decBy;

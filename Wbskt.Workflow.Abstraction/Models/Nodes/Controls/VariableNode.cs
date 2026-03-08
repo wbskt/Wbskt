@@ -13,5 +13,5 @@ public sealed class VariableNode : BaseControl
 
     public string VariableName { get; set; } = string.Empty;
     public WorkflowExpression? Expression { get; set; }
-    public string Operation { get; set; } = "Set"; // Set, Get, Increment, Decrement
+    public VariableOperation Operation { get; set; } = VariableOperation.Set;
 }

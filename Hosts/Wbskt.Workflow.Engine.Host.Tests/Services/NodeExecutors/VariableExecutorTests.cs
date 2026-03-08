@@ -1,4 +1,5 @@
 using Moq;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
@@ -28,7 +29,7 @@ public class VariableExecutorTests
         {
             NodeId = Guid.NewGuid(),
             VariableName = "",
-            Operation = "Set"
+            Operation = VariableOperation.Set
         };
         var context = new ExecutionContext(new WorkflowInstance(), Guid.NewGuid());
 
@@ -49,7 +50,7 @@ public class VariableExecutorTests
         {
             NodeId = Guid.NewGuid(),
             VariableName = "myVar",
-            Operation = "Set",
+            Operation = VariableOperation.Set,
             Expression = expr
         };
         var context = new ExecutionContext(new WorkflowInstance(), Guid.NewGuid());
@@ -72,7 +73,7 @@ public class VariableExecutorTests
         {
             NodeId = Guid.NewGuid(),
             VariableName = "myVar",
-            Operation = "Get"
+            Operation = VariableOperation.Get
         };
         var context = new ExecutionContext(new WorkflowInstance(), Guid.NewGuid());
         context.SetState("myVar", 123.45);
@@ -94,7 +95,7 @@ public class VariableExecutorTests
         {
             NodeId = Guid.NewGuid(),
             VariableName = "counter",
-            Operation = "Increment",
+            Operation = VariableOperation.Increment,
             Expression = expr
         };
         var context = new ExecutionContext(new WorkflowInstance(), Guid.NewGuid());
@@ -119,7 +120,7 @@ public class VariableExecutorTests
         {
             NodeId = Guid.NewGuid(),
             VariableName = "counter",
-            Operation = "Decrement",
+            Operation = VariableOperation.Decrement,
             Expression = expr
         };
         var context = new ExecutionContext(new WorkflowInstance(), Guid.NewGuid());
