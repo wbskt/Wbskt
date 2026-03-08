@@ -18,12 +18,18 @@ internal sealed class SocketHandler : ISocketHandler
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<SocketHandler> _logger;
+    private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
 
-    public SocketHandler(IConnectionManager connectionManager, ILogger<SocketHandler> logger, IEventBus eventBus)
+    public SocketHandler(
+        IConnectionManager connectionManager,
+        ILogger<SocketHandler> logger,
+        IHostApplicationLifetime appLifetime,
+        IEventBus eventBus)
     {
         _connectionManager = connectionManager;
         _logger = logger;
+        _appLifetime = appLifetime;
         _eventBus = eventBus;
     }
 
@@ -34,6 +40,12 @@ internal sealed class SocketHandler : ISocketHandler
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
+
+        // Create a linked token that triggers if the client leaves OR the server stops
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+            context.RequestAborted, 
+            _appLifetime.ApplicationStopping
+        );
 
         var clientRefIdString = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var workspaceId = int.Parse(context.User.FindFirst("workspace_id")!.Value);
@@ -47,12 +59,12 @@ internal sealed class SocketHandler : ISocketHandler
         _connectionManager.AddConnection(clientRefId, webSocket);
         
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
-        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, workspaceId), context.RequestAborted);
+        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, workspaceId), cts.Token);
 
         try
         {
             // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
-            await ReceiveLoopAsync(clientRefId, webSocket, workspaceId, context.RequestAborted);
+            await ReceiveLoopAsync(clientRefId, webSocket, workspaceId, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -68,7 +80,7 @@ internal sealed class SocketHandler : ISocketHandler
         }
         finally
         {
-            await _connectionManager.RemoveConnectionAsync(clientRefId, context.RequestAborted);
+            await _connectionManager.RemoveConnectionAsync(clientRefId, CancellationToken.None);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
             await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, workspaceId, "Socket closed"), CancellationToken.None);
         }
