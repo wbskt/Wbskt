@@ -22,14 +22,14 @@ public sealed class SendCommandActionExecutor : IWorkflowNodeExecutor
     {
         var commandNode = (SendCommandActionNode)node;
 
-        // In a real implementation, we might want to evaluate the PayloadTemplate using a template engine
+        // In a real implementation, we might want to evaluate the Payload using a template engine
         // For MVP, we'll just send it as-is or do simple string replacements if needed.
         
         await _eventBus.PublishAsync(new ClientPayloadEvent(
             commandNode.TargetClientRefId,
             context.WorkspaceId,
-            commandNode.ActionName,
-            commandNode.PayloadTemplate
+            commandNode.MessageType,
+            commandNode.Payload
         ));
 
         return NodeExecutionResult.Success(PortNames.Out);

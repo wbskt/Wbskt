@@ -11,6 +11,6 @@ public sealed class SendCommandActionNode : BaseAction
     ];
 
     public Guid TargetClientRefId { get; set; }
-    public string ActionName { get; set; } = string.Empty;
-    public string PayloadTemplate { get; set; } = string.Empty;
+    public string MessageType { get; set; } = string.Empty;
+    public string Payload { get; set; } = string.Empty;
 }
