@@ -84,7 +84,7 @@ public static class Program
 
         builder.Services.AddControllers();
 
-        builder.Services.AddOpenApi();
+        builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
 
@@ -98,7 +98,7 @@ public static class Program
         {
             app.MapOpenApi();
 
-            app.MapScalarApiReference();
+            app.MapCustomScalarApiReference();
         }
 
         app.UseAuthentication();
