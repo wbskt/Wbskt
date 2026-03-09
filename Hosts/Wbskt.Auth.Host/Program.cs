@@ -1,7 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Scalar.AspNetCore;
 using Serilog;
 using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;

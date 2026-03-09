@@ -1,4 +1,3 @@
-using Scalar.AspNetCore;
 using Serilog;
 using Wbskt.Common.Infrastructure;
 using Wbskt.Common.Logging;
