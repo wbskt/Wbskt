@@ -5,7 +5,7 @@ using Wbskt.Management.Host.Hubs;
 
 namespace Wbskt.Management.Host.Handlers;
 
-internal sealed class NotificationHandler : IConsumer<ClientLatencyMeasuredEvent>
+public sealed class NotificationHandler : IConsumer<ClientLatencyMeasuredEvent>
 {
     private readonly IHubContext<NotificationHub, INotificationClient> _hubContext;
 

@@ -4,7 +4,7 @@ using Wbskt.Management.Host.Providers;
 
 namespace Wbskt.Management.Host.Handlers;
 
-internal sealed class ClientPresenceHandler : IConsumer<ClientConnectedEvent>, IConsumer<ClientDisconnectedEvent>
+public sealed class ClientPresenceHandler : IConsumer<ClientConnectedEvent>, IConsumer<ClientDisconnectedEvent>
 {
     private readonly IClientProvider _clientProvider;
 

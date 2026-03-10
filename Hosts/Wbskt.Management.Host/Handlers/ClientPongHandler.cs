@@ -4,7 +4,7 @@ using Wbskt.Events.Client;
 
 namespace Wbskt.Management.Host.Handlers;
 
-internal sealed class ClientPongHandler : IConsumer<ClientPongEvent>
+public sealed class ClientPongHandler : IConsumer<ClientPongEvent>
 {
     private readonly IEventBus _eventBus;
 
