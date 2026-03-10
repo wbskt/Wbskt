@@ -1,0 +1,46 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Databases/">
+    <Project Path="Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj" Type="42ea0dbd-9cf1-443e-919e-be9c484e4577">
+      <Platform Project="AnyCPU" />
+    </Project>
+    <Project Path="Databases/Wbskt.Database/Wbskt.Database.sqlproj" Type="42ea0dbd-9cf1-443e-919e-be9c484e4577">
+      <Platform Project="AnyCPU" />
+    </Project>
+  </Folder>
+  <Folder Name="/Events/">
+    <Project Path="Events/Wbskt.EventBus.RabbitMQ/Wbskt.EventBus.RabbitMQ.csproj" />
+    <Project Path="Events/Wbskt.EventBus/Wbskt.EventBus.csproj" />
+    <Project Path="Events/Wbskt.Events/Wbskt.Events.csproj" />
+  </Folder>
+  <Folder Name="/Hosts/">
+    <Project Path="Hosts/Wbskt.Auth.Host/Wbskt.Auth.Host.csproj" />
+    <Project Path="Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj" />
+    <Project Path="Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj" />
+    <Project Path="Hosts/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj" />
+    <Project Path="Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj" />
+  </Folder>
+  <Folder Name="/SolutionItems/">
+    <File Path=".gitignore" />
+    <File Path="Coding.Conventions.md" />
+    <File Path="Deploy-Databases.ps1" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="LICENSE.txt" />
+    <File Path="nuget.config" />
+    <File Path="Scripts.bat" />
+    <File Path="Workflow.Engine.md" />
+  </Folder>
+  <Project Path="Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj" />
+  <Project Path="Wbskt.Common.Abstraction/Wbskt.Common.Abstraction.csproj" />
+  <Project Path="Wbskt.Common/Wbskt.Common.csproj" />
+  <Project Path="Wbskt.Foundation.Abstraction/Wbskt.Foundation.Abstraction.csproj" />
+  <Project Path="Wbskt.Simulator/Wbskt.Simulator.csproj" />
+  <Project Path="Wbskt.Workflow.Abstraction/Wbskt.Workflow.Abstraction.csproj" />
+  <Project Path="Wbskt.Workflow/Wbskt.Workflow.csproj" />
+</Solution>
