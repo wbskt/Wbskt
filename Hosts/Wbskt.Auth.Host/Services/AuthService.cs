@@ -34,13 +34,13 @@ internal sealed class AuthService : IAuthService
 
             if (verificationResult == PasswordVerificationResult.Failed)
             {
-                await _eventBus.PublishAsync(new UserLoginEvent(user.Id, ipAddress, false, "Invalid password"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, ipAddress, "Invalid password"), cancellationToken);
                 throw new SecurityException("Invalid credentials.");
             }
 
             if (!user.IsActive)
             {
-                await _eventBus.PublishAsync(new UserLoginEvent(user.Id, ipAddress, false, "User inactive"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, ipAddress, "User inactive"), cancellationToken);
                 throw new SecurityException("User is inactive.");
             }
 
@@ -48,7 +48,7 @@ internal sealed class AuthService : IAuthService
             var refreshToken = GenerateRefreshToken(user.Id);
 
             await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
-            await _eventBus.PublishAsync(new UserLoginEvent(user.Id, ipAddress, true), cancellationToken);
+            await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, ipAddress), cancellationToken);
 
             return new LoginResponse(accessToken, refreshToken.Token);
         }
