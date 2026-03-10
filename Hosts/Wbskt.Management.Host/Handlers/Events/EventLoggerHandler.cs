@@ -1,23 +1,24 @@
 using System.Text;
 using System.Text.Json;
 using MassTransit;
-using Wbskt.Common.Abstraction.Interfaces;
+using Wbskt.Common.Models;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers.Events;
 
-public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
+public sealed class EventLoggerHandler : IConsumer<IEvent>
 {
-    private readonly IEventProvider _eventProvider;
+    private readonly EventLogBuffer _buffer;
     private readonly IEventRegistry _registry;
-    private readonly ILogger<DatabaseEventLoggerHandler> _logger;
+    private readonly ILogger<EventLoggerHandler> _logger;
 
-    public DatabaseEventLoggerHandler(
-        IEventProvider eventProvider,
+    public EventLoggerHandler(
+        EventLogBuffer buffer,
         IEventRegistry registry,
-        ILogger<DatabaseEventLoggerHandler> logger)
+        ILogger<EventLoggerHandler> logger)
     {
-        _eventProvider = eventProvider;
+        _buffer = buffer;
         _registry = registry;
         _logger = logger;
     }
@@ -50,11 +51,12 @@ public sealed class DatabaseEventLoggerHandler : IConsumer<IEvent>
                 workspaceId = id;
             }
 
-            await _eventProvider.InsertEventLogAsync(eventId, eventData, context.Message.CreatedAtUtc, workspaceId, context.CancellationToken);
+            var entry = new EventLogEntry(eventId, eventData, context.Message.CreatedAtUtc, workspaceId);
+            await _buffer.WriteAsync(entry, context.CancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to log event to database.");
+            _logger.LogWarning(ex, "Failed to write event to buffer.");
         }
     }
 }

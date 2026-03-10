@@ -60,7 +60,7 @@ public static class Program
         builder.Services.AddWbsktEventDataServices();
 
         // Event Bus & Logging
-        var busConfig = builder.Services.AddDatabaseEventLogging();
+        var busConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);
         builder.Services.AddRabbitMQEventBus(builder.Configuration, configureBus: busConfig);
 
         // Register Keyed ReferenceMappers
