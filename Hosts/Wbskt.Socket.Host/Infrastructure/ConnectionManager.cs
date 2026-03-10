@@ -3,21 +3,22 @@ using System.Net.WebSockets;
 
 namespace Wbskt.Socket.Host.Infrastructure;
 
-public interface IConnectionManager
-{
-    void AddConnection(Guid clientRefId, WebSocket socket);
-    Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default);
-    WebSocket? GetConnection(Guid clientRefId);
-    IReadOnlyCollection<Guid> GetConnectedClients();
-}
-
 internal sealed class ConnectionManager : IConnectionManager
 {
+    private readonly ILogger<ConnectionManager> _logger;
     private readonly ConcurrentDictionary<Guid, WebSocket> _connections = new();
+
+    public ConnectionManager(ILogger<ConnectionManager> logger)
+    {
+        _logger = logger;
+    }
 
     public void AddConnection(Guid clientRefId, WebSocket socket)
     {
-        _connections.TryAdd(clientRefId, socket);
+        if (!_connections.TryAdd(clientRefId, socket))
+        {
+            _logger.LogWarning("Connection attempt rejected. Client {ClientRefId} is already connected.", clientRefId);
+        }
     }
 
     public async Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default)

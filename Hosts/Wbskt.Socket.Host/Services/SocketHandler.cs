@@ -55,7 +55,7 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+        using var webSocket = await context.WebSockets.AcceptWebSocketAsync(); // we have multiple wbskt but not saving to connection manager
         _connectionManager.AddConnection(clientRefId, webSocket);
         
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
