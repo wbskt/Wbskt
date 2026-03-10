@@ -15,7 +15,20 @@ public sealed class WebSocketAuthMiddleware
     {
         if (context.Request.Path == "/ws")
         {
-            var token = context.Request.Query["access_token"].ToString();
+            var token = string.Empty;
+
+            // 1. Check Authorization header (Used by C# SDK and other clients that can set headers)
+            var authHeader = context.Request.Headers.Authorization.ToString();
+            if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                token = authHeader.Substring("Bearer ".Length).Trim();
+            }
+
+            // 2. Check query string as fallback (Required for browser WebSockets like Simulator.Web)
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                token = context.Request.Query["access_token"].ToString();
+            }
 
             if (string.IsNullOrWhiteSpace(token))
             {

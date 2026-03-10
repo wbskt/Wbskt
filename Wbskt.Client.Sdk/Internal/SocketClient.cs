@@ -39,7 +39,8 @@ internal sealed class SocketClient : IAsyncDisposable
         _webSocket.Dispose();
         _webSocket = new ClientWebSocket();
 
-        var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws?access_token={token}");
+        var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws");
+        _webSocket.Options.SetRequestHeader("Authorization", $"Bearer {token}");
         await _webSocket.ConnectAsync(uri, _cts.Token);
         OnConnected?.Invoke();
         

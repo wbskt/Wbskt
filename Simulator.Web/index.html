@@ -242,6 +242,10 @@
 
         function connectSocket(token) {
             const wsUrl = document.getElementById('socketUrl').value;
+            
+            // Note: The browser's native WebSocket API does not support custom HTTP headers (like Authorization).
+            // Therefore, we must continue to pass the token via the query string.
+            // The Server's WebSocketAuthMiddleware will handle this fallback gracefully.
             socket = new WebSocket(`${wsUrl}/ws?access_token=${token}`);
 
             socket.onopen = () => {
