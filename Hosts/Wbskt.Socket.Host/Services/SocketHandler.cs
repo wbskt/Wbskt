@@ -55,8 +55,13 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        using var webSocket = await context.WebSockets.AcceptWebSocketAsync(); // we have multiple wbskt but not saving to connection manager
-        _connectionManager.AddConnection(clientRefId, webSocket);
+        using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+        if (!_connectionManager.TryAddConnection(clientRefId, webSocket))
+        {
+            _logger.LogWarning("Rejecting duplicate websocket for client {ClientRefId}", clientRefId);
+            await webSocket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Multiple concurrent connections are not allowed.", CancellationToken.None);
+            return;
+        }
         
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
         await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, workspaceId), cts.Token);

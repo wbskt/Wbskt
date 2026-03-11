@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.WebSockets;
 
 namespace Wbskt.Socket.Host.Infrastructure;
@@ -13,12 +15,14 @@ internal sealed class ConnectionManager : IConnectionManager
         _logger = logger;
     }
 
-    public void AddConnection(Guid clientRefId, WebSocket socket)
+    public bool TryAddConnection(Guid clientRefId, WebSocket socket)
     {
         if (!_connections.TryAdd(clientRefId, socket))
         {
             _logger.LogWarning("Connection attempt rejected. Client {ClientRefId} is already connected.", clientRefId);
+            return false;
         }
+        return true;
     }
 
     public async Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default)
