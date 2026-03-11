@@ -99,6 +99,12 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM [dbo].[Permissions] WHERE [Slug] = 'logs.read')
+BEGIN
+    INSERT INTO [dbo].[Permissions] ([Slug], [Description]) VALUES ('logs.read', 'Read event logs');
+END
+GO
+
 -- RolePermissions (Admin gets all)
 IF EXISTS (SELECT 1 FROM [dbo].[Roles] WHERE [Name] = 'Admin')
 BEGIN

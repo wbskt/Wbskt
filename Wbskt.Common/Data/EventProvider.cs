@@ -1,6 +1,9 @@
 using System.Data;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Common.Abstraction.Interfaces;
+using Wbskt.Common.Abstraction.Models;
+using Wbskt.Common.Abstraction.Models.Management;
+using Wbskt.EventBus.Abstractions;
 
 namespace Wbskt.Common.Data;
 
@@ -28,5 +31,26 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             parameter.SqlDbType = SqlDbType.Structured;
             parameter.TypeName = "dbo.EventLogTableType";
         }, cancellationToken);
+    }
+
+    public async Task<IPagedList<EventLogResponse>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await ExecutePagedCollectionAsync(
+            "dbo.EventLog_GetBy_Workspace",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@EventName", (object?)eventName ?? DBNull.Value);
+                p.AddWithValue("@Criticality", (object?)criticality ?? DBNull.Value);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+            },
+            reader => new EventLogResponse(
+                reader.GetString("EventName"),
+                reader.GetString("EventData"),
+                (EventCriticality)reader.GetByte("Criticality"),
+                reader.GetDateTime("CreatedAtUtc")
+            ),
+            cancellationToken);
     }
 }

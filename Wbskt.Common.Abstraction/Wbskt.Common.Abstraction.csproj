@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
+    </ItemGroup>
+
 </Project>

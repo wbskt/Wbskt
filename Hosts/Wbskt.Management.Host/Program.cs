@@ -44,6 +44,7 @@ public static class Program
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
         builder.Services.AddScoped<IWorkflowProvider, WorkflowProvider>();
         builder.Services.AddScoped<IWorkflowService, WorkflowService>();
+        builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
