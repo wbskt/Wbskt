@@ -9,16 +9,16 @@ BEGIN
     SET NOCOUNT ON;
 
     SELECT 
-        e.Name AS EventName,
+        e.EventName AS EventName,
         el.EventData,
-        e.Criticality,
-        el.CreatedAtUtc,
+        e.EventCriticality,
+        el.CreatedAt,
         COUNT(*) OVER() AS TotalCount
     FROM dbo.EventLogs el
     JOIN dbo.Events e ON el.EventId = e.Id
     WHERE el.WorkspaceId = @WorkspaceId
-      AND (@EventName IS NULL OR e.Name = @EventName)
-      AND (@Criticality IS NULL OR e.Criticality = @Criticality)
-    ORDER BY el.CreatedAtUtc DESC
+      AND (@EventName IS NULL OR e.EventName = @EventName)
+      AND (@Criticality IS NULL OR e.EventCriticality = @Criticality)
+    ORDER BY el.CreatedAt DESC
     OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY;
 END
