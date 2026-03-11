@@ -48,9 +48,9 @@ public class ClientsController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.read", cancellationToken);
         
-        var pagedData = await _clientService.GetAllAsync(status, name, skip, take, cancellationToken);
+        var pagedData = await _clientService.GetAllAsync(workspaceId, status, name, skip, take, cancellationToken);
         
         Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
 
@@ -88,7 +88,7 @@ public class ClientsController : ControllerBase
         }
 
         // 4. All checks pass, get the data
-        var pagedData = await _clientService.GetByPolicyIdAsync(policyId, status, name, skip, take, cancellationToken);
+        var pagedData = await _clientService.GetByPolicyIdAsync(workspaceId, policyId, status, name, skip, take, cancellationToken);
 
         Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
         return new ListResponse<ClientResponse> { Items = pagedData };

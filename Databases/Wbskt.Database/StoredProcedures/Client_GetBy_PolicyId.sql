@@ -1,4 +1,5 @@
 CREATE PROCEDURE dbo.Client_GetBy_PolicyId
+    @WorkspaceId INT,
     @PolicyId INT,
     @Status TINYINT = NULL,
     @Name NVARCHAR(100) = NULL,
@@ -9,16 +10,19 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Total count for this policy
     SELECT @TotalCount = COUNT(*)
     FROM dbo.Clients
-    WHERE PolicyId = @PolicyId
+    WHERE WorkspaceId = @WorkspaceId
+      AND  PolicyId = @PolicyId
       AND (@Status IS NULL OR Status = @Status)
       AND (@Name IS NULL OR Name LIKE '%' + @Name + '%');
 
+    -- Filtered and paginated selection
     SELECT 
         c.Id,
         c.RefId,
-        p.WorkspaceId,
+        c.WorkspaceId,
         c.PolicyId,
         p.RefId AS PolicyRefId,
         c.Name,
@@ -27,7 +31,8 @@ BEGIN
         c.CreatedAt
     FROM dbo.Clients c
     INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id
-    WHERE c.PolicyId = @PolicyId
+    WHERE  c.WorkspaceId = @WorkspaceId
+      AND  c.PolicyId = @PolicyId
       AND (@Status IS NULL OR c.Status = @Status)
       AND (@Name IS NULL OR c.Name LIKE '%' + @Name + '%')
     ORDER BY c.CreatedAt DESC

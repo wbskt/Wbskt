@@ -1,4 +1,5 @@
 CREATE PROCEDURE dbo.Client_Create
+    @WorkspaceId INT,
     @PolicyId INT,
     @Name NVARCHAR(100),
     @Secret NVARCHAR(255),
@@ -10,12 +11,14 @@ BEGIN
     SET NOCOUNT ON;
 
     INSERT INTO dbo.Clients (
+        WorkspaceId,
         PolicyId,
         Name,
         Secret,
         Status
     )
     VALUES (
+        @WorkspaceId,
         @PolicyId,
         @Name,
         @Secret,

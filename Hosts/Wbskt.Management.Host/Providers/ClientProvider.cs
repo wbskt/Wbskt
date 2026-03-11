@@ -43,13 +43,15 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task<IPagedList<Client>> GetAllAsync(ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, int skip,
+        int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.Client_GetAll",
             p =>
             {
                 p.AddWithValue("@Status", (object?)status ?? DBNull.Value);
+                p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);
                 p.AddWithValue("@Take", take);
@@ -60,12 +62,14 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task<IPagedList<Client>> GetByPolicyIdAsync(int policyId, ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, ClientStatus? status,
+        string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.Client_GetBy_PolicyId",
             p =>
             {
+                p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@PolicyId", policyId);
                 p.AddWithValue("@Status", (object?)status ?? DBNull.Value);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
@@ -78,10 +82,12 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task<Client> InsertClientAsync(int policyId, string name, string secret, ClientStatus status, CancellationToken cancellationToken = default)
+    public async Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, string secret,
+        ClientStatus status, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Client_Create", p =>
         {
+            p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@PolicyId", policyId);
             p.AddWithValue("@Name", name);
             p.AddWithValue("@Secret", secret);

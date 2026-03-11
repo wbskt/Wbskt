@@ -1,4 +1,5 @@
 CREATE PROCEDURE dbo.RegistrationPolicy_GetAll
+    @WorkspaceId INT,
     @AutoApproval BIT = NULL,
     @Name NVARCHAR(100) = NULL,
     @Skip INT = 0,
@@ -8,11 +9,14 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Total count for the workspace
     SELECT @TotalCount = COUNT(*)
     FROM dbo.RegistrationPolicies
-    WHERE (@AutoApproval IS NULL OR AutoApproval = @AutoApproval)
+    WHERE WorkspaceId = @WorkspaceId
+      AND (@AutoApproval IS NULL OR AutoApproval = @AutoApproval)
       AND (@Name IS NULL OR Name LIKE '%' + @Name + '%');
 
+    -- Paginated selection
     SELECT 
         Id,
         RefId,
@@ -23,7 +27,8 @@ BEGIN
         AutoApproval,
         CreatedAt
     FROM dbo.RegistrationPolicies
-    WHERE (@AutoApproval IS NULL OR AutoApproval = @AutoApproval)
+    WHERE WorkspaceId = @WorkspaceId
+      AND  (@AutoApproval IS NULL OR AutoApproval = @AutoApproval)
       AND (@Name IS NULL OR Name LIKE '%' + @Name + '%')
     ORDER BY CreatedAt DESC
     OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY;

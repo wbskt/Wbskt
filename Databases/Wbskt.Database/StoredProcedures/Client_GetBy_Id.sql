@@ -7,7 +7,7 @@ BEGIN
     SELECT 
         C.Id,
         C.RefId,
-        P.WorkspaceId,
+        C.WorkspaceId,
         C.PolicyId,
         P.RefId AS PolicyRefId,
         C.Name,

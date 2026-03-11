@@ -50,7 +50,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
         // 4. Create Client
-        var client = await _clientProvider.InsertClientAsync(policy.Id, request.Name, secret, initialStatus, cancellationToken);
+        var client = await _clientProvider.InsertClientAsync(policy.WorkspaceId ,policy.Id, request.Name, secret, initialStatus, cancellationToken);
 
         // 5. Publish Events
         await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.WorkspaceId, policy.RefId, client.Name), cancellationToken);

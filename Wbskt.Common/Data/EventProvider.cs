@@ -44,12 +44,13 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 p.AddWithValue("@Criticality", (object?)criticality ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);
                 p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
             reader => new EventLogResponse(
                 reader.GetString("EventName"),
                 reader.GetString("EventData"),
-                (EventCriticality)reader.GetByte("Criticality"),
-                reader.GetDateTime("CreatedAtUtc")
+                (EventCriticality)reader.GetByte("EventCriticality"),
+                reader.GetDateTime("CreatedAt")
             ),
             cancellationToken);
     }

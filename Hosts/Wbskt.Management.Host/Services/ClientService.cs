@@ -24,16 +24,18 @@ internal sealed class ClientService : IClientService
         _eventBus = eventBus;
     }
 
-    public async Task<IPagedList<ClientResponse>> GetAllAsync(ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<ClientResponse>> GetAllAsync(int workspaceId, ClientStatus? status, string? name,
+        int skip, int take, CancellationToken cancellationToken = default)
     {
-        var pagedClients = await _clientProvider.GetAllAsync(status, name, skip, take, cancellationToken);
+        var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, skip, take, cancellationToken);
         
         return new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
     }
 
-    public async Task<IPagedList<ClientResponse>> GetByPolicyIdAsync(int policyId, ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<ClientResponse>> GetByPolicyIdAsync(int workspaceId, int policyId,
+        ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var pagedClients = await _clientProvider.GetByPolicyIdAsync(policyId, status, name, skip, take, cancellationToken);
+        var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, skip, take, cancellationToken);
 
         return new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
     }

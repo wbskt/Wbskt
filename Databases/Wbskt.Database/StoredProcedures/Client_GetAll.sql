@@ -1,6 +1,7 @@
 CREATE PROCEDURE dbo.Client_GetAll
-    @Status TINYINT = NULL,
+    @WorkspaceId INT,
     @Name NVARCHAR(100) = NULL,
+    @Status TINYINT = NULL,
     @Skip INT = 0,
     @Take INT = 100,
     @TotalCount INT OUTPUT
@@ -9,14 +10,15 @@ BEGIN
     SET NOCOUNT ON;
 
     SELECT @TotalCount = COUNT(*)
-    FROM dbo.Clients
-    WHERE (@Status IS NULL OR Status = @Status)
+    FROM dbo.Clients   
+    WHERE WorkspaceId = @WorkspaceId
+      AND (@Status IS NULL OR Status = @Status)
       AND (@Name IS NULL OR Name LIKE '%' + @Name + '%');
 
     SELECT 
         c.Id,
         c.RefId,
-        p.WorkspaceId,
+        c.WorkspaceId,
         c.PolicyId,
         p.RefId AS PolicyRefId,
         c.Name,
