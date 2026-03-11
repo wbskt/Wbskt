@@ -25,6 +25,8 @@
 #>
 
 param (
+    [Parameter(Mandatory = $false)]
+    [switch]$Fresh, # Pass this to delete and redeploy fresh
     [string]$Server = "localhost",
     [string]$User = "sa",
     [string]$Password = "Welcome1234"
@@ -118,6 +120,10 @@ foreach ($Proj in $Projects) {
         "/SourceFile:$($DacpacFile.FullName)",
         "/TargetConnectionString:$ConnString;Database=$($Proj.DbName)"
     )
+    if ($Fresh) {
+        $SqlPackageArgs += "/p:CreateNewDatabase=True"
+        Write-Host "Creating fresh database..." -ForegroundColor Yellow
+    }
 
     # Print the command for debugging (masking password)
     $SafeConnString = $ConnString.Replace($Password, "****")
