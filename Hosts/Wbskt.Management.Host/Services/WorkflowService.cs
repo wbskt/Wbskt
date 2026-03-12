@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Common.Abstraction.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Foundation.Abstraction.Exceptions;
@@ -25,17 +26,17 @@ internal sealed class WorkflowService : IWorkflowService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyCollection<WorkflowSummaryResponse>> GetAllAsync(int workspaceId, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<WorkflowSummaryResponse>> GetAllAsync(int workspaceId, CancellationToken cancellationToken = default)
     {
-        var workflows = await _provider.GetAllByWorkspaceAsync(workspaceId, cancellationToken);
+        var pagedWorkflows = await _provider.GetAllByWorkspaceAsync(workspaceId, cancellationToken);
         
-        return workflows.Select(w => new WorkflowSummaryResponse(
+        return new PagedList<WorkflowSummaryResponse>(pagedWorkflows.Select(w => new WorkflowSummaryResponse(
             w.RefId,
             w.Name,
             w.Description,
             w.IsEnabled,
             w.CreatedAt
-        )).ToList().AsReadOnly();
+        )), pagedWorkflows.TotalCount);
     }
 
     public async Task<WorkflowDefinition> GetByIdAsync(int workspaceId, int id, CancellationToken cancellationToken = default)

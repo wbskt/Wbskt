@@ -34,9 +34,9 @@ public class RegistrationPoliciesController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.read", cancellationToken);
+        var workSpaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.read", cancellationToken);
 
-        var pagedData = await _policyService.GetAllAsync(autoApproval, name, skip, take, cancellationToken);
+        var pagedData = await _policyService.GetAllAsync(workSpaceId, autoApproval, name, skip, take, cancellationToken);
 
         Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
 

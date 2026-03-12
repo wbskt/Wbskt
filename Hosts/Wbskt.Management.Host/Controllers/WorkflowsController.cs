@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.Common.Abstraction.Models;
 using Wbskt.Foundation.Abstraction;
 using Wbskt.Foundation.Abstraction.Exceptions;
 using Wbskt.Management.Host.Models;
@@ -29,11 +30,17 @@ public sealed class WorkflowsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IReadOnlyCollection<WorkflowSummaryResponse>> GetAll(Guid workspaceRef, CancellationToken cancellationToken)
+    public async Task<ListResponse<WorkflowSummaryResponse>> GetAll(Guid workspaceRef, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "workflows.read", cancellationToken);
+        var pagedData = await _workflowService.GetAllAsync(workspaceId, cancellationToken);
         
-        return await _workflowService.GetAllAsync(workspaceId, cancellationToken);
+        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
+
+        return new ListResponse<WorkflowSummaryResponse>
+        {
+            Items = pagedData
+        };
     }
 
     [HttpGet("{workflowRefId:guid}")]

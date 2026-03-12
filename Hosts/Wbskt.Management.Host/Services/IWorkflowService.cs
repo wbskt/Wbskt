@@ -1,3 +1,4 @@
+using Wbskt.Common.Abstraction.Models;
 using Wbskt.Management.Host.Models;
 using Wbskt.Workflow.Abstraction.Models;
 
@@ -5,7 +6,7 @@ namespace Wbskt.Management.Host.Services;
 
 public interface IWorkflowService
 {
-    Task<IReadOnlyCollection<WorkflowSummaryResponse>> GetAllAsync(int workspaceId, CancellationToken cancellationToken = default);
+    Task<IPagedList<WorkflowSummaryResponse>> GetAllAsync(int workspaceId, CancellationToken cancellationToken = default);
     
     Task<WorkflowDefinition> GetByIdAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
     

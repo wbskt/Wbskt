@@ -53,12 +53,14 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         );
     }
 
-    public async Task<IPagedList<RegistrationPolicy>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<RegistrationPolicy>> GetAllAsync(int workSpaceId, bool? autoApproval, string? name,
+        int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.RegistrationPolicy_GetAll",
             p =>
             {
+                p.AddWithValue("@WorkSpaceId", workSpaceId);
                 p.AddWithValue("@AutoApproval", (object?)autoApproval ?? DBNull.Value);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);

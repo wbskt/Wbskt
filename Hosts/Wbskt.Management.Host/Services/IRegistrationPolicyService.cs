@@ -6,7 +6,8 @@ namespace Wbskt.Management.Host.Services;
 
 public interface IRegistrationPolicyService
 {
-    Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default);
+    Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(int workSpaceId, bool? autoApproval, string? name,
+        int skip, int take, CancellationToken cancellationToken = default);
     Task<RegistrationPolicyResponse> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<RegistrationPolicyResponse> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);

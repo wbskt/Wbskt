@@ -19,9 +19,10 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         _eventBus = eventBus;
     }
 
-    public async Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(bool? autoApproval, string? name, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<RegistrationPolicyResponse>> GetAllAsync(int workSpaceId, bool? autoApproval,
+        string? name, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var pagedPolicies = await _provider.GetAllAsync(autoApproval, name, skip, take, cancellationToken);
+        var pagedPolicies = await _provider.GetAllAsync(workSpaceId, autoApproval, name, skip, take, cancellationToken);
         
         return new PagedList<RegistrationPolicyResponse>(pagedPolicies.Select(MapToResponse), pagedPolicies.TotalCount);
     }

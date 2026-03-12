@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Wbskt.Common.Abstraction.Models;
 using Wbskt.Common.Data;
 using Wbskt.Workflow.Entities;
 
@@ -18,11 +19,15 @@ public sealed class WorkflowProvider : BaseSqlProvider, IWorkflowProvider
             cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<WorkflowEntity>> GetAllByWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<WorkflowEntity>> GetAllByWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteCollectionAsync(
+        return await ExecutePagedCollectionAsync(
             "dbo.Workflow_GetAllBy_Workspace",
-            p => p.AddWithValue("@WorkspaceId", workspaceId),
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
             MapWorkflow,
             cancellationToken);
     }
