@@ -258,6 +258,9 @@
         <header>
             <div id="current-workspace-name" style="font-weight: 600; font-size: 1.1rem;">No Workspace Selected</div>
             <div style="display: flex; gap: 15px; align-items: center;">
+                <button class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="management.fetchAll()">
+                    <span id="refresh-icon">🔄</span> Refresh
+                </button>
                 <div id="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background: var(--secondary);"></div>
                 <span style="font-size: 0.875rem; color: var(--text-dim);">System Active</span>
             </div>
@@ -495,6 +498,7 @@
             logout() {
                 localStorage.removeItem('wbskt_token');
                 localStorage.removeItem('wbskt_workspace');
+                localStorage.removeItem('wbskt_simulated_clients');
                 location.reload();
             }
         };
@@ -506,6 +510,8 @@
                 
                 const ref = state.currentWorkspace.refId;
                 const headers = { 'Authorization': `Bearer ${state.token}` };
+                const refreshIcon = document.getElementById('refresh-icon');
+                if (refreshIcon) refreshIcon.classList.add('loading-spinner');
 
                 try {
                     // Policies
@@ -514,16 +520,25 @@
 
                     // Workflows
                     const wResp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${ref}/workflows`, { headers });
-                    if (wResp.ok) state.workflows = await wResp.json();
+                    if (wResp.ok) {
+                        const wData = await wResp.json();
+                        state.workflows = wData.items || wData.Items || [];
+                    }
 
                     // Clients
                     const cResp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${ref}/clients`, { headers });
-                    // Wait, I need to check if ClientsController exists and has GET /api/workspaces/{ref}/clients
-                    if (cResp.ok) state.clients = (await cResp.json()).items;
+                    if (cResp.ok) {
+                        const cData = await cResp.json();
+                        state.clients = cData.items || cData.Items || [];
+                    }
 
                     ui.refreshAll();
+                    ui.notify('Data refreshed');
                 } catch (err) {
                     console.error(err);
+                    ui.notify('Refresh failed', 'error');
+                } finally {
+                    if (refreshIcon) refreshIcon.classList.remove('loading-spinner');
                 }
             },
 
@@ -625,6 +640,24 @@
 
         // --- Simulator Module ---
         const simulator = {
+            saveToStorage(clientRefId, secret, name) {
+                const wsId = state.currentWorkspace.refId;
+                const key = `wbskt_sims_${wsId}`;
+                const sims = JSON.parse(localStorage.getItem(key) || '[]');
+                if (!sims.find(s => s.clientRefId === clientRefId)) {
+                    sims.push({ clientRefId, secret, name });
+                    localStorage.setItem(key, JSON.stringify(sims));
+                }
+            },
+
+            removeFromStorage(clientRefId) {
+                const wsId = state.currentWorkspace.refId;
+                const key = `wbskt_sims_${wsId}`;
+                let sims = JSON.parse(localStorage.getItem(key) || '[]');
+                sims = sims.filter(s => s.clientRefId !== clientRefId);
+                localStorage.setItem(key, JSON.stringify(sims));
+            },
+
             async register() {
                 const pin = document.getElementById('sim-policy-select').value;
                 const name = document.getElementById('sim-client-name').value || 'Simulated-Client';
@@ -639,6 +672,7 @@
                     const reg = await resp.json();
                     ui.notify(`Registered: ${reg.clientRefId}`);
                     
+                    this.saveToStorage(reg.clientRefId, reg.secret, name);
                     this.connect(reg.clientRefId, reg.secret, name);
                 } catch (err) {
                     ui.notify(err.message, 'error');
@@ -659,6 +693,7 @@
                     const simObj = {
                         clientRefId,
                         name,
+                        secret,
                         ws,
                         logs: []
                     };
@@ -685,6 +720,7 @@
                     };
 
                 } catch (err) {
+                    console.error(err);
                     ui.notify(`Connection failed for ${name}`, 'error');
                 }
             },
@@ -708,6 +744,14 @@
                 } catch (e) {
                     ui.notify('Invalid Payload JSON', 'error');
                 }
+            },
+
+            remove(index) {
+                const sim = state.activeSimulators[index];
+                if (sim.ws) sim.ws.close();
+                this.removeFromStorage(sim.clientRefId);
+                state.activeSimulators.splice(index, 1);
+                ui.refreshSimulator();
             }
         };
 
@@ -735,6 +779,11 @@
                 document.getElementById('current-workspace-name').innerText = state.currentWorkspace.name;
                 document.getElementById('user-info').innerText = `Workspace: ${state.currentWorkspace.name}`;
                 management.fetchAll();
+
+                // Reconnect saved simulators
+                const wsId = state.currentWorkspace.refId;
+                const saved = JSON.parse(localStorage.getItem(`wbskt_sims_${wsId}`) || '[]');
+                saved.forEach(s => simulator.connect(s.clientRefId, s.secret, s.name));
             },
 
             refreshAll() {
@@ -834,7 +883,10 @@
                                 <h3 style="margin:0;">${sim.name}</h3>
                                 <small style="font-family: monospace; color: var(--text-dim);">${sim.clientRefId}</small>
                             </div>
-                            <button class="btn-danger" onclick="state.activeSimulators[${idx}].ws.close()">Disconnect</button>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-secondary" onclick="simulator.connect('${sim.clientRefId}', '${sim.secret}', '${sim.name}')" ${sim.status==='connected'?'disabled':''}>Reconnect</button>
+                                <button class="btn-danger" onclick="simulator.remove(${idx})">Remove</button>
+                            </div>
                         </div>
                         <div class="grid" style="grid-template-columns: 1fr 1fr;">
                             <div>
@@ -845,7 +897,7 @@
                                 <div class="form-group">
                                     <textarea id="tele-payload-${idx}" placeholder="JSON Payload">{ "active": true }</textarea>
                                 </div>
-                                <button class="btn-secondary" style="width: 100%;" onclick="simulator.sendTelemetry(${idx})">Send Message</button>
+                                <button class="btn-secondary" style="width: 100%;" onclick="simulator.sendTelemetry(${idx})" ${sim.status!=='connected'?'disabled':''}>Send Message</button>
                             </div>
                             <div>
                                 <label>Client Logs</label>
@@ -859,7 +911,6 @@
                     `;
                     list.appendChild(card);
                     
-                    // Scroll to bottom of log
                     const logDiv = document.getElementById(`log-${idx}`);
                     logDiv.scrollTop = logDiv.scrollHeight;
                 });
