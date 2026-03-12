@@ -1,11 +1,11 @@
 <#PSScriptInfo
-.VERSION 1.2.0
+.VERSION 1.2.1
 .GUID f3a1d2c4-5e9b-4d8a-a6b3-2f8e4d0c9b4c
 .AUTHOR Richard Joy
 .COMPANYNAME WBSKT Inc.
 .COPYRIGHT Copyright (C) WBSKT Inc.
 .TAGS PowerShell, Database, Development, Wbskt
-.DESCRIPTION Deploys WBSKT databases with a forced drop-and-recreate logic when -Fresh is used.
+.DESCRIPTION Deploys WBSKT databases. Only drops-and-recreates when -Fresh is used.
 #>
 
 #Requires -Version 5.1
@@ -47,6 +47,8 @@ begin {
         )
 
         foreach ($path in $paths) {
+            
+            # Check if the path exists
             if (Test-Path $path) {
                 return $path
             }
@@ -54,6 +56,7 @@ begin {
 
         $fromPath = Get-Command "SqlPackage.exe" -ErrorAction SilentlyContinue
         
+        # Fallback to system path
         if ($fromPath) {
             return $fromPath.Source
         }
@@ -100,6 +103,7 @@ begin {
 
         $targetDir = Join-Path (Split-Path $ProjectPath) "bin\Release"
         
+        # Verify directory exists
         if (-not (Test-Path $targetDir)) {
             return $null
         }
@@ -108,6 +112,7 @@ begin {
                   Sort-Object LastWriteTime -Descending | 
                   Select-Object -First 1
 
+        # Return full path if found
         if ($dacpac) {
             return $dacpac.FullName
         }
@@ -119,9 +124,11 @@ begin {
         param(
             [string]$DbName,
             [string]$DacpacPath,
-            [string]$SqlPackageExecutable
+            [string]$SqlPackageExecutable,
+            [bool]$Recreate
         )
 
+        # Ensure we have a valid source file
         if (-not $DacpacPath) {
             throw "DACPAC path is null for $DbName. Did the build fail?"
         }
@@ -135,11 +142,12 @@ begin {
             "/SourceFile:$DacpacPath",
             "/TargetConnectionString:$connString",
             "/p:BlockOnPossibleDataLoss=False",
-            "/p:CreateNewDatabase=True" # Since we drop it, we always want this true if -Fresh was used
+            "/p:CreateNewDatabase=$Recreate"
         )
 
         & $SqlPackageExecutable @publishArgs
         
+        # Check exit code for failures
         if ($LASTEXITCODE -ne 0) {
             throw "SqlPackage failed with exit code $LASTEXITCODE for $DbName"
         }
@@ -154,6 +162,7 @@ process {
     # 1. Locate SqlPackage
     $exe = Get-SqlPackagePath
     
+    # Verify tool availability
     if (-not $exe) {
         throw "SqlPackage.exe not found. Please install SSDT or the sqlpackage dotnet tool."
     }
@@ -166,6 +175,7 @@ process {
     foreach ($project in $projects) {
         dotnet build $project -c Release
         
+        # Stop if build fails
         if ($LASTEXITCODE -ne 0) {
             throw "Build failed for: $project"
         }
@@ -179,11 +189,11 @@ process {
 
     # 4. Deploy Auth
     $authDacpac = Get-DacpacPath -ProjectPath $authProject -DacpacName "Wbskt.Database.Auth.dacpac"
-    Publish-Database -DbName $authDbName -DacpacPath $authDacpac -SqlPackageExecutable $exe
+    Publish-Database -DbName $authDbName -DacpacPath $authDacpac -SqlPackageExecutable $exe -Recreate $Fresh
 
     # 5. Deploy Core
     $coreDacpac = Get-DacpacPath -ProjectPath $coreProject -DacpacName "Wbskt.Database.dacpac"
-    Publish-Database -DbName $coreDbName -DacpacPath $coreDacpac -SqlPackageExecutable $exe
+    Publish-Database -DbName $coreDbName -DacpacPath $coreDacpac -SqlPackageExecutable $exe -Recreate $Fresh
 
     Write-Host "`nDeployment completed successfully." -ForegroundColor Green
 }
