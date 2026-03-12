@@ -17,3 +17,4 @@ BEGIN
     FROM dbo.Workflows
     WHERE Id = @Id;
 END
+GO

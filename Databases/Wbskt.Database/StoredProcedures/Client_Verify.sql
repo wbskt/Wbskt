@@ -20,3 +20,4 @@ BEGIN
     WHERE c.RefId = @RefId 
       AND c.Secret = @Secret;
 END
+GO

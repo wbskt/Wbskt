@@ -1,7 +1,7 @@
 CREATE PROCEDURE dbo.RefreshToken_Insert
     @UserId INT,
     @Token NVARCHAR(255),
-    @Expires DATETIME2,
+    @Expires DATETIME2(3),
     @CreatedByIp NVARCHAR(50),
     @Id INT OUTPUT
 AS
@@ -23,3 +23,4 @@ BEGIN
     
     SET @Id = SCOPE_IDENTITY();
 END
+GO

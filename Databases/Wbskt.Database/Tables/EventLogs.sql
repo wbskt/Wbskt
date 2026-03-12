@@ -1,15 +1,23 @@
 CREATE TABLE dbo.EventLogs (
-    Id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
-    EventId INT NOT NULL,
-    WorkspaceId INT NULL,
-    EventData NVARCHAR(MAX) NULL, -- JSON payload
-    CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    Id          INT           IDENTITY(1, 1) NOT NULL,
+    EventId     INT           NOT NULL,
+    WorkspaceId INT           NULL,
+    EventData   NVARCHAR(MAX) NULL, -- JSON payload
+    CreatedAt   DATETIME2(3)  NOT NULL           DEFAULT SYSUTCDATETIME(),
+
+    -- Constraints
+    CONSTRAINT PK_EventLogs        PRIMARY KEY (Id),
     CONSTRAINT FK_EventLogs_Events FOREIGN KEY (EventId) REFERENCES dbo.Events(Id)
 );
 GO
 
-CREATE INDEX IX_EventLogs_EventId ON dbo.EventLogs(EventId);
+-- Indexes
+CREATE INDEX IX_EventLogs_EventId
+    ON dbo.EventLogs (EventId);
 GO
-
-CREATE INDEX IX_EventLogs_CreatedAt ON dbo.EventLogs(CreatedAt);
+CREATE INDEX IX_EventLogs_CreatedAt
+    ON dbo.EventLogs (CreatedAt);
+GO
+CREATE INDEX IX_EventLogs_WorkspaceId
+    ON dbo.EventLogs (WorkspaceId); -- Recommended for multi-tenant filtering
 GO

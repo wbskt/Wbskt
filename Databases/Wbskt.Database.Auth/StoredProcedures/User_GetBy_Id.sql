@@ -14,3 +14,4 @@ BEGIN
     FROM dbo.Users
     WHERE Id = @Id;
 END
+GO

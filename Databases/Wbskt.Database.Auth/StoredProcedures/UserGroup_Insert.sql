@@ -3,7 +3,9 @@ CREATE PROCEDURE dbo.UserGroup_Insert
     @GroupId INT
 AS
 BEGIN
-    INSERT INTO dbo.UserGroups (
+    SET NOCOUNT ON;
+
+INSERT INTO dbo.UserGroups (
         UserId, 
         GroupId
     )
@@ -12,3 +14,4 @@ BEGIN
         @GroupId
     );
 END
+GO

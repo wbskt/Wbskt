@@ -7,3 +7,4 @@ BEGIN
     DELETE FROM dbo.Workflows
     WHERE Id = @Id;
 END
+GO

@@ -1,17 +1,17 @@
-SET ANSI_NULLS ON
+SET ANSI_NULLS ON;
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER ON;
 GO
 
 CREATE VIEW dbo.ViewEvents
 AS
-SELECT 
-    E.EventName, 
-    E.EventCriticality,
-    EL.CreatedAt, 
-    EL.WorkspaceId, 
-    EL.EventData 
-FROM EventLogs EL 
-    INNER JOIN dbo.Events 
-        E on E.Id = EL.EventId
-    GO
+SELECT
+    e.EventName,
+    e.EventCriticality,
+    el.CreatedAt,
+    el.WorkspaceId,
+    el.EventData
+FROM dbo.EventLogs AS el
+INNER JOIN dbo.Events AS e
+    ON e.Id = el.EventId;
+GO

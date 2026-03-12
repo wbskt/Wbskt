@@ -14,3 +14,4 @@ BEGIN
     FROM dbo.RefreshTokens
     WHERE Token = @Token;
 END
+GO

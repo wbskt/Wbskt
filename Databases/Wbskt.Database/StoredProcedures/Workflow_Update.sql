@@ -16,3 +16,4 @@ BEGIN
         Version = Version + 1
     WHERE Id = @Id;
 END
+GO

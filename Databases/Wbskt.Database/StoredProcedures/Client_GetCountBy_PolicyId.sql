@@ -9,3 +9,4 @@ BEGIN
     WHERE PolicyId = @PolicyId
       AND Status = 1; -- 1: Registered
 END
+GO

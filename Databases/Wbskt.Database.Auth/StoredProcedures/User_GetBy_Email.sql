@@ -14,3 +14,4 @@ BEGIN
     FROM dbo.Users
     WHERE Email = @Email;
 END
+GO

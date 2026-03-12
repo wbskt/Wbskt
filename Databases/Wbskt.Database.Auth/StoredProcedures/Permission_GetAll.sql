@@ -8,3 +8,4 @@ BEGIN
         Description
     FROM dbo.Permissions;
 END
+GO

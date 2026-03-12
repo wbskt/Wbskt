@@ -17,3 +17,4 @@ BEGIN
     FROM dbo.Workflows
     WHERE RefId = @RefId;
 END
+GO

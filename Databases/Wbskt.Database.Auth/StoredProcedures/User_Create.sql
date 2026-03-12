@@ -20,3 +20,4 @@ BEGIN
     
     SET @Id = SCOPE_IDENTITY();
 END
+GO

@@ -3,7 +3,9 @@ CREATE PROCEDURE dbo.Role_Create
     @Description NVARCHAR(255)
 AS
 BEGIN
-    INSERT INTO dbo.Roles (
+    SET NOCOUNT ON;
+
+INSERT INTO dbo.Roles (
         Name, 
         Description
     )
@@ -12,3 +14,4 @@ BEGIN
         @Description
     );
 END
+GO

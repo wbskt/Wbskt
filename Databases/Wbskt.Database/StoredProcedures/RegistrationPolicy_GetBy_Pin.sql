@@ -16,3 +16,4 @@ BEGIN
     FROM dbo.RegistrationPolicies
     WHERE Pin = @Pin;
 END
+GO

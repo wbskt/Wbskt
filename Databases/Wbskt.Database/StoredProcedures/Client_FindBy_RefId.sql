@@ -8,3 +8,4 @@ BEGIN
     FROM dbo.Clients
     WHERE RefId = @RefId;
 END
+GO

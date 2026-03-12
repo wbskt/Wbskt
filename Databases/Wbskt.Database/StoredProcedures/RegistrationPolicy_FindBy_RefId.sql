@@ -9,3 +9,4 @@ BEGIN
     FROM dbo.RegistrationPolicies
     WHERE RefId = @RefId;
 END
+GO

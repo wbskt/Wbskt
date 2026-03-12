@@ -1,18 +1,29 @@
 /*
- Pre-Deployment Script Template							
 --------------------------------------------------------------------------------------
- This file contains SQL statements that will be executed before the build script.	
+Pre-Deployment Script: Snapshot Isolation Configuration
 --------------------------------------------------------------------------------------
 */
 
--- Enable Read Committed Snapshot Isolation (RCSI)
--- This improves concurrency by preventing readers from being blocked by writers.
-IF (SELECT is_read_committed_snapshot_on FROM sys.databases WHERE name = DB_NAME()) = 0
+-- 1. Enable Read Committed Snapshot Isolation (RCSI)
+-- Improves concurrency: Readers do NOT block Writers, and Writers do NOT block Readers.
+IF (SELECT is_read_committed_snapshot_on
+    FROM sys.databases
+    WHERE name = DB_NAME()) = 0
 BEGIN
-    -- We must use a separate batch and force other connections to close
-    PRINT 'Enabling READ_COMMITTED_SNAPSHOT for ' + DB_NAME();
-    
-    DECLARE @sql NVARCHAR(MAX) = 'ALTER DATABASE [' + DB_NAME() + '] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;';
-    EXEC sp_executesql @sql;
+    PRINT '>>> Configuring Database: Enabling READ_COMMITTED_SNAPSHOT for ' + DB_NAME();
+
+    DECLARE @dbName  NVARCHAR(256) = DB_NAME();
+    DECLARE @stmt    NVARCHAR(MAX) = N'ALTER DATABASE [' + @dbName + N'] 
+                                         SET READ_COMMITTED_SNAPSHOT ON 
+                                         WITH ROLLBACK IMMEDIATE;';
+
+    -- EXECUTE WITH elevated awareness of connection termination
+    EXEC sp_executesql @stmt;
+
+    PRINT '>>> Success: READ_COMMITTED_SNAPSHOT is now ON.';
+END
+ELSE
+    BEGIN
+    PRINT '>>> Status: READ_COMMITTED_SNAPSHOT is already enabled for ' + DB_NAME();
 END
 GO

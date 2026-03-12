@@ -3,7 +3,9 @@ CREATE PROCEDURE dbo.Group_Create
     @ParentGroupId INT = NULL
 AS
 BEGIN
-    INSERT INTO dbo.Groups (
+    SET NOCOUNT ON;
+
+INSERT INTO dbo.Groups (
         Name, 
         ParentGroupId
     )
@@ -12,3 +14,4 @@ BEGIN
         @ParentGroupId
     );
 END
+GO

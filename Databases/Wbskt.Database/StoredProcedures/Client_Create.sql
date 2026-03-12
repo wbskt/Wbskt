@@ -31,3 +31,4 @@ BEGIN
     FROM dbo.Clients
     WHERE Id = SCOPE_IDENTITY();
 END
+GO

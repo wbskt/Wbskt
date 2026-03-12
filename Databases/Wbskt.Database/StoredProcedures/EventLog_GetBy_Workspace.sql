@@ -9,7 +9,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Total count of the entire table for this workspace
+    -- Total count of the entire TABLE for this workspace
     SELECT @TotalCount = COUNT(*)
     FROM dbo.EventLogs
     WHERE WorkspaceId = @WorkspaceId;

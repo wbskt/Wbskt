@@ -9,3 +9,4 @@ BEGIN
         Description
     FROM dbo.Roles;
 END
+GO

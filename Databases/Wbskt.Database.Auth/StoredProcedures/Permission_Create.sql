@@ -3,9 +3,13 @@ CREATE PROCEDURE dbo.Permission_Create
     @Description NVARCHAR(255)
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = @Slug)
+    SET NOCOUNT ON;
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = @Slug)
     BEGIN
-        INSERT INTO dbo.Permissions (
+    SET NOCOUNT ON;
+
+INSERT INTO dbo.Permissions (
             Slug, 
             Description
         )
@@ -15,3 +19,4 @@ BEGIN
         );
     END
 END
+GO

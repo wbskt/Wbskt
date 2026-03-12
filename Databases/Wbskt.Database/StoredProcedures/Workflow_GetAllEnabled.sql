@@ -16,3 +16,4 @@ BEGIN
     FROM dbo.Workflows
     WHERE IsEnabled = 1;
 END
+GO

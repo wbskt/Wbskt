@@ -4,12 +4,16 @@ CREATE PROCEDURE dbo.UserPermission_Grant
     @IsDeny BIT
 AS
 BEGIN
-    DECLARE @PermissionId INT;
+    SET NOCOUNT ON;
+
+DECLARE @PermissionId INT;
     SELECT @PermissionId = Id FROM dbo.Permissions WHERE Slug = @PermissionSlug;
 
     IF @PermissionId IS NOT NULL
     BEGIN
-        MERGE dbo.UserPermissions AS target
+    SET NOCOUNT ON;
+
+MERGE dbo.UserPermissions AS target
         USING (SELECT @UserId AS UserId, @PermissionId AS PermissionId) AS source
         ON (target.UserId = source.UserId AND target.PermissionId = source.PermissionId)
         WHEN MATCHED THEN
@@ -27,3 +31,4 @@ BEGIN
             );
     END
 END
+GO

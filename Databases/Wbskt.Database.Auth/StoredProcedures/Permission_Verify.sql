@@ -10,7 +10,7 @@ BEGIN
     -- 1. Get Permission ID
     SELECT @PermissionId = Id FROM dbo.Permissions WHERE Slug = @PermissionSlug;
 
-    -- If permission doesn't exist, strictly deny
+    -- IF permission doesn't exist, strictly deny
     IF @PermissionId IS NULL
     BEGIN
         SELECT 0 AS AccessGranted;
@@ -26,21 +26,21 @@ BEGIN
     FROM dbo.UserPermissions
     WHERE UserId = @UserId AND PermissionId = @PermissionId;
 
-    -- If User has explicit DENY -> DENY
+    -- IF User has explicit DENY -> DENY
     IF @UserDeny = 1
     BEGIN
         SELECT 0 AS AccessGranted;
         RETURN;
     END
 
-    -- If User has explicit ALLOW -> ALLOW
+    -- IF User has explicit ALLOW -> ALLOW
     IF @UserAllow = 1
     BEGIN
         SELECT 1 AS AccessGranted;
         RETURN;
     END
 
-    -- 3. Resolve All Roles (Direct + Group Inherited)
+    -- 3. Resolve ALL Roles (Direct + GROUP Inherited)
     ;WITH AllGroups AS (
         -- Anchor: Direct Groups
         SELECT GroupId FROM dbo.UserGroups WHERE UserId = @UserId
@@ -72,7 +72,7 @@ BEGIN
     INNER JOIN #UserEffectiveRoles uer ON uer.RoleId = rp.RoleId
     WHERE rp.PermissionId = @PermissionId;
 
-    -- Clean up temp table
+    -- Clean up temp TABLE
     DROP TABLE #UserEffectiveRoles;
 
     -- Logic: Any Role DENY -> DENY
@@ -89,6 +89,7 @@ BEGIN
         RETURN;
     END
 
-    -- Default: DENY
+    -- DEFAULT: DENY
     SELECT 0 AS AccessGranted;
 END
+GO

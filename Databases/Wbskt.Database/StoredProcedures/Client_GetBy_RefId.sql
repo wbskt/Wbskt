@@ -18,3 +18,4 @@ BEGIN
     INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id
     WHERE c.RefId = @RefId;
 END
+GO

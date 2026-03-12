@@ -9,3 +9,4 @@ BEGIN
         ParentGroupId
     FROM dbo.Groups;
 END
+GO

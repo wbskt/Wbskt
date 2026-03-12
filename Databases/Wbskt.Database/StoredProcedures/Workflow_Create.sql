@@ -25,3 +25,4 @@ BEGIN
     FROM dbo.Workflows w
     JOIN @InsertedId i ON w.Id = i.Id;
 END
+GO
