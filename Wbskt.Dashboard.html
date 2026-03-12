@@ -227,8 +227,17 @@
             </div>
             <div id="workspace-select" style="display: none;">
                 <h2 style="font-size: 1.25rem;">Select Workspace</h2>
-                <div id="workspace-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <div id="workspace-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                     <!-- Workspaces will be injected here -->
+                </div>
+                
+                <div style="padding-top: 20px; border-top: 1px solid var(--border);">
+                    <h3 style="font-size: 1rem; margin-bottom: 15px;">Create New Workspace</h3>
+                    <div class="form-group">
+                        <label>Workspace Name</label>
+                        <input type="text" id="new-ws-name" placeholder="My Production Workspace">
+                    </div>
+                    <button class="btn-primary" style="width: 100%;" onclick="auth.createWorkspace()">Create & Select</button>
                 </div>
             </div>
         </div>
@@ -493,6 +502,30 @@
                 localStorage.setItem('wbskt_workspace', JSON.stringify(ws));
                 document.getElementById('auth-overlay').style.display = 'none';
                 ui.initDashboard();
+            },
+
+            async createWorkspace() {
+                const name = document.getElementById('new-ws-name').value;
+                if (!name) return ui.notify('Name is required', 'error');
+
+                try {
+                    const resp = await fetch(`${CONFIG.authUrl}/api/workspaces`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify({ name: name, description: '' })
+                    });
+
+                    if (!resp.ok) throw new Error('Failed to create workspace');
+                    
+                    const ws = await resp.json();
+                    ui.notify('Workspace created');
+                    this.selectWorkspace(ws);
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
             },
 
             logout() {
