@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WBSKT Control Dashboard</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-hover: #334155;
+            --primary: #38bdf8;
+            --secondary: #2dd4bf;
+            --accent: #818cf8;
+            --error: #f43f5e;
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --border: #334155;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styles */
+        aside {
+            width: 280px;
+            background-color: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .logo { font-size: 1.5rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+        .logo-icon { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; }
+
+        nav { display: flex; flex-direction: column; gap: 5px; }
+        .nav-item {
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-dim);
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .nav-item:hover { background: var(--surface-hover); color: var(--text); }
+        .nav-item.active { background: var(--primary); color: #000; }
+
+        /* Main Content Styles */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            height: 64px;
+            border-bottom: 1px solid var(--border);
+            padding: 0 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface);
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: none; /* Controlled by JS */
+        }
+        .content-area.active { display: block; }
+
+        /* UI Components */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        h1, h2, h3 { margin-top: 0; }
+        
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.875rem; color: var(--text-dim); font-weight: 500; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 8px;
+            font-family: inherit;
+        }
+        input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.1s, opacity 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-primary { background: var(--primary); color: #000; }
+        .btn-secondary { background: var(--surface-hover); color: var(--text); }
+        .btn-accent { background: var(--accent); color: white; }
+        .btn-danger { background: var(--error); color: white; }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-success { background: #065f46; color: #34d399; }
+        .badge-warning { background: #92400e; color: #fbbf24; }
+        .badge-info { background: #1e40af; color: #60a5fa; }
+
+        /* Auth Screen */
+        #auth-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .auth-card {
+            width: 400px;
+            background: var(--surface);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+        }
+
+        /* Client Simulator Table */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: var(--text-dim); font-size: 0.75rem; padding: 12px; border-bottom: 1px solid var(--border); }
+        td { padding: 12px; border-bottom: 1px solid var(--border); }
+
+        .client-log {
+            height: 150px;
+            overflow-y: auto;
+            background: #000;
+            padding: 8px;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 0.75rem;
+            border-radius: 4px;
+        }
+
+        /* Notifications */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 2000;
+        }
+        .toast {
+            padding: 12px 20px;
+            border-radius: 8px;
+            background: var(--surface);
+            border-left: 4px solid var(--primary);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .loading-spinner {
+            width: 20px; height: 20px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <!-- Auth Overlay -->
+    <div id="auth-overlay">
+        <div class="auth-card">
+            <div class="logo" style="margin-bottom: 30px;">
+                <div class="logo-icon"></div>
+                WBSKT Core
+            </div>
+            <div id="login-form">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="login-email" value="admin@wbskt.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="login-pass" value="Admin@123">
+                </div>
+                <button class="btn-primary" style="width: 100%;" onclick="auth.login()">Login</button>
+            </div>
+            <div id="workspace-select" style="display: none;">
+                <h2 style="font-size: 1.25rem;">Select Workspace</h2>
+                <div id="workspace-list" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Workspaces will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside>
+        <div class="logo">
+            <div class="logo-icon"></div>
+            WBSKT
+        </div>
+        <nav>
+            <div class="nav-item active" data-target="dashboard">Overview</div>
+            <div class="nav-item" data-target="policies">Policies</div>
+            <div class="nav-item" data-target="workflows">Workflows</div>
+            <div class="nav-item" data-target="clients">Clients</div>
+            <div class="nav-item" data-target="simulator">Simulator</div>
+        </nav>
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border);">
+            <div id="user-info" style="font-size: 0.875rem; color: var(--text-dim);">Logged in as...</div>
+            <button class="btn-secondary" style="margin-top: 10px; width: 100%;" onclick="auth.logout()">Logout</button>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main>
+        <header>
+            <div id="current-workspace-name" style="font-weight: 600; font-size: 1.1rem;">No Workspace Selected</div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <div id="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background: var(--secondary);"></div>
+                <span style="font-size: 0.875rem; color: var(--text-dim);">System Active</span>
+            </div>
+        </header>
+
+        <!-- View: Overview -->
+        <div id="view-dashboard" class="content-area active">
+            <h1>System Overview</h1>
+            <div class="grid">
+                <div class="card">
+                    <h3 style="color: var(--primary);">Workspaces</h3>
+                    <div id="stat-workspaces" style="font-size: 2.5rem; font-weight: 800;">0</div>
+                </div>
+                <div class="card">
+                    <h3 style="color: var(--secondary);">Active Clients</h3>
+                    <div id="stat-clients" style="font-size: 2.5rem; font-weight: 800;">0</div>
+                </div>
+                <div class="card">
+                    <h3 style="color: var(--accent);">Workflows</h3>
+                    <div id="stat-workflows" style="font-size: 2.5rem; font-weight: 800;">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Policies -->
+        <div id="view-policies" class="content-area">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <h1>Registration Policies</h1>
+                <button class="btn-primary" onclick="ui.showModal('create-policy-modal')">Create Policy</button>
+            </div>
+            <div id="policies-list" class="grid">
+                <!-- Policies will be injected here -->
+            </div>
+        </div>
+
+        <!-- View: Workflows -->
+        <div id="view-workflows" class="content-area">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <h1>Workflows</h1>
+                <button class="btn-primary" onclick="ui.showModal('create-workflow-modal')">Create Workflow</button>
+            </div>
+            <div id="workflows-list" class="grid">
+                <!-- Workflows will be injected here -->
+            </div>
+        </div>
+
+        <!-- View: Clients -->
+        <div id="view-clients" class="content-area">
+            <h1>Manage Clients</h1>
+            <div class="card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>CLIENT REF</th>
+                            <th>NAME</th>
+                            <th>STATUS</th>
+                            <th>POLICY</th>
+                            <th>CREATED AT</th>
+                            <th>ACTIONS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-table-body">
+                        <!-- Clients will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- View: Simulator -->
+        <div id="view-simulator" class="content-area">
+            <h1>Client Simulator</h1>
+            <div class="card">
+                <h2>Add Virtual Client</h2>
+                <div style="display: flex; gap: 20px; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Select Policy</label>
+                        <select id="sim-policy-select"></select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Client Name</label>
+                        <input type="text" id="sim-client-name" placeholder="Device-01">
+                    </div>
+                    <button class="btn-primary" onclick="simulator.register()">Register & Connect</button>
+                </div>
+            </div>
+
+            <div id="simulated-clients-list">
+                <!-- Virtual clients will appear here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="modal-container" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1500; align-items: center; justify-content: center;">
+        
+        <!-- Create Policy Modal -->
+        <div id="create-policy-modal" class="card modal-content" style="display: none; width: 500px;">
+            <h2>New Registration Policy</h2>
+            <div class="form-group">
+                <label>Policy Name</label>
+                <input type="text" id="policy-name" placeholder="Smart Home Policy">
+            </div>
+            <div class="form-group">
+                <label>Max Clients (Empty for unlimited)</label>
+                <input type="number" id="policy-max" placeholder="10">
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="policy-auto" checked style="width: auto;">
+                <label style="margin-bottom: 0;">Auto-approve clients</label>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
+                <button class="btn-primary" onclick="management.createPolicy()">Create</button>
+            </div>
+        </div>
+
+        <!-- Create Workflow Modal -->
+        <div id="create-workflow-modal" class="card modal-content" style="display: none; width: 500px;">
+            <h2>New Workflow</h2>
+            <div class="form-group">
+                <label>Workflow Name</label>
+                <input type="text" id="workflow-name" placeholder="Daily Light Schedule">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="workflow-desc" placeholder="Turns off all lights at midnight..."></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
+                <button class="btn-primary" onclick="management.createWorkflow()">Create</button>
+            </div>
+        </div>
+
+        <!-- Edit Workflow Modal -->
+        <div id="edit-workflow-modal" class="card modal-content" style="display: none; width: 800px; max-height: 90vh; overflow-y: auto;">
+            <h2 id="edit-workflow-title">Edit Workflow</h2>
+            <div class="form-group">
+                <label>Definition (JSON)</label>
+                <textarea id="workflow-json" style="height: 400px; font-family: monospace; font-size: 0.8rem;"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
+                <button class="btn-primary" onclick="management.saveWorkflow()">Save Definition</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        const CONFIG = {
+            authUrl: 'https://localhost:7000',
+            mgmtUrl: 'https://localhost:7010',
+            socketUrl: 'https://localhost:7020',
+            workflowUrl: 'https://localhost:7030'
+        };
+
+        const state = {
+            token: localStorage.getItem('wbskt_token'),
+            user: null,
+            workspaces: [],
+            currentWorkspace: JSON.parse(localStorage.getItem('wbskt_workspace') || 'null'),
+            policies: [],
+            workflows: [],
+            clients: [],
+            activeSimulators: []
+        };
+
+        // --- Auth Module ---
+        const auth = {
+            async login() {
+                const email = document.getElementById('login-email').value;
+                const pass = document.getElementById('login-pass').value;
+
+                try {
+                    const resp = await fetch(`${CONFIG.authUrl}/api/auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email, password: pass })
+                    });
+
+                    if (!resp.ok) throw new Error('Invalid credentials');
+                    
+                    const data = await resp.json();
+                    state.token = data.accessToken;
+                    localStorage.setItem('wbskt_token', state.token);
+                    
+                    ui.notify('Logged in successfully');
+                    this.loadWorkspaces();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async loadWorkspaces() {
+                try {
+                    const resp = await fetch(`${CONFIG.authUrl}/api/workspaces`, {
+                        headers: { 'Authorization': `Bearer ${state.token}` }
+                    });
+
+                    if (!resp.ok) throw new Error('Failed to load workspaces');
+                    
+                    state.workspaces = await resp.json();
+                    this.showWorkspacePicker();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            showWorkspacePicker() {
+                document.getElementById('login-form').style.display = 'none';
+                const picker = document.getElementById('workspace-select');
+                picker.style.display = 'block';
+                
+                const list = document.getElementById('workspace-list');
+                list.innerHTML = '';
+                
+                state.workspaces.forEach(ws => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-secondary';
+                    btn.style.justifyContent = 'space-between';
+                    btn.innerHTML = `<span>${ws.name}</span> <span style="font-size: 0.7rem; opacity: 0.5;">${ws.refId}</span>`;
+                    btn.onclick = () => this.selectWorkspace(ws);
+                    list.appendChild(btn);
+                });
+            },
+
+            selectWorkspace(ws) {
+                state.currentWorkspace = ws;
+                localStorage.setItem('wbskt_workspace', JSON.stringify(ws));
+                document.getElementById('auth-overlay').style.display = 'none';
+                ui.initDashboard();
+            },
+
+            logout() {
+                localStorage.removeItem('wbskt_token');
+                localStorage.removeItem('wbskt_workspace');
+                location.reload();
+            }
+        };
+
+        // --- Management Module ---
+        const management = {
+            async fetchAll() {
+                if (!state.currentWorkspace) return;
+                
+                const ref = state.currentWorkspace.refId;
+                const headers = { 'Authorization': `Bearer ${state.token}` };
+
+                try {
+                    // Policies
+                    const pResp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${ref}/registration-policies`, { headers });
+                    if (pResp.ok) state.policies = (await pResp.json()).items;
+
+                    // Workflows
+                    const wResp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${ref}/workflows`, { headers });
+                    if (wResp.ok) state.workflows = await wResp.json();
+
+                    // Clients
+                    const cResp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${ref}/clients`, { headers });
+                    // Wait, I need to check if ClientsController exists and has GET /api/workspaces/{ref}/clients
+                    if (cResp.ok) state.clients = (await cResp.json()).items;
+
+                    ui.refreshAll();
+                } catch (err) {
+                    console.error(err);
+                }
+            },
+
+            async createPolicy() {
+                const name = document.getElementById('policy-name').value;
+                const max = document.getElementById('policy-max').value;
+                const auto = document.getElementById('policy-auto').checked;
+
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/registration-policies`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify({ 
+                            name, 
+                            maxClients: max ? parseInt(max) : null, 
+                            autoApproval: auto 
+                        })
+                    });
+
+                    if (!resp.ok) throw new Error('Failed to create policy');
+                    
+                    ui.notify('Policy created');
+                    ui.hideModal();
+                    this.fetchAll();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async createWorkflow() {
+                const name = document.getElementById('workflow-name').value;
+                const desc = document.getElementById('workflow-desc').value;
+
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify({ name, description: desc })
+                    });
+
+                    if (!resp.ok) throw new Error('Failed to create workflow');
+                    
+                    ui.notify('Workflow created');
+                    ui.hideModal();
+                    this.fetchAll();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async openWorkflowEditor(refId) {
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${refId}`, {
+                        headers: { 'Authorization': `Bearer ${state.token}` }
+                    });
+                    
+                    const wf = await resp.json();
+                    state.editingWorkflow = wf;
+                    
+                    document.getElementById('edit-workflow-title').innerText = `Editing: ${wf.name}`;
+                    document.getElementById('workflow-json').value = JSON.stringify(wf, null, 2);
+                    ui.showModal('edit-workflow-modal');
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async saveWorkflow() {
+                const json = document.getElementById('workflow-json').value;
+                try {
+                    const data = JSON.parse(json);
+                    const refId = state.editingWorkflow.workflowRefId;
+
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${refId}`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (!resp.ok) throw new Error('Update failed');
+                    
+                    ui.notify('Workflow saved');
+                    ui.hideModal();
+                    this.fetchAll();
+                } catch (err) {
+                    ui.notify('Invalid JSON or update error', 'error');
+                }
+            }
+        };
+
+        // --- Simulator Module ---
+        const simulator = {
+            async register() {
+                const pin = document.getElementById('sim-policy-select').value;
+                const name = document.getElementById('sim-client-name').value || 'Simulated-Client';
+
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/client-registrations/initiate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pin, name })
+                    });
+
+                    const reg = await resp.json();
+                    ui.notify(`Registered: ${reg.clientRefId}`);
+                    
+                    this.connect(reg.clientRefId, reg.secret, name);
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async connect(clientRefId, secret, name) {
+                try {
+                    const loginResp = await fetch(`${CONFIG.mgmtUrl}/api/client-auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ clientRefId, secret })
+                    });
+
+                    const { accessToken } = await loginResp.json();
+                    
+                    const ws = new WebSocket(`${CONFIG.socketUrl}/ws?access_token=${accessToken}`);
+                    const simObj = {
+                        clientRefId,
+                        name,
+                        ws,
+                        logs: []
+                    };
+
+                    ws.onopen = () => {
+                        simObj.status = 'connected';
+                        this.log(simObj, 'Connected to socket');
+                        state.activeSimulators.push(simObj);
+                        ui.refreshSimulator();
+                    };
+
+                    ws.onmessage = (e) => {
+                        this.log(simObj, `RECV: ${e.data}`, 'recv');
+                    };
+
+                    ws.onclose = () => {
+                        simObj.status = 'disconnected';
+                        this.log(simObj, 'Disconnected');
+                        ui.refreshSimulator();
+                    };
+
+                    ws.onerror = () => {
+                        this.log(simObj, 'Socket Error', 'error');
+                    };
+
+                } catch (err) {
+                    ui.notify(`Connection failed for ${name}`, 'error');
+                }
+            },
+
+            log(sim, msg, type = 'info') {
+                sim.logs.push({ time: new Date().toLocaleTimeString(), msg, type });
+                if (sim.logs.length > 50) sim.logs.shift();
+                ui.refreshSimulator();
+            },
+
+            sendTelemetry(index) {
+                const sim = state.activeSimulators[index];
+                const type = document.getElementById(`tele-type-${index}`).value;
+                const payloadStr = document.getElementById(`tele-payload-${index}`).value;
+                
+                try {
+                    const payload = JSON.parse(payloadStr);
+                    const msg = { type: 'telemetry', payload: { subType: type, data: payload } };
+                    sim.ws.send(JSON.stringify(msg));
+                    this.log(sim, `SENT: ${JSON.stringify(msg)}`, 'sent');
+                } catch (e) {
+                    ui.notify('Invalid Payload JSON', 'error');
+                }
+            }
+        };
+
+        // --- UI Module ---
+        const ui = {
+            init() {
+                // Navigation
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.onclick = () => {
+                        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                        item.classList.add('active');
+                        
+                        document.querySelectorAll('.content-area').forEach(v => v.classList.remove('active'));
+                        document.getElementById(`view-${item.dataset.target}`).classList.add('active');
+                    };
+                });
+
+                if (state.token && state.currentWorkspace) {
+                    document.getElementById('auth-overlay').style.display = 'none';
+                    this.initDashboard();
+                }
+            },
+
+            initDashboard() {
+                document.getElementById('current-workspace-name').innerText = state.currentWorkspace.name;
+                document.getElementById('user-info').innerText = `Workspace: ${state.currentWorkspace.name}`;
+                management.fetchAll();
+            },
+
+            refreshAll() {
+                this.renderPolicies();
+                this.renderWorkflows();
+                this.renderClients();
+                this.renderStats();
+            },
+
+            renderStats() {
+                document.getElementById('stat-workspaces').innerText = state.workspaces.length;
+                document.getElementById('stat-clients').innerText = state.clients.length;
+                document.getElementById('stat-workflows').innerText = state.workflows.length;
+            },
+
+            renderPolicies() {
+                const list = document.getElementById('policies-list');
+                const select = document.getElementById('sim-policy-select');
+                list.innerHTML = '';
+                select.innerHTML = '<option value="">-- Choose Policy --</option>';
+
+                state.policies.forEach(p => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                            <h3 style="margin: 0;">${p.name}</h3>
+                            <span class="badge ${p.autoApproval ? 'badge-success' : 'badge-warning'}">${p.autoApproval ? 'Auto' : 'Manual'}</span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 15px;">
+                            <div>PIN: <strong style="color: var(--primary); letter-spacing: 2px;">${p.pin}</strong></div>
+                            <div>Max Clients: ${p.maxClients || 'Unlimited'}</div>
+                        </div>
+                        <button class="btn-secondary" style="width: 100%; font-size: 0.8rem;">View Details</button>
+                    `;
+                    list.appendChild(card);
+
+                    const opt = document.createElement('option');
+                    opt.value = p.pin;
+                    opt.innerText = `${p.name} (${p.pin})`;
+                    select.appendChild(opt);
+                });
+            },
+
+            renderWorkflows() {
+                const list = document.getElementById('workflows-list');
+                list.innerHTML = '';
+
+                state.workflows.forEach(w => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                            <h3 style="margin: 0;">${w.name}</h3>
+                            <span class="badge ${w.isEnabled ? 'badge-success' : 'badge-info'}">${w.isEnabled ? 'Active' : 'Draft'}</span>
+                        </div>
+                        <p style="font-size: 0.875rem; color: var(--text-dim); margin-bottom: 20px;">${w.description || 'No description'}</p>
+                        <button class="btn-accent" style="width: 100%;" onclick="management.openWorkflowEditor('${w.workflowRefId}')">Edit Definition</button>
+                    `;
+                    list.appendChild(card);
+                });
+            },
+
+            renderClients() {
+                const tbody = document.getElementById('clients-table-body');
+                tbody.innerHTML = '';
+
+                state.clients.forEach(c => {
+                    const row = document.createElement('tr');
+                    const statusClass = c.status === 1 ? 'badge-success' : (c.status === 0 ? 'badge-warning' : '');
+                    const statusText = ['Pending', 'Registered', 'Revoked', 'Rejected'][c.status];
+
+                    row.innerHTML = `
+                        <td style="font-family: monospace; font-size: 0.75rem;">${c.clientRefId}</td>
+                        <td style="font-weight: 600;">${c.name}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td style="font-size: 0.75rem; color: var(--text-dim);">${c.policyRefId}</td>
+                        <td style="font-size: 0.75rem;">${new Date(c.createdAt).toLocaleString()}</td>
+                        <td><button class="btn-secondary" style="padding: 5px 10px; font-size: 0.7rem;">Manage</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            },
+
+            renderSimulator() {
+                const list = document.getElementById('simulated-clients-list');
+                list.innerHTML = '';
+
+                state.activeSimulators.forEach((sim, idx) => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.borderColor = sim.status === 'connected' ? 'var(--secondary)' : 'var(--error)';
+                    
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                            <div>
+                                <h3 style="margin:0;">${sim.name}</h3>
+                                <small style="font-family: monospace; color: var(--text-dim);">${sim.clientRefId}</small>
+                            </div>
+                            <button class="btn-danger" onclick="state.activeSimulators[${idx}].ws.close()">Disconnect</button>
+                        </div>
+                        <div class="grid" style="grid-template-columns: 1fr 1fr;">
+                            <div>
+                                <label>Send Telemetry</label>
+                                <div class="form-group">
+                                    <input type="text" id="tele-type-${idx}" value="status" placeholder="Type">
+                                </div>
+                                <div class="form-group">
+                                    <textarea id="tele-payload-${idx}" placeholder="JSON Payload">{ "active": true }</textarea>
+                                </div>
+                                <button class="btn-secondary" style="width: 100%;" onclick="simulator.sendTelemetry(${idx})">Send Message</button>
+                            </div>
+                            <div>
+                                <label>Client Logs</label>
+                                <div class="client-log" id="log-${idx}">
+                                    ${sim.logs.map(l => `<div style="margin-bottom:2px; color: ${l.type === 'sent' ? '#60a5fa' : (l.type === 'recv' ? '#34d399' : 'white')}">
+                                        [${l.time}] ${l.msg}
+                                    </div>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                    
+                    // Scroll to bottom of log
+                    const logDiv = document.getElementById(`log-${idx}`);
+                    logDiv.scrollTop = logDiv.scrollHeight;
+                });
+            },
+
+            refreshSimulator() {
+                this.renderSimulator();
+            },
+
+            showModal(id) {
+                document.getElementById('modal-container').style.display = 'flex';
+                document.querySelectorAll('.modal-content').forEach(m => m.style.display = 'none');
+                document.getElementById(id).style.display = 'block';
+            },
+
+            hideModal() {
+                document.getElementById('modal-container').style.display = 'none';
+            },
+
+            notify(msg, type = 'info') {
+                const container = document.getElementById('toast-container');
+                const t = document.createElement('div');
+                t.className = 'toast';
+                if (type === 'error') t.style.borderLeftColor = 'var(--error)';
+                t.innerText = msg;
+                container.appendChild(t);
+                setTimeout(() => t.remove(), 4000);
+            }
+        };
+
+        window.onload = () => ui.init();
+    </script>
+</body>
+</html>
