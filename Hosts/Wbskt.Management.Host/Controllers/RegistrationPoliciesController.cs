@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Common.Abstraction.Models;
 using Wbskt.Common.Abstraction.Models.Management;
@@ -10,6 +11,7 @@ namespace Wbskt.Management.Host.Controllers;
 
 [Route("api/workspaces/{workspaceRef:guid}/registration-policies")]
 [ApiController]
+[Authorize]
 public class RegistrationPoliciesController : ControllerBase
 {
     private readonly IRegistrationPolicyService _policyService;
