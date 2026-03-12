@@ -172,7 +172,7 @@ internal sealed class AuthService : IAuthService
             new Claim("type", "user")
         };
 
-        return _jwtService.GenerateToken(claims, TimeSpan.FromMinutes(15));
+        return _jwtService.GenerateToken(claims, TimeSpan.FromMinutes(60));
     }
 
     private RefreshToken GenerateRefreshToken(int userId)
