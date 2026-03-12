@@ -1,101 +1,47 @@
 # Project Overview
 
-This project, named WBSKT, is a .NET Core application that provides a client registration and authentication system. It's built with .NET 8 and uses a SQL Server database for data storage. The architecture follows a standard client-server model, where clients register and authenticate with a core service.
-
-The application currently supports user authentication with JWTs and refresh tokens, and provides a REST API for managing registration policies. The client registration workflow is also implemented, allowing clients to register themselves using a policy and receive a client-specific JWT.
+This project, named WBSKT, is a .NET Core application that provides a distributed client registration, management, and workflow automation system. It's built with .NET 10 (latest) and uses a microservice-oriented architecture.
 
 ## Architecture
 
-The solution is divided into several projects:
+The solution is divided into several host services:
 
-*   **Wbskt.Core.Service**: The main web service project, built with ASP.NET Core. It exposes the REST API for all user and client interactions.
-*   **Wbskt.Common**: A shared library containing common components such as contracts, services, readers, writers, records, and exceptions.
-*   **Wbskt.Database**: A SQL Server database project containing the schema definitions (tables and stored procedures) for the application.
-*   **Wbskt.EventBus**: A class library project that contains the core components of the in-process event bus, which is used for decoupling components.
-*   **Wbskt.Core.Installer**: A WiX installer project for creating a Windows installer for the application.
+*   **Wbskt.Auth.Host**: Handles user registration, authentication (JWT), and workspace management.
+*   **Wbskt.Management.Host**: Provides the management API for registration policies, clients, and workflow definitions.
+*   **Wbskt.Socket.Host**: Manages persistent WebSocket connections with registered clients.
+*   **Wbskt.Workflow.Engine.Host**: The "brain" of the system, executing workflows triggered by client events or schedules.
 
-## API Endpoints
+### Communication
+- **REST APIs**: Used for management and authentication.
+- **WebSockets**: Used for real-time bidirectional communication with clients.
+- **RabbitMQ**: Used for inter-service communication via a distributed event bus (MassTransit).
 
-### Users
+## Key Components
 
-- `POST /api/users/register`: Registers a new user.
-- `POST /api/users/login`: Logs in a user and returns an access token and a refresh token.
-- `POST /api/users/refresh-token`: Refreshes an access token using a refresh token.
+- **Registration Policies**: Define how clients can join a workspace (PIN-based, auto-approval).
+- **Workflows**: User-defined automation logic (Nodes & Edges) triggered by client payloads or property changes.
+- **Clients**: Edge devices or applications that connect via the SDK and exchange telemetry/commands.
 
-### Policies
+## Development Tools
 
-- `POST /api/policies`: Creates a new registration policy.
-- `GET /api/policies`: Gets all registration policies for the authenticated user.
-- `GET /api/policies/{refId}`: Gets a specific registration policy by its `RefId`.
-- `PUT /api/policies/{refId}`: Updates a registration policy.
-- `DELETE /api/policies/{refId}`: Deletes a registration policy.
+### WBSKT Control Dashboard
+A comprehensive HTML/JS tool located at `Wbskt.Dashboard.html` in the root directory. It allows:
+- User login and workspace selection.
+- Management of Policies and Workflows.
+- Real-time client simulation (multi-client support).
+- Monitoring client logs and telemetry.
 
-### Registrations
-
-- `POST /api/registrations`: Registers a new client using a registration policy.
-
-## Database Schema
-
-### Users
-
-- `Id`: `INT`
-- `Name`: `NVARCHAR(100)`
-- `EmailId`: `NVARCHAR(100)`
-- `PasswordHash`: `VARCHAR(512)`
-
-### UserRefreshTokens
-
-- `Id`: `INT`
-- `UserId`: `INT`
-- `Token`: `VARCHAR(256)`
-- `Expires`: `DATETIME`
-- `Created`: `DATETIME`
-- `CreatedByIp`: `VARCHAR(50)`
-- `Revoked`: `DATETIME`
-- `RevokedByIp`: `VARCHAR(50)`
-- `ReplacedByToken`: `VARCHAR(256)`
-
-### RegistrationPolicies
-
-- `Id`: `INT`
-- `RefId`: `GUID`
-- `UserId`: `INT`
-- `Name`: `NVARCHAR(100)`
-- `MaxClients`: `INT` (nullable)
-- `Expiry`: `DATETIME` (nullable)
-- `Pin`: `VARCHAR(6)` (unique, server-generated)
-
-### Clients
-
-- `Id`: `INT`
-- `RefId`: `GUID`
-- `UserId`: `INT`
-- `RegistrationPolicyId`: `INT`
-- `Name`: `NVARCHAR(100)` (nullable)
-- `Active`: `BOOL`
-
-### Servers
-
-- `Id`: `INT`
-- `PublicDomainName`: `VARCHAR(256)`
-- `Status`: `INT`
+### Port Configuration (Development)
+- **Auth**: `https://localhost:7000`
+- **Management**: `https://localhost:7010`
+- **Socket**: `https://localhost:7020`
+- **Workflow Engine**: `https://localhost:7030`
 
 ## Development Conventions
 
-*   **Coding Style**: The project follows standard C# coding conventions.
-*   **Dependency Injection**: The project uses the built-in dependency injection container in ASP.NET Core. Services are registered in `Program.cs` and in the `DependencyInjection` class in the `Wbskt.Common` project.
-*   **Authentication**: The service uses JWT Bearer authentication with refresh tokens. There are separate authentication schemes for users, clients, and socket servers, each with its own signing key.
-*   **API Security**:
-    - The API uses `RefId` (GUID) instead of integer IDs to expose resources.
-    - A `CurrentUser` service is used to securely access the current user's information from the request context.
-*   **Logging**: The project uses Serilog for logging.
-*   **Database Access**: The project uses `Microsoft.Data.SqlClient` for database access. All database operations are performed through stored procedures.
-*   **Caching**: The project uses a hybrid caching strategy.
-    - User-specific data (like policies) is cached per user.
-    - Global data (like servers) is cached using a `LastModified` timestamp.
-*   **Event Bus**: An in-process event bus is implemented to decouple components. This is currently used for cache invalidation. When a policy is created, updated, or deleted, the `RegistrationPoliciesWriter` publishes an event, and the `PolicyCacheHandler` subscribes to these events to invalidate the cache.
-*   **Exception Handling**: The project uses custom exception classes defined in `WbsktExceptions.cs` to handle specific error scenarios.
-*   **Testing**: There are no tests in the project currently.
+*   **RefId usage**: The API exposes GUID-based `RefId`s instead of internal integer IDs for all resources.
+*   **Event-Driven**: Most actions (like client payloads or state changes) publish events to RabbitMQ to trigger downstream logic.
+*   **Reference Mappers**: Used to securely map between external `RefId`s and internal database IDs within each service's context.
 
 ## Future Architecture & Vision: The Workflow Engine
 
