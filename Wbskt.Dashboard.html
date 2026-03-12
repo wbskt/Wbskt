@@ -695,7 +695,9 @@
                         name,
                         secret,
                         ws,
-                        logs: []
+                        logs: [],
+                        currentType: 'status',
+                        currentPayload: '{ "active": true }'
                     };
 
                     ws.onopen = () => {
@@ -892,10 +894,10 @@
                             <div>
                                 <label>Send Telemetry</label>
                                 <div class="form-group">
-                                    <input type="text" id="tele-type-${idx}" value="status" placeholder="Type">
+                                    <input type="text" id="tele-type-${idx}" value="${sim.currentType}" oninput="ui.updateSimInput(${idx}, 'currentType', this.value)" placeholder="Type">
                                 </div>
                                 <div class="form-group">
-                                    <textarea id="tele-payload-${idx}" placeholder="JSON Payload">{ "active": true }</textarea>
+                                    <textarea id="tele-payload-${idx}" oninput="ui.updateSimInput(${idx}, 'currentPayload', this.value)" placeholder="JSON Payload">${sim.currentPayload}</textarea>
                                 </div>
                                 <button class="btn-secondary" style="width: 100%;" onclick="simulator.sendTelemetry(${idx})" ${sim.status!=='connected'?'disabled':''}>Send Message</button>
                             </div>
@@ -918,6 +920,10 @@
 
             refreshSimulator() {
                 this.renderSimulator();
+            },
+
+            updateSimInput(index, field, value) {
+                state.activeSimulators[index][field] = value;
             },
 
             showModal(id) {
