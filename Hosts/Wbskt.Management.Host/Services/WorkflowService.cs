@@ -67,7 +67,7 @@ internal sealed class WorkflowService : IWorkflowService
 
         var workflow = await _provider.InsertAsync(workspaceId, request.Name, request.Description, cancellationToken);
         
-        await _eventBus.PublishAsync(new WorkflowCreatedEvent(workflow.RefId, workspaceId), cancellationToken);
+        await _eventBus.PublishAsync(new WorkflowCreatedEvent(workflow.RefId, workspaceId, workflow.Name), cancellationToken);
 
         return new WorkflowSummaryResponse(
             workflow.RefId,

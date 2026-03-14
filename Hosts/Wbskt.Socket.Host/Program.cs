@@ -36,7 +36,7 @@ public static class Program
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
 
         // Event Bus
-        builder.Services.AddRabbitMQEventBus(builder.Configuration);
+        builder.Services.AddRabbitMqEventBus(builder.Configuration);
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

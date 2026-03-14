@@ -45,7 +45,7 @@ public static class Program
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>("Workspace");
 
         // Event Bus
-        builder.Services.AddRabbitMQEventBus(builder.Configuration);
+        builder.Services.AddRabbitMqEventBus(builder.Configuration);
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

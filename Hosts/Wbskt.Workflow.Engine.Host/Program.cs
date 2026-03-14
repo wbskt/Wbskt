@@ -29,7 +29,7 @@ public static class Program
         // Add services to the container.
 
         // Event Bus
-        builder.Services.AddRabbitMQEventBus(builder.Configuration);
+        builder.Services.AddRabbitMqEventBus(builder.Configuration);
 
         // Workflow Engine
         builder.Services.AddWorkflowEngine();

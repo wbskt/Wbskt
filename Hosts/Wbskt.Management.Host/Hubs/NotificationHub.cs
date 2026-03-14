@@ -22,14 +22,14 @@ public class NotificationHub : Hub<INotificationClient>
             .RequestServices.GetRequiredService<IAuthServiceClient>();
             
         // The AuthenticationForwardingHandler will automatically add the user's token.
-        await authClient.ResolveWorkspaceAsync(Guid.Parse(workspaceRef), "workspaces:join");
+        var workspaceId = await authClient.ResolveWorkspaceAsync(Guid.Parse(workspaceRef), "workspaces:join");
 
         // If the above call fails, it will throw, and the user won't be added to the group.
-        await Groups.AddToGroupAsync(Context.ConnectionId, workspaceRef);
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"ws:{workspaceId}");
     }
 
-    public async Task LeaveWorkspace(string workspaceId)
+    public async Task LeaveWorkspace(int workspaceId)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, workspaceId);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"ws:{workspaceId}");
     }
 }

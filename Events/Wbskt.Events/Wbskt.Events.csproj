@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Wbskt.Common.Abstraction\Wbskt.Common.Abstraction.csproj" />
     <ProjectReference Include="..\Wbskt.EventBus\Wbskt.EventBus.csproj" />
   </ItemGroup>
 

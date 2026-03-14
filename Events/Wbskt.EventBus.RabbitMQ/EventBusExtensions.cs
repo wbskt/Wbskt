@@ -8,12 +8,13 @@ namespace Wbskt.EventBus.RabbitMQ;
 
 public static class EventBusExtensions
 {
-    public static void AddRabbitMQEventBus(
+    public static void AddRabbitMqEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
         Action<IBusRegistrationConfigurator>? configureBus = null,
-        Action<RabbitMQOptions>? configureOptions = null)
-    {
+        Action<RabbitMQOptions>? configureOptions = null,
+        Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureEndpoints = null)
+        {
         services.AddEventBusCore();
 
         var options = new RabbitMQOptions();
@@ -33,7 +34,7 @@ public static class EventBusExtensions
                     .Where(a => a.Name != null && a.Name.StartsWith("Wbskt"))
                     .Select(Assembly.Load)
                     .ToList();
-                
+
                 assemblies.Add(entryAssembly);
                 x.AddConsumers(assemblies.ToArray());
             }
@@ -47,6 +48,7 @@ public static class EventBusExtensions
                 });
 
                 cfg.ConfigureEndpoints(context);
+                configureEndpoints?.Invoke(context, cfg);
             });
         });
 

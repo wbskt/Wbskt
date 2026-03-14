@@ -1,0 +1,28 @@
+using System.Reflection;
+using MassTransit;
+using Microsoft.AspNetCore.SignalR;
+using Wbskt.Common.Abstraction;
+using Wbskt.Events.Abstractions;
+using Wbskt.Management.Host.Hubs;
+
+namespace Wbskt.Management.Host.Handlers;
+
+public class SignalRForwardingConsumer<TEvent> : IConsumer<TEvent> 
+    where TEvent : WorkspaceEvent
+{
+    private readonly IHubContext<NotificationHub> _hubContext;
+    private readonly SignalRNotifyAttribute _metadata;
+
+    public SignalRForwardingConsumer(IHubContext<NotificationHub> hubContext)
+    {
+        _hubContext = hubContext;
+        _metadata = typeof(TEvent).GetCustomAttribute<SignalRNotifyAttribute>()!;
+    }
+
+    public async Task Consume(ConsumeContext<TEvent> context)
+    {
+        var message = context.Message;
+
+        await _hubContext.Clients.Group($"ws:{message.WorkspaceId}").SendAsync(_metadata.ClientMethod, message);
+    }
+}

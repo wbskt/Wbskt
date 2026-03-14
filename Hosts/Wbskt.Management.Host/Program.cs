@@ -61,8 +61,22 @@ public static class Program
         builder.Services.AddWbsktEventDataServices();
 
         // Event Bus & Logging
-        var busConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);
-        builder.Services.AddRabbitMQEventBus(builder.Configuration, configureBus: busConfig);
+        var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);
+        
+
+        builder.Services.AddRabbitMqEventBus(builder.Configuration, 
+            configureBus: configurator =>
+            {
+                dbEventLoggingBusConfig(configurator);
+
+                // Register Auto SignalR Forwarding Consumers
+                configurator.AddAutoSignalRForwarding();
+            },
+            configureEndpoints: (context, cfg) => 
+            {
+                // Register Auto SignalR Forwarding Endpoints
+                cfg.ConfigureAutoSignalRForwardingEndpoints(context);
+            });
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
