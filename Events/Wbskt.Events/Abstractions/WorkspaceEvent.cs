@@ -10,6 +10,6 @@ public abstract record WorkspaceEvent : BaseEvent
         this.WorkspaceId = WorkspaceId;
     }
 
-    [JsonIgnore]
+    // [JsonIgnore] TODO: shouldn't pass this in signal r but must be serialised in rabbit mq
     public int WorkspaceId { get; }
 }

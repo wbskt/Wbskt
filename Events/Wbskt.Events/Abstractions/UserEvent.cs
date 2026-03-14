@@ -9,6 +9,6 @@ public abstract record UserEvent : AuthEvent
         this.UserId = UserId;
     }
 
-    [JsonIgnore]
+    // [JsonIgnore] TODO: shouldn't pass this in signal r but must be serialised in rabbit mq
     public int UserId { get; }
 }
