@@ -1,5 +1,6 @@
 using Wbskt.Common.Abstraction;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Events.Client;
 
@@ -10,4 +11,4 @@ public sealed record ClientRegistrationInitiatedEvent(
     int WorkspaceId,
     Guid PolicyRefId,
     string Name
-) : BaseEvent;
+) : ClientEvent(ClientRefId, WorkspaceId);
