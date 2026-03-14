@@ -89,6 +89,28 @@ public static class Program
                 ValidateIssuer = false,
                 ValidateAudience = false
             };
+            x.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var isSignalR = context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications");
+                    if (!isSignalR)
+                    {
+                        return Task.CompletedTask;
+                    }
+
+                    var accessToken = context.Request.Query["access_token"];
+                    if (string.IsNullOrWhiteSpace(accessToken))
+                    {
+                        return Task.CompletedTask;
+                    }
+
+                    context.Token = accessToken;
+
+                    return Task.CompletedTask;
+
+                }
+            };
         });
 
         builder.Services.AddAuthorization();
