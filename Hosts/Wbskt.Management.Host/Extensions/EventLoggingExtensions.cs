@@ -1,6 +1,4 @@
 using MassTransit;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Foundation.Abstraction;
 using Wbskt.Management.Host.Handlers.Events;

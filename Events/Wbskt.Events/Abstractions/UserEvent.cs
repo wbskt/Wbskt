@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Wbskt.Common.Abstraction;
 
 namespace Wbskt.Events.Abstractions;
