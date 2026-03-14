@@ -4,15 +4,8 @@ using Wbskt.Management.Host.Services.Clients;
 
 namespace Wbskt.Management.Host.Hubs;
 
-// Interface for strongly-typed client methods
-public interface INotificationClient
-{
-    Task ReceiveLatencyMeasurement(Guid clientRefId, double roundTripMs);
-    // Add more client methods for other event types here
-}
-
 [Authorize]
-public class NotificationHub : Hub<INotificationClient>
+public class NotificationHub : Hub
 {
     public async Task JoinWorkspace(string workspaceRef)
     {

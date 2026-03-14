@@ -54,7 +54,7 @@ public static class Program
         builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["Services:Auth"] 
-                                         ?? throw new ArgumentNullException("Services:Auth configuration is missing."));
+                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         
@@ -62,7 +62,6 @@ public static class Program
 
         // Event Bus & Logging
         var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);
-        
 
         builder.Services.AddRabbitMqEventBus(builder.Configuration, 
             configureBus: configurator =>
@@ -71,11 +70,6 @@ public static class Program
 
                 // Register Auto SignalR Forwarding Consumers
                 configurator.AddAutoSignalRForwarding();
-            },
-            configureEndpoints: (context, cfg) => 
-            {
-                // Register Auto SignalR Forwarding Endpoints
-                cfg.ConfigureAutoSignalRForwardingEndpoints(context);
             });
 
         // Register Keyed ReferenceMappers

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using MassTransit;
 using Microsoft.AspNetCore.SignalR;
 using Wbskt.Common.Abstraction;
@@ -7,13 +8,13 @@ using Wbskt.Management.Host.Hubs;
 
 namespace Wbskt.Management.Host.Handlers;
 
-public class SignalRForwardingConsumer<TEvent> : IConsumer<TEvent> 
+public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent> 
     where TEvent : WorkspaceEvent
 {
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly SignalRNotifyAttribute _metadata;
 
-    public SignalRForwardingConsumer(IHubContext<NotificationHub> hubContext)
+    public SignalRForwardingHandler(IHubContext<NotificationHub> hubContext)
     {
         _hubContext = hubContext;
         _metadata = typeof(TEvent).GetCustomAttribute<SignalRNotifyAttribute>()!;
@@ -23,6 +24,7 @@ public class SignalRForwardingConsumer<TEvent> : IConsumer<TEvent>
     {
         var message = context.Message;
 
-        await _hubContext.Clients.Group($"ws:{message.WorkspaceId}").SendAsync(_metadata.ClientMethod, message);
+        var json = JsonSerializer.Serialize(context.Message, context.Message.GetType());
+        await _hubContext.Clients.Group($"ws:{message.WorkspaceId}").SendAsync(_metadata.ClientMethod, json);
     }
 }
