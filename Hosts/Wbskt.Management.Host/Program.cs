@@ -95,12 +95,16 @@ public static class Program
 
         builder.Services.AddCors(options =>
         {
-            options.AddDefaultPolicy(policy =>
-            {
-                policy.AllowAnyOrigin()
-                      .AllowAnyHeader()
-                      .AllowAnyMethod();
-            });
+            options.AddPolicy("AllowAll",
+                policyBuilder =>
+                {
+                    policyBuilder
+                        .SetIsOriginAllowed(_ => true)
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials();
+                }
+            );
         });
 
         builder.Services.AddControllers();
@@ -113,7 +117,7 @@ public static class Program
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
-        app.UseCors();
+        app.UseCors("AllowAll");
 
         if (app.Environment.IsDevelopment())
         {
