@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Wbskt.Common.Abstraction;
 using Wbskt.EventBus.Abstractions;
 
 namespace Wbskt.Events.Abstractions;
@@ -10,6 +11,6 @@ public abstract record WorkspaceEvent : BaseEvent
         this.WorkspaceId = WorkspaceId;
     }
 
-    // [JsonIgnore] TODO: shouldn't pass this in signal r but must be serialised in rabbit mq
+    [SignalRPrivate]
     public int WorkspaceId { get; }
 }

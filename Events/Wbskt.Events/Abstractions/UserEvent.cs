@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Wbskt.Common.Abstraction;
 
 namespace Wbskt.Events.Abstractions;
 
@@ -9,6 +10,6 @@ public abstract record UserEvent : AuthEvent
         this.UserId = UserId;
     }
 
-    // [JsonIgnore] TODO: shouldn't pass this in signal r but must be serialised in rabbit mq
+    [SignalRPrivate]
     public int UserId { get; }
 }

@@ -1,7 +1,9 @@
 using System.Text;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using Wbskt.Common.Abstraction;
 using Wbskt.Common.Data;
 using Wbskt.Common.Infrastructure;
 using Wbskt.Common.Logging;
@@ -138,7 +140,13 @@ public static class Program
         });
 
         builder.Services.AddControllers();
-        builder.Services.AddSignalR();
+        builder.Services.AddSignalR().AddJsonProtocol(options =>
+        {
+            options.PayloadSerializerOptions.TypeInfoResolver = new DefaultJsonTypeInfoResolver
+            {
+                Modifiers = { IgnoreSignalRPrivateProperties }
+            };
+        });
         builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
@@ -163,5 +171,19 @@ public static class Program
         app.MapHub<NotificationHub>("/hubs/notifications");
 
         await app.RunAsync();
+    }
+
+    private static void IgnoreSignalRPrivateProperties(JsonTypeInfo typeInfo)
+    {
+        if (typeInfo.Kind != JsonTypeInfoKind.Object)
+            return;
+
+        foreach (JsonPropertyInfo propertyInfo in typeInfo.Properties)
+        {
+            if (propertyInfo.AttributeProvider?.GetCustomAttributes(typeof(SignalRPrivateAttribute), false).Length > 0)
+            {
+                propertyInfo.ShouldSerialize = (_, _) => false;
+            }
+        }
     }
 }

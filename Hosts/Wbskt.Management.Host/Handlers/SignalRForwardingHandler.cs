@@ -23,8 +23,6 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
     public async Task Consume(ConsumeContext<TEvent> context)
     {
         var message = context.Message;
-
-        var json = JsonSerializer.Serialize(context.Message, context.Message.GetType());
-        await _hubContext.Clients.Group($"ws:{message.WorkspaceId}").SendAsync(_metadata.ClientMethod, json);
+        await _hubContext.Clients.Group($"ws:{message.WorkspaceId}").SendAsync(_metadata.ClientMethod, message);
     }
 }
