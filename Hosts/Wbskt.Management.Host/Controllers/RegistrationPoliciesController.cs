@@ -27,6 +27,16 @@ public class RegistrationPoliciesController : ControllerBase
         _policyMapper = policyMapper;
     }
 
+    /// <summary>
+    /// Retrieves all registration policies for a specific workspace.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="autoApproval">Optional filter for auto-approval status.</param>
+    /// <param name="name">Optional filter for policy name (partial match).</param>
+    /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A paginated list of registration policies.</returns>
     [HttpGet]
     public async Task<ListResponse<RegistrationPolicyResponse>> GetAll(
         Guid workspaceRef,
@@ -48,6 +58,15 @@ public class RegistrationPoliciesController : ControllerBase
         };
     }
 
+    /// <summary>
+    /// Retrieves a specific registration policy by its reference ID.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="refId">The unique reference ID of the policy.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The registration policy details.</returns>
+    /// <exception cref="NotFoundException">Thrown if the policy is not found.</exception>
+    /// <exception cref="SecurityException">Thrown if the policy does not belong to the specified workspace.</exception>
     [HttpGet("{refId:guid}")]
     public async Task<RegistrationPolicyResponse> Get(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
@@ -75,6 +94,13 @@ public class RegistrationPoliciesController : ControllerBase
         );
     }
 
+    /// <summary>
+    /// Creates a new registration policy for a specific workspace.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="request">The policy creation request details.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The created registration policy details.</returns>
     [HttpPost]
     public async Task<RegistrationPolicyResponse> Create(Guid workspaceRef, RegistrationPolicyRequest request, CancellationToken cancellationToken)
     {

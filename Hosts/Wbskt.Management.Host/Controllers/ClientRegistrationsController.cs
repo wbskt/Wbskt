@@ -6,6 +6,7 @@ namespace Wbskt.Management.Host.Controllers;
 
 [Route("api/client-registrations")]
 [ApiController]
+[ApiExplorerSettings(IgnoreApi = true)]
 public class ClientRegistrationsController : ControllerBase
 {
     private readonly IClientRegistrationService _registrationService;

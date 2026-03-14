@@ -39,6 +39,16 @@ public class ClientsController : ControllerBase
         _policyService = policyService;
     }
 
+    /// <summary>
+    /// Retrieves all clients for a specific workspace with optional filtering.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="status">Optional filter by client status (Pending, Registered, etc.).</param>
+    /// <param name="name">Optional filter by client name (partial match).</param>
+    /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A paginated list of clients.</returns>
     [HttpGet]
     public async Task<ListResponse<ClientResponse>> GetAll(
         Guid workspaceRef,
@@ -60,6 +70,18 @@ public class ClientsController : ControllerBase
         };
     }
 
+    /// <summary>
+    /// Retrieves all clients associated with a specific registration policy.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="policyRefId">The unique reference ID of the registration policy.</param>
+    /// <param name="status">Optional filter by client status.</param>
+    /// <param name="name">Optional filter by client name.</param>
+    /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A paginated list of clients linked to the specified policy.</returns>
+    /// <exception cref="SecurityException">Thrown if the policy reference is invalid or does not belong to the workspace.</exception>
     [HttpGet("policy/{policyRefId:guid}")]
     public async Task<ListResponse<ClientResponse>> GetByPolicy(
         Guid workspaceRef,
@@ -94,6 +116,15 @@ public class ClientsController : ControllerBase
         return new ListResponse<ClientResponse> { Items = pagedData };
     }
 
+    /// <summary>
+    /// Updates the status of a specific client (e.g., Revoking or Approving a client).
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client to update.</param>
+    /// <param name="request">The new status details.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="SecurityException">Thrown if the client reference is invalid or access is denied.</exception>
     [HttpPatch("{clientRefId:guid}/status")]
     public async Task UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
@@ -108,6 +139,14 @@ public class ClientsController : ControllerBase
         await _clientService.UpdateStatusAsync(workspaceId, id, request.Status, cancellationToken);
     }
 
+    /// <summary>
+    /// Sends an asynchronous command payload to a specific registered client.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the target client.</param>
+    /// <param name="request">The command name and payload data.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{clientRefId:guid}/command")]
     public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
@@ -115,6 +154,13 @@ public class ClientsController : ControllerBase
         await _eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, workspaceId, request.CommandName, request.Payload), cancellationToken);
     }
 
+    /// <summary>
+    /// Triggers a ping event for a specific client to verify connectivity or wake state.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the target client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{clientRefId:guid}/ping")]
     public async Task Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
