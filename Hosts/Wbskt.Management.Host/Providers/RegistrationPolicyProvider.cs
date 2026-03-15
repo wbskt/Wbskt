@@ -92,6 +92,18 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         return await GetByRefIdAsync(refId, cancellationToken);
     }
 
+    public async Task UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Update", p =>
+        {
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@Name", request.Name);
+            p.AddWithValue("@AutoApproval", request.AutoApproval);
+            p.AddWithValue("@IsEnabled", request.IsEnabled);
+        }, cancellationToken);
+    }
+
     private static RegistrationPolicy MapPolicy(SqlDataReader reader)
     {
         return new RegistrationPolicy
@@ -103,6 +115,7 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             Name = reader.GetString(reader.GetOrdinal("Name")),
             MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
             AutoApproval = reader.GetBoolean(reader.GetOrdinal("AutoApproval")),
+            IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
     }

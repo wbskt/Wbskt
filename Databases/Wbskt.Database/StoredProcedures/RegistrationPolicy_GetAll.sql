@@ -25,8 +25,8 @@ BEGIN
         Name,
         MaxClients,
         AutoApproval,
-        CreatedAt
-    FROM dbo.RegistrationPolicies
+        IsEnabled,
+        CreatedAt    FROM dbo.RegistrationPolicies
     WHERE WorkspaceId = @WorkspaceId
       AND  (@AutoApproval IS NULL OR AutoApproval = @AutoApproval)
       AND (@Name IS NULL OR Name LIKE '%' + @Name + '%')

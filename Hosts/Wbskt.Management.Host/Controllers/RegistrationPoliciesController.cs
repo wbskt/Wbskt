@@ -90,6 +90,7 @@ public class RegistrationPoliciesController : ControllerBase
             policy.Name,
             policy.MaxClients,
             policy.AutoApproval,
+            policy.IsEnabled,
             policy.CreatedAt
         );
     }
@@ -106,5 +107,28 @@ public class RegistrationPoliciesController : ControllerBase
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.manage", cancellationToken);
         return await _policyService.CreateAsync(workspaceId, request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Updates an existing registration policy's details.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="refId">The unique reference ID of the policy to update.</param>
+    /// <param name="request">The updated policy details (Name, AutoApproval, IsEnabled).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="SecurityException">Thrown if the policy reference is invalid or access is denied.</exception>
+    [HttpPatch("{refId:guid}")]
+    public async Task Update(Guid workspaceRef, Guid refId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
+    {
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.manage", cancellationToken);
+        
+        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
+        if (policyId <= 0)
+        {
+            throw new SecurityException("Access denied.");
+        }
+
+        await _policyService.UpdateAsync(workspaceId, policyId, request, cancellationToken);
     }
 }

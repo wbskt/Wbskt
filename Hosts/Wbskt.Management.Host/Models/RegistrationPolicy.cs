@@ -9,5 +9,6 @@ public class RegistrationPolicy
     public string Name { get; set; } = string.Empty;
     public int? MaxClients { get; set; }
     public bool AutoApproval { get; set; }
+    public bool IsEnabled { get; set; }
     public DateTime CreatedAt { get; set; }
 }

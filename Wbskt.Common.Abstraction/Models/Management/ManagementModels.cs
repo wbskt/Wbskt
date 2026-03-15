@@ -20,7 +20,14 @@ public record RegistrationPolicyResponse(
     string Name, 
     int? MaxClients, 
     bool AutoApproval,
+    bool IsEnabled,
     DateTime CreatedAt
+);
+
+public record UpdateRegistrationPolicyRequest(
+    string Name,
+    bool AutoApproval,
+    bool IsEnabled
 );
 
 public record ClientRegistrationRequest(string Pin, string Name);

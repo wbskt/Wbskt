@@ -6,6 +6,7 @@ CREATE TABLE dbo.RegistrationPolicies (
     Name         NVARCHAR(100)    NOT NULL,
     MaxClients   INT              NULL,
     AutoApproval BIT              NOT NULL           DEFAULT 1,
+    IsEnabled    BIT              NOT NULL           DEFAULT 1,
     CreatedAt    DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
 
     -- Constraints

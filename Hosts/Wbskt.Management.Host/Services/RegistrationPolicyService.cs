@@ -53,6 +53,16 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return MapToResponse(policy);
     }
 
+    public async Task UpdateAsync(int workspaceId, int policyId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            throw new ValidationException("Policy name is required.");
+        }
+
+        await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
+    }
+
     private static RegistrationPolicyResponse MapToResponse(RegistrationPolicy p)
     {
         return new RegistrationPolicyResponse(
@@ -61,6 +71,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             p.Name,
             p.MaxClients,
             p.AutoApproval,
+            p.IsEnabled,
             p.CreatedAt
         );
     }

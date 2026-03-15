@@ -12,6 +12,7 @@ BEGIN
         Name,
         MaxClients,
         AutoApproval,
+        IsEnabled,
         CreatedAt
     FROM dbo.RegistrationPolicies
     WHERE Id = @Id;
