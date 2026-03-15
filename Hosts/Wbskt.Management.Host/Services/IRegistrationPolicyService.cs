@@ -12,4 +12,5 @@ public interface IRegistrationPolicyService
     Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<RegistrationPolicyResponse> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     Task UpdateAsync(int workspaceId, int policyId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+    Task DisableAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default);
 }

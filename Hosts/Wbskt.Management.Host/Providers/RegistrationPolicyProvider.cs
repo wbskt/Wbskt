@@ -104,6 +104,15 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         }, cancellationToken);
     }
 
+    public async Task DisableAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Disable", p =>
+        {
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            p.AddWithValue("@Id", id);
+        }, cancellationToken);
+    }
+
     private static RegistrationPolicy MapPolicy(SqlDataReader reader)
     {
         return new RegistrationPolicy

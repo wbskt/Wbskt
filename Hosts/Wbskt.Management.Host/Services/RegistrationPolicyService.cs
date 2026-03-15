@@ -63,6 +63,11 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
     }
 
+    public async Task DisableAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default)
+    {
+        await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
+    }
+
     private static RegistrationPolicyResponse MapToResponse(RegistrationPolicy p)
     {
         return new RegistrationPolicyResponse(

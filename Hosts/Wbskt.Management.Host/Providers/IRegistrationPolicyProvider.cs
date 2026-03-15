@@ -14,4 +14,5 @@ public interface IRegistrationPolicyProvider : IReferenceProvider
         int take, CancellationToken cancellationToken = default);
     Task<RegistrationPolicy> InsertAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     Task UpdateAsync(int workspaceId, int id, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+    Task DisableAsync(int workspaceId, int id, CancellationToken cancellationToken = default);
 }

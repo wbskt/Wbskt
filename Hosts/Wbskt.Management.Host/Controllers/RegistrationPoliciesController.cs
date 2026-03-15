@@ -131,4 +131,26 @@ public class RegistrationPoliciesController : ControllerBase
 
         await _policyService.UpdateAsync(workspaceId, policyId, request, cancellationToken);
     }
+
+    /// <summary>
+    /// Disables a specific registration policy.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="refId">The unique reference ID of the policy to disable.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="SecurityException">Thrown if the policy reference is invalid or access is denied.</exception>
+    [HttpPost("{refId:guid}/disable")]
+    public async Task Disable(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
+    {
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "policies.manage", cancellationToken);
+        
+        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
+        if (policyId <= 0)
+        {
+            throw new SecurityException("Access denied.");
+        }
+
+        await _policyService.DisableAsync(workspaceId, policyId, cancellationToken);
+    }
 }
