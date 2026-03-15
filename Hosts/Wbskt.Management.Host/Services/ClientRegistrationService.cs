@@ -33,6 +33,11 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         // 1. Validate Policy
         var policy = await _policyProvider.GetByPinAsync(request.Pin, cancellationToken);
 
+        if (!policy.IsEnabled)
+        {
+            throw new SecurityException("This registration policy is currently disabled.");
+        }
+
         // 2. Check Capacity
         if (policy.MaxClients.HasValue)
         {

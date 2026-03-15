@@ -26,6 +26,7 @@ public record RegistrationPolicyResponse(
 
 public record UpdateRegistrationPolicyRequest(
     string Name,
+    int? MaxClients,
     bool AutoApproval,
     bool IsEnabled
 );

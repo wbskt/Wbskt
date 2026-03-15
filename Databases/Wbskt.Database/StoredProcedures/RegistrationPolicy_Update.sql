@@ -2,6 +2,7 @@ CREATE PROCEDURE dbo.RegistrationPolicy_Update
     @WorkspaceId INT,
     @Id INT,
     @Name NVARCHAR(100),
+    @MaxClients INT NULL,
     @AutoApproval BIT,
     @IsEnabled BIT
 AS
@@ -10,6 +11,7 @@ BEGIN
 
     UPDATE dbo.RegistrationPolicies
     SET Name = @Name,
+        MaxClients = @MaxClients,
         AutoApproval = @AutoApproval,
         IsEnabled = @IsEnabled
     WHERE Id = @Id

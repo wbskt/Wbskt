@@ -11,11 +11,16 @@ namespace Wbskt.Management.Host.Services;
 internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 {
     private readonly IRegistrationPolicyProvider _provider;
+    private readonly IClientProvider _clientProvider;
     private readonly IEventBus _eventBus;
 
-    public RegistrationPolicyService(IRegistrationPolicyProvider provider, IEventBus eventBus)
+    public RegistrationPolicyService(
+        IRegistrationPolicyProvider provider, 
+        IClientProvider clientProvider,
+        IEventBus eventBus)
     {
         _provider = provider;
+        _clientProvider = clientProvider;
         _eventBus = eventBus;
     }
 
@@ -58,6 +63,17 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             throw new ValidationException("Policy name is required.");
+        }
+
+        if (request.MaxClients.HasValue)
+        {
+            var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policyId, cancellationToken);
+            
+            // Logic requiring an empty line before this comment
+            if (currentCount > request.MaxClients.Value)
+            {
+                throw new ValidationException($"Cannot set max clients to {request.MaxClients.Value} because {currentCount} clients are already registered under this policy.");
+            }
         }
 
         await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
