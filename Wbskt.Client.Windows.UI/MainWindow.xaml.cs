@@ -48,6 +48,14 @@ public partial class MainWindow : Window
                         MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private void OnDeleteMapping(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: CommandMapping mapping })
+        {
+            _mappings.Remove(mapping);
+        }
+    }
+
     // ── Selection ────────────────────────────────────────────────────────────
 
     private void MappingsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
