@@ -5,7 +5,7 @@ namespace Wbskt.Client.Windows.Service.Handlers;
 
 public partial class SystemControlHandler : IActionHandler
 {
-    public ActionType Type => ActionType.SystemControl;
+    public ActionType Type => ActionType.SystemPower;
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
