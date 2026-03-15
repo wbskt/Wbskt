@@ -36,6 +36,11 @@
     <File Path="Scripts.bat" />
     <File Path="Workflow.Engine.md" />
   </Folder>
+  <Folder Name="/WindowsClient/">
+    <Project Path="Wbskt.Client.Windows.Models/Wbskt.Client.Windows.Models.csproj" />
+    <Project Path="Wbskt.Client.Windows.Service/Wbskt.Client.Windows.Service.csproj" />
+    <Project Path="Wbskt.Client.Windows.UI/Wbskt.Client.Windows.UI.csproj" />
+  </Folder>
   <Project Path="Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj" />
   <Project Path="Wbskt.Common.Abstraction/Wbskt.Common.Abstraction.csproj" />
   <Project Path="Wbskt.Common/Wbskt.Common.csproj" />

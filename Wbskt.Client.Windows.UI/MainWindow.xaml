@@ -1,0 +1,33 @@
+<Window x:Class="Wbskt.Client.Windows.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WBSKT Command Mapper" Height="450" Width="800"
+        Background="#0f172a" WindowStartupLocation="CenterScreen">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Command Mappings" FontSize="24" FontWeight="Bold" Foreground="#38bdf8"/>
+            <TextBlock Text="Configure local actions for received WBSKT payloads" Foreground="#94a3b8"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="1" x:Name="MappingsGrid" AutoGenerateColumns="False" 
+                  Background="#1e293b" Foreground="White" BorderBrush="#334155"
+                  CanUserAddRows="False" RowBackground="#1e293b" AlternatingRowBackground="#334155">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Command Name" Binding="{Binding CommandName}" Width="*"/>
+                <DataGridTextColumn Header="Action Type" Binding="{Binding ActionType}" Width="150"/>
+                <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding IsEnabled}" Width="80"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="Add New" Padding="15,8" Background="#38bdf8" Foreground="Black" FontWeight="SemiBold" BorderThickness="0" Margin="0,0,10,0"/>
+            <Button Content="Save Mappings" Padding="15,8" Background="#2dd4bf" Foreground="Black" FontWeight="SemiBold" BorderThickness="0" Click="OnSave"/>
+        </StackPanel>
+    </Grid>
+</Window>
