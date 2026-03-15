@@ -9,13 +9,13 @@ public enum ActionType
     KeySimulation   // Virtual Keypresses
 }
 
-public record CommandMapping(
-    Guid Id,
-    string CommandName, 
-    ActionType ActionType, 
-    Dictionary<string, string> Parameters,
-    bool IsEnabled = true
-);
+public record CommandMapping(Guid Id)
+{
+    public string CommandName { get; set; } = string.Empty;
+    public ActionType ActionType { get; set; } = ActionType.Toast;
+    public Dictionary<string, string> Parameters { get; set; } = new();
+    public bool IsEnabled { get; set; } = true;
+}
 
 public interface IActionHandler
 {
