@@ -15,7 +15,7 @@ public class NotificationHub : Hub
             .RequestServices.GetRequiredService<IAuthServiceClient>();
             
         // The AuthenticationForwardingHandler will automatically add the user's token.
-        var workspaceId = await authClient.ResolveWorkspaceAsync(Guid.Parse(workspaceRef), "workspaces:join");
+        var workspaceId = await authClient.ResolveWorkspaceAsync(Guid.Parse(workspaceRef), "workspace.join");
 
         // If the above call fails, it will throw, and the user won't be added to the group.
         await Groups.AddToGroupAsync(Context.ConnectionId, $"ws:{workspaceId}");

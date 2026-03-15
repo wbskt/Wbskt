@@ -99,6 +99,12 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspace.join')
+    BEGIN
+        INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspace.join', 'Join workspaces');
+    END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'logs.read')
 BEGIN
     INSERT INTO dbo.Permissions (Slug, Description) VALUES ('logs.read', 'Read event logs');
