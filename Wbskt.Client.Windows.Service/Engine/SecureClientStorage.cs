@@ -17,7 +17,10 @@ public class SecureClientStorage : IClientStorage
 
     public Task SaveCredentialsAsync(Guid refId, string secret)
     {
-        if (!Directory.Exists(CredsDir)) Directory.CreateDirectory(CredsDir);
+        if (!Directory.Exists(CredsDir))
+        {
+            Directory.CreateDirectory(CredsDir);
+        }
 
         File.WriteAllText(IdPath, refId.ToString());
         
@@ -31,7 +34,9 @@ public class SecureClientStorage : IClientStorage
     public Task<(Guid? RefId, string? Secret)> LoadCredentialsAsync()
     {
         if (!File.Exists(IdPath) || !File.Exists(SecretPath))
+        {
             return Task.FromResult<(Guid?, string?)>((null, null));
+        }
 
         try
         {
@@ -49,8 +54,16 @@ public class SecureClientStorage : IClientStorage
 
     public Task ClearCredentialsAsync()
     {
-        if (File.Exists(IdPath)) File.Delete(IdPath);
-        if (File.Exists(SecretPath)) File.Delete(SecretPath);
+        if (File.Exists(IdPath))
+        {
+            File.Delete(IdPath);
+        }
+
+        if (File.Exists(SecretPath))
+        {
+            File.Delete(SecretPath);
+        }
+
         return Task.CompletedTask;
     }
 }

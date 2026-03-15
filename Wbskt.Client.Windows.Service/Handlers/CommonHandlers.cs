@@ -8,8 +8,11 @@ public class ProcessStartHandler : IActionHandler
 
     public Task ExecuteAsync(Dictionary<string, string> parameters)
     {
-        if (!parameters.TryGetValue("path", out var path)) return Task.CompletedTask;
-        
+        if (!parameters.TryGetValue("path", out var path))
+        {
+            return Task.CompletedTask;
+        }
+
         var args = parameters.GetValueOrDefault("args", "");
         
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, args) 
@@ -27,8 +30,11 @@ public class PowerShellHandler : IActionHandler
 
     public async Task ExecuteAsync(Dictionary<string, string> parameters)
     {
-        if (!parameters.TryGetValue("scriptPath", out var scriptPath)) return;
-        
+        if (!parameters.TryGetValue("scriptPath", out var scriptPath))
+        {
+            return;
+        }
+
         var startInfo = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "powershell.exe",
@@ -38,6 +44,9 @@ public class PowerShellHandler : IActionHandler
         };
 
         using var process = System.Diagnostics.Process.Start(startInfo);
-        if (process != null) await process.WaitForExitAsync();
+        if (process != null)
+        {
+            await process.WaitForExitAsync();
+        }
     }
 }

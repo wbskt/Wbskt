@@ -176,7 +176,9 @@ public static class Program
     private static void IgnoreSignalRPrivateProperties(JsonTypeInfo typeInfo)
     {
         if (typeInfo.Kind != JsonTypeInfoKind.Object)
+        {
             return;
+        }
 
         foreach (JsonPropertyInfo propertyInfo in typeInfo.Properties)
         {

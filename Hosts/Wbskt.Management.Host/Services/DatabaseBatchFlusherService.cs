@@ -71,7 +71,10 @@ public class DatabaseBatchFlusherService : BackgroundService
 
     private async Task FlushBatchAsync(List<EventLogEntry> batch, CancellationToken cancellationToken)
     {
-        if (batch.Count == 0) return;
+        if (batch.Count == 0)
+        {
+            return;
+        }
 
         try
         {

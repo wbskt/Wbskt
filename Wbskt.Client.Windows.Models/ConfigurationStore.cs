@@ -11,7 +11,7 @@ public class ConfigurationStore
         "config.json"
     );
 
-    private static readonly string SettingsPath = Path.Combine(
+    public static string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
         "Wbskt", 
         "settings.json"
@@ -19,7 +19,10 @@ public class ConfigurationStore
 
     public List<CommandMapping> LoadMappings()
     {
-        if (!File.Exists(ConfigPath)) return new List<CommandMapping>();
+        if (!File.Exists(ConfigPath))
+        {
+            return new List<CommandMapping>();
+        }
 
         try
         {
@@ -35,31 +38,52 @@ public class ConfigurationStore
     public void SaveMappings(List<CommandMapping> mappings)
     {
         var dir = Path.GetDirectoryName(ConfigPath);
-        if (dir != null && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+        if (dir != null && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
 
         var json = JsonSerializer.Serialize(mappings, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(ConfigPath, json);
     }
 
-    public ClientSettings? LoadSettings()
+    public ClientSettings LoadSettings()
     {
-        if (!File.Exists(SettingsPath)) return null;
+        if (!File.Exists(SettingsPath))
+        {
+            return new ClientSettings(
+                "https://localhost:7010",
+                "wss://localhost:7020",
+                Environment.MachineName
+            );
+        }
 
         try
         {
             var json = File.ReadAllText(SettingsPath);
-            return JsonSerializer.Deserialize<ClientSettings>(json);
+            return JsonSerializer.Deserialize<ClientSettings>(json) ?? new ClientSettings(
+                "https://localhost:7010",
+                "wss://localhost:7020",
+                Environment.MachineName
+            );
         }
         catch
         {
-            return null;
+            return new ClientSettings(
+                "https://localhost:7010",
+                "wss://localhost:7020",
+                Environment.MachineName
+            );
         }
     }
 
     public void SaveSettings(ClientSettings settings)
     {
         var dir = Path.GetDirectoryName(SettingsPath);
-        if (dir != null && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+        if (dir != null && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
 
         var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(SettingsPath, json);

@@ -7,7 +7,10 @@ public static class VariableResolver
 {
     public static string Resolve(string template, string jsonPayload)
     {
-        if (string.IsNullOrEmpty(template) || !template.Contains("{{")) return template;
+        if (string.IsNullOrEmpty(template) || !template.Contains("{{"))
+        {
+            return template;
+        }
 
         try
         {

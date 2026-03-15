@@ -23,7 +23,10 @@ public class MappingEngine
 
         foreach (var mapping in activeMappings)
         {
-            if (!_handlers.TryGetValue(mapping.ActionType, out var handler)) continue;
+            if (!_handlers.TryGetValue(mapping.ActionType, out var handler))
+            {
+                continue;
+            }
 
             var resolvedParams = mapping.Parameters.ToDictionary(
                 p => p.Key, 

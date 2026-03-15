@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Forms;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
@@ -34,13 +35,15 @@ public class TrayContext : ApplicationContext
         // 3. Setup Tray Icon
         _trayIcon = new NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
-            Text = "WBSKT Edge Agent (Connecting...)",
+            Icon = SystemIcons.Application,
+            Text = "WBSKT Edge Agent",
             ContextMenuStrip = new ContextMenuStrip(),
             Visible = true
         };
 
-        _trayIcon.ContextMenuStrip.Items.Add("Configure", null, OnConfigure);
+        _trayIcon.ContextMenuStrip.Items.Add("Configure Commands", null, OnConfigure);
+        _trayIcon.ContextMenuStrip.Items.Add("Open Settings File", null, OnOpenSettings);
+        _trayIcon.ContextMenuStrip.Items.Add("Reconnect", null, OnReconnect);
         _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         _trayIcon.ContextMenuStrip.Items.Add("Exit", null, OnExit);
         
@@ -50,12 +53,35 @@ public class TrayContext : ApplicationContext
         InitializeClient();
     }
 
+    private void OnOpenSettings(object? sender, EventArgs e)
+    {
+        if (!File.Exists(ConfigurationStore.SettingsPath))
+        {
+            _store.SaveSettings(_store.LoadSettings()); // Ensure default exists
+        }
+        
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ConfigurationStore.SettingsPath) 
+        { 
+            UseShellExecute = true 
+        });
+    }
+
+    private async void OnReconnect(object? sender, EventArgs e)
+    {
+        if (_client != null)
+        {
+            await _client.DisposeAsync();
+        }
+
+        InitializeClient();
+    }
+
     private void InitializeClient()
     {
         var settings = _store.LoadSettings();
-        if (settings == null)
+        if (string.IsNullOrEmpty(settings.PolicyPin) && !File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wbskt", "security", "client.id")))
         {
-            _trayIcon.Text = "WBSKT Edge Agent (Not Configured)";
+            _trayIcon.Text = "WBSKT Edge Agent (No PIN in settings.json)";
             return;
         }
 
@@ -103,7 +129,11 @@ public class TrayContext : ApplicationContext
 
     private async void OnExit(object? sender, EventArgs e)
     {
-        if (_client != null) await _client.DisposeAsync();
+        if (_client != null)
+        {
+            await _client.DisposeAsync();
+        }
+
         _trayIcon.Visible = false;
         Application.Exit();
     }
