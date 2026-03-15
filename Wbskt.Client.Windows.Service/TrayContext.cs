@@ -29,7 +29,7 @@ public class TrayContext : ApplicationContext
         _engine = new MappingEngine(handlers);
 
         // 2. Load Mappings
-        var mappings = _store.LoadMappings();
+        var mappings = ConfigurationStore.LoadMappings();
         _engine.UpdateMappings(mappings);
 
         // 3. Setup Tray Icon
@@ -57,7 +57,7 @@ public class TrayContext : ApplicationContext
     {
         if (!File.Exists(ConfigurationStore.SettingsPath))
         {
-            _store.SaveSettings(_store.LoadSettings()); // Ensure default exists
+            ConfigurationStore.SaveSettings(ConfigurationStore.LoadSettings()); // Ensure default exists
         }
         
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ConfigurationStore.SettingsPath) 
@@ -78,7 +78,7 @@ public class TrayContext : ApplicationContext
 
     private void InitializeClient()
     {
-        var settings = _store.LoadSettings();
+        var settings = ConfigurationStore.LoadSettings();
         if (string.IsNullOrEmpty(settings.PolicyPin) && !File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wbskt", "security", "client.id")))
         {
             _trayIcon.Text = "WBSKT Edge Agent (No PIN in settings.json)";

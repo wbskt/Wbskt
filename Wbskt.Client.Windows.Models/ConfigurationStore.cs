@@ -1,41 +1,46 @@
-using System.IO;
 using System.Text.Json;
 
 namespace Wbskt.Client.Windows.Models;
 
 public class ConfigurationStore
-{
+{    
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     private static readonly string ConfigPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
         "Wbskt", 
         "config.json"
     );
 
-    public static string SettingsPath = Path.Combine(
+    public static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
         "Wbskt", 
         "settings.json"
     );
 
-    public List<CommandMapping> LoadMappings()
+    public static List<CommandMapping> LoadMappings()
     {
         if (!File.Exists(ConfigPath))
         {
-            return new List<CommandMapping>();
+            return [];
         }
 
         try
         {
             var json = File.ReadAllText(ConfigPath);
-            return JsonSerializer.Deserialize<List<CommandMapping>>(json) ?? new List<CommandMapping>();
+            var dtos = JsonSerializer.Deserialize<List<CommandMappingDto>>(json, JsonOptions);
+            return dtos?.Select(d => d.ToModel()).ToList() ?? [];
         }
-        catch
+        catch (Exception ex) when (ex is JsonException or IOException)
         {
-            return new List<CommandMapping>();
+            return [];
         }
     }
 
-    public void SaveMappings(List<CommandMapping> mappings)
+    public static void SaveMappings(List<CommandMapping> mappings)
     {
         var dir = Path.GetDirectoryName(ConfigPath);
         if (dir != null && !Directory.Exists(dir))
@@ -43,11 +48,12 @@ public class ConfigurationStore
             Directory.CreateDirectory(dir);
         }
 
-        var json = JsonSerializer.Serialize(mappings, new JsonSerializerOptions { WriteIndented = true });
+        var dtos = mappings.Select(m => m.ToDto()).ToList();
+        var json = JsonSerializer.Serialize(dtos, JsonOptions);
         File.WriteAllText(ConfigPath, json);
     }
 
-    public ClientSettings LoadSettings()
+    public static ClientSettings LoadSettings()
     {
         if (!File.Exists(SettingsPath))
         {
@@ -77,7 +83,7 @@ public class ConfigurationStore
         }
     }
 
-    public void SaveSettings(ClientSettings settings)
+    public static void SaveSettings(ClientSettings settings)
     {
         var dir = Path.GetDirectoryName(SettingsPath);
         if (dir != null && !Directory.Exists(dir))

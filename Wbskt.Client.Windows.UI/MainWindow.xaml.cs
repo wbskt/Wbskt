@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Microsoft.Win32;
 using Wbskt.Client.Windows.Models;
 
 namespace Wbskt.Client.Windows.UI;
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
     // it on every dynamic parameter rebuild.
     private Style? _textBoxStyle;
     private Style? _comboBoxStyle;
+    private Style? _buttonStyle;
 
     public MainWindow()
     {
@@ -26,7 +28,7 @@ public partial class MainWindow : Window
 
     private void LoadData()
     {
-        _mappings = new ObservableCollection<CommandMapping>(_store.LoadMappings());
+        _mappings = new ObservableCollection<CommandMapping>(ConfigurationStore.LoadMappings());
         MappingsGrid.ItemsSource = _mappings;
     }
 
@@ -43,7 +45,7 @@ public partial class MainWindow : Window
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
-        _store.SaveMappings(_mappings.ToList());
+        ConfigurationStore.SaveMappings(_mappings.ToList());
         MessageBox.Show("All mappings saved successfully.", "Saved",
                         MessageBoxButton.OK, MessageBoxImage.Information);
     }
@@ -135,6 +137,7 @@ public partial class MainWindow : Window
         // Resolve styles once per rebuild, not once per parameter.
         _textBoxStyle  ??= (Style)FindResource("PropertyTextBox");
         _comboBoxStyle ??= (Style)FindResource("PropertyComboBox");
+        _buttonStyle   ??= (Style)FindResource("RiderButton");
 
         var mutedBrush = (SolidColorBrush)FindResource("TextMuted");
 
@@ -150,10 +153,18 @@ public partial class MainWindow : Window
                 Padding    = new Thickness(0, 0, 0, 5)
             });
 
-            DynamicParametersStack.Children.Add(
-                param.InputType == ParameterInputType.Dropdown && param.Options is not null
-                    ? BuildDropdown(param)
-                    : BuildTextBox(param));
+            if (param.InputType == ParameterInputType.Dropdown && param.Options is not null)
+            {
+                DynamicParametersStack.Children.Add(BuildDropdown(param));
+            }
+            else if (param.InputType == ParameterInputType.FilePath)
+            {
+                DynamicParametersStack.Children.Add(BuildFilePicker(param));
+            }
+            else
+            {
+                DynamicParametersStack.Children.Add(BuildTextBox(param));
+            }
         }
     }
 
@@ -168,6 +179,47 @@ public partial class MainWindow : Window
         combo.SelectionChanged += (_, _) =>
             _selectedMapping!.Parameters[param.Key] = combo.SelectedItem?.ToString() ?? "";
         return combo;
+    }
+
+    private FrameworkElement BuildFilePicker(ParameterDefinition param)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 0, 0, 14) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var textBox = new TextBox
+        {
+            Style = _textBoxStyle,
+            Text  = _selectedMapping!.Parameters[param.Key],
+            Margin = new Thickness(0) // Grid handles margin
+        };
+        textBox.TextChanged += (_, _) => _selectedMapping!.Parameters[param.Key] = textBox.Text;
+
+        var browseButton = new Button
+        {
+            Style = _buttonStyle,
+            Content = "...",
+            Width = 32,
+            Height = 32,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Top
+        };
+
+        browseButton.Click += (_, _) =>
+        {
+            var dialog = new OpenFileDialog();
+            if (dialog.ShowDialog() == true)
+            {
+                textBox.Text = dialog.FileName;
+            }
+        };
+
+        Grid.SetColumn(textBox, 0);
+        Grid.SetColumn(browseButton, 1);
+        grid.Children.Add(textBox);
+        grid.Children.Add(browseButton);
+
+        return grid;
     }
 
     private TextBox BuildTextBox(ParameterDefinition param)
