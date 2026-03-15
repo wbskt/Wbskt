@@ -9,7 +9,8 @@
         <SolidColorBrush x:Key="WindowBg" Color="#1e1f22"/>
         <SolidColorBrush x:Key="SurfaceBg" Color="#2b2d30"/>
         <SolidColorBrush x:Key="BorderColor" Color="#393b40"/>
-        <SolidColorBrush x:Key="SelectionBg" Color="#2e436e"/> <SolidColorBrush x:Key="AccentColor" Color="#3574f0"/>
+        <SolidColorBrush x:Key="SelectionBg" Color="#2e436e"/> 
+        <SolidColorBrush x:Key="AccentColor" Color="#3574f0"/>
         <SolidColorBrush x:Key="TextPrimary" Color="#dfe1e5"/>
         <SolidColorBrush x:Key="TextMuted" Color="#70727a"/>
         <SolidColorBrush x:Key="ScrollBarThumb" Color="#43454a"/>
@@ -38,17 +39,57 @@
             </Setter>
         </Style>
 
-        <Style TargetType="CheckBox">
+        <Style x:Key="RiderEditingInput" TargetType="TextBox">
+            <Setter Property="Background" Value="#1e1f22"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="4">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RiderCheckBox" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Border x:Name="Box" Width="16" Height="16" CornerRadius="3" Background="#393b40">
-                            <Path x:Name="CheckMark" Data="M 3,8 L 7,12 L 13,4" Stroke="White" StrokeThickness="2" Visibility="Collapsed"/>
-                        </Border>
+                        <Grid Background="Transparent">
+                            <Border x:Name="Box" Width="18" Height="18" CornerRadius="4" 
+                                    Background="#393b40" BorderBrush="#4b4d54" BorderThickness="1">
+                                <Path x:Name="CheckMark" 
+                                      Data="M 5,9.5 L 8.5,13 L 13.5,5" 
+                                      Stroke="White" 
+                                      StrokeThickness="2" 
+                                      StrokeStartLineCap="Round" 
+                                      StrokeEndLineCap="Round" 
+                                      StrokeLineJoin="Round"
+                                      Visibility="Collapsed"
+                                      Stretch="None" 
+                                      HorizontalAlignment="Center" 
+                                      VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentColor}"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentColor}"/>
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#6b6e77"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -58,29 +99,44 @@
 
         <Style TargetType="DataGridRow">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/> <Setter Property="FontSize" Value="13"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{StaticResource SelectionBg}"/>
-                    <Setter Property="Foreground" Value="White"/>
-                </Trigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#323438"/>
-                </Trigger>
-            </Style.Triggers>
+            <Setter Property="Margin" Value="6,2,6,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridRow">
+                        <Border x:Name="RowBorder" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <DataGridCellsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="RowBorder" Property="Background" Value="{StaticResource SelectionBg}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RowBorder" Property="Background" Value="#323438"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="Selector.IsSelectionActive" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="RowBorder" Property="Background" Value="#2d2f33"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
-            <Setter Property="Padding" Value="15,10"/>
+            <Setter Property="Padding" Value="20,10"/>
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="DataGridColumnHeader">
-                        <Border Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderColor}">
+                        <Border BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderColor}">
                             <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -89,13 +145,14 @@
         </Style>
 
         <Style TargetType="DataGridCell">
-            <Setter Property="Padding" Value="15,10"/>
+            <Setter Property="Padding" Value="15,0"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="DataGridCell">
-                        <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                        <Border Padding="{TemplateBinding Padding}" Background="Transparent">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -139,7 +196,7 @@
             <TextBlock Text="Manage and automate local actions for WBSKT payloads." Foreground="{StaticResource TextMuted}" FontSize="13" Margin="0,5,0,0"/>
         </StackPanel>
 
-        <Border Grid.Row="1" Background="{StaticResource SurfaceBg}" CornerRadius="10" BorderThickness="1" BorderBrush="{StaticResource BorderColor}" Padding="5">
+        <Border Grid.Row="1" Background="{StaticResource SurfaceBg}" CornerRadius="12" BorderThickness="1" BorderBrush="{StaticResource BorderColor}" Padding="2">
             <DataGrid x:Name="MappingsGrid" 
                       AutoGenerateColumns="False" 
                       Background="Transparent" 
@@ -148,11 +205,29 @@
                       GridLinesVisibility="None"
                       HeadersVisibility="Column"
                       RowHeaderWidth="0"
-                      SelectionUnit="FullRow">
+                      SelectionUnit="FullRow"
+                      RowHeight="48"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Command Name" Binding="{Binding CommandName}" Width="*" FontWeight="SemiBold"/>
-                    <DataGridTextColumn Header="Action Type" Binding="{Binding ActionType}" Width="180"/>
-                    <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding IsEnabled}" Width="100"/>
+                    <DataGridTextColumn Header="Command Name" 
+                                        Binding="{Binding CommandName}" 
+                                        Width="*" 
+                                        EditingElementStyle="{StaticResource RiderEditingInput}"/>
+                    
+                    <DataGridTextColumn Header="Action Type" 
+                                        Binding="{Binding ActionType}" 
+                                        Width="180" 
+                                        EditingElementStyle="{StaticResource RiderEditingInput}"/>
+                    
+                    <DataGridTemplateColumn Header="Enabled" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" 
+                                          Style="{StaticResource RiderCheckBox}" 
+                                          HorizontalAlignment="Center"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
         </Border>
