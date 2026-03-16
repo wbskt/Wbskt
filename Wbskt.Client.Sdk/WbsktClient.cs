@@ -14,6 +14,7 @@ public sealed class WbsktClient : IWbsktClient
     private bool _shouldReconnect = true;
     private Guid? _resolvedRefId;
     private string? _resolvedSecret;
+    private ClientCapabilities? _lastCapabilities;
 
     public event Action<string, object?>? OnCommandReceived;
     public event Action? OnConnected;
@@ -28,7 +29,7 @@ public sealed class WbsktClient : IWbsktClient
 
         // Forward internal events to public surface
         _socket.OnMessageReceived += (action, payload) => OnCommandReceived?.Invoke(action, payload);
-        _socket.OnConnected += () => OnConnected?.Invoke();
+        _socket.OnConnected += HandleConnected;
         _socket.OnDisconnected += HandleDisconnect;
     }
 
@@ -64,6 +65,17 @@ public sealed class WbsktClient : IWbsktClient
         }
     }
 
+    private void HandleConnected()
+    {
+        OnConnected?.Invoke();
+        
+        // Auto-broadcast capabilities on every successful connection
+        if (_lastCapabilities != null)
+        {
+            _ = UpdateCapabilitiesAsync(_lastCapabilities);
+        }
+    }
+
     private void HandleDisconnect()
     {
         OnDisconnected?.Invoke();
@@ -94,6 +106,16 @@ public sealed class WbsktClient : IWbsktClient
                 await Task.Delay(backoff, _cts.Token);
                 backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, maxBackoff.Ticks));
             }
+        }
+    }
+
+    public async Task UpdateCapabilitiesAsync(ClientCapabilities capabilities)
+    {
+        _lastCapabilities = capabilities;
+        
+        if (_socket.IsConnected)
+        {
+            await SendTelemetryAsync("capabilities", capabilities);
         }
     }
 

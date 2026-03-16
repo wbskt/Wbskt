@@ -9,7 +9,6 @@ namespace Wbskt.Client.Windows.UI;
 
 public partial class MainWindow : Window
 {
-    private readonly ConfigurationStore _store = new();
     private ObservableCollection<CommandMapping> _mappings = new();
     private CommandMapping? _selectedMapping;
 

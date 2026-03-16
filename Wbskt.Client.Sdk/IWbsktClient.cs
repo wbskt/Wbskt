@@ -1,3 +1,5 @@
+using Wbskt.Client.Sdk.Models;
+
 namespace Wbskt.Client.Sdk;
 
 public interface IWbsktClient : IAsyncDisposable
@@ -8,4 +10,5 @@ public interface IWbsktClient : IAsyncDisposable
 
     Task StartAsync();
     Task SendTelemetryAsync(string type, object payload);
+    Task UpdateCapabilitiesAsync(ClientCapabilities capabilities);
 }

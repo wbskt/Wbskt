@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Wbskt.Client.Windows.Models;
 
-public class ConfigurationStore
+public static class ConfigurationStore
 {    
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

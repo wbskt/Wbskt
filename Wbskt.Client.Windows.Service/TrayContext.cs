@@ -1,5 +1,4 @@
 using System.IO;
-using System.Windows.Forms;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.Client.Windows.Models;
@@ -12,13 +11,10 @@ public class TrayContext : ApplicationContext
 {
     private readonly NotifyIcon _trayIcon;
     private readonly MappingEngine _engine;
-    private readonly ConfigurationStore _store;
     private IWbsktClient? _client;
 
     public TrayContext()
     {
-        _store = new ConfigurationStore();
-        
         // 1. Setup Engine & Handlers
         var handlers = new List<IActionHandler>
         {
@@ -36,7 +32,7 @@ public class TrayContext : ApplicationContext
         _trayIcon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = "WBSKT Edge Agent",
+            Text = "WBSKT Windows Agent",
             ContextMenuStrip = new ContextMenuStrip(),
             Visible = true
         };
@@ -47,7 +43,7 @@ public class TrayContext : ApplicationContext
         _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         _trayIcon.ContextMenuStrip.Items.Add("Exit", null, OnExit);
         
-        _trayIcon.DoubleClick += (s, e) => OnConfigure(s, e);
+        _trayIcon.DoubleClick += OnConfigure;
 
         // 4. Initialize SDK
         InitializeClient();
@@ -97,6 +93,10 @@ public class TrayContext : ApplicationContext
 
         _client.OnConnected += () => {
             _trayIcon.Text = "WBSKT Edge Agent (Connected)";
+            
+            // Build and send current capabilities
+            var caps = CapabilityDiscovery.BuildCapabilities(ConfigurationStore.LoadMappings());
+            _ = _client.UpdateCapabilitiesAsync(caps);
         };
 
         _client.OnDisconnected += () => {
