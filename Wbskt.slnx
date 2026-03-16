@@ -45,6 +45,7 @@
   <Project Path="Wbskt.Common.Abstraction/Wbskt.Common.Abstraction.csproj" />
   <Project Path="Wbskt.Common/Wbskt.Common.csproj" />
   <Project Path="Wbskt.Foundation.Abstraction/Wbskt.Foundation.Abstraction.csproj" />
+  <Project Path="Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
   <Project Path="Wbskt.Simulator/Wbskt.Simulator.csproj" />
   <Project Path="Wbskt.Workflow.Abstraction/Wbskt.Workflow.Abstraction.csproj" />
   <Project Path="Wbskt.Workflow/Wbskt.Workflow.csproj" />
