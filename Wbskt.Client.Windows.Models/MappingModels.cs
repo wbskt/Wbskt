@@ -102,14 +102,14 @@ public static class ActionRegistry
                 new("action", "Action", ParameterInputType.Dropdown, true, null, "lock", new() { "lock", "sleep", "hibernate", "restart", "shutdown" })
             }
         ),
-        new ActionDefinition(
-            ActionType.MonitorControl,
-            "Display Control",
-            "Manages monitor power state",
-            new() {
-                new("action", "Action", ParameterInputType.Dropdown, true, null, "off", new() { "off", "on" })
-            }
-        ),
+        // new ActionDefinition(
+        //     ActionType.MonitorControl,
+        //     "Display Control",
+        //     "Manages monitor power state",
+        //     new() {
+        //         new("action", "Action", ParameterInputType.Dropdown, true, null, "off", new() { "off", "on" })
+        //     }
+        // ),
         new ActionDefinition(
             ActionType.OpenFile,
             "Open URL or File",

@@ -19,8 +19,12 @@ public class TrayContext : ApplicationContext
         var handlers = new List<IActionHandler>
         {
             new ProcessStartHandler(),
+            new ProcessKillHandler(),
             new PowerShellHandler(),
-            new SystemControlHandler()
+            new SystemPowerHandler(),
+            new ToastHandler(),
+            new VolumeControlHandler(),
+            new OpenFileHandler()
         };
         _engine = new MappingEngine(handlers);
 
