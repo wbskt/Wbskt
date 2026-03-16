@@ -8,7 +8,7 @@ namespace Wbskt.Auth.Host.Providers;
 
 internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
 {
-    public SqlAuthProvider(IConfiguration configuration) : base(configuration) { }
+    public SqlAuthProvider(IConfiguration configuration) : base(configuration, "AuthDBConnection") { }
 
     public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {

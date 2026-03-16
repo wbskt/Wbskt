@@ -9,9 +9,9 @@ public abstract class BaseSqlProvider
 {
     private readonly string _connectionString;
 
-    protected BaseSqlProvider(IConfiguration configuration)
+    protected BaseSqlProvider(IConfiguration configuration, string connectionStringName = "DefaultConnection")
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection") 
+        _connectionString = configuration.GetConnectionString(connectionStringName) 
                             ?? throw new ArgumentNullException(nameof(configuration));
     }
 

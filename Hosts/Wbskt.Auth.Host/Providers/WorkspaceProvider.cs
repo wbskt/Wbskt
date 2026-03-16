@@ -7,7 +7,7 @@ namespace Wbskt.Auth.Host.Providers;
 
 internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
 {
-    public WorkspaceProvider(IConfiguration configuration) : base(configuration) { }
+    public WorkspaceProvider(IConfiguration configuration) : base(configuration, "AuthDBConnection") { }
 
     public async Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default)
     {
