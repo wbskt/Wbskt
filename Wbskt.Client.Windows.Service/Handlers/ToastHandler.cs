@@ -31,6 +31,9 @@ public class ToastHandler : IActionHandler
         };
 
         using var process = System.Diagnostics.Process.Start(startInfo);
-        if (process != null) await process.WaitForExitAsync();
+        if (process != null)
+        {
+            await process.WaitForExitAsync();
+        }
     }
 }

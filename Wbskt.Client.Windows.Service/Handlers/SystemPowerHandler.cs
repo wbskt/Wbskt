@@ -21,7 +21,10 @@ public partial class SystemPowerHandler : IActionHandler
 
     public Task ExecuteAsync(Dictionary<string, string> parameters)
     {
-        if (!parameters.TryGetValue("action", out var action)) return Task.CompletedTask;
+        if (!parameters.TryGetValue("action", out var action))
+        {
+            return Task.CompletedTask;
+        }
 
         switch (action.ToLower())
         {

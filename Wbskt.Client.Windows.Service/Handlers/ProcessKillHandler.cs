@@ -9,7 +9,10 @@ public class ProcessKillHandler : IActionHandler
 
     public Task ExecuteAsync(Dictionary<string, string> parameters)
     {
-        if (!parameters.TryGetValue("processName", out var processName)) return Task.CompletedTask;
+        if (!parameters.TryGetValue("processName", out var processName))
+        {
+            return Task.CompletedTask;
+        }
 
         var name = processName.EndsWith(".exe") ? processName[..^4] : processName;
         

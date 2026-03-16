@@ -10,7 +10,9 @@ public class VolumeControlHandler : IActionHandler
     public async Task ExecuteAsync(Dictionary<string, string> parameters)
     {
         if (!parameters.TryGetValue("action", out var action))
+        {
             return;
+        }
 
         await Task.Run(() =>
         {
@@ -18,7 +20,10 @@ public class VolumeControlHandler : IActionHandler
             try
             {
                 device = GetDefaultRenderDevice();
-                if (device == null) return;
+                if (device == null)
+                {
+                    return;
+                }
 
                 switch (action.ToLowerInvariant())
                 {
@@ -54,7 +59,9 @@ public class VolumeControlHandler : IActionHandler
             finally
             {
                 if (device != null)
+                {
                     Marshal.ReleaseComObject(device);
+                }
             }
         });
     }
@@ -78,8 +85,15 @@ public class VolumeControlHandler : IActionHandler
         }
         finally
         {
-            if (device   != null) Marshal.ReleaseComObject(device);
-            if (enumerator != null) Marshal.ReleaseComObject(enumerator);
+            if (device   != null)
+            {
+                Marshal.ReleaseComObject(device);
+            }
+
+            if (enumerator != null)
+            {
+                Marshal.ReleaseComObject(enumerator);
+            }
         }
     }
 

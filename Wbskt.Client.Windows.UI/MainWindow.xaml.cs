@@ -88,7 +88,10 @@ public partial class MainWindow : Window
 
     private void ComboActionType_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_selectedMapping is null || _changeSuspended) return;
+        if (_selectedMapping is null || _changeSuspended)
+        {
+            return;
+        }
 
         _selectedMapping.ActionType = (ActionType)ComboActionType.SelectedItem;
         RefreshDynamicParameters();
@@ -99,7 +102,10 @@ public partial class MainWindow : Window
 
     private void Property_Changed(object sender, TextChangedEventArgs e)
     {
-        if (_selectedMapping is null || _changeSuspended) return;
+        if (_selectedMapping is null || _changeSuspended)
+        {
+            return;
+        }
 
         // Name-based switch is refactor-safe; reference equality (sender == TxtX)
         // breaks silently if controls are ever recreated or renamed in XAML.
@@ -124,14 +130,20 @@ public partial class MainWindow : Window
 
     private void RefreshDynamicParameters()
     {
-        if (_selectedMapping is null) return;
+        if (_selectedMapping is null)
+        {
+            return;
+        }
 
         DynamicParametersStack.Children.Clear();
 
         var definition = ActionRegistry.Definitions
             .FirstOrDefault(d => d.Type == _selectedMapping.ActionType);
 
-        if (definition is null) return;
+        if (definition is null)
+        {
+            return;
+        }
 
         // Resolve styles once per rebuild, not once per parameter.
         _textBoxStyle  ??= (Style)FindResource("PropertyTextBox");

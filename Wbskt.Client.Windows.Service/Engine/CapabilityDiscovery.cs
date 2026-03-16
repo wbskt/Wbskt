@@ -52,8 +52,11 @@ public static partial class CapabilityDiscovery
 
     private static string PrettifyName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return name;
-        
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
         // simple snake_case or camelCase to Title Case
         var result = CaseRegexGen().Replace(name, "$1 $2");
         result = result.Replace("_", " ");
