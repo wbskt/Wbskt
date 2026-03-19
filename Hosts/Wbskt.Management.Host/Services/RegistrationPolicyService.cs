@@ -1,6 +1,7 @@
 using Wbskt.Common.Abstraction.Models;
 using Wbskt.Common.Abstraction.Models.Management;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Foundation.Abstraction.Exceptions;
 using Wbskt.Management.Host.Models;
@@ -77,11 +78,28 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         }
 
         await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
+
+        var policy = await _provider.GetByIdAsync(policyId, cancellationToken);
+        var events = new List<RegistrationPolicyEvent>();
+        if (!policy.Name.Equals(request.Name))
+        {
+            events.Add(new PolicyNameUpdatedEvent(policy.RefId, workspaceId, request.Name, policy.Name));
+        }
+
+        if (policy.MaxClients != request.MaxClients)
+        {
+            events.Add(new PolicyClientLimitUpdatedEvent(policy.RefId, workspaceId, request.MaxClients, policy.MaxClients));
+        }
+
+        await Parallel.ForEachAsync(events, cancellationToken, async (@event, token) => await _eventBus.PublishAsync(@event, token));
     }
 
     public async Task DisableAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default)
     {
         await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
+
+        var policy = await _provider.GetByIdAsync(policyId, cancellationToken);
+        await _eventBus.PublishAsync(new PolicyDisabledEvent(policy.RefId, workspaceId), cancellationToken);
     }
 
     private static RegistrationPolicyResponse MapToResponse(RegistrationPolicy p)
