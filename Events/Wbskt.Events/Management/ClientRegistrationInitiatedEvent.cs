@@ -2,7 +2,7 @@ using Wbskt.Common.Abstraction;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 
-namespace Wbskt.Events.Client;
+namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientRegistrationInitiatedEvent")]
@@ -11,4 +11,4 @@ public sealed record ClientRegistrationInitiatedEvent(
     int WorkspaceId,
     Guid PolicyRefId,
     string Name
-) : ClientEvent(ClientRefId, WorkspaceId);
+) : RegistrationPolicyEvent(ClientRefId, WorkspaceId);

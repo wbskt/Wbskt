@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Wbskt.Common.Abstraction.Models.Management;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Events.Management;
 using Wbskt.Foundation.Abstraction.Exceptions;
 using Wbskt.Management.Host.Providers;
 
