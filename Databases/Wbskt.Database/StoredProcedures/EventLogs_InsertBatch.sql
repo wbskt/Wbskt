@@ -4,8 +4,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId)
-    SELECT EventId, EventData, CreatedAtUtc, WorkspaceId
+    INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId)
+    SELECT EventId, EventData, CreatedAtUtc, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId
     FROM @Logs;
 END
 GO

@@ -14,15 +14,10 @@ internal sealed class EventLogService : IEventLogService
         _eventProvider = eventProvider;
     }
 
-    public async Task<IPagedList<EventLogResponse>> GetLogsAsync(
-        int workspaceId, 
-        string? eventName, 
-        EventCriticality? criticality, 
-        int skip, 
-        int take, 
-        CancellationToken cancellationToken = default)
+    public async Task<IPagedList<EventLogResponse>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int? policyId, int? clientId,
+        int? workflowId, int skip, int take, CancellationToken cancellationToken = default)
     {
         // Simple passthrough to provider for MVP
-        return await _eventProvider.GetLogsAsync(workspaceId, eventName, criticality, skip, take, cancellationToken);
+        return await _eventProvider.GetLogsAsync(workspaceId, eventName, criticality, policyId, clientId, workflowId, skip, take, cancellationToken);
     }
 }

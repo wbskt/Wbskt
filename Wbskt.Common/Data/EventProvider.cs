@@ -33,13 +33,16 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
-    public async Task<IPagedList<EventLogResponse>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<EventLogResponse>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int? policyId, int? clientId, int? workflowId, int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.EventLog_GetBy_Workspace",
             p =>
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@PolicyId", policyId);
+                p.AddWithValue("@ClientId", clientId);
+                p.AddWithValue("@WorkflowId", workflowId);
                 p.AddWithValue("@EventName", (object?)eventName ?? DBNull.Value);
                 p.AddWithValue("@Criticality", (object?)criticality ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);
@@ -50,6 +53,9 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 reader.GetString("EventName"),
                 reader.GetString("EventData"),
                 (EventCriticality)reader.GetByte("EventCriticality"),
+                reader.GetGuid("PolicyRefId"),
+                reader.GetGuid("ClientRefId"),
+                reader.GetGuid("WorkflowRefId"),
                 reader.GetDateTime("CreatedAt")
             ),
             cancellationToken);

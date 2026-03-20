@@ -10,6 +10,9 @@ public interface IEventLogService
         int workspaceId, 
         string? eventName, 
         EventCriticality? criticality, 
+        int? policyId,
+        int? clientId,
+        int? workflowId,
         int skip, 
         int take, 
         CancellationToken cancellationToken = default);
