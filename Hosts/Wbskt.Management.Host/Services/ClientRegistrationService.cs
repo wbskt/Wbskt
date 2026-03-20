@@ -36,6 +36,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
 
         if (!policy.IsEnabled)
         {
+            await _eventBus.PublishAsync(new PolicyRegistrationAttemptedOnDisabledEvent(policy.RefId, policy.WorkspaceId, request.Name), cancellationToken);
             throw new SecurityException("This registration policy is currently disabled.");
         }
 
@@ -43,10 +44,11 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         if (policy.MaxClients.HasValue)
         {
             var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id, cancellationToken);
-            
+
             // Logic requiring an empty line before this comment
             if (currentCount >= policy.MaxClients.Value)
             {
+                await _eventBus.PublishAsync(new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
                 throw new ValidationException("Policy registration limit reached.");
             }
         }
@@ -59,11 +61,11 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var client = await _clientProvider.InsertClientAsync(policy.WorkspaceId ,policy.Id, request.Name, secret, initialStatus, cancellationToken);
 
         // 5. Publish Events
-        await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.WorkspaceId, policy.RefId, client.Name), cancellationToken);
+        await _eventBus.PublishAsync(new ClientRegisteredEvent(client.RefId, client.WorkspaceId, policy.RefId, client.Name), cancellationToken);
 
         if (policy.AutoApproval)
         {
-            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, (byte)ClientStatus.Registered), cancellationToken);
+            await _eventBus.PublishAsync(new ClientAutoApprovedEvent(client.RefId, client.WorkspaceId), cancellationToken);
         }
 
         return new ClientRegistrationResponse(
