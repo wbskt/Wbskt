@@ -20,7 +20,7 @@ public sealed class WorkflowsController : ControllerBase
     private readonly IReferenceMapper _workflowMapper;
 
     public WorkflowsController(
-        IWorkflowService workflowService, 
+        IWorkflowService workflowService,
         IAuthServiceClient authClient,
         [FromKeyedServices("Workflow")] IReferenceMapper workflowMapper)
     {
