@@ -6,6 +6,7 @@ using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Models;
 using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers;
 
@@ -58,7 +59,7 @@ public sealed class EventLogsController : ControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "logs.read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
         int? clientId = null;
         int? workflowId = null;
         int? policyId = null;

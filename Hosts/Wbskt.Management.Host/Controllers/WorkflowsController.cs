@@ -5,6 +5,7 @@ using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Models;
 using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
 
@@ -38,7 +39,7 @@ public sealed class WorkflowsController : ControllerBase
     [HttpGet]
     public async Task<ListResponse<WorkflowSummaryResponse>> GetAll(Guid workspaceRef, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "workflows.read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, cancellationToken);
         var pagedData = await _workflowService.GetAllAsync(workspaceId, cancellationToken);
         
         Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
@@ -60,7 +61,7 @@ public sealed class WorkflowsController : ControllerBase
     [HttpGet("{workflowRefId:guid}")]
     public async Task<WorkflowDefinition> Get(Guid workspaceRef, Guid workflowRefId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "workflows.read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, cancellationToken);
         var id = await _workflowMapper.FindIdByRefIdAsync(workflowRefId, cancellationToken);
         
         if (id <= 0)
@@ -81,7 +82,7 @@ public sealed class WorkflowsController : ControllerBase
     [HttpPost]
     public async Task<WorkflowSummaryResponse> Create(Guid workspaceRef, CreateWorkflowRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "workflows.create", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsCreate, cancellationToken);
         
         return await _workflowService.CreateAsync(workspaceId, request, cancellationToken);
     }
@@ -98,7 +99,7 @@ public sealed class WorkflowsController : ControllerBase
     [HttpPut("{workflowRefId:guid}")]
     public async Task Update(Guid workspaceRef, Guid workflowRefId, UpdateWorkflowRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "workflows.update", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsUpdate, cancellationToken);
         var id = await _workflowMapper.FindIdByRefIdAsync(workflowRefId, cancellationToken);
         
         if (id <= 0)
@@ -120,7 +121,7 @@ public sealed class WorkflowsController : ControllerBase
     [HttpDelete("{workflowRefId:guid}")]
     public async Task Delete(Guid workspaceRef, Guid workflowRefId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "workflows.delete", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsDelete, cancellationToken);
         var id = await _workflowMapper.FindIdByRefIdAsync(workflowRefId, cancellationToken);
         
         if (id <= 0)

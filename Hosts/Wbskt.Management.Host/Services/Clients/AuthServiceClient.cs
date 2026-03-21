@@ -1,4 +1,5 @@
 using Wbskt.Primitives.Exceptions;
+using Wbskt.Primitives.Models;
 
 namespace Wbskt.Management.Host.Services.Clients;
 
@@ -11,7 +12,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
         _httpClient = httpClient;
     }
 
-    public async Task<int> ResolveWorkspaceAsync(Guid workspaceRef, string requiredPermission, CancellationToken cancellationToken = default)
+    public async Task<int> ResolveWorkspaceAsync(Guid workspaceRef, PermissionSlug requiredPermission, CancellationToken cancellationToken = default)
     {
         var request = new ResolveWorkspaceRequest(workspaceRef, requiredPermission);
         

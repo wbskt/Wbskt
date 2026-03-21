@@ -7,6 +7,7 @@ using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Models;
 using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Controllers;
@@ -58,7 +59,7 @@ public class ClientsController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
         
         var pagedData = await _clientService.GetAllAsync(workspaceId, status, name, skip, take, cancellationToken);
         
@@ -93,7 +94,7 @@ public class ClientsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         // 1. Authorize workspace access
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.read", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
 
         // 2. Resolve Policy RefId
         var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
@@ -128,7 +129,7 @@ public class ClientsController : ControllerBase
     [HttpPatch("{clientRefId:guid}/status")]
     public async Task UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.update", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
         var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
 
         if (id <= 0)
@@ -150,7 +151,7 @@ public class ClientsController : ControllerBase
     [HttpPost("{clientRefId:guid}/command")]
     public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.command", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
         var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
         await _eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, clientId, workspaceId, request.CommandName, request.Payload), cancellationToken);
     }
@@ -165,7 +166,7 @@ public class ClientsController : ControllerBase
     [HttpPost("{clientRefId:guid}/ping")]
     public async Task Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.ping", cancellationToken);
+        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsPing, cancellationToken);
         var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
         await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientId, workspaceId, DateTime.UtcNow), cancellationToken);
     }
