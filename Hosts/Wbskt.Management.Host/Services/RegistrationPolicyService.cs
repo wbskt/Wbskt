@@ -80,7 +80,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
 
         var policy = await _provider.GetByIdAsync(policyId, cancellationToken);
-        var events = new List<BaseEvent>();
+        var events = new List<BaseEvent>(2);
         if (!policy.Name.Equals(request.Name))
         {
             events.Add(new PolicyNameUpdatedEvent(policy.RefId, policy.Id, workspaceId, request.Name, policy.Name));

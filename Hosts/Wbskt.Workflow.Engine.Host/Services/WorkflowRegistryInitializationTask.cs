@@ -29,7 +29,7 @@ public sealed class WorkflowRegistryInitializationTask : IStartupTask
         try
         {
             var entities = await _provider.GetAllEnabledAsync(cancellationToken);
-            var definitions = new List<WorkflowDefinition>();
+            var definitions = new List<WorkflowDefinition>(entities.Count);
 
             foreach (var entity in entities)
             {
