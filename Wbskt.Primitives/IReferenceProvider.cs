@@ -1,6 +1,6 @@
 namespace Wbskt.Primitives;
 
-public interface IReferenceMapper
+public interface IReferenceProvider
 {
     Task<int> FindIdByRefIdAsync(Guid referenceId, CancellationToken cancellationToken = default);
 }
