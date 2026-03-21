@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Wbskt.Workflow.Engine.Host\Wbskt.Workflow.Engine.Host.csproj" />
+    <ProjectReference Include="..\..\Hosts\Wbskt.Workflow.Engine.Host\Wbskt.Workflow.Engine.Host.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow\Wbskt.Workflow.csproj" />
     <ProjectReference Include="..\..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
     <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />

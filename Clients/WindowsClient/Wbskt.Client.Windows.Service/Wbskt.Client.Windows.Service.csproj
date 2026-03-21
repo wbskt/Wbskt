@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
+    <ProjectReference Include="..\..\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
     <ProjectReference Include="..\Wbskt.Client.Windows.Models\Wbskt.Client.Windows.Models.csproj" />
   </ItemGroup>
 
