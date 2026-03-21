@@ -33,7 +33,7 @@ public sealed class ClientPayloadHandler : IConsumer<ClientPayloadEvent>
         try
         {
             await HandleCommandAsync(socket, context.Message, context.CancellationToken);
-            await _eventBus.PublishAsync(new ClientPayloadDeliveredEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.MessageType), context.CancellationToken);
+            await _eventBus.PublishAsync(new ClientPayloadDeliveredEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.MessageType, context.Message.Payload), context.CancellationToken);
         }
         catch (Exception ex)
         {

@@ -6,4 +6,4 @@ namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientPayloadDeliveredEvent")]
-public sealed record ClientPayloadDeliveredEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string MessageType) : BaseEvent, IClientContext;
+public sealed record ClientPayloadDeliveredEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string MessageType, string Payload) : BaseEvent, IClientContext;
