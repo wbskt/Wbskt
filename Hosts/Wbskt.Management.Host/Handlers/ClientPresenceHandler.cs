@@ -15,19 +15,13 @@ public sealed class ClientPresenceHandler : IConsumer<ClientConnectedEvent>, ICo
 
     public async Task Consume(ConsumeContext<ClientConnectedEvent> context)
     {
-        var clientId = await _clientProvider.FindIdByRefIdAsync(context.Message.ClientRefId, context.CancellationToken);
-        if (clientId > 0)
-        {
-            await _clientProvider.UpdatePresenceAsync(clientId, true, context.Message.CreatedAtUtc, context.CancellationToken);
-        }
+        var message = context.Message;
+        await _clientProvider.UpdatePresenceAsync(message.ClientId, true, message.CreatedAtUtc, context.CancellationToken);
     }
 
     public async Task Consume(ConsumeContext<ClientDisconnectedEvent> context)
     {
-        var clientId = await _clientProvider.FindIdByRefIdAsync(context.Message.ClientRefId, context.CancellationToken);
-        if (clientId > 0)
-        {
-            await _clientProvider.UpdatePresenceAsync(clientId, false, context.Message.CreatedAtUtc, context.CancellationToken);
-        }
+        var message = context.Message;
+        await _clientProvider.UpdatePresenceAsync(message.ClientId, false, message.CreatedAtUtc, context.CancellationToken);
     }
 }

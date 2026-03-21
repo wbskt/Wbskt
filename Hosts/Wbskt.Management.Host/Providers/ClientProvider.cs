@@ -159,6 +159,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             Name = reader.GetString(reader.GetOrdinal("Name")),
             Secret = reader.GetString(reader.GetOrdinal("Secret")),
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
+            IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
+            LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
     }

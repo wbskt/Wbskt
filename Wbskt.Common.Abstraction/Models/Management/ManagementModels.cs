@@ -44,6 +44,8 @@ public record ClientResponse(
     Guid PolicyRefId,
     string Name,
     ClientStatus Status,
+    bool IsConnected,
+    DateTime? LastActivityAt,
     DateTime CreatedAt
 );
 

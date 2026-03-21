@@ -82,6 +82,8 @@ internal sealed class ClientService : IClientService
             c.PolicyRefId,
             c.Name,
             c.Status,
+            c.IsConnected,
+            c.LastActivityAt,
             c.CreatedAt
         );
     }

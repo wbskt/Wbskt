@@ -12,5 +12,7 @@ public class Client
     public string Name { get; set; } = string.Empty;
     public string Secret { get; set; } = string.Empty;
     public ClientStatus Status { get; set; }
+    public bool IsConnected { get; set; }
+    public DateTime? LastActivityAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }
