@@ -158,16 +158,16 @@ public class DatabaseBatchFlusherService : BackgroundService
     private static DataTable BuildDataTable(List<EventLogEntry> batch)
     {
         var dt = new DataTable();
-        dt.Columns.Add("EventId",      typeof(int));
-        dt.Columns.Add("EventData",    typeof(string));
-        dt.Columns.Add("CreatedAtUtc", typeof(DateTime));
-        dt.Columns.Add("WorkspaceId",  typeof(int));
-        dt.Columns.Add("PolicyId",     typeof(int));
-        dt.Columns.Add("PolicyRefId",  typeof(Guid));
-        dt.Columns.Add("ClientId",     typeof(int));
-        dt.Columns.Add("ClientRefId",  typeof(Guid));
-        dt.Columns.Add("WorkflowId",   typeof(int));
-        dt.Columns.Add("WorkflowRefId",typeof(Guid));
+        dt.Columns.Add("EventId",       typeof(int));
+        dt.Columns.Add("EventData",     typeof(string));
+        dt.Columns.Add("CreatedAtUtc",  typeof(DateTime));
+        dt.Columns.Add("WorkspaceId",   typeof(int));
+        dt.Columns.Add("PolicyId",      typeof(int));
+        dt.Columns.Add("ClientId",      typeof(int));      // moved up
+        dt.Columns.Add("WorkflowId",    typeof(int));      // moved up
+        dt.Columns.Add("PolicyRefId",   typeof(Guid));     // moved down
+        dt.Columns.Add("ClientRefId",   typeof(Guid));     // moved down
+        dt.Columns.Add("WorkflowRefId", typeof(Guid));
 
         foreach (var item in batch)
         {
@@ -175,22 +175,15 @@ public class DatabaseBatchFlusherService : BackgroundService
                 item.EventId,
                 item.EventData,
                 item.CreatedAtUtc,
-                ZeroOrNullToDbNull(item.WorkspaceId),
-                ZeroOrNullToDbNull(item.PolicyId),
-                GuidOrDbNull(item.PolicyRefId),
-                ZeroOrNullToDbNull(item.ClientId),
-                GuidOrDbNull(item.ClientRefId),
-                ZeroOrNullToDbNull(item.WorkflowId),
-                GuidOrDbNull(item.WorkflowRefId)
-            );
+                (object?)item.WorkspaceId  ?? DBNull.Value,
+                (object?)item.PolicyId     ?? DBNull.Value,
+                item.ClientId > 0 ? item.ClientId : DBNull.Value,   // matches new order
+                (object?)item.WorkflowId   ?? DBNull.Value,         // matches new order
+                (object?)item.PolicyRefId  ?? DBNull.Value,
+                (object?)item.ClientRefId  ?? DBNull.Value,
+                (object?)item.WorkflowRefId ?? DBNull.Value);
         }
 
         return dt;
     }
-    
-    private static object ZeroOrNullToDbNull(object? value) =>
-        value is null || value.Equals(0) ? DBNull.Value : value;
-    
-    private static object GuidOrDbNull(Guid? value) =>
-        value is null || value == Guid.Empty ? DBNull.Value : value;
 }
