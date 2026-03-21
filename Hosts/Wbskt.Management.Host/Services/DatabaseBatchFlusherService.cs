@@ -83,10 +83,26 @@ public class DatabaseBatchFlusherService : BackgroundService
             dataTable.Columns.Add("EventData", typeof(string));
             dataTable.Columns.Add("CreatedAtUtc", typeof(DateTime));
             dataTable.Columns.Add("WorkspaceId", typeof(int));
+            dataTable.Columns.Add("PolicyId", typeof(int));
+            dataTable.Columns.Add("PolicyRefId", typeof(Guid));
+            dataTable.Columns.Add("ClientId", typeof(int));
+            dataTable.Columns.Add("ClientRefId", typeof(Guid));
+            dataTable.Columns.Add("WorkflowId", typeof(int));
+            dataTable.Columns.Add("WorkflowRefId", typeof(Guid));
 
             foreach (var item in batch)
             {
-                dataTable.Rows.Add(item.EventId, item.EventData, item.CreatedAtUtc, (object?)item.WorkspaceId ?? DBNull.Value);
+                dataTable.Rows.Add(
+                    item.EventId, 
+                    item.EventData, 
+                    item.CreatedAtUtc, 
+                    (object?)item.WorkspaceId ?? DBNull.Value,
+                    (object?)item.PolicyId ?? DBNull.Value,
+                    (object?)item.PolicyRefId ?? DBNull.Value,
+                    (object?)item.ClientId ?? DBNull.Value,
+                    (object?)item.ClientRefId ?? DBNull.Value,
+                    (object?)item.WorkflowId ?? DBNull.Value,
+                    (object?)item.WorkflowRefId ?? DBNull.Value);
             }
 
             using var scope = _serviceProvider.CreateScope();
