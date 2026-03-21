@@ -1,4 +1,5 @@
 using System.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Common.Abstraction.Interfaces;
 using Wbskt.Common.Abstraction.Models;
@@ -49,15 +50,20 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 p.AddWithValue("@Take", take);
                 p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
-            reader => new EventLogResponse(
-                reader.GetString("EventName"),
-                reader.GetString("EventData"),
-                (EventCriticality)reader.GetByte("EventCriticality"),
-                reader.GetGuid("PolicyRefId"),
-                reader.GetGuid("ClientRefId"),
-                reader.GetGuid("WorkflowRefId"),
-                reader.GetDateTime("CreatedAt")
-            ),
+            MapEventLog,
             cancellationToken);
+    }
+
+    private static EventLogResponse MapEventLog(SqlDataReader reader)
+    {
+        return new EventLogResponse(
+            reader.GetString(reader.GetOrdinal("EventName")),
+            reader.GetString(reader.GetOrdinal("EventData")),
+            (EventCriticality)reader.GetByte(reader.GetOrdinal("EventCriticality")),
+            reader.IsDBNull(reader.GetOrdinal("PolicyRefId")) ? null : reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
+            reader.IsDBNull(reader.GetOrdinal("ClientRefId")) ? null : reader.GetGuid(reader.GetOrdinal("ClientRefId")),
+            reader.IsDBNull(reader.GetOrdinal("WorkflowRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
+            reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+        );
     }
 }
