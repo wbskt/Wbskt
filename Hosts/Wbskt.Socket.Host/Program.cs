@@ -1,7 +1,7 @@
 using Serilog;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
-using Wbskt.Infrastructure.Logging;
+using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
@@ -27,9 +27,11 @@ public static class Program
             Args = args,
             ContentRootPath = Directory.GetCurrentDirectory()
         });
+        
+        builder.AddSharedConfiguration("serilog.json", "rabbitmq.json", "jwt.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
-
+        
         // Add services to the container.
         builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
         builder.Services.AddScoped<IJwtService, JwtService>();
