@@ -1,5 +1,3 @@
-using Wbskt.Common.Abstraction.Models.Management;
-
 namespace Wbskt.Management.Host.Models;
 
 public class Client

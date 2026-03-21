@@ -1,4 +1,4 @@
-using Wbskt.Common.Security;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Socket.Host.Middleware;
 

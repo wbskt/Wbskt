@@ -1,7 +1,7 @@
 using System.Reflection;
-using Wbskt.Common.Abstraction.Interfaces;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Foundation.Abstraction;
+using Wbskt.Management.Host.Providers;
+using Wbskt.Primitives;
 
 namespace Wbskt.Management.Host.Services.Events;
 

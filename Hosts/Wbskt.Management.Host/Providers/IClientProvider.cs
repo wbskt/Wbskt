@@ -1,7 +1,6 @@
-using Wbskt.Common.Abstraction.Models;
-using Wbskt.Common.Abstraction.Models.Management;
-using Wbskt.Foundation.Abstraction;
 using Wbskt.Management.Host.Models;
+using Wbskt.Models;
+using Wbskt.Primitives;
 
 namespace Wbskt.Management.Host.Providers;
 

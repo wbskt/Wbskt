@@ -1,7 +1,7 @@
-using Wbskt.Common.Abstraction.Interfaces;
-using Wbskt.Common.Abstraction.Models;
-using Wbskt.Common.Abstraction.Models.Management;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Management.Host.Models;
+using Wbskt.Management.Host.Providers;
+using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services;
 

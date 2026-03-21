@@ -1,8 +1,8 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
-using Wbskt.Common.Abstraction.Models;
-using Wbskt.Common.Data;
+using Wbskt.Infrastructure;
+using Wbskt.Models;
 using Wbskt.Workflow.Entities;
 
 namespace Wbskt.Workflow.Providers;

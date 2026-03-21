@@ -1,5 +1,4 @@
 using Wbskt.Auth.Host.Models;
-using Wbskt.Common.Abstraction.Models.Auth;
 
 namespace Wbskt.Auth.Host.Services;
 

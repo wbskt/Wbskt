@@ -1,4 +1,4 @@
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Services.Clients;
 

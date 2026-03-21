@@ -1,8 +1,8 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
-using Wbskt.Common.Data;
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Infrastructure;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Providers;
 

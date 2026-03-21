@@ -1,11 +1,11 @@
 using Serilog;
-using Wbskt.Common.Infrastructure;
-using Wbskt.Common.Logging;
-using Wbskt.Common.Middlewares;
-using Wbskt.Common.Security;
 using Wbskt.EventBus.RabbitMQ;
-using Wbskt.Foundation.Abstraction;
-using Wbskt.Foundation.Abstraction.Constants;
+using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Logging;
+using Wbskt.Infrastructure.Middlewares;
+using Wbskt.Infrastructure.Security;
+using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 using Wbskt.Socket.Host.Extensions;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Middleware;

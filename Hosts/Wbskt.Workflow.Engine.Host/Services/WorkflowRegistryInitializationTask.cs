@@ -1,4 +1,4 @@
-using Wbskt.Foundation.Abstraction;
+using Wbskt.Primitives;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Engine.Host.Interfaces;
 using Wbskt.Workflow.Mappers;

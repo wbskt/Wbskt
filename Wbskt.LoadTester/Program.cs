@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
+using Wbskt.LoadTester;
 
 Console.WriteLine("WBSKT Load Tester");
 Console.WriteLine("=================");
@@ -87,27 +88,30 @@ while (true)
 
 
 // A simple in-memory storage for the load test to avoid file contention
-public class InMemoryClientStorage : IClientStorage
+namespace Wbskt.LoadTester
 {
-    private Guid? _refId;
-    private string? _secret;
-
-    public Task SaveCredentialsAsync(Guid refId, string secret)
+    public class InMemoryClientStorage : IClientStorage
     {
-        _refId = refId;
-        _secret = secret;
-        return Task.CompletedTask;
-    }
+        private Guid? _refId;
+        private string? _secret;
 
-    public Task<(Guid? RefId, string? Secret)> LoadCredentialsAsync()
-    {
-        return Task.FromResult((_refId, _secret));
-    }
+        public Task SaveCredentialsAsync(Guid refId, string secret)
+        {
+            _refId = refId;
+            _secret = secret;
+            return Task.CompletedTask;
+        }
 
-    public Task ClearCredentialsAsync()
-    {
-        _refId = null;
-        _secret = null;
-        return Task.CompletedTask;
+        public Task<(Guid? RefId, string? Secret)> LoadCredentialsAsync()
+        {
+            return Task.FromResult((_refId, _secret));
+        }
+
+        public Task ClearCredentialsAsync()
+        {
+            _refId = null;
+            _secret = null;
+            return Task.CompletedTask;
+        }
     }
 }

@@ -5,14 +5,14 @@ using Serilog;
 using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
-using Wbskt.Common.Infrastructure;
-using Wbskt.Common.Logging;
-using Wbskt.Common.Mappers;
-using Wbskt.Common.Middlewares;
-using Wbskt.Common.Security;
 using Wbskt.EventBus.RabbitMQ;
-using Wbskt.Foundation.Abstraction;
-using Wbskt.Foundation.Abstraction.Constants;
+using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Logging;
+using Wbskt.Infrastructure.Mappers;
+using Wbskt.Infrastructure.Middlewares;
+using Wbskt.Infrastructure.Security;
+using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Auth.Host;
 

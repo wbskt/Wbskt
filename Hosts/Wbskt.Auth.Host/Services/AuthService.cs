@@ -3,11 +3,10 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
-using Wbskt.Common.Abstraction.Models.Auth;
-using Wbskt.Common.Security;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Infrastructure.Security;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
 

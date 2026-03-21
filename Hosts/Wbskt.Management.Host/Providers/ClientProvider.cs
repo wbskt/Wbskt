@@ -1,10 +1,9 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
-using Wbskt.Common.Abstraction.Models;
-using Wbskt.Common.Abstraction.Models.Management;
-using Wbskt.Common.Data;
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Models;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Providers;
 

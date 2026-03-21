@@ -1,7 +1,7 @@
 using System.Reflection;
 using MassTransit;
 using Microsoft.AspNetCore.SignalR;
-using Wbskt.Common.Abstraction;
+using Wbskt.Events;
 using Wbskt.Events.Abstractions;
 using Wbskt.Management.Host.Hubs;
 

@@ -1,5 +1,5 @@
-using Wbskt.Common.Abstraction.Models;
 using Wbskt.Management.Host.Models;
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.Management.Host.Services;

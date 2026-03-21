@@ -1,6 +1,6 @@
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
 

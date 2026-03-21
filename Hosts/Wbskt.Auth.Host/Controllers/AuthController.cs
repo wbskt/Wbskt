@@ -3,8 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
-using Wbskt.Common.Abstraction.Models.Auth;
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Controllers;
 

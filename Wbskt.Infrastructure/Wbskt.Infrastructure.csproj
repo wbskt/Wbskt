@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
+      <ProjectReference Include="..\Events\Wbskt.Events\Wbskt.Events.csproj" />
+      <ProjectReference Include="..\Models\Wbskt.Models\Wbskt.Models.csproj" />
+      <ProjectReference Include="..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" />
+        <PackageReference Include="Microsoft.Data.SqlClient" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Serilog.Settings.Configuration" />
+    </ItemGroup>
+
+</Project>

@@ -1,10 +1,10 @@
 using Serilog;
-using Wbskt.Common.Infrastructure;
-using Wbskt.Common.Logging;
-using Wbskt.Common.Middlewares;
 using Wbskt.EventBus.RabbitMQ;
-using Wbskt.Foundation.Abstraction;
-using Wbskt.Foundation.Abstraction.Constants;
+using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Logging;
+using Wbskt.Infrastructure.Middlewares;
+using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Engine.Host.Extensions;
 
 namespace Wbskt.Workflow.Engine.Host;

@@ -1,4 +1,4 @@
-using Wbskt.Foundation.Abstraction;
+using Wbskt.Primitives;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;

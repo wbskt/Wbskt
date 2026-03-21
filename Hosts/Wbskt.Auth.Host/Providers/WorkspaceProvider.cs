@@ -1,7 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
-using Wbskt.Common.Data;
+using Wbskt.Infrastructure;
 
 namespace Wbskt.Auth.Host.Providers;
 

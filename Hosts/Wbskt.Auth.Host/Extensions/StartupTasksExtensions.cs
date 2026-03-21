@@ -1,4 +1,4 @@
-using Wbskt.Foundation.Abstraction;
+using Wbskt.Primitives;
 
 namespace Wbskt.Auth.Host.Extensions;
 

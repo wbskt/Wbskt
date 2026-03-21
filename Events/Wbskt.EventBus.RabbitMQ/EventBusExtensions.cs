@@ -15,7 +15,6 @@ public static class EventBusExtensions
         Action<RabbitMQOptions>? configureOptions = null,
         Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureEndpoints = null)
         {
-        services.AddEventBusCore();
 
         var options = new RabbitMQOptions();
         configuration.GetSection("RabbitMQ").Bind(options);

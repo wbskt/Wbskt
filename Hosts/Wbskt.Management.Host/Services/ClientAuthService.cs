@@ -1,8 +1,8 @@
 using System.Security.Claims;
-using Wbskt.Common.Abstraction.Models.Management;
-using Wbskt.Common.Security;
-using Wbskt.Foundation.Abstraction.Exceptions;
+using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Services;
 

@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.Common.Abstraction.Models;
-using Wbskt.Common.Abstraction.Models.Management;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Foundation.Abstraction;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Models;
+using Wbskt.Primitives;
 
 namespace Wbskt.Management.Host.Controllers;
 

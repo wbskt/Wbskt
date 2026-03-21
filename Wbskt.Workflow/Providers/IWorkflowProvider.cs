@@ -1,5 +1,5 @@
-using Wbskt.Common.Abstraction.Models;
-using Wbskt.Foundation.Abstraction;
+using Wbskt.Models;
+using Wbskt.Primitives;
 using Wbskt.Workflow.Entities;
 
 namespace Wbskt.Workflow.Providers;

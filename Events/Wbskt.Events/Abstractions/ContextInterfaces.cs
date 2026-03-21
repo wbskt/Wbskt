@@ -1,4 +1,3 @@
-using Wbskt.Common.Abstraction;
 using Wbskt.EventBus.Abstractions;
 
 namespace Wbskt.Events.Abstractions;

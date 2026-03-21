@@ -1,10 +1,10 @@
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Foundation.Abstraction;
 using Wbskt.Management.Host.Handlers.Events;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Events;
+using Wbskt.Primitives;
 
 namespace Wbskt.Management.Host.Extensions;
 

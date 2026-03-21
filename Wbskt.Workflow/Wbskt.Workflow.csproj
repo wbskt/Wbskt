@@ -7,8 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
+    <ProjectReference Include="..\Models\Wbskt.Models\Wbskt.Models.csproj" />
+    <ProjectReference Include="..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
     <ProjectReference Include="..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
-    <ProjectReference Include="..\Wbskt.Common\Wbskt.Common.csproj" />
   </ItemGroup>
 
 </Project>

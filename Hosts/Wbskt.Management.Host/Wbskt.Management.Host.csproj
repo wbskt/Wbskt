@@ -17,11 +17,10 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\Wbskt.Common.Abstraction\Wbskt.Common.Abstraction.csproj" />
-      <ProjectReference Include="..\..\Wbskt.Common\Wbskt.Common.csproj" />
       <ProjectReference Include="..\..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
       <ProjectReference Include="..\..\Events\Wbskt.EventBus.RabbitMQ\Wbskt.EventBus.RabbitMQ.csproj" />
       <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />
+      <ProjectReference Include="..\..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
       <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
       <ProjectReference Include="..\..\Wbskt.Workflow\Wbskt.Workflow.csproj" />
     </ItemGroup>

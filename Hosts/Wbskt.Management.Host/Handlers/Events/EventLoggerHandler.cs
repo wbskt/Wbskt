@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using MassTransit;
-using Wbskt.Common.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers.Events;

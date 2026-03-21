@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.Common.Abstraction.Models.Management;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Controllers;

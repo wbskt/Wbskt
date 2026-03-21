@@ -1,6 +1,6 @@
 using System.Reflection;
 using MassTransit;
-using Wbskt.Common.Abstraction;
+using Wbskt.Events;
 using Wbskt.Management.Host.Handlers;
 
 namespace Wbskt.Management.Host.Extensions;

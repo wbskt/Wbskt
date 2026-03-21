@@ -1,25 +1,24 @@
 using System.Text;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using Wbskt.Common.Abstraction;
-using Wbskt.Common.Data;
-using Wbskt.Common.Infrastructure;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Foundation.Abstraction;
-using Wbskt.Common.Logging;
-using Wbskt.Common.Mappers;
-using Wbskt.Common.Middlewares;
-using Wbskt.Common.Security;
 using Wbskt.EventBus.RabbitMQ;
-using Wbskt.Foundation.Abstraction;
-using Wbskt.Foundation.Abstraction.Constants;
+using Wbskt.Events;
+using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Logging;
+using Wbskt.Infrastructure.Mappers;
+using Wbskt.Infrastructure.Middlewares;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Extensions;
 using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Primitives;
+using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Providers;
 
 namespace Wbskt.Management.Host;
@@ -62,7 +61,7 @@ public static class Program
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         
-        builder.Services.AddWbsktEventDataServices();
+        builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
 
         // Event Bus & Logging
         var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);

@@ -25,6 +25,12 @@
     <Project Path="Hosts/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj" />
     <Project Path="Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj" />
   </Folder>
+  <Folder Name="/Models/">
+    <Project Path="Models/Wbskt.Auth.Models/Wbskt.Auth.Models.csproj" />
+    <Project Path="Models/Wbskt.Management.Models/Wbskt.Management.Models.csproj" />
+    <Project Path="Models/Wbskt.Workflow.Models/Wbskt.Workflow.Models.csproj" />
+    <Project Path="Models/Wbskt.Models/Wbskt.Models.csproj" />
+  </Folder>
   <Folder Name="/SolutionItems/">
     <File Path=".gitignore" />
     <File Path="Coding.Conventions.md" />
@@ -42,10 +48,9 @@
     <Project Path="Wbskt.Client.Windows.UI/Wbskt.Client.Windows.UI.csproj" />
   </Folder>
   <Project Path="Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj" />
-  <Project Path="Wbskt.Common.Abstraction/Wbskt.Common.Abstraction.csproj" />
-  <Project Path="Wbskt.Common/Wbskt.Common.csproj" />
-  <Project Path="Wbskt.Foundation.Abstraction/Wbskt.Foundation.Abstraction.csproj" />
+  <Project Path="Wbskt.Infrastructure/Wbskt.Infrastructure.csproj" />
   <Project Path="Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
+  <Project Path="Wbskt.Primitives/Wbskt.Primitives.csproj" />
   <Project Path="Wbskt.Simulator/Wbskt.Simulator.csproj" />
   <Project Path="Wbskt.Workflow.Abstraction/Wbskt.Workflow.Abstraction.csproj" />
   <Project Path="Wbskt.Workflow/Wbskt.Workflow.csproj" />
