@@ -6,8 +6,9 @@ namespace Wbskt.Events.WorkflowEngine;
 [EventCriticality(EventCriticality.Info)]
 public sealed record NodeExecutionWaitingEvent(
     int WorkspaceId,
+    Guid WorkflowRefId,
+    int WorkflowId,
     Guid InstanceId,
     Guid PointerId,
     Guid NodeId,
-    DateTime WaitUntil
-) : WorkspaceEvent(WorkspaceId);
+    DateTime WaitUntil) : BaseEvent, IWorkflowContext;

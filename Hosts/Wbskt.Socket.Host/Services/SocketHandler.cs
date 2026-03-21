@@ -48,6 +48,7 @@ internal sealed class SocketHandler : ISocketHandler
         );
 
         var clientRefIdString = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var clientId = int.Parse(context.User.FindFirst("id")!.Value);
         var workspaceId = int.Parse(context.User.FindFirst("workspace_id")!.Value);
         if (!Guid.TryParse(clientRefIdString, out var clientRefId))
         {
@@ -64,12 +65,12 @@ internal sealed class SocketHandler : ISocketHandler
         }
         
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
-        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, workspaceId), cts.Token);
+        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId), cts.Token);
 
         try
         {
             // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
-            await ReceiveLoopAsync(clientRefId, webSocket, workspaceId, cts.Token);
+            await ReceiveLoopAsync(clientRefId, clientId, webSocket, workspaceId, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -87,11 +88,11 @@ internal sealed class SocketHandler : ISocketHandler
         {
             await _connectionManager.RemoveConnectionAsync(clientRefId, CancellationToken.None);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
-            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, workspaceId, "Socket closed"), CancellationToken.None);
+            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, "Socket closed"), CancellationToken.None);
         }
     }
 
-    private async Task ReceiveLoopAsync(Guid clientRefId, WebSocket webSocket, int workspaceId,
+    private async Task ReceiveLoopAsync(Guid clientRefId, int clientId, WebSocket webSocket, int workspaceId,
         CancellationToken cancellationToken)
     {
         var buffer = new byte[1024 * 4];
@@ -117,7 +118,7 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        await _eventBus.PublishAsync(new ClientPayloadReceivedEvent(clientRefId, workspaceId, message.Type, messageJson), cancellationToken);
+                        await _eventBus.PublishAsync(new ClientPayloadReceivedEvent(clientRefId, clientId, workspaceId, message.Type, messageJson), cancellationToken);
                     }
                 }
                 catch (JsonException ex)

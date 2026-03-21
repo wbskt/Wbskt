@@ -8,7 +8,7 @@ using Wbskt.Management.Host.Hubs;
 namespace Wbskt.Management.Host.Handlers;
 
 public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent> 
-    where TEvent : WorkspaceEvent
+    where TEvent : class, IWorkspaceContext
 {
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly SignalRNotifyAttribute _metadata;

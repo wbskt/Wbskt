@@ -4,4 +4,4 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Events.Auth;
 
 [EventCriticality(EventCriticality.Info)]
-public sealed record TokenRotatedEvent(int UserId, string IpAddress) : UserEvent(UserId);
+public sealed record TokenRotatedEvent(int UserId, Guid UserRefId, string IpAddress) : BaseEvent, IUserContext;

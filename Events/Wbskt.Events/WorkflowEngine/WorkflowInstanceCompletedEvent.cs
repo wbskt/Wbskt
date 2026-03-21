@@ -5,8 +5,8 @@ namespace Wbskt.Events.WorkflowEngine;
 
 [EventCriticality(EventCriticality.Info)]
 public sealed record WorkflowInstanceCompletedEvent(
-    Guid InstanceId, 
-    Guid WorkflowRefId, 
+    Guid InstanceId,
+    Guid WorkflowRefId,
+    int WorkflowId,
     int WorkspaceId,
-    string Status
-) : WorkspaceEvent(WorkspaceId);
+    string Status) : BaseEvent, IWorkflowContext;

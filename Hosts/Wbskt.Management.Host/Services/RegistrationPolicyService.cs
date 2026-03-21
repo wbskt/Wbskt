@@ -54,7 +54,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         var policy = await _provider.InsertAsync(workspaceId, request, cancellationToken);
         
-        await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, workspaceId, policy.Name), cancellationToken);
+        await _eventBus.PublishAsync(new PolicyCreatedEvent(policy.RefId, policy.Id, workspaceId, policy.Name), cancellationToken);
 
         return MapToResponse(policy);
     }
@@ -80,15 +80,15 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         await _provider.UpdateAsync(workspaceId, policyId, request, cancellationToken);
 
         var policy = await _provider.GetByIdAsync(policyId, cancellationToken);
-        var events = new List<RegistrationPolicyEvent>();
+        var events = new List<BaseEvent>();
         if (!policy.Name.Equals(request.Name))
         {
-            events.Add(new PolicyNameUpdatedEvent(policy.RefId, workspaceId, request.Name, policy.Name));
+            events.Add(new PolicyNameUpdatedEvent(policy.RefId, policy.Id, workspaceId, request.Name, policy.Name));
         }
 
         if (policy.MaxClients != request.MaxClients)
         {
-            events.Add(new PolicyClientLimitUpdatedEvent(policy.RefId, workspaceId, request.MaxClients, policy.MaxClients));
+            events.Add(new PolicyClientLimitUpdatedEvent(policy.RefId, policy.Id, workspaceId, request.MaxClients, policy.MaxClients));
         }
 
         await Parallel.ForEachAsync(events, cancellationToken, async (@event, token) => await _eventBus.PublishAsync(@event, token));
@@ -99,7 +99,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
 
         var policy = await _provider.GetByIdAsync(policyId, cancellationToken);
-        await _eventBus.PublishAsync(new PolicyDisabledEvent(policy.RefId, workspaceId), cancellationToken);
+        await _eventBus.PublishAsync(new PolicyDisabledEvent(policy.RefId, policy.Id, workspaceId), cancellationToken);
     }
 
     private static RegistrationPolicyResponse MapToResponse(RegistrationPolicy p)

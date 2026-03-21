@@ -4,4 +4,4 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
-public sealed record ClientConnectedEvent(Guid ClientRefId, int WorkspaceId) : ClientEvent(ClientRefId, WorkspaceId);
+public sealed record ClientConnectedEvent(Guid ClientRefId, int ClientId, int WorkspaceId) : BaseEvent, IClientContext;

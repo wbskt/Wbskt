@@ -4,9 +4,5 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
-public sealed record ClientPropertyUpdatedEvent(
-    Guid ClientRefId, 
-    int WorkspaceId,
-    string PropertyName,
-    string NewValue
-) : ClientEvent(ClientRefId, WorkspaceId);
+public sealed record ClientPropertyUpdatedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string PropertyName,
+    string NewValue) : BaseEvent, IClientContext;

@@ -67,7 +67,7 @@ internal sealed class WorkflowService : IWorkflowService
 
         var workflow = await _provider.InsertAsync(workspaceId, request.Name, request.Description, cancellationToken);
         
-        await _eventBus.PublishAsync(new WorkflowCreatedEvent(workflow.RefId, workspaceId, workflow.Name), cancellationToken);
+        await _eventBus.PublishAsync(new WorkflowCreatedEvent(workflow.RefId, workflow.Id, workspaceId, workflow.Name), cancellationToken);
 
         return new WorkflowSummaryResponse(
             workflow.RefId,
@@ -114,7 +114,7 @@ internal sealed class WorkflowService : IWorkflowService
             cancellationToken);
 
         // 4. Notify the Engine to reload
-        await _eventBus.PublishAsync(new WorkflowUpdatedEvent(existing.RefId, workspaceId), cancellationToken);
+        await _eventBus.PublishAsync(new WorkflowUpdatedEvent(existing.RefId, existing.Id, workspaceId), cancellationToken);
     }
 
     public async Task DeleteAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
@@ -128,6 +128,6 @@ internal sealed class WorkflowService : IWorkflowService
 
         await _provider.DeleteAsync(id, cancellationToken);
 
-        await _eventBus.PublishAsync(new WorkflowDeletedEvent(existing.RefId, workspaceId), cancellationToken);
+        await _eventBus.PublishAsync(new WorkflowDeletedEvent(existing.RefId, existing.Id, workspaceId), cancellationToken);
     }
 }

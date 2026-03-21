@@ -33,7 +33,7 @@ public class ClientPayloadTriggerHandlerTests
     public async Task Consume_NotTelemetry_ReturnsEarly()
     {
         // Arrange
-        _contextMock.Setup(x => x.Message).Returns(new ClientPayloadReceivedEvent(Guid.NewGuid(), 1, "CommandResponse", ""));
+        _contextMock.Setup(x => x.Message).Returns(new ClientPayloadReceivedEvent(Guid.NewGuid(), 1, 1, "CommandResponse", ""));
 
         // Act
         await _handler.Consume(_contextMock.Object);
@@ -47,7 +47,7 @@ public class ClientPayloadTriggerHandlerTests
     {
         // Arrange
         var clientRefId = Guid.NewGuid();
-        _contextMock.Setup(x => x.Message).Returns(new ClientPayloadReceivedEvent(clientRefId, 1, "Telemetry", ""));
+        _contextMock.Setup(x => x.Message).Returns(new ClientPayloadReceivedEvent(clientRefId, 5, 1, "Telemetry", ""));
         
         _registryMock.Setup(x => x.GetWorkflows($"client:{clientRefId}"))
             .Returns(new List<WorkflowDefinition>());
@@ -65,7 +65,7 @@ public class ClientPayloadTriggerHandlerTests
         // Arrange
         var clientRefId = Guid.NewGuid();
         var workspaceId = 1;
-        _contextMock.Setup(x => x.Message).Returns(new ClientPayloadReceivedEvent(clientRefId, workspaceId, "Telemetry", "{\"temp\": 25}"));
+        _contextMock.Setup(x => x.Message).Returns(new ClientPayloadReceivedEvent(clientRefId, 4, workspaceId, "Telemetry", "{\"temp\": 25}"));
 
         var workflow = new WorkflowDefinition { WorkflowRefId = Guid.NewGuid(), WorkspaceId = workspaceId };
         

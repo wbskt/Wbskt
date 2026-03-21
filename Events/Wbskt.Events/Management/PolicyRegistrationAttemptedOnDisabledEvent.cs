@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Warning)]
 [SignalRNotify("OnPolicyRegistrationAttemptedOnDisabledEvent")]
-public sealed record PolicyRegistrationAttemptedOnDisabledEvent(Guid PolicyRefId, int WorkspaceId, string ClientName) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+public sealed record PolicyRegistrationAttemptedOnDisabledEvent(Guid PolicyRefId, int PolicyId, int WorkspaceId, string ClientName) : BaseEvent, IPolicyContext;

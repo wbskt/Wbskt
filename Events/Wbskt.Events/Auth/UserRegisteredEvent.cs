@@ -4,4 +4,5 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Events.Auth;
 
 [EventCriticality(EventCriticality.Info)]
-public sealed record UserRegisteredEvent(int UserId, string Username, string Email) : UserEvent(UserId);
+public sealed record UserRegisteredEvent(int UserId, Guid UserRefId, string Username, string Email)
+    : BaseEvent, IUserContext;

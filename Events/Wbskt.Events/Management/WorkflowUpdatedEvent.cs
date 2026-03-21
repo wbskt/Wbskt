@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnWorkflowUpdated")]
-public sealed record WorkflowUpdatedEvent(Guid WorkflowRefId, int WorkspaceId) : WorkflowEvent(WorkflowRefId, WorkspaceId);
+public sealed record WorkflowUpdatedEvent(Guid WorkflowRefId, int WorkflowId, int WorkspaceId) : BaseEvent, IWorkflowContext;

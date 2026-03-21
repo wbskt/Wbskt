@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnWorkflowCreated")]
-public sealed record WorkflowCreatedEvent(Guid WorkflowRefId, int WorkspaceId, string Name) : WorkflowEvent(WorkflowRefId, WorkspaceId);
+public sealed record WorkflowCreatedEvent(Guid WorkflowRefId, int WorkflowId, int WorkspaceId, string Name) : BaseEvent, IWorkflowContext;

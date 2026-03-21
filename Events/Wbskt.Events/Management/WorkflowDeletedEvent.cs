@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnWorkflowDeleted")]
-public record WorkflowDeletedEvent(Guid WorkflowRefId, int WorkspaceId) : WorkflowEvent(WorkflowRefId, WorkspaceId);
+public sealed record WorkflowDeletedEvent(Guid WorkflowRefId, int WorkflowId, int WorkspaceId) : BaseEvent, IWorkflowContext;

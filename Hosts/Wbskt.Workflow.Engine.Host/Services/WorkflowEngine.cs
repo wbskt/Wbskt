@@ -32,6 +32,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
     {
         var instance = new WorkflowInstance
         {
+            WorkflowId = definition.WorkspaceId,
             WorkflowRefId = definition.WorkflowRefId,
             WorkspaceId = definition.WorkspaceId,
             TriggerContext = triggerContext,
@@ -39,7 +40,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         };
 
         await _eventBus.PublishAsync(new WorkflowInstanceStartedEvent(
-            instance.InstanceId, instance.WorkflowRefId, instance.WorkspaceId));
+            instance.InstanceId, instance.WorkflowRefId, instance.WorkflowId, instance.WorkspaceId));
 
         var matchingTriggers = definition.Nodes
             .OfType<BaseTriggerNode>()
@@ -109,7 +110,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 var executor = ResolveExecutor(node, serviceProvider);
                 
                 await _eventBus.PublishAsync(new NodeExecutionStartedEvent(
-                    instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, node.GetType().Name, node.Name));
+                    instance.WorkspaceId, instance.WorkflowRefId, instance.WorkflowId, instance.InstanceId, pointer.PointerId, node.NodeId, node.GetType().Name, node.Name));
 
                 var result = await executor.ExecuteAsync(node, context);
 
@@ -125,7 +126,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     pointer.ResumeAt = result.WaitUntil;
 
                     await _eventBus.PublishAsync(new NodeExecutionWaitingEvent(
-                        instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, result.WaitUntil.Value));
+                        instance.WorkspaceId, instance.WorkflowRefId, instance.WorkflowId, instance.InstanceId, pointer.PointerId, node.NodeId, result.WaitUntil.Value));
                     
                     break;
                 }
@@ -134,7 +135,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 // (Note: Currently NodeExecutionResult doesn't have an output object, we should add it if needed)
                 
                 await _eventBus.PublishAsync(new NodeExecutionCompletedEvent(
-                    instance.WorkspaceId, instance.InstanceId, pointer.PointerId, node.NodeId, result.ActivatedPortIds));
+                    instance.WorkspaceId, instance.WorkflowRefId, instance.WorkflowId, instance.InstanceId, pointer.PointerId, node.NodeId, result.ActivatedPortIds));
 
                 pointer.Status = ExecutionStatus.Completed;
 
@@ -224,7 +225,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         
         _logger.LogWarning("Node execution failed for Instance {InstanceId}: {message}", instance.InstanceId, message);
         await _eventBus.PublishAsync(new NodeExecutionFailedEvent(
-            instance.WorkspaceId, instance.InstanceId, pointer.PointerId, pointer.NodeId, message));
+            instance.WorkspaceId, instance.WorkflowRefId, instance.WorkflowId, instance.InstanceId, pointer.PointerId, pointer.NodeId, message));
     }
 
     private async Task CheckWorkflowCompletionAsync(WorkflowInstance instance)
@@ -259,7 +260,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
         instance.FinishedAt = DateTime.UtcNow;
 
         await _eventBus.PublishAsync(new WorkflowInstanceCompletedEvent(
-            instance.InstanceId, instance.WorkflowRefId, instance.WorkspaceId, instance.Status.ToString()));
+            instance.InstanceId, instance.WorkflowRefId, instance.WorkflowId, instance.WorkspaceId, instance.Status.ToString()));
         
         _logger.LogDebug("Workflow instance {InstanceId} finished with status {Status}", instance.InstanceId, instance.Status);
     }

@@ -18,6 +18,6 @@ public sealed class ClientPongHandler : IConsumer<ClientPongEvent>
         var pong = context.Message;
         var roundTrip = (DateTime.UtcNow - pong.OriginalPingTime).TotalMilliseconds;
 
-        await _eventBus.PublishAsync(new ClientLatencyMeasuredEvent(pong.ClientRefId, pong.WorkspaceId, roundTrip), context.CancellationToken);
+        await _eventBus.PublishAsync(new ClientLatencyMeasuredEvent(pong.ClientRefId, pong.ClientId, pong.WorkspaceId, roundTrip), context.CancellationToken);
     }
 }

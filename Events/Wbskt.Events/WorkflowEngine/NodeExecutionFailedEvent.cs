@@ -6,8 +6,9 @@ namespace Wbskt.Events.WorkflowEngine;
 [EventCriticality(EventCriticality.Error)]
 public sealed record NodeExecutionFailedEvent(
     int WorkspaceId,
+    Guid WorkflowRefId,
+    int WorkflowId,
     Guid InstanceId,
     Guid PointerId,
     Guid NodeId,
-    string ErrorMessage
-) : WorkspaceEvent(WorkspaceId);
+    string ErrorMessage) : BaseEvent, IWorkflowContext;

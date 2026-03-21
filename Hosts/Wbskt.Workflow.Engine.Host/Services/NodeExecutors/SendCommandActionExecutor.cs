@@ -27,6 +27,7 @@ public sealed class SendCommandActionExecutor : IWorkflowNodeExecutor
         
         await _eventBus.PublishAsync(new ClientPayloadEvent(
             commandNode.TargetClientRefId,
+            0, // TODO: we need actual client id. either we fetch it here or fill id in the node definition when workflow is saved
             context.WorkspaceId,
             commandNode.MessageType,
             commandNode.Payload

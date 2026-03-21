@@ -55,9 +55,9 @@ internal sealed class ClientService : IClientService
             return;
         }
 
+        var policy = await _policyProvider.GetByRefIdAsync(client.PolicyRefId, cancellationToken);
         if (status == ClientStatus.Registered)
         {
-            var policy = await _policyProvider.GetByRefIdAsync(client.PolicyRefId, cancellationToken);
 
             if (policy.MaxClients.HasValue)
             {
@@ -72,7 +72,7 @@ internal sealed class ClientService : IClientService
 
         await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
 
-        await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.WorkspaceId, (byte)status), cancellationToken);
+        await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, (byte)status), cancellationToken);
     }
 
     private static ClientResponse MapToResponse(Client c)

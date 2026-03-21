@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Warning)]
 [SignalRNotify("OnPolicyRegistrationLimitReachedEvent")]
-public sealed record PolicyRegistrationLimitReachedEvent(Guid PolicyRefId, int WorkspaceId, int Limit) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+public sealed record PolicyRegistrationLimitReachedEvent(Guid PolicyRefId, int PolicyId, int WorkspaceId, int Limit) : BaseEvent, IPolicyContext;

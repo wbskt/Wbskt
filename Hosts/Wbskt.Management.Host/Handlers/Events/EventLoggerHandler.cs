@@ -3,6 +3,7 @@ using System.Text.Json;
 using MassTransit;
 using Wbskt.Common.Models;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers.Events;
@@ -27,6 +28,7 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
     {
         try
         {
+            var @event = context.Message;
             var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
             var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
 
@@ -45,13 +47,19 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
                 ? messageNode.GetRawText() 
                 : Encoding.UTF8.GetString(bodyBytes);
 
-            int? workspaceId = null;
-            if (doc.RootElement.TryGetProperty("message", out var msg) && msg.TryGetProperty("workspaceId", out var wsId) && wsId.TryGetInt32(out var id))
-            {
-                workspaceId = id;
-            }
+            var entry = new EventLogEntry(
+                eventId, 
+                eventData, 
+                @event.CreatedAtUtc, 
+                WorkspaceId: (@event as IWorkspaceContext)?.WorkspaceId,
+                PolicyId: (@event as IPolicyContext)?.PolicyId,
+                PolicyRefId: (@event as IPolicyContext)?.PolicyRefId,
+                ClientId: (@event as IClientContext)?.ClientId,
+                ClientRefId: (@event as IClientContext)?.ClientRefId,
+                WorkflowId: (@event as IWorkflowContext)?.WorkflowId,
+                WorkflowRefId: (@event as IWorkflowContext)?.WorkflowRefId
+            );
 
-            var entry = new EventLogEntry(eventId, eventData, context.Message.CreatedAtUtc, workspaceId);
             await _buffer.WriteAsync(entry, context.CancellationToken);
         }
         catch (Exception ex)

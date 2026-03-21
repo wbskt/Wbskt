@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientAutoApprovedEvent")]
-public sealed record ClientAutoApprovedEvent(Guid ClientRefId, Guid PolicyRefId, int WorkspaceId) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+public sealed record ClientAutoApprovedEvent(Guid ClientRefId, int ClientId, Guid PolicyRefId, int PolicyId, int WorkspaceId) : BaseEvent, IClientContext, IPolicyContext;

@@ -4,9 +4,10 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
-public record ClientPayloadEvent(
+public sealed record ClientPayloadEvent(
     Guid ClientRefId, 
+    int ClientId,
     int WorkspaceId,
     string MessageType,
     string Payload
-) : ClientEvent(ClientRefId, WorkspaceId);
+) : BaseEvent, IClientContext;

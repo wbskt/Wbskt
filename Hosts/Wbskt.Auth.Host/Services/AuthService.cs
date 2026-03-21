@@ -34,13 +34,13 @@ internal sealed class AuthService : IAuthService
 
             if (verificationResult == PasswordVerificationResult.Failed)
             {
-                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, ipAddress, "Invalid password"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password"), cancellationToken);
                 throw new SecurityException("Invalid credentials.");
             }
 
             if (!user.IsActive)
             {
-                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, ipAddress, "User inactive"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive"), cancellationToken);
                 throw new SecurityException("User is inactive.");
             }
 
@@ -48,7 +48,7 @@ internal sealed class AuthService : IAuthService
             var refreshToken = GenerateRefreshToken(user.Id);
 
             await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
-            await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, ipAddress), cancellationToken);
+            await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
             return new LoginResponse(accessToken, refreshToken.Token);
         }
@@ -88,7 +88,7 @@ internal sealed class AuthService : IAuthService
         var newRefreshToken = GenerateRefreshToken(user.Id);
 
         await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
-        await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, ipAddress), cancellationToken);
+        await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
         return new LoginResponse(newAccessToken, newRefreshToken.Token);
     }
@@ -124,8 +124,9 @@ internal sealed class AuthService : IAuthService
         user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
         var userId = await _provider.InsertUserAsync(user, cancellationToken);
+        user = await _provider.GetByIdAsync(userId, cancellationToken);
 
-        await _eventBus.PublishAsync(new UserRegisteredEvent(userId, username, email), cancellationToken);
+        await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
     }
 
     public async Task CreateRoleAsync(string name, string description, CancellationToken cancellationToken = default)
@@ -158,8 +159,9 @@ internal sealed class AuthService : IAuthService
     public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
     {
         await _provider.GrantUserPermissionAsync(userId, permissionSlug, isDeny, cancellationToken);
-        
-        await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId), cancellationToken);
+        var user = await _provider.GetByIdAsync(userId, cancellationToken);
+
+        await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId, user.RefId), cancellationToken);
     }
 
     private string GenerateAccessToken(User user)

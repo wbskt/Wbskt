@@ -3,10 +3,5 @@ using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Events.Client;
 
-[EventCriticality(EventCriticality.Error)]
-public sealed record ClientPayloadFailedEvent(
-    Guid ClientRefId, 
-    int WorkspaceId,
-    string MessageType,
-    string Reason
-) : ClientEvent(ClientRefId, WorkspaceId);
+[EventCriticality(EventCriticality.Warning)]
+public sealed record ClientPayloadFailedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string MessageType, string Reason) : BaseEvent, IClientContext;

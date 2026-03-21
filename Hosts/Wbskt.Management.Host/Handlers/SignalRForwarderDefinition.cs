@@ -4,7 +4,7 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Management.Host.Handlers;
 
 public class SignalRForwarderDefinition<TEvent> : ConsumerDefinition<SignalRForwardingHandler<TEvent>> 
-    where TEvent : WorkspaceEvent
+    where TEvent : class, IWorkspaceContext
 {
     public SignalRForwarderDefinition()
     {

@@ -6,4 +6,9 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientPendingApprovalEvent")]
-public sealed record ClientPendingApprovalEvent(Guid ClientRefId, Guid PolicyRefId, int WorkspaceId) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+public sealed record ClientPendingApprovalEvent(
+    Guid ClientRefId,
+    int ClientId,
+    Guid PolicyRefId,
+    int PolicyId,
+    int WorkspaceId) : BaseEvent, IClientContext, IPolicyContext;

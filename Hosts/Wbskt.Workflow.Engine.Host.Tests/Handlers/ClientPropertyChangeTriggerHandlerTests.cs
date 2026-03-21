@@ -34,7 +34,7 @@ public class ClientPropertyChangeTriggerHandlerTests
     {
         // Arrange
         var clientRefId = Guid.NewGuid();
-        _contextMock.Setup(x => x.Message).Returns(new ClientPropertyUpdatedEvent(clientRefId, 1, "firmware_version", "2.0.0"));
+        _contextMock.Setup(x => x.Message).Returns(new ClientPropertyUpdatedEvent(clientRefId, 5, 1, "firmware_version", "2.0.0"));
         
         _registryMock.Setup(x => x.GetWorkflows($"client:{clientRefId}"))
             .Returns(new List<WorkflowDefinition>());
@@ -52,7 +52,7 @@ public class ClientPropertyChangeTriggerHandlerTests
         // Arrange
         var clientRefId = Guid.NewGuid();
         var workspaceId = 1;
-        _contextMock.Setup(x => x.Message).Returns(new ClientPropertyUpdatedEvent(clientRefId, workspaceId, "firmware_version", "2.0.0"));
+        _contextMock.Setup(x => x.Message).Returns(new ClientPropertyUpdatedEvent(clientRefId, 6, workspaceId, "firmware_version", "2.0.0"));
 
         var workflow = new WorkflowDefinition { WorkflowRefId = Guid.NewGuid(), WorkspaceId = workspaceId };
         

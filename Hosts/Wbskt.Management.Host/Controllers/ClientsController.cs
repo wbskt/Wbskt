@@ -151,7 +151,8 @@ public class ClientsController : ControllerBase
     public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.command", cancellationToken);
-        await _eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, workspaceId, request.CommandName, request.Payload), cancellationToken);
+        var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        await _eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, clientId, workspaceId, request.CommandName, request.Payload), cancellationToken);
     }
 
     /// <summary>
@@ -165,7 +166,8 @@ public class ClientsController : ControllerBase
     public async Task Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, "clients.ping", cancellationToken);
-        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, workspaceId, DateTime.UtcNow), cancellationToken);
+        var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientId, workspaceId, DateTime.UtcNow), cancellationToken);
     }
 }
 

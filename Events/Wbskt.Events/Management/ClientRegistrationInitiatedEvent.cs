@@ -6,4 +6,10 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientRegistrationInitiatedEvent")]
-public sealed record ClientRegistrationInitiatedEvent(Guid ClientRefId, int WorkspaceId, Guid PolicyRefId, string Name) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+public sealed record ClientRegistrationInitiatedEvent(
+    Guid ClientRefId,
+    int ClientId,
+    Guid PolicyRefId,
+    int PolicyId,
+    int WorkspaceId,
+    string Name) : BaseEvent, IClientContext, IPolicyContext;

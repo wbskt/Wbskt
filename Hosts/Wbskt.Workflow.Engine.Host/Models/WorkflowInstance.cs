@@ -7,6 +7,7 @@ public sealed class WorkflowInstance
 {
     public Guid InstanceId { get; set; } = Guid.NewGuid();
     public Guid WorkflowRefId { get; set; }
+    public int WorkflowId { get; set; }
     public int WorkspaceId { get; set; }
 
     public BaseTriggerContext? TriggerContext { get; set; }

@@ -6,4 +6,4 @@ namespace Wbskt.Events.Management;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnPolicyDisabledEvent")]
-public sealed record PolicyDisabledEvent(Guid PolicyRefId, int WorkspaceId) : RegistrationPolicyEvent(PolicyRefId, WorkspaceId);
+public sealed record PolicyDisabledEvent(Guid PolicyRefId, int PolicyId, int WorkspaceId) : BaseEvent, IPolicyContext;

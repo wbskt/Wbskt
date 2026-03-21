@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using Wbskt.Common.Abstraction.Models.Management;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Client;
 using Wbskt.Events.Management;
 using Wbskt.Foundation.Abstraction.Exceptions;
 using Wbskt.Management.Host.Providers;
@@ -36,7 +35,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
 
         if (!policy.IsEnabled)
         {
-            await _eventBus.PublishAsync(new PolicyRegistrationAttemptedOnDisabledEvent(policy.RefId, policy.WorkspaceId, request.Name), cancellationToken);
+            await _eventBus.PublishAsync(new PolicyRegistrationAttemptedOnDisabledEvent(policy.RefId, policy.Id, policy.WorkspaceId, request.Name), cancellationToken);
             throw new SecurityException("This registration policy is currently disabled.");
         }
 
@@ -48,7 +47,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             // Logic requiring an empty line before this comment
             if (currentCount >= policy.MaxClients.Value)
             {
-                await _eventBus.PublishAsync(new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
+                await _eventBus.PublishAsync(new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
                 throw new ValidationException("Policy registration limit reached.");
             }
         }
@@ -61,15 +60,15 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         var client = await _clientProvider.InsertClientAsync(policy.WorkspaceId ,policy.Id, request.Name, secret, initialStatus, cancellationToken);
 
         // 5. Publish Events
-        await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.WorkspaceId, policy.RefId, client.Name), cancellationToken);
+        await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, client.Name), cancellationToken);
 
         if (policy.AutoApproval)
         {
-            await _eventBus.PublishAsync(new ClientAutoApprovedEvent(client.RefId, policy.RefId, client.WorkspaceId), cancellationToken);
+            await _eventBus.PublishAsync(new ClientAutoApprovedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId), cancellationToken);
         }
         else
         {
-            await _eventBus.PublishAsync(new ClientPendingApprovalEvent(client.RefId, policy.RefId, client.WorkspaceId), cancellationToken);
+            await _eventBus.PublishAsync(new ClientPendingApprovalEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId), cancellationToken);
         }
 
         return new ClientRegistrationResponse(
