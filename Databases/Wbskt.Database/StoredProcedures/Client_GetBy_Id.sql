@@ -12,8 +12,10 @@ BEGIN
         P.RefId AS PolicyRefId,
         C.Name,
         C.Secret,
-        C.Status,
-        C.CreatedAt
+        c.Status,
+        c.IsConnected,
+        c.LastActivityAt,
+        c.CreatedAt
     FROM dbo.Clients C
     JOIN dbo.RegistrationPolicies P ON C.PolicyId = P.Id
     WHERE C.Id = @Id;

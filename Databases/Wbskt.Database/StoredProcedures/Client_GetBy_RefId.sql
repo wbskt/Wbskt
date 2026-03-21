@@ -13,6 +13,8 @@ BEGIN
         c.Name,
         c.Secret,
         c.Status,
+        c.IsConnected,
+        c.LastActivityAt,
         c.CreatedAt
     FROM dbo.Clients c
     INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id
