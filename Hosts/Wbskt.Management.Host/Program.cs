@@ -6,6 +6,8 @@ using Serilog;
 using Wbskt.Common.Abstraction;
 using Wbskt.Common.Data;
 using Wbskt.Common.Infrastructure;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Foundation.Abstraction;
 using Wbskt.Common.Logging;
 using Wbskt.Common.Mappers;
 using Wbskt.Common.Middlewares;
@@ -175,14 +177,27 @@ public static class Program
 
     private static void IgnoreSignalRPrivateProperties(JsonTypeInfo typeInfo)
     {
-        if (typeInfo.Kind != JsonTypeInfoKind.Object)
+        // 1. Quick Exit: Only process objects that implement IEvent
+        if (typeInfo.Kind != JsonTypeInfoKind.Object || !typeof(IEvent).IsAssignableFrom(typeInfo.Type))
         {
             return;
         }
-
-        foreach (JsonPropertyInfo propertyInfo in typeInfo.Properties)
+        
+        // 2. Scan properties
+        foreach (var propertyInfo in typeInfo.Properties)
         {
-            if (propertyInfo.AttributeProvider?.GetCustomAttributes(typeof(SignalRPrivateAttribute), false).Length > 0)
+            // Check property itself
+            var hasPrivateAttribute = propertyInfo.AttributeProvider?.GetCustomAttributes(typeof(SignalRPrivateAttribute), false).Length > 0;
+            
+            // Check interfaces (only if not already found)
+            if (!hasPrivateAttribute)
+            {
+                hasPrivateAttribute = typeInfo.Type.GetInterfaces()
+                    .Select(i => i.GetProperty(propertyInfo.Name))
+                    .Any(p => p != null && p.GetCustomAttributes(typeof(SignalRPrivateAttribute), false).Length > 0);
+            }
+            
+            if (hasPrivateAttribute)
             {
                 propertyInfo.ShouldSerialize = (_, _) => false;
             }
