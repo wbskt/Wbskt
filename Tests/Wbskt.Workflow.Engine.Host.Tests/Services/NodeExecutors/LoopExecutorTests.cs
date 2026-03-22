@@ -41,7 +41,7 @@ public class LoopExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Completed, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Completed, result.ActivatedPortIds.First());
     }
 
     [Fact]
@@ -68,28 +68,28 @@ public class LoopExecutorTests
         // Iteration 1
         var result1 = await _executor.ExecuteAsync(node, context);
         Assert.True(result1.IsSuccess);
-        Assert.Equal(PortNames.Body, result1.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Body, result1.ActivatedPortIds.First());
         Assert.Equal("first", context.GetState("item"));
         Assert.Equal(1, context.GetState(indexKey));
 
         // Iteration 2
         var result2 = await _executor.ExecuteAsync(node, context);
         Assert.True(result2.IsSuccess);
-        Assert.Equal(PortNames.Body, result2.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Body, result2.ActivatedPortIds.First());
         Assert.Equal("second", context.GetState("item"));
         Assert.Equal(2, context.GetState(indexKey));
 
         // Iteration 3
         var result3 = await _executor.ExecuteAsync(node, context);
         Assert.True(result3.IsSuccess);
-        Assert.Equal(PortNames.Body, result3.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Body, result3.ActivatedPortIds.First());
         Assert.Equal("third", context.GetState("item"));
         Assert.Equal(3, context.GetState(indexKey));
 
         // Iteration 4 (End)
         var result4 = await _executor.ExecuteAsync(node, context);
         Assert.True(result4.IsSuccess);
-        Assert.Equal(PortNames.Completed, result4.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Completed, result4.ActivatedPortIds.First());
         
         // Ensure state is cleaned up
         Assert.Null(context.GetState("item"));

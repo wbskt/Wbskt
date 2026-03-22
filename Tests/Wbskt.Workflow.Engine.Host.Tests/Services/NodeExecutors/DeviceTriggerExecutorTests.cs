@@ -35,7 +35,7 @@ public class DeviceTriggerExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
         Assert.NotNull(context.LastNodeOutput);
     }
     
@@ -63,7 +63,7 @@ public class DeviceTriggerExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
         Assert.Equal(25.5, context.LastNodeOutput);
     }
 }

@@ -31,7 +31,7 @@ public class NotificationExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
     }
     
     [Fact]
@@ -53,7 +53,7 @@ public class NotificationExecutorTests
         var result = await executor.ExecuteAsync(node, context);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
     }
     
     [Fact]
@@ -76,6 +76,6 @@ public class NotificationExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
     }
 }

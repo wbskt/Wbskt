@@ -47,7 +47,7 @@ public class SendCommandActionExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
         
         // Ensure the event bus was called with exactly the expected properties
         _eventBusMock.Verify(x => x.PublishAsync(It.Is<ClientPayloadEvent>(e => 

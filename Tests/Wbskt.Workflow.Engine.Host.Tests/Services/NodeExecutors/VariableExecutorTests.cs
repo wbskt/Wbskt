@@ -61,7 +61,7 @@ public class VariableExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
         Assert.Equal("TestValue", context.GetState("myVar"));
     }
 

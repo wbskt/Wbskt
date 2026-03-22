@@ -27,7 +27,7 @@ public class DelayExecutorTests
         // Assert
         Assert.True(result.IsSuccess);
         Assert.False(result.WaitUntil.HasValue);
-        Assert.Equal(PortNames.Out, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Out, result.ActivatedPortIds.First());
     }
 
     [Fact]

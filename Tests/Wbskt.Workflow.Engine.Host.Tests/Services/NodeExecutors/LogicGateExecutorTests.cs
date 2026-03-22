@@ -39,7 +39,7 @@ public class LogicGateExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Match, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Match, result.ActivatedPortIds.First());
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class LogicGateExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Otherwise, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Otherwise, result.ActivatedPortIds.First());
     }
 
     [Fact]
@@ -84,6 +84,6 @@ public class LogicGateExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.Otherwise, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.Otherwise, result.ActivatedPortIds.First());
     }
 }

@@ -77,7 +77,7 @@ public class WebhookNotificationExecutorTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(PortNames.OnResponse, result.ActivatedPortIds[0]);
+        Assert.Equal(PortNames.OnResponse, result.ActivatedPortIds.First());
 
         // Verify that SendAsync was called once
         _httpMessageHandlerMock.Protected().Verify(

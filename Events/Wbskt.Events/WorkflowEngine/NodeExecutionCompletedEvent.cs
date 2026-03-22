@@ -12,4 +12,4 @@ public sealed record NodeExecutionCompletedEvent(
     Guid InstanceId,
     Guid PointerId,
     Guid NodeId,
-    List<string> ActivatedPorts) : BaseEvent, IWorkflowContext;
+    IReadOnlyCollection<string> ActivatedPorts) : BaseEvent, IWorkflowContext;
