@@ -162,11 +162,11 @@ pre {
 <div class="content">
 
 <div class="panel active" id="p-models">
-<div class="section-title">WorkflowDefinition — the static blueprint</div>
+<div class="section-title">WorkflowDefinition - the static blueprint</div>
 <pre><span class="cm">// Immutable, versioned, stored in SQL</span>
 <span class="kw">record</span> <span class="ty">WorkflowDefinition</span> {
     Id:              Guid          <span class="cm">// DB primary key</span>
-    WorkspaceId:     Guid          <span class="cm">// tenant scope — NOT the workflow id</span>
+    WorkspaceId:     Guid          <span class="cm">// tenant scope - NOT the workflow id</span>
     Name:            string
     Version:         int           <span class="cm">// bumped on publish, old instances keep old version</span>
     IsEnabled:       bool
@@ -202,13 +202,13 @@ pre {
 </div>
 
 <div class="panel" id="p-instance">
-<div class="section-title">WorkflowInstance — the live runtime object <span class="badge badge-fix">fixes identity bug</span></div>
+<div class="section-title">WorkflowInstance - the live runtime object <span class="badge badge-fix">fixes identity bug</span></div>
 <pre><span class="kw">record</span> <span class="ty">WorkflowInstance</span> {
     InstanceId:     Guid    <span class="cm">// always a new Guid per run</span>
     DefinitionId:   Guid    <span class="cm">// FK to WorkflowDefinition.Id (was wrong before)</span>
     Version:        int     <span class="cm">// snapshot of definition version at start time</span>
     WorkspaceId:    Guid
-    CorrelationId:  string  <span class="cm">// e.g. "device:7a3b" — tenant routing key</span>
+    CorrelationId:  string  <span class="cm">// e.g. "device:7a3b" - tenant routing key</span>
 
     Status:         <span class="ty">InstanceStatus</span>
     <span class="cm">// Running | Suspended | Completed | Failed | Compensating</span>
@@ -222,7 +222,7 @@ pre {
 }
 
 <span class="kw">record</span> <span class="ty">WorkflowState</span> {
-    <span class="cm">// Namespaced by nodeId — eliminates shared-key collision</span>
+    <span class="cm">// Namespaced by nodeId - eliminates shared-key collision</span>
     NodeOutputs:  Dictionary&lt;string, <span class="ty">JsonElement</span>&gt;
     <span class="cm">// key = nodeId, value = deep-clone of node's output object</span>
 
@@ -267,14 +267,14 @@ pre {
     ExpiresAt:        DateTimeOffset?
 }
 
-<span class="cm">// Fan-in barrier — one row per joining node per instance</span>
+<span class="cm">// Fan-in barrier - one row per joining node per instance</span>
 <span class="kw">record</span> <span class="ty">FanInGate</span> {
     GateId:           string    <span class="cm">// = joining node's NodeId</span>
     InstanceId:       Guid
     ExpectedBranches: int       <span class="cm">// set when gate is created from fan-out</span>
     ArrivedBranches:  int       <span class="cm">// atomically incremented on each arrival</span>
     <span class="cm">// Gate fires when ArrivedBranches == ExpectedBranches</span>
-    <span class="cm">// Increment is done with Redis INCR — atomic, no locking needed</span>
+    <span class="cm">// Increment is done with Redis INCR - atomic, no locking needed</span>
 }
 
 <span class="cm">// Scheduler record for timer-suspended pointers</span>
@@ -288,7 +288,7 @@ pre {
 </div>
 
 <div class="panel" id="p-registry">
-<div class="section-title">WorkflowRuntimeRegistry — trigger routing <span class="badge badge-fix">concurrency enforced</span></div>
+<div class="section-title">WorkflowRuntimeRegistry - trigger routing <span class="badge badge-fix">concurrency enforced</span></div>
 <pre><span class="kw">class</span> <span class="ty">WorkflowRuntimeRegistry</span> : <span class="ty">IHostedService</span> {
 
     <span class="cm">// Loaded once at startup, refreshed on definition change events</span>
@@ -325,10 +325,10 @@ pre {
 </div>
 
 <div class="panel" id="p-start">
-<div class="section-title">StartAsync — instance creation</div>
+<div class="section-title">StartAsync - instance creation</div>
 <pre><span class="kw">function</span> <span class="fn">StartAsync</span>(def: <span class="ty">WorkflowDefinition</span>, event: <span class="ty">DeviceEvent</span>):
 
-    <span class="cm">// Deep clone initial state — fixes shallow copy corruption</span>
+    <span class="cm">// Deep clone initial state - fixes shallow copy corruption</span>
     initialState = <span class="fn">DeepClone</span>(def.InitialState)
 
     instance = <span class="kw">new</span> <span class="ty">WorkflowInstance</span> {
@@ -356,14 +356,14 @@ pre {
     }
     instance.Pointers.<span class="fn">Add</span>(pointer)
 
-    <span class="cm">// Persist BEFORE executing — crash safety</span>
+    <span class="cm">// Persist BEFORE executing - crash safety</span>
     <span class="kw">await</span> store.<span class="fn">SaveInstanceAsync</span>(instance)
 
     <span class="kw">await</span> <span class="fn">ExecutePointerAsync</span>(instance, pointer, def, triggerContext: event)</pre>
 </div>
 
 <div class="panel" id="p-loop">
-<div class="section-title">Node execution loop — the inner engine</div>
+<div class="section-title">Node execution loop - the inner engine</div>
 <pre><span class="kw">function</span> <span class="fn">ExecutePointerAsync</span>(
         instance: <span class="ty">WorkflowInstance</span>,
         pointer:  <span class="ty">ExecutionPointer</span>,
@@ -374,7 +374,7 @@ pre {
 
         node = def.Nodes.<span class="fn">Get</span>(pointer.CurrentNodeId)
 
-        <span class="cm">// Scoped DI per node — fixes captive dependency</span>
+        <span class="cm">// Scoped DI per node - fixes captive dependency</span>
         <span class="kw">using</span> scope = services.<span class="fn">CreateScope</span>():
             executor = scope.<span class="fn">GetKeyedService</span>&lt;<span class="ty">INodeExecutor</span>&gt;(node.TypeKey)
 
@@ -401,7 +401,7 @@ pre {
 
             <span class="kw">if</span> result.IsSuspend:
                 <span class="kw">await</span> <span class="fn">SuspendPointerAsync</span>(instance, pointer, result.Bookmark)
-                <span class="kw">return</span>   <span class="cm">// exit loop — pointer is parked</span>
+                <span class="kw">return</span>   <span class="cm">// exit loop - pointer is parked</span>
 
             <span class="cm">// Store this node's output under its own key</span>
             <span class="kw">if</span> result.Output != null:
@@ -418,7 +418,7 @@ pre {
 
             <span class="kw">if</span> outboundEdges.Count == <span class="num">1</span>:
                 pointer.CurrentNodeId = outboundEdges[<span class="num">0</span>].TargetNodeId
-                <span class="cm">// continue while loop — same pointer, next node</span>
+                <span class="cm">// continue while loop - same pointer, next node</span>
 
             <span class="kw">else</span>:
                 <span class="cm">// Fan-out: multiple edges from one port</span>
@@ -431,7 +431,7 @@ pre {
 </div>
 
 <div class="panel" id="p-fanout">
-<div class="section-title">Fan-out — parallel branch spawning</div>
+<div class="section-title">Fan-out - parallel branch spawning</div>
 <pre><span class="kw">function</span> <span class="fn">FanOutAsync</span>(
         instance: <span class="ty">WorkflowInstance</span>,
         sourcePointer: <span class="ty">ExecutionPointer</span>,
@@ -441,7 +441,7 @@ pre {
     <span class="cm">// Retire the source pointer</span>
     sourcePointer.Status = Completed
 
-    <span class="cm">// Find the join node — all edges must eventually converge (optional)</span>
+    <span class="cm">// Find the join node - all edges must eventually converge (optional)</span>
     joinNodeId = <span class="fn">FindJoinNode</span>(edges, def)  <span class="cm">// null if branches are independent</span>
 
     <span class="kw">if</span> joinNodeId != null:
@@ -454,7 +454,7 @@ pre {
         }
         <span class="kw">await</span> store.<span class="fn">SaveGateAsync</span>(gate)
 
-    <span class="cm">// Spawn one pointer per outbound edge — fire and forget onto task scheduler</span>
+    <span class="cm">// Spawn one pointer per outbound edge - fire and forget onto task scheduler</span>
     tasks = edges.<span class="fn">Select</span>(edge => {
         branchPointer = <span class="kw">new</span> <span class="ty">ExecutionPointer</span> {
             PointerId:     Guid.<span class="fn">NewGuid</span>()
@@ -477,7 +477,7 @@ pre {
 </div>
 
 <div class="panel" id="p-fanin">
-<div class="section-title">Fan-in — join gate (was completely missing)</div>
+<div class="section-title">Fan-in - join gate (was completely missing)</div>
 <pre><span class="cm">// Called when a branch pointer arrives at a node that has a gate</span>
 <span class="kw">function</span> <span class="fn">CheckFanInGateAsync</span>(
         instance: <span class="ty">WorkflowInstance</span>,
@@ -487,30 +487,30 @@ pre {
     gate = store.<span class="fn">GetGate</span>(instance.InstanceId, nodeId)
     <span class="kw">if</span> gate == null: <span class="kw">return</span> <span class="kw">true</span>  <span class="cm">// not a join node</span>
 
-    <span class="cm">// Atomic increment via Redis INCR — safe under concurrent branch arrivals</span>
+    <span class="cm">// Atomic increment via Redis INCR - safe under concurrent branch arrivals</span>
     arrived = <span class="kw">await</span> store.<span class="fn">IncrementGateAsync</span>(gate.GateId, instance.InstanceId)
 
     <span class="kw">if</span> arrived &lt; gate.ExpectedBranches:
-        <span class="cm">// Not all branches done yet — this branch parks itself</span>
+        <span class="cm">// Not all branches done yet - this branch parks itself</span>
         pointer.Status = Suspended
         pointer.SuspendedOn = <span class="str">"fanin:{gate.GateId}"</span>
         <span class="kw">await</span> store.<span class="fn">SaveInstanceAsync</span>(instance)
         <span class="kw">return</span> <span class="kw">false</span>
 
-    <span class="cm">// Last branch to arrive — it wins and continues past the join node</span>
+    <span class="cm">// Last branch to arrive - it wins and continues past the join node</span>
     <span class="cm">// All other parked branch pointers are retired</span>
     <span class="kw">await</span> store.<span class="fn">RetireParkedBranchPointersAsync</span>(instance.InstanceId, gate.GateId)
     <span class="kw">await</span> store.<span class="fn">DeleteGateAsync</span>(gate.GateId, instance.InstanceId)
     <span class="kw">return</span> <span class="kw">true</span>   <span class="cm">// winning branch proceeds into the join node's executor</span>
 
-<span class="cm">// Integrated into the node loop — called before executing any node:</span>
+<span class="cm">// Integrated into the node loop - called before executing any node:</span>
 <span class="kw">if</span> pointer.FanInGateId != null:
     mayProceed = <span class="kw">await</span> <span class="fn">CheckFanInGateAsync</span>(instance, pointer, node.NodeId)
     <span class="kw">if</span> !mayProceed: <span class="kw">return</span>   <span class="cm">// this branch is parked</span></pre>
 </div>
 
 <div class="panel" id="p-suspend">
-<div class="section-title">Suspend + persist — crash-safe parking</div>
+<div class="section-title">Suspend + persist - crash-safe parking</div>
 <pre><span class="kw">function</span> <span class="fn">SuspendPointerAsync</span>(
         instance: <span class="ty">WorkflowInstance</span>,
         pointer:  <span class="ty">ExecutionPointer</span>,
@@ -534,7 +534,7 @@ pre {
     pointer.SuspendedOn = bm.Name
     instance.Status = <span class="fn">AllPointersSuspendedOrDone</span>(instance) ? Suspended : Running
 
-    <span class="cm">// Transactional write — both or neither</span>
+    <span class="cm">// Transactional write - both or neither</span>
     <span class="kw">await</span> store.<span class="fn">SaveBookmarkAndInstanceAsync</span>(bookmark, instance)
     <span class="cm">// Process can now die. Bookmark survives in Redis.</span>
 
@@ -551,28 +551,28 @@ pre {
 </div>
 
 <div class="panel" id="p-resume">
-<div class="section-title">Resume from event — bookmark lookup + re-entry</div>
+<div class="section-title">Resume from event - bookmark lookup + re-entry</div>
 <pre><span class="cm">// Called by MassTransit consumer when a device event arrives</span>
 <span class="kw">function</span> <span class="fn">ResumeAsync</span>(event: <span class="ty">DeviceEvent</span>):
 
     bookmarkName = <span class="fn">BuildBookmarkName</span>(event)
     <span class="cm">// e.g. "device:7a3b:temperature"</span>
 
-    <span class="cm">// Find ALL matching bookmarks — one event may resume multiple workflows</span>
+    <span class="cm">// Find ALL matching bookmarks - one event may resume multiple workflows</span>
     bookmarks = <span class="kw">await</span> store.<span class="fn">FindBookmarksAsync</span>(bookmarkName)
 
     <span class="kw">for each</span> bm <span class="kw">in</span> bookmarks:
 
         <span class="kw">if</span> bm.ExpiresAt != null &amp;&amp; bm.ExpiresAt &lt; Now:
             <span class="kw">await</span> store.<span class="fn">DeleteBookmarkAsync</span>(bm.BookmarkId)
-            <span class="kw">continue</span>   <span class="cm">// expired — treat as missed event</span>
+            <span class="kw">continue</span>   <span class="cm">// expired - treat as missed event</span>
 
         <span class="cm">// Optimistic lock: tag instance row with ETag before read</span>
         instance = <span class="kw">await</span> store.<span class="fn">LoadInstanceAsync</span>(bm.InstanceId)
         pointer  = instance.Pointers.<span class="fn">Get</span>(bm.PointerId)
 
         <span class="kw">if</span> pointer.Status != Suspended:
-            <span class="kw">continue</span>   <span class="cm">// race condition — another event already resumed this</span>
+            <span class="kw">continue</span>   <span class="cm">// race condition - another event already resumed this</span>
 
         <span class="cm">// Inject event payload into state so the node can read it</span>
         instance.State.NodeOutputs[<span class="str">"__resume_payload"</span>] = <span class="fn">DeepClone</span>(event.Payload)
@@ -583,11 +583,11 @@ pre {
 
         <span class="kw">await</span> store.<span class="fn">DeleteBookmarkAndSaveInstanceAsync</span>(bm.BookmarkId, instance)
 
-        <span class="cm">// Resume execution — pointer restarts at the node that suspended it</span>
+        <span class="cm">// Resume execution - pointer restarts at the node that suspended it</span>
         _ = Task.<span class="fn">Run</span>(() =>
             <span class="fn">ExecutePointerAsync</span>(instance, pointer, def, triggerCtx: null))
 
-<span class="cm">// On process restart — bookmarks still in Redis, instances in SQL</span>
+<span class="cm">// On process restart - bookmarks still in Redis, instances in SQL</span>
 <span class="kw">function</span> <span class="fn">OnStartup</span>():
     <span class="cm">// Reload any Running instances that were mid-execution at crash time</span>
     orphaned = store.<span class="fn">GetRunningInstances</span>()
@@ -667,7 +667,7 @@ pre {
 </div>
 
 <div class="panel" id="p-compensation">
-<div class="section-title">Compensation — undo already-executed nodes</div>
+<div class="section-title">Compensation - undo already-executed nodes</div>
 <pre><span class="kw">function</span> <span class="fn">RunCompensationAsync</span>(
         instance: <span class="ty">WorkflowInstance</span>,
         def:      <span class="ty">WorkflowDefinition</span>):
@@ -707,7 +707,7 @@ pre {
 </div>
 
 <div class="panel" id="p-subwf">
-<div class="section-title">Workflow within a workflow — sub-workflow node</div>
+<div class="section-title">Workflow within a workflow - sub-workflow node</div>
 <pre><span class="cm">// A node executor that spawns a child workflow and waits for it</span>
 <span class="kw">class</span> <span class="ty">SubWorkflowExecutor</span> : <span class="ty">INodeExecutor</span> {
 
@@ -765,7 +765,7 @@ pre {
 </div>
 
 <div class="panel" id="p-context">
-<div class="section-title">ExecutionContext — the executor's full API</div>
+<div class="section-title">ExecutionContext - the executor's full API</div>
 <pre><span class="cm">// Thread-safe, scoped per node execution</span>
 <span class="kw">class</span> <span class="ty">ExecutionContext</span> {
 
@@ -779,7 +779,7 @@ pre {
     Config:        <span class="ty">JsonElement</span>     <span class="cm">// deep-cloned node config</span>
     TriggerCtx:    <span class="ty">TriggerContext</span>? <span class="cm">// original triggering event (only on first node)</span>
 
-    <span class="cm">// State access — namespaced reads to avoid key collisions</span>
+    <span class="cm">// State access - namespaced reads to avoid key collisions</span>
     <span class="kw">function</span> <span class="fn">GetVariable</span>&lt;T&gt;(name: string) -> T?
     <span class="kw">function</span> <span class="fn">SetVariable</span>&lt;T&gt;(name: string, value: T)
 
@@ -787,7 +787,7 @@ pre {
     <span class="kw">function</span> <span class="fn">GetNodeOutput</span>&lt;T&gt;(nodeId: string) -> T?
         <span class="cm">// returns State.NodeOutputs[nodeId] deserialised as T</span>
 
-    <span class="cm">// Services (scoped DI — safe for DbContext, HttpClient, etc.)</span>
+    <span class="cm">// Services (scoped DI - safe for DbContext, HttpClient, etc.)</span>
     Services: <span class="ty">IServiceProvider</span>
 
     <span class="cm">// Logging (pre-correlated with instanceId + nodeId)</span>
@@ -815,11 +815,11 @@ pre {
 </div>
 
 <div class="panel" id="p-concurrency">
-<div class="section-title">ConcurrencyPolicy enforcement — full detail</div>
+<div class="section-title">ConcurrencyPolicy enforcement - full detail</div>
 <pre><span class="cm">// Stored in WorkflowDefinition. Evaluated at trigger time in RuntimeRegistry.</span>
 
 <span class="kw">enum</span> <span class="ty">ConcurrencyPolicy</span> {
-    AllowParallel    <span class="cm">// default — every trigger starts a new instance</span>
+    AllowParallel    <span class="cm">// default - every trigger starts a new instance</span>
     Queue            <span class="cm">// only one running; extras queued, drain on completion</span>
     CancelPrevious   <span class="cm">// cancel any running instance before starting new</span>
     DropNew          <span class="cm">// if one is running, ignore the new trigger entirely</span>
@@ -834,7 +834,7 @@ pre {
     <span class="kw">await</span> redis.<span class="fn">SetAsync</span>(key, event, ex: def.DebounceWindow)
     <span class="cm">// A background watcher fires StartAsync when the key expires</span>
 
-<span class="cm">// Queue drain — called when an instance completes:</span>
+<span class="cm">// Queue drain - called when an instance completes:</span>
 <span class="kw">function</span> <span class="fn">OnInstanceCompleted</span>(instance: <span class="ty">WorkflowInstance</span>):
     def = definitionStore.<span class="fn">Get</span>(instance.DefinitionId)
     <span class="kw">if</span> def.ConcurrencyPolicy != Queue: <span class="kw">return</span>
@@ -843,7 +843,7 @@ pre {
     <span class="kw">if</span> nextEvent != null:
         engine.<span class="fn">StartAsync</span>(def, nextEvent)
 
-<span class="cm">// Graceful cancel — sets status, deletes bookmarks, publishes event</span>
+<span class="cm">// Graceful cancel - sets status, deletes bookmarks, publishes event</span>
 <span class="kw">function</span> <span class="fn">CancelAsync</span>(instance: <span class="ty">WorkflowInstance</span>, reason: string):
     instance.Status = Cancelled
     <span class="kw">await</span> store.<span class="fn">DeleteAllBookmarksAsync</span>(instance.InstanceId)

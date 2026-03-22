@@ -237,10 +237,10 @@ code {
 <div class="content">
 
 <div class="panel active" id="p-definition">
-<h2>Definition vs. Instance — the most fundamental distinction</h2>
+<h2>Definition vs. Instance - the most fundamental distinction</h2>
 <div class="concept">
   <div class="cname">WorkflowDefinition</div>
-  <div class="calt">Also called: Blueprint, Template, Schema, Workflow (bad — see below)</div>
+  <div class="calt">Also called: Blueprint, Template, Schema, Workflow (bad - see below)</div>
   <div class="cdesc">The static, versioned description of what a workflow does. Contains nodes, edges, initial state schema, and policies. Never mutated at runtime. One definition can produce thousands of instances simultaneously. Stored in SQL as a versioned document.</div>
   <span class="cbad prefer">Prefer: Definition</span><span class="cbad note">Also fine: Blueprint</span><span class="cbad avoid">Avoid: "Workflow" alone</span>
 </div>
@@ -252,17 +252,17 @@ code {
 </div>
 <div class="rule"><b>The core naming trap:</b> Calling both the definition and the running execution "Workflow" is the #1 source of confusion in workflow engine codebases. You will end up with <code>WorkflowId</code> that could mean either the definition PK or the instance PK. Separate them from day one: <code>DefinitionId</code> and <code>InstanceId</code> are unambiguous.</div>
 <div class="compare">
-  <div class="col r"><b>Confused</b>Workflow.Id — is this the template or the run?<br>workflow.Start(workflowId) — starting what exactly?<br>GetWorkflow(id) — definition or instance?</div>
-  <div class="col g"><b>Clear</b>definition.Id / instance.InstanceId — unambiguous<br>engine.StartAsync(definition, event) — obvious<br>store.GetInstance(id) / store.GetDefinition(id)</div>
+  <div class="col r"><b>Confused</b>Workflow.Id - is this the template or the run?<br>workflow.Start(workflowId) - starting what exactly?<br>GetWorkflow(id) - definition or instance?</div>
+  <div class="col g"><b>Clear</b>definition.Id / instance.InstanceId - unambiguous<br>engine.StartAsync(definition, event) - obvious<br>store.GetInstance(id) / store.GetDefinition(id)</div>
 </div>
 </div>
 
 <div class="panel" id="p-node">
-<h2>Node / Activity — the unit of work</h2>
+<h2>Node / Activity - the unit of work</h2>
 <div class="concept">
   <div class="cname">Node (in definitions) / Activity (in code)</div>
   <div class="calt">Also called: Step, Task, Action, Unit, Element</div>
-  <div class="cdesc">The atomic unit of a workflow graph. In the definition JSON it's a "node" (graph terminology). In code the implementation is an "activity" or "executor". These two words refer to the same concept from different angles — the graph slot vs. the behaviour that fills it.</div>
+  <div class="cdesc">The atomic unit of a workflow graph. In the definition JSON it's a "node" (graph terminology). In code the implementation is an "activity" or "executor". These two words refer to the same concept from different angles - the graph slot vs. the behaviour that fills it.</div>
   <span class="cbad prefer">Prefer: Node (graph), Activity (behaviour)</span><span class="cbad note">Also fine: Step (for linear engines)</span><span class="cbad avoid">Avoid: Task (collides with System.Threading.Tasks.Task)</span>
 </div>
 <div class="concept">
@@ -273,25 +273,25 @@ code {
 <div class="concept">
   <div class="cname">TypeKey / ActivityType</div>
   <div class="calt">The discriminator that connects a node slot to its executor</div>
-  <div class="cdesc">A string constant like <code>"LogicGate"</code>, <code>"DeviceTrigger"</code>, <code>"SendCommand"</code>. Used as the key in DI (Keyed Services in .NET) to resolve the correct executor at runtime. This is what makes the engine "blind" — it doesn't know what a LogicGate does, only that it should ask DI for one.</div>
+  <div class="cdesc">A string constant like <code>"LogicGate"</code>, <code>"DeviceTrigger"</code>, <code>"SendCommand"</code>. Used as the key in DI (Keyed Services in .NET) to resolve the correct executor at runtime. This is what makes the engine "blind" - it doesn't know what a LogicGate does, only that it should ask DI for one.</div>
   <span class="cbad prefer">Prefer: TypeKey or ActivityType</span><span class="cbad avoid">Avoid: NodeType (too generic, collides with graph node types)</span>
 </div>
 <div class="rule"><b>Naming convention for TypeKeys:</b> Use PascalCase nouns describing what the node <i>is</i>, not what it does. <code>HttpRequest</code> not <code>CallHttp</code>. <code>DeviceTrigger</code> not <code>WatchDevice</code>. <code>LogicGate</code> not <code>CheckCondition</code>. Nouns compose better in a visual designer.</div>
 </div>
 
 <div class="panel" id="p-edge">
-<h2>Edge / Connection — the wiring between nodes</h2>
+<h2>Edge / Connection - the wiring between nodes</h2>
 <div class="concept">
   <div class="cname">EdgeDefinition / Connection</div>
   <div class="calt">Also called: Link, Transition, Arrow, Wire</div>
-  <div class="cdesc">Defines how one node's output connects to another node's input. An edge is directional: (SourceNodeId, SourcePort) → (TargetNodeId, TargetPort). Multiple edges can originate from a single port (fan-out). Multiple edges can point at the same target node (fan-in — requires a gate).</div>
+  <div class="cdesc">Defines how one node's output connects to another node's input. An edge is directional: (SourceNodeId, SourcePort) → (TargetNodeId, TargetPort). Multiple edges can originate from a single port (fan-out). Multiple edges can point at the same target node (fan-in - requires a gate).</div>
   <span class="cbad prefer">Prefer: Edge (graph theory), Connection (visual designer)</span><span class="cbad note">Also fine: Link, Wire</span><span class="cbad avoid">Avoid: Transition (implies state machine, different semantics)</span>
 </div>
 <div class="rule"><b>Edge vs. Transition:</b> A <b>transition</b> (state machine term) changes the state of a single object. An <b>edge</b> (graph term) routes execution from one node to another. In a workflow engine the distinction matters: multiple edges can be active simultaneously (parallel branches), but a state machine can only be in one state at a time. Use "edge" to avoid inheriting state machine assumptions.</div>
 </div>
 
 <div class="panel" id="p-port">
-<h2>Port / Outcome — named exits from a node</h2>
+<h2>Port / Outcome - named exits from a node</h2>
 <div class="concept">
   <div class="cname">Port / Outcome / OutputPort</div>
   <div class="calt">Also called: Exit, Handle, Output, Connector</div>
@@ -301,33 +301,33 @@ code {
 <div class="concept">
   <div class="cname">ActivatedPort / ActivatedOutcome</div>
   <div class="calt">The port name returned by an executor after it runs</div>
-  <div class="cdesc">The string name of the port the executor decided to activate. Returned inside the NodeResult. The engine uses this to look up outbound edges. If no edge matches the activated port, execution on that branch ends (terminal). This is the primary navigation mechanism — not return codes, not booleans.</div>
+  <div class="cdesc">The string name of the port the executor decided to activate. Returned inside the NodeResult. The engine uses this to look up outbound edges. If no edge matches the activated port, execution on that branch ends (terminal). This is the primary navigation mechanism - not return codes, not booleans.</div>
 </div>
-<div class="rule"><b>Standard port vocabulary:</b> Establish a consistent set of reserved port names across all node types. <code>done</code> — completed successfully with one outcome. <code>true/false</code> — binary condition. <code>error</code> — handled failure (routes to error handler node). <code>timeout</code> — deadline exceeded. <code>cancelled</code> — externally cancelled. Custom ports for domain logic: <code>online/offline</code>, <code>high/normal/low</code>, <code>approved/rejected</code>.</div>
+<div class="rule"><b>Standard port vocabulary:</b> Establish a consistent set of reserved port names across all node types. <code>done</code> - completed successfully with one outcome. <code>true/false</code> - binary condition. <code>error</code> - handled failure (routes to error handler node). <code>timeout</code> - deadline exceeded. <code>cancelled</code> - externally cancelled. Custom ports for domain logic: <code>online/offline</code>, <code>high/normal/low</code>, <code>approved/rejected</code>.</div>
 </div>
 
 <div class="panel" id="p-instance">
-<h2>Instance lifecycle — the status vocabulary</h2>
+<h2>Instance lifecycle - the status vocabulary</h2>
 <div class="concept">
   <div class="cname">InstanceStatus</div>
   <div class="cdesc">The coarse status of a workflow instance. Every status should be mutually exclusive and cover every possible state of the instance.</div>
   <div style="margin-top:10px;font-size:11.5px;line-height:1.8;color:var(--color-text-secondary)">
-    <code>Pending</code> — created, not yet started (queued by ConcurrencyPolicy)<br>
-    <code>Running</code> — at least one pointer is actively executing<br>
-    <code>Suspended</code> — all pointers are parked on bookmarks, none active<br>
-    <code>Completed</code> — all pointers reached terminal nodes successfully<br>
-    <code>Failed</code> — error policy exhausted, instance halted<br>
-    <code>Compensating</code> — rolling back already-executed nodes<br>
-    <code>Cancelled</code> — externally cancelled before completion
+    <code>Pending</code> - created, not yet started (queued by ConcurrencyPolicy)<br>
+    <code>Running</code> - at least one pointer is actively executing<br>
+    <code>Suspended</code> - all pointers are parked on bookmarks, none active<br>
+    <code>Completed</code> - all pointers reached terminal nodes successfully<br>
+    <code>Failed</code> - error policy exhausted, instance halted<br>
+    <code>Compensating</code> - rolling back already-executed nodes<br>
+    <code>Cancelled</code> - externally cancelled before completion
   </div>
-  <span class="cbad avoid">Avoid: "Waiting" (ambiguous — waiting for what?)</span>
+  <span class="cbad avoid">Avoid: "Waiting" (ambiguous - waiting for what?)</span>
   <span class="cbad avoid">Avoid: "Paused" (implies user intent, not system state)</span>
 </div>
-<div class="rule"><b>Running vs. Suspended:</b> An instance is <b>Running</b> even if some pointers are suspended — as long as at least one pointer is actively executing. It becomes <b>Suspended</b> only when every pointer is parked. This distinction matters for observability dashboards and concurrency policy checks.</div>
+<div class="rule"><b>Running vs. Suspended:</b> An instance is <b>Running</b> even if some pointers are suspended - as long as at least one pointer is actively executing. It becomes <b>Suspended</b> only when every pointer is parked. This distinction matters for observability dashboards and concurrency policy checks.</div>
 </div>
 
 <div class="panel" id="p-pointer">
-<h2>Pointer / Token — tracking position in the graph</h2>
+<h2>Pointer / Token - tracking position in the graph</h2>
 <div class="concept">
   <div class="cname">ExecutionPointer</div>
   <div class="calt">Also called: Token (Petri net term), Cursor, ExecutionCursor, Thread</div>
@@ -338,25 +338,25 @@ code {
   <div class="cname">PointerStatus</div>
   <div class="cdesc">Fine-grained status of a single pointer within an instance.</div>
   <div style="margin-top:8px;font-size:11.5px;line-height:1.8;color:var(--color-text-secondary)">
-    <code>Active</code> — currently executing or queued to execute<br>
-    <code>Suspended</code> — parked on a bookmark, waiting for an event<br>
-    <code>Sleeping</code> — parked on a delay timer specifically<br>
-    <code>WaitingForJoin</code> — arrived at a fan-in gate, not yet the winner<br>
-    <code>Completed</code> — reached a terminal node<br>
-    <code>Failed</code> — error exhausted retries on this branch<br>
-    <code>Cancelled</code> — externally cancelled
+    <code>Active</code> - currently executing or queued to execute<br>
+    <code>Suspended</code> - parked on a bookmark, waiting for an event<br>
+    <code>Sleeping</code> - parked on a delay timer specifically<br>
+    <code>WaitingForJoin</code> - arrived at a fan-in gate, not yet the winner<br>
+    <code>Completed</code> - reached a terminal node<br>
+    <code>Failed</code> - error exhausted retries on this branch<br>
+    <code>Cancelled</code> - externally cancelled
   </div>
 </div>
-<div class="rule"><b>Why "Pointer" and not "Thread":</b> A pointer is a logical concept — a position in a graph. A thread is an OS concept — a unit of CPU scheduling. Calling it a thread implies one OS thread per branch, which is wrong (branches share a thread pool). Pointer is the accurate term.</div>
+<div class="rule"><b>Why "Pointer" and not "Thread":</b> A pointer is a logical concept - a position in a graph. A thread is an OS concept - a unit of CPU scheduling. Calling it a thread implies one OS thread per branch, which is wrong (branches share a thread pool). Pointer is the accurate term.</div>
 </div>
 
 <div class="panel" id="p-context">
-<h2>Context objects — what gets passed to executors</h2>
+<h2>Context objects - what gets passed to executors</h2>
 <div class="concept">
   <div class="cname">ExecutionContext</div>
   <div class="calt">Also called: ActivityContext, NodeContext, StepContext</div>
-  <div class="cdesc">The object passed into a node executor when it runs. Contains everything the executor needs: the node's config, access to workflow state, the triggering event, DI services, logging, and a cancellation token. It is the executor's complete API — the executor should need nothing else.</div>
-  <span class="cbad prefer">Prefer: ExecutionContext, ActivityContext</span><span class="cbad avoid">Avoid: WorkflowContext (too broad — which workflow?)</span>
+  <div class="cdesc">The object passed into a node executor when it runs. Contains everything the executor needs: the node's config, access to workflow state, the triggering event, DI services, logging, and a cancellation token. It is the executor's complete API - the executor should need nothing else.</div>
+  <span class="cbad prefer">Prefer: ExecutionContext, ActivityContext</span><span class="cbad avoid">Avoid: WorkflowContext (too broad - which workflow?)</span>
 </div>
 <div class="concept">
   <div class="cname">TriggerContext</div>
@@ -370,22 +370,22 @@ code {
 </div>
 
 <div class="panel" id="p-executor">
-<h2>Executor pattern — separating definition from behaviour</h2>
+<h2>Executor pattern - separating definition from behaviour</h2>
 <div class="concept">
   <div class="cname">INodeExecutor / IActivityExecutor</div>
   <div class="calt">Also called: IStepBody (WorkflowCore), IActivity (Elsa), Handler</div>
-  <div class="cdesc">The interface every node behaviour implements. Has a single method: <code>ExecuteAsync(context) → NodeResult</code>. Registered in DI with a TypeKey. The engine never knows what the executor does — it just calls it. This is the "Blind Executor" principle: the engine is a generic scheduler, not a domain expert.</div>
+  <div class="cdesc">The interface every node behaviour implements. Has a single method: <code>ExecuteAsync(context) → NodeResult</code>. Registered in DI with a TypeKey. The engine never knows what the executor does - it just calls it. This is the "Blind Executor" principle: the engine is a generic scheduler, not a domain expert.</div>
   <span class="cbad prefer">Prefer: INodeExecutor, IActivityExecutor</span><span class="cbad avoid">Avoid: IWorker (too generic), IHandler (collides with MediatR)</span>
 </div>
 <div class="concept">
   <div class="cname">ICompensatableExecutor</div>
   <div class="cdesc">Optional interface an executor can additionally implement. Adds <code>CompensateAsync(CompensationContext)</code>. The engine calls this during rollback in reverse execution order. Only executors that make side effects (send commands, write records) need to implement this.</div>
 </div>
-<div class="rule"><b>Blind Executor principle:</b> The engine resolves executors by TypeKey via keyed DI. It passes in a context and receives a NodeResult. It does not know whether the executor is sending an HTTP request, evaluating an expression, or publishing to RabbitMQ. This is intentional — new node types are added without touching the engine.</div>
+<div class="rule"><b>Blind Executor principle:</b> The engine resolves executors by TypeKey via keyed DI. It passes in a context and receives a NodeResult. It does not know whether the executor is sending an HTTP request, evaluating an expression, or publishing to RabbitMQ. This is intentional - new node types are added without touching the engine.</div>
 </div>
 
 <div class="panel" id="p-bookmark">
-<h2>Bookmark / Subscription — the suspend/resume primitive</h2>
+<h2>Bookmark / Subscription - the suspend/resume primitive</h2>
 <div class="concept">
   <div class="cname">Bookmark</div>
   <div class="calt">Also called: Subscription, WaitHandle, Suspension, Continuation</div>
@@ -394,8 +394,8 @@ code {
 </div>
 <div class="concept">
   <div class="cname">BookmarkName</div>
-  <div class="calt">The lookup key — must be deterministic and unique per event type</div>
-  <div class="cdesc">The string key used to find bookmarks when an event arrives. Should encode the event type and the specific entity being watched. Convention: <code>"{eventType}:{entityId}"</code> e.g. <code>"device:7a3b:temperature"</code>, <code>"approval:request:4f2c"</code>. Bookmarks are found by exact name match — the name IS the routing.</div>
+  <div class="calt">The lookup key - must be deterministic and unique per event type</div>
+  <div class="cdesc">The string key used to find bookmarks when an event arrives. Should encode the event type and the specific entity being watched. Convention: <code>"{eventType}:{entityId}"</code> e.g. <code>"device:7a3b:temperature"</code>, <code>"approval:request:4f2c"</code>. Bookmarks are found by exact name match - the name IS the routing.</div>
 </div>
 <div class="concept">
   <div class="cname">DelayedResume / SleepRecord</div>
@@ -404,7 +404,7 @@ code {
 </div>
 
 <div class="panel" id="p-trigger">
-<h2>Trigger vs. Signal — two very different concepts</h2>
+<h2>Trigger vs. Signal - two very different concepts</h2>
 <div class="concept">
   <div class="cname">Trigger</div>
   <div class="calt">Starts a new instance</div>
@@ -415,15 +415,15 @@ code {
   <div class="calt">Resumes an existing suspended instance</div>
   <div class="cdesc">An event that resumes a parked pointer by matching its bookmark name. The engine looks up bookmarks, not definitions. One event can resume multiple instances if multiple bookmarks share the same name. Signals do not create new instances.</div>
 </div>
-<div class="rule"><b>Why this distinction is critical:</b> The same physical event (e.g. a device temperature reading) can simultaneously be a <b>trigger</b> (start a new "high temperature alert" workflow) AND a <b>signal</b> (resume an existing "monitor this device" workflow that's waiting for a reading). The routing logic is completely different — triggers go through the Registry, signals go through the BookmarkStore. Conflating them is a common architectural mistake.</div>
+<div class="rule"><b>Why this distinction is critical:</b> The same physical event (e.g. a device temperature reading) can simultaneously be a <b>trigger</b> (start a new "high temperature alert" workflow) AND a <b>signal</b> (resume an existing "monitor this device" workflow that's waiting for a reading). The routing logic is completely different - triggers go through the Registry, signals go through the BookmarkStore. Conflating them is a common architectural mistake.</div>
 <div class="compare">
-  <div class="col r"><b>Conflated (wrong)</b>"An event starts or resumes workflows" — one code path tries to do both, gets confused about whether to create or resume</div>
+  <div class="col r"><b>Conflated (wrong)</b>"An event starts or resumes workflows" - one code path tries to do both, gets confused about whether to create or resume</div>
   <div class="col g"><b>Separated (right)</b>Engine checks bookmarks first (resume path), then checks Registry (start path). Both can fire for the same event.</div>
 </div>
 </div>
 
 <div class="panel" id="p-correlation">
-<h2>Correlation — routing events to the right instances</h2>
+<h2>Correlation - routing events to the right instances</h2>
 <div class="concept">
   <div class="cname">CorrelationId</div>
   <div class="calt">Also called: TenantKey, EntityKey, RoutingKey</div>
@@ -434,11 +434,11 @@ code {
   <div class="cname">CorrelationKey (on events)</div>
   <div class="cdesc">The CorrelationId extracted from an incoming event. Used to find bookmarks and check concurrency. Should match the format used when the instance was created. In IoT: built from the device ID in the MQTT topic.</div>
 </div>
-<div class="rule"><b>CorrelationId vs. WorkspaceId:</b> CorrelationId identifies <i>which entity</i> this workflow is about (a specific device). WorkspaceId identifies <i>which tenant</i> owns it. They serve different purposes — don't merge them into one field.</div>
+<div class="rule"><b>CorrelationId vs. WorkspaceId:</b> CorrelationId identifies <i>which entity</i> this workflow is about (a specific device). WorkspaceId identifies <i>which tenant</i> owns it. They serve different purposes - don't merge them into one field.</div>
 </div>
 
 <div class="panel" id="p-fanout">
-<h2>Fan-out / Fork — splitting execution into parallel branches</h2>
+<h2>Fan-out / Fork - splitting execution into parallel branches</h2>
 <div class="concept">
   <div class="cname">Fan-out / Fork</div>
   <div class="calt">Also called: Split, Parallel, Branch, Scatter</div>
@@ -447,12 +447,12 @@ code {
 </div>
 <div class="concept">
   <div class="cname">FanOutNode / ParallelNode</div>
-  <div class="cdesc">An explicit node type whose entire purpose is to fan-out. Distinct from implicit fan-out (any node with multiple edges on one port). An explicit FanOutNode makes the intent visible in the graph designer — you can see at a glance that this is an intentional split.</div>
+  <div class="cdesc">An explicit node type whose entire purpose is to fan-out. Distinct from implicit fan-out (any node with multiple edges on one port). An explicit FanOutNode makes the intent visible in the graph designer - you can see at a glance that this is an intentional split.</div>
 </div>
 </div>
 
 <div class="panel" id="p-fanin">
-<h2>Fan-in / Join / Gate — merging parallel branches</h2>
+<h2>Fan-in / Join / Gate - merging parallel branches</h2>
 <div class="concept">
   <div class="cname">Fan-in / Join</div>
   <div class="calt">Also called: Merge, Synchronize, Barrier, Gather</div>
@@ -464,15 +464,15 @@ code {
   <div class="cdesc">The persistence record that tracks branch arrivals. Fields: GateId (= joining node's NodeId), InstanceId, ExpectedBranches (set at fan-out time), ArrivedBranches (atomically incremented). The gate fires when Arrived == Expected. Using an atomic increment (Redis INCR) means no application-level locking is needed.</div>
   <span class="cbad prefer">Prefer: FanInGate, JoinGate</span><span class="cbad avoid">Avoid: Semaphore (OS term with different semantics), Lock</span>
 </div>
-<div class="rule"><b>Gate vs. Barrier:</b> A <b>barrier</b> (concurrency term) blocks all threads until all have arrived. A <b>gate</b> in a workflow engine is softer — branches park themselves and the last one through cleans up the others. The gate analogy is better: it opens when the last branch arrives, lets one through, closes behind it.</div>
+<div class="rule"><b>Gate vs. Barrier:</b> A <b>barrier</b> (concurrency term) blocks all threads until all have arrived. A <b>gate</b> in a workflow engine is softer - branches park themselves and the last one through cleans up the others. The gate analogy is better: it opens when the last branch arrives, lets one through, closes behind it.</div>
 </div>
 
 <div class="panel" id="p-branch">
-<h2>Branch vs. Pointer — a naming distinction worth making</h2>
+<h2>Branch vs. Pointer - a naming distinction worth making</h2>
 <div class="concept">
   <div class="cname">Branch</div>
   <div class="calt">A logical path through the graph</div>
-  <div class="cdesc">A conceptual term for one of several parallel paths of execution. Use "branch" in documentation, user-facing messages, and designer UI. It's the intuitive word — "this workflow has three branches running in parallel."</div>
+  <div class="cdesc">A conceptual term for one of several parallel paths of execution. Use "branch" in documentation, user-facing messages, and designer UI. It's the intuitive word - "this workflow has three branches running in parallel."</div>
 </div>
 <div class="concept">
   <div class="cname">ExecutionPointer</div>
@@ -481,38 +481,38 @@ code {
 </div>
 <div class="compare">
   <div class="col g"><b>UI / Docs language</b>"This workflow has 2 branches running in parallel. Branch 1 is waiting for a sensor reading. Branch 2 is executing a command."</div>
-  <div class="col g"><b>Code / Engine language</b>instance.Pointers.Where(p => p.Status == Active) — two active pointers, one suspended, one executing.</div>
+  <div class="col g"><b>Code / Engine language</b>instance.Pointers.Where(p => p.Status == Active) - two active pointers, one suspended, one executing.</div>
 </div>
 </div>
 
 <div class="panel" id="p-state">
-<h2>State namespacing — avoiding key collisions</h2>
+<h2>State namespacing - avoiding key collisions</h2>
 <div class="concept">
   <div class="cname">WorkflowState</div>
   <div class="cdesc">The live memory of an instance. Contains two distinct namespaces that must never be merged into one dictionary.</div>
 </div>
 <div class="concept">
-  <div class="cname">NodeOutputs — keyed by NodeId</div>
+  <div class="cname">NodeOutputs - keyed by NodeId</div>
   <div class="calt">Also called: ActivityState, StepResults</div>
   <div class="cdesc">Each node's output stored under its own NodeId key. <code>state.NodeOutputs["check-temp-node"]</code>. Never under a generic key like <code>"lastOutput"</code>. This means any downstream node can read any upstream node's output without ambiguity, and parallel branches can't overwrite each other's results.</div>
-  <span class="cbad prefer">Prefer: NodeOutputs[nodeId]</span><span class="cbad avoid">Avoid: state["output"] — first parallel branch to write wins, second loses</span>
+  <span class="cbad prefer">Prefer: NodeOutputs[nodeId]</span><span class="cbad avoid">Avoid: state["output"] - first parallel branch to write wins, second loses</span>
 </div>
 <div class="concept">
-  <div class="cname">Variables — named workflow-level values</div>
-  <div class="cdesc">Business-meaningful named values defined in the definition schema. Typed (string, number, bool, object). Set by special AssignVariable nodes or via output mapping. Accessed by name across any node. These are the "parameters" of the workflow — things like thresholds, device IDs, escalation recipients.</div>
+  <div class="cname">Variables - named workflow-level values</div>
+  <div class="cdesc">Business-meaningful named values defined in the definition schema. Typed (string, number, bool, object). Set by special AssignVariable nodes or via output mapping. Accessed by name across any node. These are the "parameters" of the workflow - things like thresholds, device IDs, escalation recipients.</div>
 </div>
 <div class="rule"><b>Deep clone on write:</b> Every write to NodeOutputs and Variables must deep-clone the value. This is the fix for the shallow copy bug. Two instances of the same definition must never share a reference to the same object. Use <code>JsonElement</code> (inherently immutable) or explicit deep-clone on assignment.</div>
 </div>
 
 <div class="panel" id="p-variable">
-<h2>Variable vs. Output — two kinds of data</h2>
+<h2>Variable vs. Output - two kinds of data</h2>
 <div class="concept">
   <div class="cname">Output / NodeOutput</div>
   <div class="cdesc">Data produced by a specific node execution. Namespaced under that node's ID. Immutable after the node completes. Read-only to downstream nodes. Examples: the parsed temperature value from a sensor reading node, the response body from an HTTP call node, the evaluation result from a logic gate node.</div>
 </div>
 <div class="concept">
   <div class="cname">Variable / WorkflowVariable</div>
-  <div class="cdesc">A named, mutable value at workflow scope. Can be read and written by any node. Defined in the definition with a name and type. Used for values that need to accumulate or change across multiple steps — e.g. a counter, a running total, a flag set by one branch and read by another.</div>
+  <div class="cdesc">A named, mutable value at workflow scope. Can be read and written by any node. Defined in the definition with a name and type. Used for values that need to accumulate or change across multiple steps - e.g. a counter, a running total, a flag set by one branch and read by another.</div>
 </div>
 <div class="compare">
   <div class="col g"><b>Use Output for</b>The result of what this specific node just did. Sensor reading, HTTP response, expression evaluation result, device command ID.</div>
@@ -521,18 +521,18 @@ code {
 </div>
 
 <div class="panel" id="p-scope">
-<h2>Scope levels — where data lives</h2>
-<div class="concept"><div class="cname">Definition scope</div><div class="cdesc">Static config baked into the definition. Immutable at runtime. Examples: node configs, thresholds defined at design time, policy settings. Deep-cloned into instance state at creation — never read directly from the definition during execution.</div></div>
-<div class="concept"><div class="cname">Instance scope</div><div class="cdesc">Lives for the lifetime of one instance. Variables and NodeOutputs. Serialised and persisted so it survives suspension and process restart. Shared across all pointers (branches) of the same instance — requires namespacing by nodeId to prevent cross-branch writes.</div></div>
+<h2>Scope levels - where data lives</h2>
+<div class="concept"><div class="cname">Definition scope</div><div class="cdesc">Static config baked into the definition. Immutable at runtime. Examples: node configs, thresholds defined at design time, policy settings. Deep-cloned into instance state at creation - never read directly from the definition during execution.</div></div>
+<div class="concept"><div class="cname">Instance scope</div><div class="cdesc">Lives for the lifetime of one instance. Variables and NodeOutputs. Serialised and persisted so it survives suspension and process restart. Shared across all pointers (branches) of the same instance - requires namespacing by nodeId to prevent cross-branch writes.</div></div>
 <div class="concept"><div class="cname">Node scope / Execution scope</div><div class="cdesc">Lives only for the duration of one node execution. The ExecutionContext itself. Local variables computed inside ExecuteAsync. The IServiceScope (DI). Discarded after ExecuteAsync returns. Never persisted.</div></div>
-<div class="concept"><div class="cname">Resume scope</div><div class="cdesc">Data carried by the resuming event — the payload of the bookmark match. Available via <code>context.ResumePayload</code> or injected into NodeOutputs under a reserved key. Only present when a node is resuming from a bookmark, not on first execution.</div></div>
+<div class="concept"><div class="cname">Resume scope</div><div class="cdesc">Data carried by the resuming event - the payload of the bookmark match. Available via <code>context.ResumePayload</code> or injected into NodeOutputs under a reserved key. Only present when a node is resuming from a bookmark, not on first execution.</div></div>
 </div>
 
 <div class="panel" id="p-error">
-<h2>Error vs. Fault vs. Exception — three different things</h2>
+<h2>Error vs. Fault vs. Exception - three different things</h2>
 <div class="concept">
   <div class="cname">Exception (code layer)</div>
-  <div class="cdesc">A .NET exception thrown by executor code. Caught by the engine's retry wrapper. Converted into a NodeError after retries are exhausted. Executors should only throw — never catch-and-swallow — so the engine can handle retry correctly.</div>
+  <div class="cdesc">A .NET exception thrown by executor code. Caught by the engine's retry wrapper. Converted into a NodeError after retries are exhausted. Executors should only throw - never catch-and-swallow - so the engine can handle retry correctly.</div>
 </div>
 <div class="concept">
   <div class="cname">NodeError (engine layer)</div>
@@ -541,16 +541,16 @@ code {
 </div>
 <div class="concept">
   <div class="cname">WorkflowFault (instance layer)</div>
-  <div class="cdesc">The terminal failure state of a whole instance. Set when the error policy is exhausted and the instance cannot continue. Different from an individual node's NodeError — a fault is instance-level, an error is node-level. An instance can have nodes that errored (and were handled) without the instance faulting.</div>
+  <div class="cdesc">The terminal failure state of a whole instance. Set when the error policy is exhausted and the instance cannot continue. Different from an individual node's NodeError - a fault is instance-level, an error is node-level. An instance can have nodes that errored (and were handled) without the instance faulting.</div>
   <span class="cbad prefer">Prefer: WorkflowFault for instance-level failures</span><span class="cbad avoid">Avoid: using "error" and "fault" interchangeably</span>
 </div>
 </div>
 
 <div class="panel" id="p-retry">
-<h2>Retry vs. Compensation — forward vs. backward recovery</h2>
+<h2>Retry vs. Compensation - forward vs. backward recovery</h2>
 <div class="concept">
   <div class="cname">Retry / RetryPolicy</div>
-  <div class="cdesc">Forward recovery: try the same operation again. Applied at the node level before the error is escalated. Policy fields: MaxRetries, BackoffMs (with exponential + jitter), RetryableExceptionTypes (only retry transient errors, not validation failures). Retry is transparent — the workflow doesn't know it happened.</div>
+  <div class="cdesc">Forward recovery: try the same operation again. Applied at the node level before the error is escalated. Policy fields: MaxRetries, BackoffMs (with exponential + jitter), RetryableExceptionTypes (only retry transient errors, not validation failures). Retry is transparent - the workflow doesn't know it happened.</div>
 </div>
 <div class="concept">
   <div class="cname">Compensation / Rollback</div>
@@ -564,19 +564,19 @@ code {
 </div>
 
 <div class="panel" id="p-policy">
-<h2>Policy objects — named bundles of behaviour rules</h2>
-<div class="concept"><div class="cname">RetryPolicy</div><div class="cdesc">Fields: MaxRetries, BackoffMs, UseExponentialBackoff, JitterMs, RetryableOn (exception type list). Defined at definition level with per-node overrides. Applied by ExecuteWithRetryAsync wrapper — never by the executor itself.</div></div>
-<div class="concept"><div class="cname">ErrorPolicy</div><div class="cdesc">Fields: OnExhausted (enum: Fail | Compensate | Skip | RouteToErrorPort). Applied after all retries fail. Skip is useful for non-critical branches in parallel workflows — let other branches continue.</div></div>
+<h2>Policy objects - named bundles of behaviour rules</h2>
+<div class="concept"><div class="cname">RetryPolicy</div><div class="cdesc">Fields: MaxRetries, BackoffMs, UseExponentialBackoff, JitterMs, RetryableOn (exception type list). Defined at definition level with per-node overrides. Applied by ExecuteWithRetryAsync wrapper - never by the executor itself.</div></div>
+<div class="concept"><div class="cname">ErrorPolicy</div><div class="cdesc">Fields: OnExhausted (enum: Fail | Compensate | Skip | RouteToErrorPort). Applied after all retries fail. Skip is useful for non-critical branches in parallel workflows - let other branches continue.</div></div>
 <div class="concept"><div class="cname">ConcurrencyPolicy</div><div class="cdesc">Fields: Mode (AllowParallel | Queue | CancelPrevious | DropNew | Debounce), DebounceWindowMs. Applied in RuntimeRegistry before StartAsync is called. The only policy evaluated before instance creation.</div></div>
 <div class="concept"><div class="cname">TimeoutPolicy</div><div class="cdesc">Fields: NodeTimeoutMs (per-node deadline), InstanceTimeoutMs (whole-workflow deadline). Node timeout is enforced by CancellationTokenSource in the retry wrapper. Instance timeout is enforced by a background scheduler that publishes a synthetic cancel event.</div></div>
 </div>
 
 <div class="panel" id="p-subwf">
-<h2>Sub-workflow / Child — workflow composition</h2>
+<h2>Sub-workflow / Child - workflow composition</h2>
 <div class="concept">
   <div class="cname">Sub-workflow / ChildWorkflow</div>
   <div class="calt">Also called: Nested workflow, Workflow invocation, Call activity</div>
-  <div class="cdesc">A node that starts another workflow definition as a child instance and waits for it to complete. The parent pointer suspends on a bookmark. When the child completes, it resumes the parent and passes outputs back. The child is a full WorkflowInstance with its own state, pointers, and lifecycle — it just has ParentInstanceId set.</div>
+  <div class="cdesc">A node that starts another workflow definition as a child instance and waits for it to complete. The parent pointer suspends on a bookmark. When the child completes, it resumes the parent and passes outputs back. The child is a full WorkflowInstance with its own state, pointers, and lifecycle - it just has ParentInstanceId set.</div>
   <span class="cbad prefer">Prefer: SubWorkflow, ChildWorkflow</span><span class="cbad avoid">Avoid: "nested workflow" (implies structural nesting, not invocation)</span>
 </div>
 <div class="concept">
@@ -586,7 +586,7 @@ code {
 </div>
 
 <div class="panel" id="p-composite">
-<h2>Composite activity — a node that contains other nodes</h2>
+<h2>Composite activity - a node that contains other nodes</h2>
 <div class="concept">
   <div class="cname">CompositeActivity / ContainerNode</div>
   <div class="cdesc">An activity that contains child nodes and manages their execution internally. Examples: Sequence (run children in order), Parallel (run children as fan-out), ForEach (run one child per item in a collection). Different from a sub-workflow: composite activities share the parent's instance state and run within the same instance. Sub-workflows are separate instances.</div>
@@ -598,24 +598,24 @@ code {
 </div>
 
 <div class="panel" id="p-registry">
-<h2>Registry vs. Store vs. Engine — three different roles</h2>
+<h2>Registry vs. Store vs. Engine - three different roles</h2>
 <div class="concept">
   <div class="cname">WorkflowRuntimeRegistry</div>
   <div class="cdesc">In-memory index of enabled definitions, keyed by trigger patterns. Answers the question: "which definitions should run for this event?" Does NOT store instances. Does NOT execute anything. Just routing. Rebuilt from the definition store on startup and refreshed on change events.</div>
 </div>
 <div class="concept">
   <div class="cname">WorkflowStore / IPersistenceStore</div>
-  <div class="cdesc">The persistence abstraction. Handles all reads and writes: instances, bookmarks, fan-in gates, delayed resumes, definitions. Implemented against SQL (definitions), Redis (bookmarks, gates), or both. The engine never writes to a database directly — only via the store interface.</div>
+  <div class="cdesc">The persistence abstraction. Handles all reads and writes: instances, bookmarks, fan-in gates, delayed resumes, definitions. Implemented against SQL (definitions), Redis (bookmarks, gates), or both. The engine never writes to a database directly - only via the store interface.</div>
 </div>
 <div class="concept">
   <div class="cname">WorkflowEngine</div>
-  <div class="cdesc">The orchestrator. Calls the Registry to find definitions, calls StartAsync/ResumeAsync to move instances forward, delegates to executors via DI, calls the Store to persist state. Registered as a Singleton — but never holds scoped services directly (captive dependency fix).</div>
+  <div class="cdesc">The orchestrator. Calls the Registry to find definitions, calls StartAsync/ResumeAsync to move instances forward, delegates to executors via DI, calls the Store to persist state. Registered as a Singleton - but never holds scoped services directly (captive dependency fix).</div>
 </div>
 <div class="rule"><b>Separation of concerns:</b> Registry knows <i>what to run</i>. Engine knows <i>how to run it</i>. Store knows <i>how to persist it</i>. Executors know <i>what the node does</i>. No class should own more than one of these responsibilities.</div>
 </div>
 
 <div class="panel" id="p-naming">
-<h2>Naming anti-patterns — what to actively avoid</h2>
+<h2>Naming anti-patterns - what to actively avoid</h2>
 <div class="concept">
   <div class="cname">"Workflow" used for both definition and instance</div>
   <div class="cdesc">The most common mistake. Results in WorkflowId being ambiguous, GetWorkflow() being meaningless, and every method signature being unclear. Always qualify: WorkflowDefinition vs. WorkflowInstance.</div>
@@ -628,11 +628,11 @@ code {
 </div>
 <div class="concept">
   <div class="cname">"Status" for both instance and pointer</div>
-  <div class="cdesc">Instance has a status (Running, Suspended, Completed). Each pointer has a status (Active, Suspended, Failed). Use InstanceStatus and PointerStatus as distinct types — not both named Status.</div>
+  <div class="cdesc">Instance has a status (Running, Suspended, Completed). Each pointer has a status (Active, Suspended, Failed). Use InstanceStatus and PointerStatus as distinct types - not both named Status.</div>
 </div>
 <div class="concept">
   <div class="cname">Global state dictionary with string keys</div>
-  <div class="cdesc"><code>state["output"]</code>, <code>state["result"]</code>, <code>state["data"]</code> — untyped, unscoped, collision-prone. When two parallel branches both write <code>state["result"]</code>, one silently overwrites the other. Always namespace by nodeId.</div>
+  <div class="cdesc"><code>state["output"]</code>, <code>state["result"]</code>, <code>state["data"]</code> - untyped, unscoped, collision-prone. When two parallel branches both write <code>state["result"]</code>, one silently overwrites the other. Always namespace by nodeId.</div>
   <span class="cbad avoid">Avoid: Dictionary&lt;string, object&gt; with generic keys</span>
 </div>
 <div class="concept">
