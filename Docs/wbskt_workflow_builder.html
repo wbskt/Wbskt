@@ -1,0 +1,932 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  :root {
+  /* JetBrains Rider "Islands" Dark Palette Mapping */
+  --color-text-primary: #bcbec4;      /* Standard text */
+  --color-text-secondary: #7a7e85;    /* Comments/Muted */
+  --color-text-tertiary: #5e6068;     /* Darker muted */
+  --color-text-danger: #e06c75;       /* Rider Red */
+  --color-text-info: #56a8f5;         /* Rider Blue */
+  
+  --color-background-primary: #2b2d30;   /* Sidebars/Panels */
+  --color-background-secondary: #1e1f22; /* App background */
+  --color-background-tertiary: #1e1f22;  /* Canvas background */
+  --color-background-danger: #402929;
+  
+  --color-border-primary: #7f77dd;       /* Rider Purple */
+  --color-border-secondary: #393b40;     /* Island borders */
+  --color-border-tertiary: #323438;      /* Divider lines */
+  --color-border-info: #56a8f5;
+  --color-border-danger: #e06c75;
+  
+  --font-mono: 'JetBrains Mono', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans,"Anthropic Sans",sans-serif);font-size:14px;color:var(--color-text-primary);background:transparent;min-height:100vh}
+
+/* Layout */
+.app{display:grid;grid-template-columns:220px 1fr 300px;height:100vh;min-height:700px}
+.sidebar{border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;overflow:hidden}
+.canvas-area{position:relative;overflow:hidden;background:var(--color-background-tertiary)}
+.inspector{border-left:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;overflow:hidden}
+
+/* Sidebar */
+.panel-header{padding:12px 14px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:11px;font-weight:500;letter-spacing:.06em;color:var(--color-text-secondary);text-transform:uppercase}
+.node-palette{padding:10px;overflow-y:auto;flex:1}
+.palette-group{margin-bottom:14px}
+.palette-group-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);margin-bottom:6px;padding-left:2px;text-transform:uppercase;letter-spacing:.05em}
+.palette-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:grab;user-select:none;font-size:13px;border:0.5px solid var(--color-border-tertiary);margin-bottom:4px;background:var(--color-background-primary);transition:background .15s}
+.palette-item:hover{background:var(--color-background-secondary)}
+.palette-item:active{cursor:grabbing}
+.node-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-trigger{background:#10b981}
+.dot-action{background:#3b82f6}
+.dot-control{background:#f59e0b}
+
+/* Canvas */
+.canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,var(--color-border-tertiary) 1px,transparent 1px);background-size:24px 24px;background-position:12px 12px}
+.canvas-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.canvas-svg.interactive{pointer-events:all}
+.canvas-nodes{position:absolute;inset:0}
+
+/* Nodes */
+.wf-node{position:absolute;min-width:160px;background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:10px;cursor:move;user-select:none;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.wf-node:hover{border-color:var(--color-border-primary)}
+.wf-node.selected{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.18)}
+.node-header{padding:8px 10px 6px;display:flex;align-items:center;gap:7px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.node-type-badge{font-size:10px;font-weight:500;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.badge-trigger{background:rgba(16,185,129,.1);color:#059669}
+.badge-action{background:rgba(59,130,246,.1);color:#2563eb}
+.badge-control{background:rgba(245,158,11,.1);color:#d97706}
+.node-name{font-size:13px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node-body{padding:6px 10px 8px;font-size:11px;color:var(--color-text-secondary);line-height:1.5}
+.node-ports{display:flex;justify-content:space-between;padding:0 0 2px}
+.ports-in{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.ports-out{display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.port-row{display:flex;align-items:center;gap:4px;cursor:crosshair}
+.port-label{font-size:10px;color:var(--color-text-tertiary)}
+.port-dot{width:10px;height:10px;border-radius:50%;background:var(--color-background-secondary);border:1.5px solid var(--color-border-secondary);position:relative;z-index:2;transition:background .12s,border-color .12s}
+.port-dot:hover,.port-dot.active{background:#3b82f6;border-color:#2563eb}
+.port-dot[data-dir="in"]{margin-left:-5px}
+.port-dot[data-dir="out"]{margin-right:-5px}
+.node-delete{width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;cursor:pointer;font-size:14px;color:var(--color-text-tertiary);flex-shrink:0}
+.node-delete:hover{color:var(--color-text-danger);background:var(--color-background-danger)}
+
+/* Inspector */
+.inspector-inner{flex:1;overflow-y:auto;padding:12px}
+.insp-section{margin-bottom:16px}
+.insp-label{font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:5px;display:block}
+.insp-input{width:100%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:6px;padding:6px 9px;font-size:13px;color:var(--color-text-primary);font-family:inherit}
+.insp-input:focus{outline:none;border-color:var(--color-border-info)}
+.insp-select{width:100%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:6px;padding:6px 9px;font-size:13px;color:var(--color-text-primary);font-family:inherit}
+textarea.insp-input{resize:vertical;min-height:70px;font-family:var(--font-mono,monospace);font-size:12px}
+.insp-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.placeholder-msg{color:var(--color-text-tertiary);font-size:13px;padding:24px 14px;text-align:center;line-height:1.6}
+
+/* Toolbar */
+.toolbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:5px 8px;z-index:100}
+.tb-btn{padding:5px 12px;border-radius:5px;border:0.5px solid var(--color-border-tertiary);background:transparent;font-size:12px;font-weight:500;cursor:pointer;color:var(--color-text-primary);transition:background .15s}
+.tb-btn:hover{background:var(--color-background-secondary)}
+.tb-btn.danger{color:var(--color-text-danger)}
+.tb-btn.primary{background:#3b82f6;color:#fff;border-color:#2563eb}
+.tb-btn.primary:hover{background:#2563eb}
+
+/* JSON panel */
+.json-panel{border-top:0.5px solid var(--color-border-tertiary);padding:10px}
+.json-pre{background:var(--color-background-secondary);border-radius:6px;padding:10px;font-family:var(--font-mono,monospace);font-size:11px;color:var(--color-text-primary);white-space:pre;overflow-x:auto;max-height:220px;overflow-y:auto;line-height:1.5}
+.copy-btn{margin-top:7px;width:100%;padding:6px;border-radius:6px;border:0.5px solid var(--color-border-tertiary);background:transparent;font-size:12px;cursor:pointer;color:var(--color-text-secondary);font-family:inherit}
+.copy-btn:hover{background:var(--color-background-secondary)}
+
+/* Condition builder */
+.cond-builder{display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:center}
+.op-select{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:5px;padding:4px 5px;font-size:11px;color:var(--color-text-primary);font-family:inherit}
+
+/* Workflow meta */
+.meta-section{padding:10px 12px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.meta-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.meta-row label{font-size:11px;color:var(--color-text-secondary);min-width:70px}
+.meta-row input,.meta-row select{flex:1;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:5px;padding:4px 8px;font-size:12px;color:var(--color-text-primary);font-family:inherit}
+.meta-row input:focus,.meta-row select:focus{outline:none;border-color:var(--color-border-info)}
+.toggle-row{display:flex;align-items:center;gap:6px}
+.toggle{width:32px;height:18px;border-radius:9px;background:var(--color-border-secondary);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.toggle.on{background:#10b981}
+.toggle-thumb{width:12px;height:12px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left .2s}
+.toggle.on .toggle-thumb{left:17px}
+
+/* Edge */
+.edge-path{stroke:var(--color-border-secondary);fill:none;stroke-width:1.5;pointer-events:stroke;cursor:pointer}
+.edge-path:hover{stroke:var(--color-border-info)}
+.edge-path.selected{stroke:#3b82f6;stroke-width:2}
+.edge-delete-btn{cursor:pointer;fill:var(--color-text-danger);opacity:0}
+.edge-group:hover .edge-delete-btn{opacity:1}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:0.5px solid var(--color-border-tertiary)}
+.tab{flex:1;padding:8px;font-size:12px;font-weight:500;text-align:center;cursor:pointer;color:var(--color-text-secondary);border-bottom:2px solid transparent;transition:color .15s}
+.tab.active{color:var(--color-text-primary);border-bottom-color:#3b82f6}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR: Palette -->
+<div class="sidebar">
+  <div class="panel-header">Node palette</div>
+  <div class="meta-section">
+    <div class="meta-row"><label>Name</label><input id="wf-name" value="My Workflow" /></div>
+    <div class="meta-row"><label>Description</label><input id="wf-desc" placeholder="What does this do?" /></div>
+    <div class="meta-row">
+      <label>Concurrency</label>
+      <select id="wf-concurrency"><option value="0">Allow parallel</option><option value="1">Queue</option><option value="2">Cancel existing</option></select>
+    </div>
+    <div class="meta-row">
+      <label>Timeout (s)</label><input id="wf-timeout" type="number" value="300" min="0" />
+    </div>
+    <div class="meta-row">
+      <label>Tags</label><input id="wf-tags" placeholder="comma, separated" />
+    </div>
+    <div class="meta-row">
+      <label>Log level</label>
+      <select id="wf-loglevel"><option value="none">None</option><option value="error">Error</option><option value="info" selected>Info</option><option value="debug">Debug</option></select>
+    </div>
+    <div class="meta-row">
+      <label>Enabled</label>
+      <div class="toggle-row"><div class="toggle on" id="wf-enabled-toggle" onclick="toggleEnabled(this)"><div class="toggle-thumb"></div></div><span id="enabled-label" style="font-size:12px;color:var(--color-text-secondary)">Yes</span></div>
+    </div>
+  </div>
+  <div class="node-palette">
+    <div class="palette-group">
+      <div class="palette-group-label">Triggers</div>
+      <div class="palette-item" draggable="true" data-type="trigger:device"><span class="node-dot dot-trigger"></span>Device sensor</div>
+      <div class="palette-item" draggable="true" data-type="trigger:timer"><span class="node-dot dot-trigger"></span>Timer schedule</div>
+    </div>
+    <div class="palette-group">
+      <div class="palette-group-label">Actions</div>
+      <div class="palette-item" draggable="true" data-type="action:command"><span class="node-dot dot-action"></span>Send command</div>
+      <div class="palette-item" draggable="true" data-type="action:email"><span class="node-dot dot-action"></span>Send email</div>
+      <div class="palette-item" draggable="true" data-type="action:telegram"><span class="node-dot dot-action"></span>Telegram</div>
+      <div class="palette-item" draggable="true" data-type="action:toast"><span class="node-dot dot-action"></span>Toast alert</div>
+      <div class="palette-item" draggable="true" data-type="action:webhook"><span class="node-dot dot-action"></span>Webhook</div>
+      <div class="palette-item" draggable="true" data-type="action:state"><span class="node-dot dot-action"></span>Set state</div>
+    </div>
+    <div class="palette-group">
+      <div class="palette-group-label">Control</div>
+      <div class="palette-item" draggable="true" data-type="control:logic"><span class="node-dot dot-control"></span>Logic gate</div>
+      <div class="palette-item" draggable="true" data-type="control:switch"><span class="node-dot dot-control"></span>Switch / case</div>
+      <div class="palette-item" draggable="true" data-type="control:delay"><span class="node-dot dot-control"></span>Delay</div>
+      <div class="palette-item" draggable="true" data-type="control:loop"><span class="node-dot dot-control"></span>Loop</div>
+      <div class="palette-item" draggable="true" data-type="control:variable"><span class="node-dot dot-control"></span>Variable</div>
+    </div>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-area" id="canvas-area">
+  <div class="canvas-grid"></div>
+  <svg class="canvas-svg" id="edges-svg"><defs><marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--color-border-secondary)"/></marker><marker id="arrowhead-sel" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/></marker></defs></svg>
+  <div class="canvas-nodes" id="canvas-nodes"></div>
+  <div class="toolbar">
+    <button class="tb-btn" onclick="zoomIn()">+ Zoom in</button>
+    <button class="tb-btn" onclick="zoomOut()">- Zoom out</button>
+    <button class="tb-btn" onclick="fitView()">Fit</button>
+    <button class="tb-btn danger" onclick="clearCanvas()">Clear</button>
+    <button class="tb-btn primary" onclick="exportJSON()">Export JSON</button>
+  </div>
+</div>
+
+<!-- INSPECTOR -->
+<div class="inspector">
+  <div class="tabs">
+    <div class="tab active" id="tab-props" onclick="switchTab('props')">Properties</div>
+    <div class="tab" id="tab-json" onclick="switchTab('json')">JSON output</div>
+  </div>
+  <div id="panel-props" style="flex:1;overflow-y:auto">
+    <div id="inspector-inner" class="inspector-inner">
+      <div class="placeholder-msg">Drop nodes onto the canvas, then click one to configure it here.</div>
+    </div>
+  </div>
+  <div id="panel-json" style="display:none;padding:10px;overflow-y:auto;flex:1">
+    <div class="json-pre" id="json-preview">{}</div>
+    <button class="copy-btn" onclick="copyJSON()">Copy JSON</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────
+let nodes = [];
+let edges = [];
+let selectedId = null;
+let selectedEdgeId = null;
+let draggingNode = null;
+let dragOffset = {x:0,y:0};
+let connectingFrom = null; // {nodeId, portId, dir}
+let scale = 1;
+let pan = {x:0,y:0};
+let drawingEdge = null;
+let wfEnabled = true;
+let nextId = 1;
+const canvas = document.getElementById('canvas-area');
+const nodesEl = document.getElementById('canvas-nodes');
+const edgesSvg = document.getElementById('edges-svg');
+
+function uid(prefix){ return prefix + '-' + (nextId++).toString().padStart(4,'0'); }
+
+// ─── Node type definitions ─────────────────────────────────────────────
+const NODE_DEFS = {
+  'trigger:device': {
+    label:'Device sensor', cat:'trigger',
+    ports:[{id:'out',dir:'out'}],
+    defaults:{ clientRefId:'', triggerType:0, propertyName:'' }
+  },
+  'trigger:timer': {
+    label:'Timer schedule', cat:'trigger',
+    ports:[{id:'out',dir:'out'}],
+    defaults:{ interval:60, unit:'Seconds' }
+  },
+  'action:command': {
+    label:'Send command', cat:'action',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ targetClientRefId:'', messageType:'SetState', payload:'{}', retryMaxAttempts:0, retryDelaySeconds:5 }
+  },
+  'action:email': {
+    label:'Send email', cat:'action',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ recipient:'', subject:'', body:'', retryMaxAttempts:0, retryDelaySeconds:5 }
+  },
+  'action:telegram': {
+    label:'Telegram', cat:'action',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ chatId:'', message:'', retryMaxAttempts:0, retryDelaySeconds:5 }
+  },
+  'action:toast': {
+    label:'Toast alert', cat:'action',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ title:'', message:'' }
+  },
+  'action:webhook': {
+    label:'Webhook', cat:'action',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'},{id:'on_response_change',dir:'out'}],
+    defaults:{ url:'', method:'POST', payload:'{}', retryMaxAttempts:0, retryDelaySeconds:5 }
+  },
+  'action:state': {
+    label:'Set state', cat:'action',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ key:'', valueExpression:'', merge:true }
+  },
+  'control:logic': {
+    label:'Logic gate', cat:'control',
+    ports:[{id:'in',dir:'in'},{id:'match',dir:'out'},{id:'otherwise',dir:'out'}],
+    defaults:{ conditionPath:'$trigger.payload.data.value', conditionOp:11, conditionValue:'0' }
+  },
+  'control:switch': {
+    label:'Switch / case', cat:'control',
+    ports:[{id:'in',dir:'in'},{id:'case_1',dir:'out'},{id:'case_2',dir:'out'},{id:'default',dir:'out'}],
+    defaults:{ switchPath:'$trigger.payload.data.status', cases:['active','inactive'] }
+  },
+  'control:delay': {
+    label:'Delay', cat:'control',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ seconds:5 }
+  },
+  'control:loop': {
+    label:'Loop', cat:'control',
+    ports:[{id:'in',dir:'in'},{id:'body',dir:'out'},{id:'completed',dir:'out'}],
+    defaults:{ itemsPath:'$trigger.payload.data.items', iteratorName:'item' }
+  },
+  'control:variable': {
+    label:'Variable', cat:'control',
+    ports:[{id:'in',dir:'in'},{id:'out',dir:'out'}],
+    defaults:{ variableName:'', expression:'', operation:'Set' }
+  },
+};
+
+const OP_NAMES = {
+  10:'== equals',11:'!= not equals',12:'> greater',13:'>= greater/eq',14:'< less',15:'<= less/eq',
+  20:'&& and',21:'|| or',30:'contains',31:'starts with',32:'ends with'
+};
+
+// ─── Drag from palette ─────────────────────────────────────────────────
+document.querySelectorAll('.palette-item').forEach(item => {
+  item.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('nodeType', item.dataset.type);
+  });
+});
+canvas.addEventListener('dragover', e => e.preventDefault());
+canvas.addEventListener('drop', e => {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('nodeType');
+  if (!type) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left - pan.x) / scale;
+  const y = (e.clientY - rect.top - pan.y) / scale;
+  createNode(type, x, y);
+});
+
+function createNode(type, x, y) {
+  const def = NODE_DEFS[type];
+  if (!def) return;
+  const node = {
+    id: uid('n'),
+    type,
+    name: def.label,
+    x: Math.round(x), y: Math.round(y),
+    ports: def.ports,
+    props: {...def.defaults}
+  };
+  nodes.push(node);
+  renderNode(node);
+  selectNode(node.id);
+  updateJSON();
+}
+
+function renderNode(node) {
+  const def = NODE_DEFS[node.type];
+  const cat = def.cat;
+  const badgeClass = `badge-${cat}`;
+  const catLabel = cat.charAt(0).toUpperCase()+cat.slice(1);
+
+  const inPorts = node.ports.filter(p=>p.dir==='in');
+  const outPorts = node.ports.filter(p=>p.dir==='out');
+
+  const el = document.createElement('div');
+  el.className = 'wf-node';
+  el.id = 'node-'+node.id;
+  el.style.left = (node.x * scale + pan.x)+'px';
+  el.style.top = (node.y * scale + pan.y)+'px';
+  el.innerHTML = `
+    <div class="node-header">
+      <span class="node-type-badge ${badgeClass}">${catLabel}</span>
+      <span class="node-name">${node.name}</span>
+      <span class="node-delete" onclick="deleteNode('${node.id}')">×</span>
+    </div>
+    <div class="node-body">${getNodeSummary(node)}</div>
+    <div class="node-ports">
+      <div class="ports-in">${inPorts.map(p=>`<div class="port-row" onmousedown="startConnect(event,'${node.id}','${p.id}','in')"><div class="port-dot" data-dir="in" data-node="${node.id}" data-port="${p.id}" id="port-${node.id}-${p.id}"></div><span class="port-label">${p.id}</span></div>`).join('')}</div>
+      <div class="ports-out">${outPorts.map(p=>`<div class="port-row" onmousedown="startConnect(event,'${node.id}','${p.id}','out')"><span class="port-label">${p.id}</span><div class="port-dot" data-dir="out" data-node="${node.id}" data-port="${p.id}" id="port-${node.id}-${p.id}"></div></div>`).join('')}</div>
+    </div>
+  `;
+  el.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('port-dot') || e.target.classList.contains('node-delete')) return;
+    selectNode(node.id);
+    draggingNode = node;
+    const rect = el.getBoundingClientRect();
+    dragOffset.x = e.clientX - rect.left;
+    dragOffset.y = e.clientY - rect.top;
+    e.preventDefault();
+  });
+  nodesEl.appendChild(el);
+}
+
+function getNodeSummary(node) {
+  const p = node.props;
+  switch(node.type) {
+    case 'trigger:device': return p.clientRefId ? `Device: ${p.clientRefId.slice(0,8)}…` : 'Click to configure';
+    case 'trigger:timer': return `Every ${p.interval} ${p.unit}`;
+    case 'action:command': return p.messageType || 'No message type';
+    case 'action:email': return p.recipient || 'No recipient';
+    case 'action:telegram': return p.chatId ? `Chat ${p.chatId}` : 'No chat ID';
+    case 'action:toast': return p.title || 'No title';
+    case 'action:webhook': return p.url || 'No URL';
+    case 'action:state': return p.key || 'No key';
+    case 'control:logic': {
+      const op = OP_NAMES[p.conditionOp]||'?';
+      const path = p.conditionPath.split('.').pop();
+      return `${path} ${op.split(' ')[0]} ${p.conditionValue}`;
+    }
+    case 'control:switch': return `Switch on ${p.switchPath.split('.').pop()}`;
+    case 'control:delay': return `Wait ${p.seconds}s`;
+    case 'control:loop': return `Loop: ${p.iteratorName}`;
+    case 'control:variable': return p.variableName ? `${p.operation} ${p.variableName}` : 'No variable';
+    default: return '';
+  }
+}
+
+function updateNodeEl(node) {
+  const el = document.getElementById('node-'+node.id);
+  if (!el) return;
+  el.querySelector('.node-name').textContent = node.name;
+  el.querySelector('.node-body').textContent = getNodeSummary(node);
+}
+
+// ─── Selection ─────────────────────────────────────────────────────────
+function selectNode(id) {
+  selectedEdgeId = null;
+  document.querySelectorAll('.wf-node').forEach(n=>n.classList.remove('selected'));
+  document.querySelectorAll('.edge-path').forEach(p=>p.classList.remove('selected'));
+  selectedId = id;
+  const el = document.getElementById('node-'+id);
+  if (el) el.classList.add('selected');
+  renderInspector();
+}
+
+function selectEdge(id) {
+  selectedId = null;
+  selectedEdgeId = id;
+  document.querySelectorAll('.wf-node').forEach(n=>n.classList.remove('selected'));
+  document.querySelectorAll('.edge-path').forEach(p=>p.classList.remove('selected'));
+  const ep = document.getElementById('edge-path-'+id);
+  if (ep) ep.classList.add('selected');
+  renderInspector();
+}
+
+// ─── Node dragging ─────────────────────────────────────────────────────
+document.addEventListener('mousemove', e => {
+  if (draggingNode) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left - dragOffset.x) / scale;
+    const y = (e.clientY - rect.top - dragOffset.y) / scale;
+    draggingNode.x = Math.round(x);
+    draggingNode.y = Math.round(y);
+    const el = document.getElementById('node-'+draggingNode.id);
+    if (el) {
+      el.style.left = (draggingNode.x * scale + pan.x)+'px';
+      el.style.top = (draggingNode.y * scale + pan.y)+'px';
+    }
+    renderEdges();
+  }
+  if (connectingFrom) {
+    renderEdges();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const g = document.getElementById('drawing-edge');
+    if (!g) {
+      const ng = document.createElementNS('http://www.w3.org/2000/svg','g');
+      ng.id = 'drawing-edge';
+      edgesSvg.appendChild(ng);
+    }
+    const dg = document.getElementById('drawing-edge');
+    const {x:sx,y:sy} = getPortPos(connectingFrom.nodeId, connectingFrom.portId);
+    dg.innerHTML = `<path d="${edgePath(sx,sy,mx,my)}" stroke="#3b82f6" fill="none" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.7"/>`;
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  draggingNode = null;
+  if (connectingFrom) {
+    const target = e.target;
+    if (target.classList.contains('port-dot') && target.dataset.dir === 'in') {
+      const tnId = target.dataset.node;
+      const tpId = target.dataset.port;
+      if (tnId !== connectingFrom.nodeId) {
+        addEdge(connectingFrom.nodeId, connectingFrom.portId, tnId, tpId);
+      }
+    }
+    connectingFrom = null;
+    const dg = document.getElementById('drawing-edge');
+    if (dg) dg.remove();
+  }
+  if (e.target === canvas || e.target.classList.contains('canvas-grid') || e.target === nodesEl || e.target === edgesSvg) {
+    selectedId = null; selectedEdgeId = null;
+    document.querySelectorAll('.wf-node').forEach(n=>n.classList.remove('selected'));
+    document.querySelectorAll('.edge-path').forEach(p=>p.classList.remove('selected'));
+    renderInspector();
+  }
+  updateJSON();
+});
+
+// ─── Port connection ────────────────────────────────────────────────────
+function startConnect(e, nodeId, portId, dir) {
+  if (dir === 'out') {
+    connectingFrom = {nodeId, portId, dir};
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}
+
+function addEdge(srcNodeId, srcPortId, tgtNodeId, tgtPortId) {
+  const exists = edges.find(e=>e.source.nodeId===srcNodeId&&e.source.portId===srcPortId&&e.target.nodeId===tgtNodeId&&e.target.portId===tgtPortId);
+  if (exists) return;
+  const edge = {
+    id: uid('e'),
+    source: {nodeId:srcNodeId, portId:srcPortId},
+    target: {nodeId:tgtNodeId, portId:tgtPortId},
+    label: ''
+  };
+  edges.push(edge);
+  renderEdges();
+  updateJSON();
+}
+
+function deleteEdge(id) {
+  edges = edges.filter(e=>e.id!==id);
+  renderEdges();
+  if (selectedEdgeId===id) { selectedEdgeId=null; renderInspector(); }
+  updateJSON();
+}
+
+// ─── Edge rendering ────────────────────────────────────────────────────
+function getPortPos(nodeId, portId) {
+  const portEl = document.getElementById(`port-${nodeId}-${portId}`);
+  if (!portEl) return {x:0,y:0};
+  const canvasRect = canvas.getBoundingClientRect();
+  const portRect = portEl.getBoundingClientRect();
+  return {
+    x: portRect.left + portRect.width/2 - canvasRect.left,
+    y: portRect.top + portRect.height/2 - canvasRect.top
+  };
+}
+
+function edgePath(x1,y1,x2,y2) {
+  const dx = Math.abs(x2-x1)*0.5;
+  return `M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
+}
+
+function renderEdges() {
+  // clear existing edges (keep drawing-edge and defs)
+  Array.from(edgesSvg.querySelectorAll('.edge-group')).forEach(g=>g.remove());
+  edges.forEach(edge => {
+    const {x:sx,y:sy} = getPortPos(edge.source.nodeId, edge.source.portId);
+    const {x:tx,y:ty} = getPortPos(edge.target.nodeId, edge.target.portId);
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.className.baseVal = 'edge-group';
+    g.id = 'edge-'+edge.id;
+    const isSel = edge.id === selectedEdgeId;
+    const d = edgePath(sx,sy,tx,ty);
+    const mx = (sx+tx)/2, my = (sy+ty)/2;
+    g.innerHTML = `
+      <path d="${d}" class="edge-path${isSel?' selected':''}" id="edge-path-${edge.id}" marker-end="url(#arrowhead${isSel?'-sel':''})" style="pointer-events:stroke;cursor:pointer"/>
+      <circle cx="${mx}" cy="${my}" r="7" fill="transparent" class="edge-delete-btn" onclick="deleteEdge('${edge.id}')" style="pointer-events:all"/>
+      <text x="${mx}" y="${my+4}" text-anchor="middle" font-size="11" class="edge-delete-btn" onclick="deleteEdge('${edge.id}')" style="pointer-events:all;fill:var(--color-text-danger)">×</text>
+      ${edge.label?`<text x="${mx}" y="${my-8}" text-anchor="middle" font-size="10" fill="var(--color-text-secondary)">${edge.label}</text>`:''}
+    `;
+    g.addEventListener('mousedown', ev=>{
+      if (ev.target.tagName !== 'text' && ev.target.tagName !== 'circle') { selectEdge(edge.id); ev.stopPropagation(); }
+    });
+    edgesSvg.appendChild(g);
+  });
+}
+
+// ─── Inspector ─────────────────────────────────────────────────────────
+function renderInspector() {
+  const insp = document.getElementById('inspector-inner');
+  if (selectedId) {
+    const node = nodes.find(n=>n.id===selectedId);
+    if (!node) { insp.innerHTML='<div class="placeholder-msg">Select a node to configure it.</div>'; return; }
+    insp.innerHTML = buildNodeInspector(node);
+  } else if (selectedEdgeId) {
+    const edge = edges.find(e=>e.id===selectedEdgeId);
+    if (!edge) return;
+    insp.innerHTML = `
+      <div class="insp-section">
+        <label class="insp-label">Edge label</label>
+        <input class="insp-input" value="${edge.label||''}" oninput="edge_update_label('${edge.id}',this.value)" placeholder="Optional label"/>
+      </div>
+      <div class="insp-section">
+        <button onclick="deleteEdge('${edge.id}')" style="width:100%;padding:7px;border-radius:6px;border:0.5px solid var(--color-border-danger);color:var(--color-text-danger);background:transparent;font-size:13px;cursor:pointer">Delete edge</button>
+      </div>`;
+  } else {
+    insp.innerHTML = '<div class="placeholder-msg">Drop nodes onto the canvas, then click to configure.</div>';
+  }
+}
+
+function edge_update_label(id, val) {
+  const edge = edges.find(e=>e.id===id);
+  if (edge) { edge.label=val; renderEdges(); updateJSON(); }
+}
+
+function buildNodeInspector(node) {
+  const p = node.props;
+  let html = `
+    <div class="insp-section">
+      <label class="insp-label">Node name</label>
+      <input class="insp-input" value="${node.name}" oninput="updateProp_name('${node.id}',this.value)"/>
+    </div>`;
+
+  switch(node.type) {
+    case 'trigger:device':
+      html += field('Client ref ID','insp-input',`value="${p.clientRefId||''}" oninput="updateProp('${node.id}','clientRefId',this.value)"`) +
+              select_field('Trigger type','triggerType',node.id,[['0','Telemetry'],['1','Prop change']],p.triggerType) +
+              field('Property name','insp-input',`value="${p.propertyName||''}" oninput="updateProp('${node.id}','propertyName',this.value)" placeholder="Leave blank for any"`);
+      break;
+    case 'trigger:timer':
+      html += `<div class="insp-section"><div class="insp-row">
+        <div><label class="insp-label">Interval</label><input class="insp-input" type="number" value="${p.interval}" oninput="updateProp('${node.id}','interval',+this.value)"/></div>
+        <div><label class="insp-label">Unit</label><select class="insp-select" onchange="updateProp('${node.id}','unit',this.value)">${['Seconds','Minutes','Hours','Days'].map(u=>`<option${p.unit===u?' selected':''}>${u}</option>`).join('')}</select></div>
+      </div></div>`;
+      break;
+    case 'action:command':
+      html += field('Target client ref ID','insp-input',`value="${p.targetClientRefId||''}" oninput="updateProp('${node.id}','targetClientRefId',this.value)"`) +
+              field('Message type','insp-input',`value="${p.messageType||''}" oninput="updateProp('${node.id}','messageType',this.value)"`) +
+              textarea_field('Payload (JSON)',node.id,'payload',p.payload||'{}') +
+              retry_fields(node.id,p);
+      break;
+    case 'action:email':
+      html += field('Recipient','insp-input',`value="${p.recipient||''}" oninput="updateProp('${node.id}','recipient',this.value)" placeholder="user@example.com"`) +
+              field('Subject','insp-input',`value="${p.subject||''}" oninput="updateProp('${node.id}','subject',this.value)"`) +
+              textarea_field('Body',node.id,'body',p.body||'') +
+              retry_fields(node.id,p);
+      break;
+    case 'action:telegram':
+      html += field('Chat ID','insp-input',`value="${p.chatId||''}" oninput="updateProp('${node.id}','chatId',this.value)"`) +
+              textarea_field('Message',node.id,'message',p.message||'');
+      break;
+    case 'action:toast':
+      html += field('Title','insp-input',`value="${p.title||''}" oninput="updateProp('${node.id}','title',this.value)"`) +
+              textarea_field('Message',node.id,'message',p.message||'');
+      break;
+    case 'action:webhook':
+      html += field('URL','insp-input',`value="${p.url||''}" oninput="updateProp('${node.id}','url',this.value)" placeholder="https://"`) +
+              select_field('Method','method',node.id,[['GET','GET'],['POST','POST'],['PUT','PUT'],['DELETE','DELETE'],['PATCH','PATCH']],p.method) +
+              textarea_field('Payload (JSON)',node.id,'payload',p.payload||'{}') +
+              retry_fields(node.id,p);
+      break;
+    case 'action:state':
+      html += field('State key','insp-input',`value="${p.key||''}" oninput="updateProp('${node.id}','key',this.value)" placeholder="e.g. lastTemperature"`) +
+              field('Value expression','insp-input',`value="${p.valueExpression||''}" oninput="updateProp('${node.id}','valueExpression',this.value)" placeholder="$trigger.payload.data.value"`);
+      break;
+    case 'control:logic':
+      html += `<div class="insp-section">
+        <label class="insp-label">Condition</label>
+        <input class="insp-input" style="margin-bottom:5px" value="${p.conditionPath||''}" oninput="updateProp('${node.id}','conditionPath',this.value)" placeholder="$trigger.payload.data.value"/>
+        <div class="cond-builder">
+          <select class="op-select" onchange="updateProp('${node.id}','conditionOp',+this.value)">
+            ${Object.entries(OP_NAMES).map(([k,v])=>`<option value="${k}"${+p.conditionOp===+k?' selected':''}>${v}</option>`).join('')}
+          </select>
+          <span style="font-size:11px;color:var(--color-text-tertiary)"></span>
+          <input class="insp-input" value="${p.conditionValue||''}" oninput="updateProp('${node.id}','conditionValue',this.value)" placeholder="value"/>
+        </div>
+      </div>`;
+      break;
+    case 'control:switch':
+      html += field('Switch on path','insp-input',`value="${p.switchPath||''}" oninput="updateProp('${node.id}','switchPath',this.value)" placeholder="$trigger.payload.data.status"`) +
+              field('Cases (comma-sep)','insp-input',`value="${(p.cases||[]).join(',')}" oninput="updateProp_cases('${node.id}',this.value)" placeholder="active,inactive,pending"`);
+      break;
+    case 'control:delay':
+      html += field('Delay (seconds)','insp-input',`type="number" value="${p.seconds||5}" oninput="updateProp('${node.id}','seconds',+this.value)"`);
+      break;
+    case 'control:loop':
+      html += field('Items path','insp-input',`value="${p.itemsPath||''}" oninput="updateProp('${node.id}','itemsPath',this.value)" placeholder="$trigger.payload.data.items"`) +
+              field('Iterator name','insp-input',`value="${p.iteratorName||'item'}" oninput="updateProp('${node.id}','iteratorName',this.value)"`);
+      break;
+    case 'control:variable':
+      html += field('Variable name','insp-input',`value="${p.variableName||''}" oninput="updateProp('${node.id}','variableName',this.value)"`) +
+              select_field('Operation','operation',node.id,[['Set','Set'],['Get','Get'],['Increment','Increment'],['Decrement','Decrement']],p.operation) +
+              field('Expression','insp-input',`value="${p.expression||''}" oninput="updateProp('${node.id}','expression',this.value)" placeholder="$trigger.payload.data.count"`);
+      break;
+  }
+
+  html += `<div class="insp-section"><button onclick="deleteNode('${node.id}')" style="width:100%;padding:7px;border-radius:6px;border:0.5px solid var(--color-border-danger);color:var(--color-text-danger);background:transparent;font-size:13px;cursor:pointer">Delete node</button></div>`;
+  return html;
+}
+
+function field(label, cls, attrs) {
+  return `<div class="insp-section"><label class="insp-label">${label}</label><input class="${cls}" ${attrs}/></div>`;
+}
+function select_field(label, propKey, nodeId, options, current) {
+  return `<div class="insp-section"><label class="insp-label">${label}</label><select class="insp-select" onchange="updateProp('${nodeId}','${propKey}',this.value)">${options.map(([v,l])=>`<option value="${v}"${current===v||current==v?' selected':''}>${l}</option>`).join('')}</select></div>`;
+}
+function textarea_field(label, nodeId, propKey, val) {
+  return `<div class="insp-section"><label class="insp-label">${label}</label><textarea class="insp-input" oninput="updateProp('${nodeId}','${propKey}',this.value)">${val}</textarea></div>`;
+}
+function retry_fields(nodeId, p) {
+  return `<div class="insp-section"><label class="insp-label">Retry policy</label><div class="insp-row">
+    <div><label class="insp-label" style="font-size:10px">Max attempts</label><input class="insp-input" type="number" min="0" value="${p.retryMaxAttempts||0}" oninput="updateProp('${nodeId}','retryMaxAttempts',+this.value)"/></div>
+    <div><label class="insp-label" style="font-size:10px">Delay (s)</label><input class="insp-input" type="number" min="0" value="${p.retryDelaySeconds||5}" oninput="updateProp('${nodeId}','retryDelaySeconds',+this.value)"/></div>
+  </div></div>`;
+}
+
+function updateProp(nodeId, key, value) {
+  const node = nodes.find(n=>n.id===nodeId);
+  if (!node) return;
+  node.props[key] = value;
+  updateNodeEl(node);
+  updateJSON();
+}
+function updateProp_name(nodeId, value) {
+  const node = nodes.find(n=>n.id===nodeId);
+  if (!node) return;
+  node.name = value;
+  updateNodeEl(node);
+  updateJSON();
+}
+function updateProp_cases(nodeId, value) {
+  const node = nodes.find(n=>n.id===nodeId);
+  if (!node) return;
+  node.props.cases = value.split(',').map(s=>s.trim()).filter(Boolean);
+  updateNodeEl(node);
+  updateJSON();
+}
+
+// ─── Delete ─────────────────────────────────────────────────────────────
+function deleteNode(id) {
+  nodes = nodes.filter(n=>n.id!==id);
+  edges = edges.filter(e=>e.source.nodeId!==id&&e.target.nodeId!==id);
+  const el = document.getElementById('node-'+id);
+  if (el) el.remove();
+  if (selectedId===id) { selectedId=null; renderInspector(); }
+  renderEdges();
+  updateJSON();
+}
+
+// ─── JSON generation ────────────────────────────────────────────────────
+function buildWorkflowJSON() {
+  const name = document.getElementById('wf-name').value;
+  const desc = document.getElementById('wf-desc').value;
+  const concurrency = +document.getElementById('wf-concurrency').value;
+  const timeout = +document.getElementById('wf-timeout').value;
+  const tagsRaw = document.getElementById('wf-tags').value;
+  const tags = tagsRaw.split(',').map(s=>s.trim()).filter(Boolean);
+  const logLevel = document.getElementById('wf-loglevel').value;
+
+  const jsonNodes = nodes.map(node => {
+    const p = node.props;
+    const base = {
+      $type: node.type,
+      nodeId: node.id,
+      name: node.name,
+      ports: node.ports.map(pt=>({portId:pt.id, direction: pt.dir==='in'?0:1})),
+      position: {x: node.x, y: node.y}
+    };
+    // Merge type-specific props
+    switch(node.type) {
+      case 'trigger:device': return {...base, clientRefId:p.clientRefId, triggerType:+p.triggerType, propertyName:p.propertyName};
+      case 'trigger:timer': return {...base, interval:p.interval, unit:p.unit};
+      case 'action:command': return {...base, targetClientRefId:p.targetClientRefId, messageType:p.messageType, payload:p.payload, retryPolicy:{maxAttempts:p.retryMaxAttempts,delaySeconds:p.retryDelaySeconds}};
+      case 'action:email': return {...base, recipient:p.recipient, subject:p.subject, body:p.body, retryPolicy:{maxAttempts:p.retryMaxAttempts,delaySeconds:p.retryDelaySeconds}};
+      case 'action:telegram': return {...base, chatId:p.chatId, message:p.message};
+      case 'action:toast': return {...base, title:p.title, message:p.message};
+      case 'action:webhook': return {...base, url:p.url, method:p.method, payload:p.payload, retryPolicy:{maxAttempts:p.retryMaxAttempts,delaySeconds:p.retryDelaySeconds}};
+      case 'action:state': return {...base, key:p.key, valueExpression:{type:'access',path:p.valueExpression}, merge:p.merge};
+      case 'control:logic': return {...base, condition:{type:'binary',op:+p.conditionOp,left:{type:'access',path:p.conditionPath},right:{type:'literal',value:p.conditionValue}}};
+      case 'control:switch': return {...base, switchExpression:{type:'access',path:p.switchPath}, cases:p.cases};
+      case 'control:delay': return {...base, seconds:p.seconds};
+      case 'control:loop': return {...base, itemsExpression:{type:'access',path:p.itemsPath}, iteratorName:p.iteratorName};
+      case 'control:variable': return {...base, variableName:p.variableName, expression:{type:'access',path:p.expression}, operation:p.operation};
+      default: return base;
+    }
+  });
+
+  const jsonEdges = edges.map(edge => ({
+    edgeId: edge.id,
+    source: edge.source,
+    target: edge.target,
+    label: edge.label || undefined,
+    properties: {}
+  }));
+
+  return {
+    workflowRefId: generateGuid(),
+    workspaceId: 1,
+    name, description: desc,
+    isEnabled: wfEnabled,
+    version: 1,
+    tags: tags.length ? tags : undefined,
+    timeoutSeconds: timeout || undefined,
+    logLevel: logLevel !== 'none' ? logLevel : undefined,
+    concurrency,
+    nodes: jsonNodes,
+    edges: jsonEdges,
+    initialState: {},
+    createdAt: new Date().toISOString()
+  };
+}
+
+function generateGuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0;
+    return (c==='x'?r:(r&0x3|0x8)).toString(16);
+  });
+}
+
+function updateJSON() {
+  const json = buildWorkflowJSON();
+  document.getElementById('json-preview').textContent = JSON.stringify(json, null, 2);
+}
+
+function exportJSON() {
+  const json = buildWorkflowJSON();
+  const str = JSON.stringify(json, null, 2);
+  const blob = new Blob([str], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = (document.getElementById('wf-name').value||'workflow').replace(/\s+/g,'_')+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyJSON() {
+  const txt = document.getElementById('json-preview').textContent;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent='Copied!';
+    setTimeout(()=>btn.textContent='Copy JSON',2000);
+  });
+}
+
+// ─── Tabs ───────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('tab-props').classList.toggle('active', tab==='props');
+  document.getElementById('tab-json').classList.toggle('active', tab==='json');
+  document.getElementById('panel-props').style.display = tab==='props'?'block':'none';
+  document.getElementById('panel-json').style.display = tab==='json'?'flex':'none';
+  if (tab==='json') updateJSON();
+}
+
+// ─── Canvas controls ────────────────────────────────────────────────────
+function zoomIn(){ scale=Math.min(scale*1.2,3); applyTransform(); }
+function zoomOut(){ scale=Math.max(scale/1.2,0.3); applyTransform(); }
+function fitView(){
+  if (!nodes.length){scale=1;pan={x:0,y:0};applyTransform();return;}
+  const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
+  const minX=Math.min(...xs)-20, minY=Math.min(...ys)-20;
+  const maxX=Math.max(...xs)+200, maxY=Math.max(...ys)+120;
+  const cw=canvas.clientWidth, ch=canvas.clientHeight;
+  scale=Math.min(cw/(maxX-minX),ch/(maxY-minY),1.2);
+  pan={x:(cw-(maxX-minX)*scale)/2-minX*scale, y:(ch-(maxY-minY)*scale)/2-minY*scale};
+  applyTransform();
+}
+function clearCanvas(){
+  if(nodes.length&&!confirm('Clear all nodes and edges?')) return;
+  nodes=[]; edges=[]; selectedId=null; selectedEdgeId=null;
+  nodesEl.innerHTML='';
+  Array.from(edgesSvg.querySelectorAll('.edge-group')).forEach(g=>g.remove());
+  renderInspector();
+  updateJSON();
+}
+function applyTransform(){
+  nodes.forEach(n=>{
+    const el=document.getElementById('node-'+n.id);
+    if(el){el.style.left=(n.x*scale+pan.x)+'px';el.style.top=(n.y*scale+pan.y)+'px';}
+  });
+  renderEdges();
+}
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const delta=e.deltaY<0?1.1:0.9;
+  pan.x=mx-(mx-pan.x)*delta;
+  pan.y=my-(my-pan.y)*delta;
+  scale=Math.max(0.3,Math.min(3,scale*delta));
+  applyTransform();
+},{passive:false});
+
+function toggleEnabled(el){
+  wfEnabled=!wfEnabled;
+  el.classList.toggle('on',wfEnabled);
+  document.getElementById('enabled-label').textContent=wfEnabled?'Yes':'No';
+  updateJSON();
+}
+
+// ─── Keyboard shortcuts ─────────────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  if ((e.key==='Delete'||e.key==='Backspace') && (e.target===document.body||e.target===canvas)) {
+    if (selectedId) deleteNode(selectedId);
+    else if (selectedEdgeId) deleteEdge(selectedEdgeId);
+  }
+});
+
+// ─── Init ────────────────────────────────────────────────────────────────
+updateJSON();
+// Pre-populate with the example from the spec
+setTimeout(()=>{
+  createNode('trigger:device', 80, 80);
+  const tid = nodes[nodes.length-1].id;
+  nodes[nodes.length-1].name = 'Sensor Input';
+
+  createNode('control:logic', 300, 40);
+  const lid1 = nodes[nodes.length-1].id;
+  nodes[nodes.length-1].name = 'Is Overheating?';
+  nodes[nodes.length-1].props.conditionPath = '$trigger.payload.data.temperature';
+  nodes[nodes.length-1].props.conditionOp = 12;
+  nodes[nodes.length-1].props.conditionValue = '70';
+
+  createNode('control:logic', 300, 180);
+  const lid2 = nodes[nodes.length-1].id;
+  nodes[nodes.length-1].name = 'Search for Keyword';
+  nodes[nodes.length-1].props.conditionPath = '$trigger.payload.data.message';
+  nodes[nodes.length-1].props.conditionOp = 30;
+  nodes[nodes.length-1].props.conditionValue = 'queue';
+
+  createNode('action:command', 530, 40);
+  const aid1 = nodes[nodes.length-1].id;
+  nodes[nodes.length-1].name = 'Activate Cooler';
+  nodes[nodes.length-1].props.messageType = 'SetState';
+  nodes[nodes.length-1].props.payload = '{"power":"ON","mode":"Cool"}';
+
+  createNode('action:toast', 530, 180);
+  const aid2 = nodes[nodes.length-1].id;
+  nodes[nodes.length-1].name = 'Alert Admin';
+  nodes[nodes.length-1].props.title = 'Keyword Detected';
+  nodes[nodes.length-1].props.message = "A message containing 'QUEUE' was identified.";
+
+  addEdge(tid,'out',lid1,'in');
+  addEdge(tid,'out',lid2,'in');
+  addEdge(lid1,'match',aid1,'in');
+  addEdge(lid2,'match',aid2,'in');
+
+  nodes.forEach(n=>{ const el=document.getElementById('node-'+n.id); if(el){el.querySelector('.node-body').textContent=getNodeSummary(n);el.querySelector('.node-name').textContent=n.name;} });
+  selectedId=null; renderInspector();
+  updateJSON();
+  setTimeout(fitView,100);
+},100);
+</script>
+</body>
+</html>

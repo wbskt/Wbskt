@@ -1,0 +1,174 @@
+{
+  "workflowRefId": "933c1ee1-6756-4723-8f5a-9cc1aa35e913",
+  "workspaceId": 1,
+  "name": "Environmental Safety & Queue Monitor",
+  "description": "Monitors temperature and specific message keywords in parallel.",
+  "isEnabled": true,
+  "version": 11,
+  "nodes": [
+    {
+      "$type": "trigger:device",
+      "ports": [
+        {
+          "portId": "out",
+          "direction": 1
+        }
+      ],
+      "clientRefId": "bdb48585-4cce-463f-a851-9a42db231f26",
+      "triggerType": 0,
+      "propertyName": "",
+      "nodeId": "de000000-0000-0000-0000-000000000001",
+      "name": "Sensor Input"
+    },
+    {
+      "$type": "control:logic",
+      "ports": [
+        {
+          "portId": "in",
+          "direction": 0
+        },
+        {
+          "portId": "match",
+          "direction": 1
+        },
+        {
+          "portId": "otherwise",
+          "direction": 1
+        }
+      ],
+      "condition": {
+        "type": "binary",
+        "op": 12,
+        "left": {
+          "type": "access",
+          "path": "$trigger.payload.data.temperature"
+        },
+        "right": {
+          "type": "literal",
+          "value": 70
+        }
+      },
+      "nodeId": "c0000000-0000-0000-0000-000000000001",
+      "name": "Is Overheating?"
+    },
+    {
+      "$type": "control:logic",
+      "ports": [
+        {
+          "portId": "in",
+          "direction": 0
+        },
+        {
+          "portId": "match",
+          "direction": 1
+        },
+        {
+          "portId": "otherwise",
+          "direction": 1
+        }
+      ],
+      "condition": {
+        "type": "binary",
+        "op": 30,
+        "left": {
+          "type": "access",
+          "path": "$trigger.payload.data.message"
+        },
+        "right": {
+          "type": "literal",
+          "value": "queue"
+        }
+      },
+      "nodeId": "c0000000-0000-0000-0000-000000000002",
+      "name": "Search for Keyword"
+    },
+    {
+      "$type": "action:command",
+      "ports": [
+        {
+          "portId": "in",
+          "direction": 0
+        },
+        {
+          "portId": "out",
+          "direction": 1
+        }
+      ],
+      "targetClientRefId": "06552300-6e45-433b-bd82-41ff52d79a52",
+      "messageType": "SetState",
+      "payload": "{\"power\": \"ON\", \"mode\": \"Cool\"}",
+      "nodeId": "ac000000-0000-0000-0000-000000000001",
+      "name": "Activate Cooler"
+    },
+    {
+      "$type": "action:toast",
+      "ports": [
+        {
+          "portId": "in",
+          "direction": 0
+        },
+        {
+          "portId": "out",
+          "direction": 1
+        }
+      ],
+      "title": "Keyword Detected",
+      "message": "A message containing 'QUEUE' was identified in the stream.",
+      "nodeId": "ac000000-0000-0000-0000-000000000002",
+      "name": "Alert Admin"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "e0000000-0000-0000-0000-000000000001",
+      "source": {
+        "nodeId": "de000000-0000-0000-0000-000000000001",
+        "portId": "out"
+      },
+      "target": {
+        "nodeId": "c0000000-0000-0000-0000-000000000001",
+        "portId": "in"
+      },
+      "properties": {}
+    },
+    {
+      "edgeId": "e0000000-0000-0000-0000-000000000002",
+      "source": {
+        "nodeId": "de000000-0000-0000-0000-000000000001",
+        "portId": "out"
+      },
+      "target": {
+        "nodeId": "c0000000-0000-0000-0000-000000000002",
+        "portId": "in"
+      },
+      "properties": {}
+    },
+    {
+      "edgeId": "e0000000-0000-0000-0000-000000000003",
+      "source": {
+        "nodeId": "c0000000-0000-0000-0000-000000000001",
+        "portId": "match"
+      },
+      "target": {
+        "nodeId": "ac000000-0000-0000-0000-000000000001",
+        "portId": "in"
+      },
+      "properties": {}
+    },
+    {
+      "edgeId": "e0000000-0000-0000-0000-000000000004",
+      "source": {
+        "nodeId": "c0000000-0000-0000-0000-000000000002",
+        "portId": "match"
+      },
+      "target": {
+        "nodeId": "ac000000-0000-0000-0000-000000000002",
+        "portId": "in"
+      },
+      "properties": {}
+    }
+  ],
+  "concurrency": 0,
+  "initialState": {},
+  "createdAt": "2026-03-12T14:11:06.329"
+}

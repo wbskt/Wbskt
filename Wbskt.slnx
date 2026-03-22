@@ -45,10 +45,15 @@
   </Folder>
   <Folder Name="/SolutionItems/Docs/">
     <File Path="Docs/access_control.png" />
+    <File Path="Docs/ai_studio_code.html" />
     <File Path="Docs/Coding.Conventions.md" />
     <File Path="Docs/GEMINI.md" />
+    <File Path="Docs/My_Workflow.json" />
     <File Path="Docs/Wbskt.Node.Schema.md" />
     <File Path="Docs/Wbskt.Optimisations.md" />
+    <File Path="Docs/Wbskt.Workflow.Schema.md" />
+    <File Path="Docs/wbskt_improved_pseudocode_reference.html" />
+    <File Path="Docs/wbskt_workflow_builder.html" />
     <File Path="Docs/Workflow.Competition.n8n.md" />
     <File Path="Docs/Workflow.Competition.zapier.md" />
     <File Path="Docs/Workflow.Engine.DetailedReview.md" />
@@ -56,6 +61,7 @@
     <File Path="Docs/Workflow.Integrations.md" />
     <File Path="Docs/Workflow.Marketplace.md" />
     <File Path="Docs/Workflow.Registry.md" />
+    <File Path="Docs/workflow_engine_concepts.html" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj" />
