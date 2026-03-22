@@ -8,7 +8,7 @@
 .DESCRIPTION Deploys WBSKT databases. Only drops-and-recreates when -Fresh is used.
 #>
 
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 [CmdletBinding(PositionalBinding = $false)]
 param (
@@ -34,90 +34,67 @@ begin {
     $coreDbName = "Wbskt.Database"
     $projectRoot = $PSScriptRoot
 
-    # Projects Configuration
-    $authProject = Join-Path $projectRoot "Databases\Wbskt.Database.Auth\Wbskt.Database.Auth.sqlproj"
-    $coreProject = Join-Path $projectRoot "Databases\Wbskt.Database\Wbskt.Database.sqlproj"
+    # Projects Configuration using Join-Path for OS-agnostic separators
+    $authProject = Join-Path $projectRoot "Databases" "Wbskt.Database.Auth" "Wbskt.Database.Auth.sqlproj"
+    $coreProject = Join-Path $projectRoot "Databases" "Wbskt.Database" "Wbskt.Database.sqlproj"
 
     function Get-SqlPackagePath {
-        $paths = @(
-            "C:\Program Files\Microsoft SQL Server\170\DAC\bin\SqlPackage.exe",
-            "C:\Program Files\Microsoft SQL Server\160\DAC\bin\SqlPackage.exe",
-            "C:\Program Files\Microsoft SQL Server\150\DAC\bin\SqlPackage.exe",
-            "$env:USERPROFILE\.dotnet\tools\sqlpackage.exe"
-        )
+        # Check system PATH first (best for Linux/macOS/Docker)
+        $fromPath = Get-Command "sqlpackage" -ErrorAction SilentlyContinue
+        if ($fromPath) { return $fromPath.Source }
 
-        foreach ($path in $paths) {
-            
-            # Check if the path exists
-            if (Test-Path $path) {
-                return $path
+        # Windows-specific fallbacks
+        if ($IsWindows) {
+            $windowsPaths = @(
+                "C:\Program Files\Microsoft SQL Server\160\DAC\bin\SqlPackage.exe",
+                "C:\Program Files\Microsoft SQL Server\150\DAC\bin\SqlPackage.exe",
+                "$env:USERPROFILE\.dotnet\tools\sqlpackage.exe"
+            )
+            foreach ($path in $windowsPaths) {
+                if (Test-Path $path) { return $path }
             }
         }
-
-        $fromPath = Get-Command "SqlPackage.exe" -ErrorAction SilentlyContinue
         
-        # Fallback to system path
-        if ($fromPath) {
-            return $fromPath.Source
-        }
-
         return $null
     }
 
     function Drop-Database {
-        param([string]$DbName)
+        param([string]$DbName, [string]$SqlPackageExecutable)
 
         Write-Host "Dropping database $DbName (Fresh Start)..." -ForegroundColor Yellow
         
-        # We connect to master to perform the drop
-        $masterConnStr = "Data Source=$Server;Database=master;User ID=$User;PWD=$Password;Encrypt=False;"
-        
-        # SQL to kick everyone out and drop the hammer
-        $sql = "
-            IF EXISTS (SELECT name FROM sys.databases WHERE name = '$DbName')
-            BEGIN
-                ALTER DATABASE [$DbName] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                DROP DATABASE [$DbName];
-            END"
+        # Cross-platform way: Use SqlPackage to "Script" a drop or use a Script Action
+        # To keep it simple and avoid ADO.NET versioning issues on Linux, we use a simple SQL command via a temporary file
+        $sql = "IF EXISTS (SELECT name FROM sys.databases WHERE name = '$DbName') BEGIN ALTER DATABASE [$DbName] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DbName]; END"
+        $tmpFile = [System.IO.Path]::GetTempFileName()
+        $sql | Out-File -FilePath $tmpFile -Encoding utf8
 
-        # Use ADO.NET to avoid dependency on SQLPS or SqlServer modules
-        $connection = New-Object System.Data.SqlClient.SqlConnection($masterConnStr)
-        
         try {
-            $connection.Open()
-            $command = $connection.CreateCommand()
-            $command.CommandText = $sql
-            $null = $command.ExecuteNonQuery()
-            Write-Host "Database $DbName dropped successfully." -ForegroundColor Gray
+            # Attempt to use sqlcmd if available, otherwise this is a gap in non-windows environments
+            if (Get-Command "sqlcmd" -ErrorAction SilentlyContinue) {
+                & sqlcmd -S $Server -U $User -P $Password -Q $sql -b
+            } else {
+                Write-Warning "sqlcmd not found. Skipping Drop step. Please ensure database is clear manually or install sqlcmd."
+            }
         }
         finally {
-            $connection.Close()
+            if (Test-Path $tmpFile) { Remove-Item $tmpFile }
         }
     }
 
     function Get-DacpacPath {
-        param(
-            [string]$ProjectPath, 
-            [string]$DacpacName
-        )
+        param([string]$ProjectPath, [string]$DacpacName)
 
-        $targetDir = Join-Path (Split-Path $ProjectPath) "bin\Release"
+        # Release folder on Linux/macOS is case-sensitive; bin/Release is standard
+        $targetDir = Join-Path (Split-Path $ProjectPath) "bin" "Release"
         
-        # Verify directory exists
-        if (-not (Test-Path $targetDir)) {
-            return $null
-        }
+        if (-not (Test-Path $targetDir)) { return $null }
 
         $dacpac = Get-ChildItem -Path $targetDir -Filter $DacpacName -Recurse | 
                   Sort-Object LastWriteTime -Descending | 
                   Select-Object -First 1
 
-        # Return full path if found
-        if ($dacpac) {
-            return $dacpac.FullName
-        }
-
-        return $null
+        return $dacpac.FullName
     }
 
     function Publish-Database {
@@ -128,14 +105,12 @@ begin {
             [bool]$Recreate
         )
 
-        # Ensure we have a valid source file
-        if (-not $DacpacPath) {
-            throw "DACPAC path is null for $DbName. Did the build fail?"
-        }
+        if (-not $DacpacPath) { throw "DACPAC path is null for $DbName." }
 
         Write-Host "`n--- Publishing Database: $DbName ---" -ForegroundColor Cyan
         
-        $connString = "Data Source=$Server;Database=$DbName;Persist Security Info=True;User ID=$User;PWD=$Password;Pooling=False;Encrypt=False;Trust Server Certificate=True;Connect Timeout=60;"
+        # Build Connection String (Added TrustServerCertificate for Linux/Docker defaults)
+        $connString = "Server=$Server;Database=$DbName;User ID=$User;Password=$Password;Encrypt=True;TrustServerCertificate=True;Timeout=60;"
 
         $publishArgs = @(
             "/Action:Publish",
@@ -147,51 +122,35 @@ begin {
 
         & $SqlPackageExecutable @publishArgs
         
-        # Check exit code for failures
         if ($LASTEXITCODE -ne 0) {
-            throw "SqlPackage failed with exit code $LASTEXITCODE for $DbName"
+            throw "SqlPackage failed with exit code $LASTEXITCODE"
         }
-
-        Write-Host "Database $DbName published successfully." -ForegroundColor Green
     }
 }
 
 process {
-    Write-Host "--- Initializing Database Deployment ---" -ForegroundColor Cyan
+    Write-Host "--- Initializing Cross-Platform Deployment ---" -ForegroundColor Cyan
 
-    # 1. Locate SqlPackage
     $exe = Get-SqlPackagePath
-    
-    # Verify tool availability
-    if (-not $exe) {
-        throw "SqlPackage.exe not found. Please install SSDT or the sqlpackage dotnet tool."
-    }
+    if (-not $exe) { throw "sqlpackage tool not found. Install via 'dotnet tool install -g microsoft.sqlpackage'" }
 
-    # 2. Build Projects
     Write-Host "Building SQL Projects..." -ForegroundColor Gray
-    
     $projects = @($authProject, $coreProject)
     
     foreach ($project in $projects) {
+        # Using 'dotnet build' is natively cross-platform
         dotnet build $project -c Release
-        
-        # Stop if build fails
-        if ($LASTEXITCODE -ne 0) {
-            throw "Build failed for: $project"
-        }
+        if ($LASTEXITCODE -ne 0) { throw "Build failed for: $project" }
     }
 
-    # 3. Handle Fresh Start (Drop step)
     if ($Fresh) {
-        Drop-Database -DbName $authDbName
-        Drop-Database -DbName $coreDbName
+        Drop-Database -DbName $authDbName -SqlPackageExecutable $exe
+        Drop-Database -DbName $coreDbName -SqlPackageExecutable $exe
     }
 
-    # 4. Deploy Auth
     $authDacpac = Get-DacpacPath -ProjectPath $authProject -DacpacName "Wbskt.Database.Auth.dacpac"
     Publish-Database -DbName $authDbName -DacpacPath $authDacpac -SqlPackageExecutable $exe -Recreate $Fresh
 
-    # 5. Deploy Core
     $coreDacpac = Get-DacpacPath -ProjectPath $coreProject -DacpacName "Wbskt.Database.dacpac"
     Publish-Database -DbName $coreDbName -DacpacPath $coreDacpac -SqlPackageExecutable $exe -Recreate $Fresh
 
