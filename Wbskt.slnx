@@ -9,11 +9,6 @@
     <Project Path="Clients/Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj" />
     <Project Path="Clients/Wbskt.Simulator/Wbskt.Simulator.csproj" />
   </Folder>
-  <Folder Name="/Clients/WindowsClient/">
-    <Project Path="Clients/WindowsClient/Wbskt.Client.Windows.Models/Wbskt.Client.Windows.Models.csproj" />
-    <Project Path="Clients/WindowsClient/Wbskt.Client.Windows.Service/Wbskt.Client.Windows.Service.csproj" />
-    <Project Path="Clients/WindowsClient/Wbskt.Client.Windows.UI/Wbskt.Client.Windows.UI.csproj" />
-  </Folder>
   <Folder Name="/Databases/">
     <Project Path="Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj" Type="42ea0dbd-9cf1-443e-919e-be9c484e4577">
       <Platform Project="AnyCPU" />
