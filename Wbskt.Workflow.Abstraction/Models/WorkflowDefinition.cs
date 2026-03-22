@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 
@@ -6,6 +7,7 @@ namespace Wbskt.Workflow.Abstraction.Models;
 public sealed class WorkflowDefinition
 {
     public Guid WorkflowRefId { get; set; }
+    [JsonIgnore] public int WorkflowId { get; set; }
     public int WorkspaceId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;

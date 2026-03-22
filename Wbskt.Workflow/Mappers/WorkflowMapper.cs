@@ -28,6 +28,7 @@ public static class WorkflowMapper
 
             // Sync DB-level fields (Source of Truth) into the object
             definition.WorkflowRefId = entity.RefId;
+            definition.WorkflowId = entity.Id;
             definition.WorkspaceId = entity.WorkspaceId;
             definition.Name = entity.Name;
             definition.Description = entity.Description;

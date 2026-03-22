@@ -32,7 +32,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
     {
         var instance = new WorkflowInstance
         {
-            WorkflowId = definition.WorkspaceId,
+            WorkflowId = definition.WorkflowId,
             WorkflowRefId = definition.WorkflowRefId,
             WorkspaceId = definition.WorkspaceId,
             TriggerContext = triggerContext,
