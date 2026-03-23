@@ -237,7 +237,7 @@ Now the full schema across all your node types, showing every `input.type` you'l
 }
 ```
 
-Now the full **input type catalogue** — this is what your registry needs to support:
+Now the full **input type catalogue** - this is what your registry needs to support:
 
 ```json
 {
@@ -319,7 +319,7 @@ Now the full **input type catalogue** — this is what your registry needs to su
     },
 
     "section_header": {
-      "description": "Visual divider / label inside the node panel — not a real input",
+      "description": "Visual divider / label inside the node panel - not a real input",
       "props": ["label", "icon"]
     }
   }
@@ -331,9 +331,9 @@ And the **port type catalogue**:
 ```json
 {
   "port_types": {
-    "flow":   "Standard execution edge — connects node A's output to node B's input",
-    "data":   "Typed data edge — carries a value of a declared type (for future typed graph validation)",
-    "error":  "Error branch — fired when the node throws, allows inline error handling"
+    "flow":   "Standard execution edge - connects node A's output to node B's input",
+    "data":   "Typed data edge - carries a value of a declared type (for future typed graph validation)",
+    "error":  "Error branch - fired when the node throws, allows inline error handling"
   }
 }
 ```
@@ -357,9 +357,9 @@ A few design decisions worth calling out:
 
 **`context_output` on trigger nodes** is what allows your IDE to power `$context.` autocomplete in downstream `expression` and `json_editor` inputs. The registry ships the schema of what each node *produces*, and the UI merges upstream outputs into the picker. This is how your `$context.temp` in the Logic Gate knows what properties are available from `ESP32_LivingRoom`.
 
-**`dependsOn` in `select:dynamic`** enables cascading dropdowns — e.g., selecting a workspace first narrows the client list. The UI re-fetches the endpoint whenever the parent field changes.
+**`dependsOn` in `select:dynamic`** enables cascading dropdowns - e.g., selecting a workspace first narrows the client list. The UI re-fetches the endpoint whenever the parent field changes.
 
 **`flags` vs `inputs`** are kept separate intentionally. Flags are header-level toggles (Trans-ID, Live indicator) that affect node *behavior metadata*, not the node's form layout. They render in the title bar, not in the body.
 
-**`error` port** — you don't have this yet based on the screenshot, but you'll want it. When `Send Command` times out waiting for ACK, where does the flow go? An error port is the node-RED pattern you'll need once workflows hit production.
+**`error` port** - you don't have this yet based on the screenshot, but you'll want it. When `Send Command` times out waiting for ACK, where does the flow go? An error port is the node-RED pattern you'll need once workflows hit production.
 
