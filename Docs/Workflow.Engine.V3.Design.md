@@ -506,15 +506,502 @@ The decrement is an atomic SQL `UPDATE ... SET ActiveBranchCount = ActiveBranchC
 
 ---
 
-## Section 3 — Bookmarks (outline only)
+## Section 3 — Bookmarks
 
-To be detailed.
+Section 1 was *what the user designs*. Section 2 was *what happens between nodes*.
+Section 3 is *what happens **at** a node that wants to wait* — and the inbound
+routing that wakes those waits.
 
-- `Bookmark { BookmarkId, RunId, BranchId, NodeId, WakeCondition, CreatedAt }` persisted in SQL.
-- `WakeCondition` variants: `Timer(at) | Signal(name, correlationData) | DevicePropertyChange | DeviceTelemetryMatch | Manual(token) | ChildRunCompleted(childRunId)`.
-- **BookmarkScheduler** — background service polling due Timer bookmarks; single-host today, promotable later.
-- **BookmarkResumer** — routes incoming signals/device events to bookmarks (resume path), distinct from TriggerDispatcher (start-new-run path).
-- Resume rehydrates the branch from snapshot and re-dispatches it.
+Every long-running, durable, mission-critical scenario depends on this section.
+The V2 pattern of holding a `Task.Delay` in memory is gone; even short waits go
+through a Bookmark.
+
+Four concepts: **Bookmark → WakeCondition → BookmarkScheduler → BookmarkResumer**,
+plus the **inbound routing** that funnels every external event through them.
+
+### 3.1 Bookmark — the durable suspension record
+
+A Bookmark is a row in SQL that says "this branch is sleeping at this node, and
+here is what should wake it up". When the engine sees a `WaitForBookmark`
+result from an executor, it creates one of these rows and **releases everything**
+— the executing thread, the BranchContext, the in-memory branch state — except
+what is already snapshotted on the Branch row.
+
+```text
+Bookmark {
+  BookmarkId:        Guid             // engine-generated; the wake handle
+  RunId:             Guid             // parent run (FK)
+  BranchId:          Guid             // which branch to resume (FK)
+  NodeId:            Guid             // the node that is waiting; resume re-enters here
+  WorkflowRefId:     Guid             // denormalized for fast lookup
+  Version:           int              // denormalized; pinned with the run
+  WakeCondition:     WakeCondition    // polymorphic; how this bookmark gets woken
+  MatchKey:          string?          // computed lookup key (see 3.2); null for Timer
+  TimeoutAt:         DateTime?        // optional; null = no timeout
+  OnTimeoutPortId:   string?          // which port to take if timeout fires first
+  CreatedAt:         DateTime
+  // Indexed by: (RunId), (MatchKey WHERE NOT NULL), (TimeoutAt WHERE NOT NULL)
+}
+```
+
+Non-obvious points:
+
+- **`NodeId` is where we resume, not the next node.** Resume re-enters the
+  same node that requested the wait. The executor inspects the resumed branch
+  state and decides which port to take (typically `Continue { ports: ["completed"] }`).
+  This keeps the wake/decide/port logic inside the executor where it belongs.
+
+- **Bookmark holds no payload.** When a signal arrives, its payload is written
+  onto the Branch (`Branch.LastOutput` or a known `Local` key) and then the
+  bookmark is consumed. The bookmark is metadata about the wait, not a buffer.
+
+- **`TimeoutAt` is a first-class column**, not nested inside `WakeCondition`.
+  The Scheduler polls `WHERE TimeoutAt <= now`; pulling the column out avoids
+  per-row JSON parsing on every poll. See 3.5 for why this is also the unified
+  TTL race mechanism.
+
+- **`WorkflowRefId` / `Version` denormalized** so resumes do not need to JOIN
+  through Run to know which definition to load. Hot-path optimization.
+
+### 3.2 WakeCondition — the six variants
+
+`WakeCondition` is a polymorphic JSON column on the Bookmark row. Each variant
+contributes a string `MatchKey` (computed at bookmark creation) which is what
+the Resumer indexes on.
+
+#### `Timer(at: DateTime)`
+
+Simplest. Wakes at an absolute time. Used by `DelayNode` (relative duration
+converted to absolute) and by any "schedule retry attempt at" inside a node's
+retry loop when the wait is long.
+
+- `MatchKey = null` — timers are polled by `TimeoutAt`; no Resumer lookup needed.
+
+#### `Signal(name: string, correlation: string)`
+
+External event with a stable name and a correlation identifier. Used by
+`AwaitSignal` (`name="operator-ack", correlation="<runId>"`) and by
+`WaitForHttp` (`name="http", correlation="<minted token>"`).
+
+- `MatchKey = "signal|{name}|{correlation}"` — O(1) index hit on the Resumer's
+  hot path.
+
+#### `DevicePropertyChange(deviceRefId: Guid, propertyName: string?)`
+
+Wakes when a device's reported property changes. `propertyName = null` means
+"any property". Used by control nodes that wait for the side-effect of an
+action sent to a device (e.g., "send OpenVent → wait for `state.vent == open`").
+
+- `MatchKey = "prop|{deviceRefId}|{propertyName ?? "*"}"`
+- Resumer on a property-change event checks **both** the exact key and the
+  device-wildcard key (`prop|{deviceRefId}|*`). Two index hits, cheap.
+
+#### `DeviceTelemetryMatch(deviceRefId: Guid, propertyName: string, value: JsonValue)`
+
+Wakes when a device publishes telemetry where `propertyName == value` (equality
+comparison).
+
+- `MatchKey = "telemetry|{deviceRefId}|{propertyName}|{value}"` — pure index hit;
+  no per-bookmark expression evaluation.
+- **v1 restriction (locked):** equality only. Full expression matching
+  (`$trigger.temperature < 30`) is deferred. If it becomes necessary later, we
+  add a second variant `DeviceTelemetryExpression(deviceRefId, expression)`
+  with a coarser MatchKey (`"telemetry|{deviceRefId}"`) and per-bookmark eval.
+  Keeping v1 equality-only means inbound telemetry routing stays O(1).
+
+#### `Manual(token: string)`
+
+A URL-callable wake handle. The token is an opaque Guid. The Resumer matches
+HTTP POSTs to `/wake/{token}` against this. Used by `WaitForHttp` (anonymous,
+self-minted token) and approval-style flows where ops gets an emailed link.
+
+- `MatchKey = "manual|{token}"`
+- Tokens are **one-shot Guids minted per wait-node execution; never reused**.
+  This is the idempotency boundary (see 3.6).
+
+#### `ChildRunCompleted(childRunId: Guid)`
+
+Wakes when a specific sub-workflow run reaches a terminal status. Used by
+`SubWorkflowNode` — parent posts this bookmark, child finishes, engine fires it.
+
+- `MatchKey = "child|{childRunId}"`
+- The wake is fired internally by the engine when the child terminates, fed
+  through the same Resumer to keep the code path uniform.
+
+### 3.3 BookmarkScheduler — the timer service
+
+A single background service per host. Its job is narrow: **wake bookmarks whose
+`TimeoutAt` has passed**.
+
+```text
+Loop forever:
+  rows ← SELECT TOP 100 BookmarkId, RunId, BranchId, NodeId,
+                       WakeCondition, OnTimeoutPortId
+          FROM Bookmarks
+          WHERE TimeoutAt <= SYSUTCDATETIME()
+          ORDER BY TimeoutAt ASC
+
+  for each row:
+    if WakeCondition is Timer:
+      // primary wake — the timer IS the wake condition
+      Resumer.ResumeViaBookmark(row, payload=null, takingPort=null)
+    else:
+      // TTL companion — timeout raced the real condition and won
+      Resumer.ResumeViaBookmark(row, payload=null, takingPort=row.OnTimeoutPortId)
+
+  if rows empty:
+    sleep min(time-to-next-TimeoutAt, 1s)
+```
+
+Design points:
+
+- **One service per host today.** When we move to leader/standby (decision #8),
+  a SQL lease decides which host runs the scheduler; others sit idle.
+- **Batch-claim semantics.** Each poll claims rows with `UPDATE … OUTPUT … WHERE …`
+  or equivalent (`SELECT … WITH (UPDLOCK, READPAST)` on SQL Server). Even
+  briefly-overlapping schedulers cannot double-process a row.
+- **No precision claims.** "Wait 1 hour" means "wake roughly 1 hour from now,
+  ± poll interval (~1s)". IoT flows do not need sub-second timer precision.
+- **Scheduler never calls executors directly** — it goes through
+  `Resumer.ResumeViaBookmark`, same path as event-driven wakes. One resume path.
+
+### 3.4 BookmarkResumer — event router and resume entry point
+
+Two responsibilities:
+
+1. **Inbound event routing** (`MatchInbound`) — incoming external events are
+   matched against bookmarks. If a match exists, resume. If not, fall through
+   to the TriggerDispatcher.
+2. **Bookmark consumption + branch rehydration** (`ResumeViaBookmark`) — once
+   a bookmark is claimed (by either path), this is what actually resumes the
+   branch.
+
+#### 3.4.1 `MatchInbound` — the routing decision
+
+```text
+function MatchInbound(event):
+  // event has: kind, matchKey(s), payload, deviceId?
+  // e.g. { kind: "signal", matchKey: "signal|operator-ack|R-42", payload: {…} }
+
+  // 1) Look up live bookmarks
+  bookmarks ← SELECT * FROM Bookmarks WHERE MatchKey IN (event.matchKeys)
+
+  if bookmarks not empty:
+    for each b in bookmarks:
+      ResumeViaBookmark(b, payload=event.payload, takingPort=null)
+    return  // *** do NOT fall through to triggers ***
+
+  // 2) Fall through to trigger path
+  TriggerDispatcher.Dispatch(event)
+```
+
+This is **decision #3 ("uniform shape, separate code paths") made concrete**.
+The Resumer owns the bookmark-or-trigger decision. The TriggerDispatcher never
+has to know that bookmarks exist; it is called only when no bookmark claimed
+the event.
+
+**Locked rule (Q2):** *match wins, no fall-through.* An event that wakes any
+bookmark cannot also start a new run from the same event. This is the safe
+default: it prevents a generic catch-all trigger (e.g., `webhook path="*"`) from
+accidentally activating on every callback-URL invocation. If a workflow truly
+wants to both wake AND start a new run from the same event, that is modeled
+explicitly with an action node inside the workflow, not implicitly by sibling
+triggers.
+
+The symmetric rule:
+- Bookmark match → resume → DONE; triggers are not consulted.
+- No bookmark match → triggers are consulted; may or may not start a new run.
+
+#### 3.4.2 `ResumeViaBookmark` — the resume itself
+
+```text
+function ResumeViaBookmark(bookmark, payload, takingPort):
+
+  // 1) Atomically claim/delete the bookmark
+  rows ← DELETE FROM Bookmarks
+         OUTPUT deleted.*
+         WHERE BookmarkId = @bookmark.BookmarkId
+
+  if rows empty:
+    return  // somebody else already consumed it; drop silently
+
+  // 2) Load run + branch state
+  run    ← LoadRun(bookmark.RunId)
+  branch ← LoadBranch(bookmark.BranchId)
+
+  // 3) Check run is still runnable
+  if run.Status != Running:
+    return  // run got cancelled/failed while we were sleeping; drop
+
+  // 4) Reattach payload to branch state
+  if payload != null:
+    branch.LastOutput = payload
+  if takingPort != null:
+    // Timeout path: skip the executor, jump straight to next edge resolution
+    branch.PendingTakePort = takingPort
+  branch.Status = Active
+
+  // 5) Persist and re-dispatch
+  PersistBranch(branch)
+  RunDispatcher.Dispatch(new BranchPointer {
+      RunId    = bookmark.RunId,
+      BranchId = bookmark.BranchId,
+      NodeId   = bookmark.NodeId
+  })
+```
+
+Subtle points:
+
+- **Atomic `DELETE … OUTPUT`** is the claim. If the row is gone, somebody else
+  got there first; this call returns zero rows and drops cleanly. The
+  Scheduler and the Resumer race for the same row when a TTL fires "at the
+  same time" as the real signal — exactly one wins.
+- **`takingPort` separation.** Regular wake (the wait condition fired)
+  re-enters the node so it can decide. Timeout wake skips the node entirely;
+  the engine just walks `OnTimeoutPortId`. The node executor's happy path is
+  not muddied with timeout branches.
+- **Run-status guard** is cheap insurance for cancellation races.
+
+### 3.5 TTL companion timers — the unified race
+
+Every Bookmark carries `TimeoutAt` + `OnTimeoutPortId` as first-class columns,
+not as a sibling Timer bookmark row. **One bookmark per wait, regardless of
+whether a TTL is set.** (This was Q1; chosen over the sibling-rows alternative.)
+
+For `AwaitSignal { name:"operator-ack", ttl:1h, onTimeout:"timeout" }`, the
+engine creates one row:
+
+```text
+Bookmark {
+  WakeCondition:   Signal { name:"operator-ack", correlation:"R-42" }
+  MatchKey:        "signal|operator-ack|R-42"
+  TimeoutAt:       now + 1h
+  OnTimeoutPortId: "timeout"
+}
+```
+
+Two paths can wake it:
+
+- HTTP signal arrives → Resumer.MatchInbound → `DELETE WHERE BookmarkId = …`
+  → 1 row returned → resume via `Continue { ports:["completed"] }` from the
+  executor.
+- Clock hits TimeoutAt → Scheduler poll → `DELETE WHERE BookmarkId = …`
+  → 1 row returned → resume via `takingPort = "timeout"` (Scheduler passes it).
+
+The single row can only be DELETEd once. Whichever side gets the row first
+wins; the other gets zero rows and drops cleanly. **One row, one DELETE, one
+atomic race.**
+
+For a pure `DelayNode { duration:10m }`:
+
+```text
+Bookmark {
+  WakeCondition:   Timer { at: now + 10m }
+  MatchKey:        null            // timer only; Resumer never looks up
+  TimeoutAt:       now + 10m       // duplicate of Timer.at, denormalized
+  OnTimeoutPortId: null            // null = regular resume, executor decides
+}
+```
+
+Yes, `TimeoutAt` duplicates `Timer.at` for this case (~10 bytes/row redundancy).
+The alternative — JSON-parsing `WakeCondition` on every Scheduler poll — is far
+more expensive. The duplication is the right trade.
+
+For `AwaitSignal` with no timeout: `TimeoutAt = null`; Scheduler never sees it;
+only the Resumer can wake it.
+
+**Net effect:** one table, one DELETE-with-OUTPUT semantic, one resume entry
+point — handles every wait pattern in the engine.
+
+#### Why not sibling-row TTLs?
+
+The alternative would be: a Signal bookmark + a Timer bookmark pointing at the
+same Branch/Node, racing each other. Pros: naturally extensible to "wait for
+any of N conditions". Cons: every wake must transactionally delete its
+siblings; introduces a grouping concept; doubles row count per wait; more
+failure modes.
+
+Our entire node catalog (`Delay`, `WaitForHttp`, `AwaitSignal`,
+`WaitForDeviceProperty`, `WaitForChildRun`) has at most one happy-path
+condition + optional timeout. Sibling-row flexibility is theoretical, not
+utilized. If we ever need true N-way races, we add siblings *then* as an
+opt-in pattern next to the single-row pattern.
+
+### 3.6 Idempotency for duplicate inbound signals
+
+Locked: **one-shot tokens are the idempotency boundary; no explicit dedup
+window.**
+
+Scenario: a flaky HTTP caller retries `POST /wake/T1` three times in 50ms
+because their socket timed out.
+
+- Call #1 → Resumer.MatchInbound finds bookmark `bk-T1` → `DELETE` returns 1
+  row → resume.
+- Call #2 → Resumer finds zero bookmarks → falls through to TriggerDispatcher
+  → no trigger matches `/wake/T1` → silently dropped.
+- Call #3 → same as #2; dropped.
+
+Already idempotent: duplicates are no-ops.
+
+The one corner case is "could a freshly-posted bookmark reuse the same MatchKey
+as a just-deleted one, so duplicate calls wake the wrong wait?" Answer: no,
+because tokens (`Manual`/`WaitForHttp` correlations) are minted per node
+execution as fresh Guids; reuse is impossible. For named signals
+(`AwaitSignal name="operator-ack"`), the correlation is typically the RunId or
+a per-node Guid, which is also non-reusable across a wait re-arming.
+
+If a future use case needs to reuse a stable correlation key across rapid
+re-arming (rare), we add a small in-memory LRU of consumed BookmarkIds; not a
+v1 requirement.
+
+### 3.7 Cancellation and bookmark cleanup
+
+When `CancelRun(runId)` is invoked (Section 5 territory, but the bookmark
+mechanics belong here):
+
+```text
+1) Run.Status ← Cancelling
+   Flip the Run-level CancellationTokenSource
+   (cooperative cancel for Active branches)
+
+2) DELETE FROM Bookmarks WHERE RunId = @runId
+   (indexed by RunId → cheap; all this run's bookmarks gone in one statement)
+
+3) Branches in Waiting / WaitingAtJoin transition to Cancelled
+4) Wait for Active branches to observe the CTS and transition
+5) When ActiveBranchCount = 0:
+     Run.Status ← Cancelled
+     emit RunCancelledEvent
+```
+
+After step 2, any event that *would have* matched a deleted bookmark gets zero
+rows from the Resumer → falls through to TriggerDispatcher → if no Trigger
+matches either, dropped. Clean shutdown with no orphan wakes.
+
+### 3.8 The full inbound routing diagram
+
+This is the engine seen from the outside. Every inbound event — RabbitMQ
+message, HTTP webhook, scheduler tick, child-run-completed notification —
+funnels through this:
+
+```text
+                ┌─────────────────────────────────────────┐
+                │             Inbound Event               │
+                │  { kind, matchKey, payload, deviceId? } │
+                └────────────────────┬────────────────────┘
+                                     │
+                                     ▼
+                            ┌──────────────────┐
+   timer tick ──────────────►   InboundHub     │
+   signal HTTP ─────────────►  (normalizer:    │
+   device telemetry ────────►  build matchKeys)│
+   device prop change ──────►                  │
+   child run completion ────►                  │
+                            └────────┬─────────┘
+                                     │
+                                     ▼
+                       ┌──────────────────────────┐
+                       │   BookmarkResumer        │
+                       │   .MatchInbound(event)   │
+                       └───┬──────────────────┬───┘
+                           │                  │
+                  match    │                  │  no match
+              (1+ rows)    ▼                  ▼
+                   ┌──────────────┐    ┌────────────────────┐
+                   │ for each b:  │    │ TriggerDispatcher  │
+                   │ Resume       │    │ .Dispatch(event)   │
+                   │ ViaBookmark  │    │ - resolve triggers │
+                   │ (delete row, │    │ - eval correlation │
+                   │  rehydrate,  │    │ - apply conc. pol. │
+                   │  re-dispatch)│    │ - create new Run   │
+                   └──────┬───────┘    └─────────┬──────────┘
+                          │                      │
+                          ▼                      ▼
+                  ┌───────────────┐      ┌───────────────┐
+                  │ RunDispatcher │      │ RunDispatcher │
+                  │ (Branch Loop) │      │ (Branch Loop) │
+                  └───────────────┘      └───────────────┘
+
+  Out-of-band:
+    BookmarkScheduler ─poll TimeoutAt─► ResumeViaBookmark (same path as above)
+```
+
+Two arrows leave the Resumer; never both. The arrow taken is decided by
+whether there is a live bookmark with the event's MatchKey. **That is the
+entire "is this a wake or a new run?" question.**
+
+### 3.9 What this enables / what it costs
+
+**Enables:**
+
+- Long waits (days, weeks) with zero in-memory cost.
+- Survive restarts: Scheduler picks up where it left off; bookmarks live in SQL.
+- Approval / escalation / human-in-the-loop flows naturally.
+- Sub-workflow waits (parent posts a `ChildRunCompleted` bookmark).
+- The same routing path serves time-based waits AND event-based waits AND HTTP
+  callbacks AND child-run completion — **one mechanism, six variants**.
+
+**Costs:**
+
+- Every wait pays one SQL INSERT + one DELETE per wait (~1ms each at moderate
+  load).
+- The Scheduler polls SQL on a 1-second cadence by default. Tunable trade-off:
+  latency vs DB load.
+- Very-short delays (< 100ms) carry SQL round-trip overhead. If this matters,
+  an in-memory fast path for sub-second Timer bookmarks is an easy follow-on;
+  not in v1.
+
+### 3.10 The two new wait-style control nodes
+
+These motivated the Q&A that opened Section 3; documenting them here for
+completeness. Both belong to the `control:` node family.
+
+#### `control:waitForHttp`
+
+Anonymous mid-graph HTTP wait. Mints a one-shot callback URL on first
+execution.
+
+- **Config:** `{ ttl: duration, onTimeout: "timeout" | "fail" }`
+- **Ports:** `completed`, `timeout`
+- **Behavior:**
+  1. On first execution: mint a fresh Guid `token`, compute
+     `callbackUrl = $"https://wbskt/api/v1/workflows/wake/{token}"`, store on
+     `$local.__callbackUrl` (available to downstream nodes via expression for
+     emailing/templating).
+  2. Return `WaitForBookmark { WakeCondition: Manual(token), TimeoutAt: now + ttl, OnTimeoutPortId: "timeout" }`.
+  3. On resume via callback: payload is the request body; take port `completed`.
+  4. On resume via timeout: take port `timeout` (Scheduler-driven, executor not
+     re-entered).
+
+#### `control:awaitSignal`
+
+Named mid-graph signal wait. Useful when the caller knows a stable signal name
+(e.g., `"operator-ack"`).
+
+- **Config:** `{ signalName, correlation: <expression>, ttl: duration?, onTimeout: portId? }`
+- **Ports:** `completed`, `timeout` (if `ttl` configured)
+- **Behavior:** Evaluate the correlation expression against current branch
+  state at execution time (typically `$run.runId`). Post
+  `WaitForBookmark { WakeCondition: Signal(signalName, correlation), TimeoutAt?, OnTimeoutPortId? }`.
+
+The two nodes share the same engine machinery; the difference is purely
+authoring ergonomics. `waitForHttp` is for "I need a callback URL right now";
+`awaitSignal` is for "I'm waiting for a known external event with a name I
+chose".
+
+### Section 3 locked decisions
+
+- **One bookmark per wait** with first-class `TimeoutAt` + `OnTimeoutPortId`
+  columns. Single-row atomic race. (Q1)
+- **Resumer match wins; no fall-through to TriggerDispatcher on match.** An
+  event is either a wake or a new run, never both. (Q2)
+- **`DeviceTelemetryMatch` is equality-only in v1.** Full expression matching
+  deferred behind a separate variant if needed. (Q3)
+- **One-shot tokens are the idempotency boundary;** no explicit dedup window.
+  (Q4)
+- **Single Scheduler + Resumer per host** today; leader/standby with SQL lease
+  later (decision #8).
+- **Cancellation deletes all of a run's bookmarks in one indexed DELETE.**
 
 ## Section 4 — Triggers & inbound (outline only)
 
@@ -571,8 +1058,14 @@ To be detailed.
 | LocalVariables | Branch-private k/v dict; copied on fork. |
 | RunState | Run-private k/v dict; shared across branches of one Run. |
 | SharedVariables | Workflow-scoped store of declared, typed vars; atomic ops only. |
-| Bookmark | Durable suspension point `(RunId, BranchId, NodeId, WakeCondition)`. |
+| Bookmark | Durable suspension point `(RunId, BranchId, NodeId, WakeCondition, MatchKey?, TimeoutAt?, OnTimeoutPortId?)`. |
 | WakeCondition | What wakes a Bookmark: Timer / Signal / DevicePropertyChange / DeviceTelemetryMatch / Manual / ChildRunCompleted. |
+| MatchKey | Indexed string on a Bookmark computed from its WakeCondition; the Resumer's lookup key. |
+| BookmarkScheduler | Background service that polls `Bookmarks WHERE TimeoutAt <= now` and drives timeouts/timer wakes. |
+| BookmarkResumer | Routes inbound events to bookmarks (resume) or falls through to TriggerDispatcher (start-new-run). |
+| InboundHub | Event normalizer that produces `(kind, matchKeys, payload)` for the Resumer. |
+| `control:waitForHttp` | Anonymous mid-graph HTTP wait; mints a one-shot `/wake/{token}` URL. |
+| `control:awaitSignal` | Named mid-graph signal wait with an authored correlation expression. |
 | Trigger | A node that starts a Run when its external condition is met. |
 | TriggerKey | String used to fan inbound events to matching trigger nodes (e.g. `client:<guid>`). |
 | CorrelationKey | Expression value used to scope `ConcurrencyPolicy`. |
