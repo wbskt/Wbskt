@@ -187,6 +187,24 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        {
+            RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
+            Runs[runId] = updated;
+            return Task.FromResult(updated);
+        }
+
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
+        {
+            return Task.FromResult(new RunCountersRow
+            {
+                RunId = runId,
+                ActiveBranchCount = _activeBranches,
+                CreditsConsumed = 0m,
+                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
+            });
+        }
+
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             _activeBranches += delta;
