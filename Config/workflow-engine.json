@@ -1,0 +1,17 @@
+{
+  "WorkflowEngine": {
+    "BookmarkPollInterval": "00:00:01",
+    "BookmarkOrphanGcInterval": "00:05:00",
+    "ScheduleTickInterval": "00:00:01",
+    "RunReaperInterval": "00:05:00",
+    "RunStuckThreshold": "00:30:00",
+    "HistoryRetentionInterval": "01:00:00",
+    "HistoryRetentionWindow": "30.00:00:00",
+    "PendingTriggerEventBacklogInterval": "00:10:00",
+    "PendingTriggerEventTtl": "1.00:00:00",
+    "MetricsExportInterval": "00:00:15",
+    "LeaseDurationSeconds": 120,
+    "BookmarkLeaseBatchSize": 64,
+    "ScheduledFireLeaseBatchSize": 64
+  }
+}

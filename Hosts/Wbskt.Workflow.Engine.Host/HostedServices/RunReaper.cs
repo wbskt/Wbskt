@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -10,26 +13,50 @@ public sealed class RunReaper : BackgroundService
 {
     private const string LeaseName = "run-reaper";
     private const int BatchSize = 100;
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan StuckThreshold = TimeSpan.FromMinutes(30);
     private readonly IClock _clock;
     private readonly ILeaseHolder _leaseHolder;
-    private readonly IRunProvider _runProvider;
-    private readonly IRunCancellationService _runCancellationService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<RunReaper> _logger;
+    private readonly TimeSpan _pollInterval;
+    private readonly TimeSpan _stuckThreshold;
 
+    [ActivatorUtilitiesConstructor]
     public RunReaper(
+        IClock clock,
+        ILeaseHolder leaseHolder,
+        IServiceScopeFactory scopeFactory,
+        ILogger<RunReaper> logger,
+        IOptions<WorkflowEngineOptions> options)
+        : this(clock, leaseHolder, scopeFactory, logger, options.Value.RunReaperInterval, options.Value.RunStuckThreshold)
+    {
+    }
+
+    internal RunReaper(
         IClock clock,
         ILeaseHolder leaseHolder,
         IRunProvider runProvider,
         IRunCancellationService runCancellationService,
-        ILogger<RunReaper> logger)
+        ILogger<RunReaper> logger,
+        TimeSpan? pollInterval = null,
+        TimeSpan? stuckThreshold = null)
+        : this(clock, leaseHolder, new StaticScopeFactory(runProvider, runCancellationService), logger, pollInterval, stuckThreshold)
+    {
+    }
+
+    private RunReaper(
+        IClock clock,
+        ILeaseHolder leaseHolder,
+        IServiceScopeFactory scopeFactory,
+        ILogger<RunReaper> logger,
+        TimeSpan? pollInterval,
+        TimeSpan? stuckThreshold)
     {
         _clock = clock;
         _leaseHolder = leaseHolder;
-        _runProvider = runProvider;
-        _runCancellationService = runCancellationService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
+        _pollInterval = pollInterval ?? TimeSpan.FromMinutes(5);
+        _stuckThreshold = stuckThreshold ?? TimeSpan.FromMinutes(30);
     }
 
     public async Task ProcessStuckRunsAsync(CancellationToken ct)
@@ -39,11 +66,14 @@ public sealed class RunReaper : BackgroundService
             return;
         }
 
-        DateTime cutoffUtc = _clock.UtcNow - StuckThreshold;
-        IReadOnlyCollection<RunRow> stuckRuns = await _runProvider.GetStuckRunsAsync(cutoffUtc, BatchSize, ct);
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        var runProvider = scope.ServiceProvider.GetRequiredService<IRunProvider>();
+        var runCancellationService = scope.ServiceProvider.GetRequiredService<IRunCancellationService>();
+        DateTime cutoffUtc = _clock.UtcNow - _stuckThreshold;
+        IReadOnlyCollection<RunRow> stuckRuns = await runProvider.GetStuckRunsAsync(cutoffUtc, BatchSize, ct);
         foreach (RunRow run in stuckRuns)
         {
-            await _runCancellationService.RequestCancellationAsync(run.Id, "REAPER_TIMEOUT", ct);
+            await runCancellationService.RequestCancellationAsync(run.Id, "REAPER_TIMEOUT", ct);
         }
     }
 
@@ -51,7 +81,7 @@ public sealed class RunReaper : BackgroundService
     {
         await ExecuteGuardedAsync(stoppingToken);
 
-        using var timer = new PeriodicTimer(PollInterval);
+        using var timer = new PeriodicTimer(_pollInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             await ExecuteGuardedAsync(stoppingToken);
@@ -71,6 +101,46 @@ public sealed class RunReaper : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Run reaper tick failed.");
+        }
+    }
+
+    private sealed class StaticScopeFactory(IRunProvider runProvider, IRunCancellationService runCancellationService) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope()
+        {
+            return new StaticServiceScope(runProvider, runCancellationService);
+        }
+    }
+
+    private sealed class StaticServiceScope(IRunProvider runProvider, IRunCancellationService runCancellationService) : IServiceScope, IAsyncDisposable
+    {
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(runProvider, runCancellationService);
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StaticServiceProvider(IRunProvider runProvider, IRunCancellationService runCancellationService) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+        {
+            if (serviceType == typeof(IRunProvider))
+            {
+                return runProvider;
+            }
+
+            if (serviceType == typeof(IRunCancellationService))
+            {
+                return runCancellationService;
+            }
+
+            return null;
         }
     }
 }

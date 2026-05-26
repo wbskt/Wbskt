@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -16,15 +18,40 @@ public sealed class BookmarkScheduler : BackgroundService
     private readonly ILogger<BookmarkScheduler> _logger;
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _orphanGcInterval;
+    private readonly int _batchSize;
+    private readonly TimeSpan _leaseDuration;
 
+    [ActivatorUtilitiesConstructor]
     public BookmarkScheduler(
         IClock clock,
         IHostIdentity hostIdentity,
         IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
         ILogger<BookmarkScheduler> logger,
+        IOptions<WorkflowEngineOptions> options)
+        : this(
+            clock,
+            hostIdentity,
+            scopeFactory,
+            runDispatcher,
+            logger,
+            options.Value.BookmarkPollInterval,
+            options.Value.BookmarkOrphanGcInterval,
+            options.Value.BookmarkLeaseBatchSize,
+            TimeSpan.FromSeconds(options.Value.LeaseDurationSeconds))
+    {
+    }
+
+    internal BookmarkScheduler(
+        IClock clock,
+        IHostIdentity hostIdentity,
+        IServiceScopeFactory scopeFactory,
+        IRunDispatcher runDispatcher,
+        ILogger<BookmarkScheduler> logger,
         TimeSpan? pollInterval = null,
-        TimeSpan? orphanGcInterval = null)
+        TimeSpan? orphanGcInterval = null,
+        int batchSize = 64,
+        TimeSpan? leaseDuration = null)
     {
         _clock = clock;
         _hostIdentity = hostIdentity;
@@ -33,6 +60,8 @@ public sealed class BookmarkScheduler : BackgroundService
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromSeconds(1);
         _orphanGcInterval = orphanGcInterval ?? TimeSpan.FromMinutes(5);
+        _batchSize = batchSize;
+        _leaseDuration = leaseDuration ?? TimeSpan.FromMinutes(2);
     }
 
     internal BookmarkScheduler(
@@ -43,7 +72,9 @@ public sealed class BookmarkScheduler : BackgroundService
         IRunDispatcher runDispatcher,
         ILogger<BookmarkScheduler> logger,
         TimeSpan? pollInterval = null,
-        TimeSpan? orphanGcInterval = null)
+        TimeSpan? orphanGcInterval = null,
+        int batchSize = 64,
+        TimeSpan? leaseDuration = null)
         : this(
             clock,
             hostIdentity,
@@ -51,7 +82,9 @@ public sealed class BookmarkScheduler : BackgroundService
             runDispatcher,
             logger,
             pollInterval,
-            orphanGcInterval)
+            orphanGcInterval,
+            batchSize,
+            leaseDuration)
     {
     }
 
@@ -61,7 +94,7 @@ public sealed class BookmarkScheduler : BackgroundService
         var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
         IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.BookmarkRow> leasedBookmarks =
-            await bookmarkProvider.LeaseDueAsync(_clock.UtcNow, BatchSize, _hostIdentity.HostId, LeaseDuration, ct);
+            await bookmarkProvider.LeaseDueAsync(_clock.UtcNow, _batchSize, _hostIdentity.HostId, _leaseDuration, ct);
 
         foreach (var bookmark in leasedBookmarks)
         {
