@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -9,23 +12,49 @@ public sealed class HistoryRetentionGc : BackgroundService
 {
     private const string LeaseName = "history-retention-gc";
     private const int BatchSize = 5000;
-    private static readonly TimeSpan PollInterval = TimeSpan.FromHours(1);
-    private static readonly TimeSpan RetentionWindow = TimeSpan.FromDays(30);
     private readonly IClock _clock;
     private readonly ILeaseHolder _leaseHolder;
-    private readonly IHistoryEventProvider _historyEventProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HistoryRetentionGc> _logger;
+    private readonly TimeSpan _pollInterval;
+    private readonly TimeSpan _retentionWindow;
 
+    [ActivatorUtilitiesConstructor]
     public HistoryRetentionGc(
         IClock clock,
         ILeaseHolder leaseHolder,
+        IServiceScopeFactory scopeFactory,
+        ILogger<HistoryRetentionGc> logger,
+        IOptions<WorkflowEngineOptions> options)
+        : this(clock, leaseHolder, scopeFactory, logger, options.Value.HistoryRetentionInterval, options.Value.HistoryRetentionWindow)
+    {
+    }
+
+    internal HistoryRetentionGc(
+        IClock clock,
+        ILeaseHolder leaseHolder,
         IHistoryEventProvider historyEventProvider,
-        ILogger<HistoryRetentionGc> logger)
+        ILogger<HistoryRetentionGc> logger,
+        TimeSpan? pollInterval = null,
+        TimeSpan? retentionWindow = null)
+        : this(clock, leaseHolder, new StaticScopeFactory(historyEventProvider), logger, pollInterval, retentionWindow)
+    {
+    }
+
+    private HistoryRetentionGc(
+        IClock clock,
+        ILeaseHolder leaseHolder,
+        IServiceScopeFactory scopeFactory,
+        ILogger<HistoryRetentionGc> logger,
+        TimeSpan? pollInterval,
+        TimeSpan? retentionWindow)
     {
         _clock = clock;
         _leaseHolder = leaseHolder;
-        _historyEventProvider = historyEventProvider;
+        _scopeFactory = scopeFactory;
         _logger = logger;
+        _pollInterval = pollInterval ?? TimeSpan.FromHours(1);
+        _retentionWindow = retentionWindow ?? TimeSpan.FromDays(30);
     }
 
     public async Task ProcessRetentionAsync(CancellationToken ct)
@@ -35,10 +64,12 @@ public sealed class HistoryRetentionGc : BackgroundService
             return;
         }
 
-        DateTime cutoffUtc = _clock.UtcNow - RetentionWindow;
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        var historyEventProvider = scope.ServiceProvider.GetRequiredService<IHistoryEventProvider>();
+        DateTime cutoffUtc = _clock.UtcNow - _retentionWindow;
         while (true)
         {
-            int deleted = await _historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, ct);
+            int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, ct);
             if (deleted < BatchSize)
             {
                 return;
@@ -50,7 +81,7 @@ public sealed class HistoryRetentionGc : BackgroundService
     {
         await ExecuteGuardedAsync(stoppingToken);
 
-        using var timer = new PeriodicTimer(PollInterval);
+        using var timer = new PeriodicTimer(_pollInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             await ExecuteGuardedAsync(stoppingToken);
@@ -70,6 +101,36 @@ public sealed class HistoryRetentionGc : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "History retention GC tick failed.");
+        }
+    }
+
+    private sealed class StaticScopeFactory(IHistoryEventProvider historyEventProvider) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope()
+        {
+            return new StaticServiceScope(historyEventProvider);
+        }
+    }
+
+    private sealed class StaticServiceScope(IHistoryEventProvider historyEventProvider) : IServiceScope, IAsyncDisposable
+    {
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(historyEventProvider);
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StaticServiceProvider(IHistoryEventProvider historyEventProvider) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+        {
+            return serviceType == typeof(IHistoryEventProvider) ? historyEventProvider : null;
         }
     }
 }

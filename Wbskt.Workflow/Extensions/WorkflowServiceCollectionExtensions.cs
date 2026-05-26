@@ -1,11 +1,17 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
+using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.NodeExecutors.Actions;
 using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.NodeExecutors.Triggers;
 using Wbskt.Workflow.Providers;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Extensions;
 
@@ -26,6 +32,13 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
 
         return services;
+    }
+
+    public static IServiceCollection AddWorkflowRuntime(this IServiceCollection services, IConfiguration configuration)
+    {
+        WorkflowEngineOptions options = configuration.GetSection("WorkflowEngine").Get<WorkflowEngineOptions>() ?? new WorkflowEngineOptions();
+        services.AddSingleton(Options.Create(options));
+        return AddWorkflowRuntime(services);
     }
 
     public static IServiceCollection AddWorkflowRuntime(this IServiceCollection services)

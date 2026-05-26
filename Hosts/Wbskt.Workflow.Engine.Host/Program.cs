@@ -27,6 +27,8 @@ public static class Program
         });
 
         builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json");
+        builder.Configuration.AddJsonFile(Path.Combine(builder.Environment.ContentRootPath, "Config", "workflow-engine.json"), optional: true, reloadOnChange: true);
+        builder.Configuration.AddJsonFile("workflow-engine.json", optional: true, reloadOnChange: true);
 
         builder.Host.UseSerilog(builder.CreateSerilog());
 
@@ -34,7 +36,7 @@ public static class Program
         builder.Services.AddHttpClient();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowProviders();
-        builder.Services.AddWorkflowRuntime();
+        builder.Services.AddWorkflowRuntime(builder.Configuration);
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddAuthorization();

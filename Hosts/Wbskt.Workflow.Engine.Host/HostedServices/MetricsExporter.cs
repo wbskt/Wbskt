@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Telemetry;
 
@@ -6,36 +9,56 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class MetricsExporter : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
-    private readonly IRunProvider _runProvider;
-    private readonly IRunCountersProvider _runCountersProvider;
-    private readonly IBookmarkProvider _bookmarkProvider;
-    private readonly IPendingTriggerEventProvider _pendingTriggerEventProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly WorkflowMetrics _workflowMetrics;
     private readonly ILogger<MetricsExporter> _logger;
+    private readonly TimeSpan _pollInterval;
 
+    [ActivatorUtilitiesConstructor]
     public MetricsExporter(
+        IServiceScopeFactory scopeFactory,
+        WorkflowMetrics workflowMetrics,
+        ILogger<MetricsExporter> logger,
+        IOptions<WorkflowEngineOptions> options)
+        : this(scopeFactory, workflowMetrics, logger, options.Value.MetricsExportInterval)
+    {
+    }
+
+    internal MetricsExporter(
         IRunProvider runProvider,
         IRunCountersProvider runCountersProvider,
         IBookmarkProvider bookmarkProvider,
         IPendingTriggerEventProvider pendingTriggerEventProvider,
         WorkflowMetrics workflowMetrics,
-        ILogger<MetricsExporter> logger)
+        ILogger<MetricsExporter> logger,
+        TimeSpan? pollInterval = null)
+        : this(new StaticScopeFactory(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider), workflowMetrics, logger, pollInterval)
     {
-        _runProvider = runProvider;
-        _runCountersProvider = runCountersProvider;
-        _bookmarkProvider = bookmarkProvider;
-        _pendingTriggerEventProvider = pendingTriggerEventProvider;
+    }
+
+    private MetricsExporter(
+        IServiceScopeFactory scopeFactory,
+        WorkflowMetrics workflowMetrics,
+        ILogger<MetricsExporter> logger,
+        TimeSpan? pollInterval)
+    {
+        _scopeFactory = scopeFactory;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
+        _pollInterval = pollInterval ?? TimeSpan.FromSeconds(15);
     }
 
     public async Task ProcessMetricsAsync(CancellationToken ct)
     {
-        long activeRuns = await _runProvider.CountByStatusAsync("Running", ct);
-        long activeBranches = await _runCountersProvider.SumActiveBranchesAsync(ct);
-        long parkedBookmarks = await _bookmarkProvider.CountAsync(ct);
-        long pendingTriggerDepth = await _pendingTriggerEventProvider.CountAllAsync(ct);
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        var runProvider = scope.ServiceProvider.GetRequiredService<IRunProvider>();
+        var runCountersProvider = scope.ServiceProvider.GetRequiredService<IRunCountersProvider>();
+        var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
+        var pendingTriggerEventProvider = scope.ServiceProvider.GetRequiredService<IPendingTriggerEventProvider>();
+        long activeRuns = await runProvider.CountByStatusAsync("Running", ct);
+        long activeBranches = await runCountersProvider.SumActiveBranchesAsync(ct);
+        long parkedBookmarks = await bookmarkProvider.CountAsync(ct);
+        long pendingTriggerDepth = await pendingTriggerEventProvider.CountAllAsync(ct);
 
         _workflowMetrics.UpdateSnapshot(activeRuns, activeBranches, parkedBookmarks, pendingTriggerDepth);
 
@@ -51,7 +74,7 @@ public sealed class MetricsExporter : BackgroundService
     {
         await ExecuteGuardedAsync(stoppingToken);
 
-        using var timer = new PeriodicTimer(PollInterval);
+        using var timer = new PeriodicTimer(_pollInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             await ExecuteGuardedAsync(stoppingToken);
@@ -71,6 +94,68 @@ public sealed class MetricsExporter : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Metrics exporter tick failed.");
+        }
+    }
+
+    private sealed class StaticScopeFactory(
+        IRunProvider runProvider,
+        IRunCountersProvider runCountersProvider,
+        IBookmarkProvider bookmarkProvider,
+        IPendingTriggerEventProvider pendingTriggerEventProvider) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope()
+        {
+            return new StaticServiceScope(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider);
+        }
+    }
+
+    private sealed class StaticServiceScope(
+        IRunProvider runProvider,
+        IRunCountersProvider runCountersProvider,
+        IBookmarkProvider bookmarkProvider,
+        IPendingTriggerEventProvider pendingTriggerEventProvider) : IServiceScope, IAsyncDisposable
+    {
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider);
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StaticServiceProvider(
+        IRunProvider runProvider,
+        IRunCountersProvider runCountersProvider,
+        IBookmarkProvider bookmarkProvider,
+        IPendingTriggerEventProvider pendingTriggerEventProvider) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+        {
+            if (serviceType == typeof(IRunProvider))
+            {
+                return runProvider;
+            }
+
+            if (serviceType == typeof(IRunCountersProvider))
+            {
+                return runCountersProvider;
+            }
+
+            if (serviceType == typeof(IBookmarkProvider))
+            {
+                return bookmarkProvider;
+            }
+
+            if (serviceType == typeof(IPendingTriggerEventProvider))
+            {
+                return pendingTriggerEventProvider;
+            }
+
+            return null;
         }
     }
 }
