@@ -353,8 +353,15 @@ public sealed class ErrorModelE2ETests
             return Task.CompletedTask;
         }
 
-        
-        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct)
+        {
+            IReadOnlyCollection<HistoryEventRow> events = state.HistoryEvents
+                .Where(evt => evt.RunId == runId && evt.HistoryEventId > afterEventId)
+                .OrderBy(evt => evt.HistoryEventId)
+                .Take(pageSize)
+                .ToArray();
+            return Task.FromResult(events);
+        }
 
         public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
