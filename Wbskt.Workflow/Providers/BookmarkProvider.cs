@@ -170,6 +170,17 @@ public class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<long> CountAsync(CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Bookmark_Count", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is long count ? count : Convert.ToInt64(result ?? 0L);
+    }
+
     public async Task<int> DeleteOrphansAsync(CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);

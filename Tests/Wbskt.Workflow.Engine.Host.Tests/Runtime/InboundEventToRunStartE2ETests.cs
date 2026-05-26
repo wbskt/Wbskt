@@ -213,6 +213,7 @@ public sealed class InboundEventToRunStartE2ETests
         }
 
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => Task.FromResult((long)Runs.Values.Count(run => run.Status == status));
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
         {
@@ -286,6 +287,7 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.FromResult(_activeBranches[runId]);
         }
 
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(_activeBranches.Values.Sum(value => (long)value));
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
@@ -305,6 +307,7 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.CompletedTask;
         }
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => Task.CompletedTask;
+        public Task<long> CountAsync(CancellationToken ct) => Task.FromResult((long)Bookmarks.Count);
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct)
         {
@@ -382,6 +385,7 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => Task.FromResult<PendingTriggerEventRow?>(null);
         public Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => Task.FromResult<PendingTriggerEventRow?>(null);
         public Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => Task.CompletedTask;
+        public Task<long> CountAllAsync(CancellationToken ct) => Task.FromResult((long)PendingEvents.Count);
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<ScheduledFireRow> InsertAsync(Guid triggerNodeId, int workflowDefinitionId, Guid workflowRefId, string cronOrInterval, DateTime nextFireAt, CancellationToken ct) => throw new NotSupportedException();
@@ -414,6 +418,7 @@ public sealed class InboundEventToRunStartE2ETests
         }
     }
 }
+
 
 
 

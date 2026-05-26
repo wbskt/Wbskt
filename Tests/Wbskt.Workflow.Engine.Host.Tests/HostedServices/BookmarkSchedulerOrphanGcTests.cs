@@ -78,6 +78,7 @@ public sealed class BookmarkSchedulerOrphanGcTests
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct)
         {
             DeleteOrphansCallCount++;
@@ -88,4 +89,5 @@ public sealed class BookmarkSchedulerOrphanGcTests
         public Task WaitForGcCallAsync(CancellationToken ct) => _gcCalled.Task.WaitAsync(ct);
     }
 }
+
 
