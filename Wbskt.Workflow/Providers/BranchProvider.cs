@@ -18,6 +18,11 @@ public class BranchProvider : BaseSqlProvider, IBranchProvider
             ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
     }
 
+    public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
+    {
+        return UpsertAsync(row, ct);
+    }
+
     public async Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
@@ -44,6 +49,44 @@ public class BranchProvider : BaseSqlProvider, IBranchProvider
         }
 
         throw new InvalidOperationException("Branch_Upsert did not return a row.");
+    }
+
+    public async Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            """
+            SELECT
+                Id,
+                RefId,
+                RunId,
+                ParentBranchId,
+                ForkCohortId,
+                NodeId,
+                Status,
+                PendingTakePort,
+                LocalJson,
+                LastOutputJson,
+                CompensationStackJson,
+                CreatedAt,
+                UpdatedAt,
+                RowVersion
+            FROM dbo.Branches
+            WHERE Id = @Id;
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+        command.Parameters.AddWithValue("@Id", checked((int)branchId));
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
+        {
+            return Map(reader);
+        }
+
+        throw new KeyNotFoundException($"Branch with Id={branchId} not found.");
     }
 
     public async Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
@@ -121,6 +164,72 @@ public class BranchProvider : BaseSqlProvider, IBranchProvider
         }
 
         return results.AsReadOnly();
+    }
+
+    public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+    {
+        return UpdateBranchAsync(branchId, currentNodeId, status, localJson, lastOutputJson, ct);
+    }
+
+    public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
+    {
+        return UpdateBranchAsync(branchId, null, "Completed", null, null, ct);
+    }
+
+    public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
+    {
+        return UpdateBranchAsync(branchId, null, "Failed", null, lastOutputJson, ct);
+    }
+
+    private async Task<BranchRow> UpdateBranchAsync(long branchId, Guid? currentNodeId, string status, string? localJson, string? lastOutputJson, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            """
+            UPDATE dbo.Branches
+            SET
+                NodeId = COALESCE(@NodeId, NodeId),
+                Status = @Status,
+                LocalJson = COALESCE(@LocalJson, LocalJson),
+                LastOutputJson = @LastOutputJson,
+                UpdatedAt = SYSUTCDATETIME()
+            WHERE Id = @Id;
+
+            SELECT
+                Id,
+                RefId,
+                RunId,
+                ParentBranchId,
+                ForkCohortId,
+                NodeId,
+                Status,
+                PendingTakePort,
+                LocalJson,
+                LastOutputJson,
+                CompensationStackJson,
+                CreatedAt,
+                UpdatedAt,
+                RowVersion
+            FROM dbo.Branches
+            WHERE Id = @Id;
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+        command.Parameters.AddWithValue("@Id", checked((int)branchId));
+        command.Parameters.AddWithValue("@NodeId", (object?)currentNodeId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@Status", status);
+        command.Parameters.AddWithValue("@LocalJson", (object?)localJson ?? DBNull.Value);
+        command.Parameters.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
+        {
+            return Map(reader);
+        }
+
+        throw new KeyNotFoundException($"Branch with Id={branchId} not found.");
     }
 
     internal static BranchRow Map(DbDataReader reader)
