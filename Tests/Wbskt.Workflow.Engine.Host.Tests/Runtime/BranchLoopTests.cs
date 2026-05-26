@@ -55,6 +55,163 @@ public sealed class BranchLoopTests
             historyProvider.Events.Select(evt => evt.EventKind));
     }
 
+    [Fact]
+    public async Task RunAsync_inline_single_child_fork_recurses_without_dispatch()
+    {
+        // Arrange
+        var rootNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var childNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fork-inline",
+            null,
+            true,
+            [new TestNode(rootNodeId, "root", "test"), new TestNode(childNodeId, "child", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(rootNodeId);
+        var dispatcher = new RecordingRunDispatcher();
+        var counters = new StubRunCountersProvider();
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fork([new ForkSpec(childNodeId.ToString(), CreatePatch("child", 1))], null, CreatePatch("fork", 1)),
+                    new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            dispatcher,
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(dispatcher.Requests);
+        Assert.Empty(counters.IncrementCalls);
+        Assert.Contains(branchProvider.PointerUpdates, update => update.CurrentNodeId == childNodeId);
+        Assert.True(branchProvider.SetCompletedCalled);
+    }
+
+    [Fact]
+    public async Task RunAsync_multi_child_fork_dispatches_each_and_returns()
+    {
+        // Arrange
+        var rootNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var childOneId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var childTwoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var childThreeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fork-multi",
+            null,
+            true,
+            [
+                new TestNode(rootNodeId, "root", "test"),
+                new TestNode(childOneId, "one", "test"),
+                new TestNode(childTwoId, "two", "test"),
+                new TestNode(childThreeId, "three", "test")
+            ],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(rootNodeId);
+        var operationLog = new List<string>();
+        var dispatcher = new RecordingRunDispatcher(operationLog);
+        var counters = new StubRunCountersProvider(operationLog);
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fork(
+                    [
+                        new ForkSpec(childOneId.ToString(), CreatePatch("child", 1)),
+                        new ForkSpec(childTwoId.ToString(), CreatePatch("child", 2)),
+                        new ForkSpec(childThreeId.ToString(), CreatePatch("child", 3))
+                    ],
+                    null,
+                    CreatePatch("fork", 1)))),
+            dispatcher,
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(3, dispatcher.Requests.Count);
+        Assert.Equal(3, branchProvider.CreatedBranches.Count);
+        Assert.True(branchProvider.SetCompletedCalled);
+        Assert.All(dispatcher.Requests, request => Assert.Equal(BranchExecutionReason.ForkChild, request.Reason));
+    }
+
+    [Fact]
+    public async Task RunAsync_fork_increments_active_branches_counter_atomically()
+    {
+        // Arrange
+        var rootNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var childOneId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var childTwoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fork-order",
+            null,
+            true,
+            [new TestNode(rootNodeId, "root", "test"), new TestNode(childOneId, "one", "test"), new TestNode(childTwoId, "two", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var operationLog = new List<string>();
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(rootNodeId),
+            new StubRunProvider(),
+            new StubRunCountersProvider(operationLog),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fork(
+                    [
+                        new ForkSpec(childOneId.ToString(), CreatePatch("child", 1)),
+                        new ForkSpec(childTwoId.ToString(), CreatePatch("child", 2))
+                    ],
+                    null,
+                    CreatePatch("fork", 1)))),
+            new RecordingRunDispatcher(operationLog),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal("increment:2", operationLog[0]);
+        Assert.Equal(["increment:2", "dispatch", "dispatch"], operationLog.Take(3));
+    }
+
     private static IReadOnlyDictionary<string, JsonElement> CreatePatch(string name, int value)
     {
         return new Dictionary<string, JsonElement>
@@ -113,85 +270,102 @@ public sealed class BranchLoopTests
         }
     }
 
-    private sealed class RecordingBranchProvider(Guid initialNodeId) : IBranchProvider
+    private sealed class RecordingBranchProvider : IBranchProvider
     {
-        private BranchRow _row = new()
+        private readonly Dictionary<long, BranchRow> _rows = new();
+        private long _nextBranchId = 2000;
+
+        public RecordingBranchProvider(Guid initialNodeId)
         {
-            Id = 1001,
-            RefId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-            RunId = 42,
-            ParentBranchId = null,
-            ForkCohortId = null,
-            NodeId = initialNodeId,
-            Status = "Active",
-            PendingTakePort = null,
-            LocalJson = "{}",
-            LastOutputJson = null,
-            CompensationStackJson = null,
-            CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
-            UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
-            RowVersion = [1]
-        };
+            _rows[1001] = new BranchRow
+            {
+                Id = 1001,
+                RefId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                RunId = 42,
+                ParentBranchId = null,
+                ForkCohortId = null,
+                NodeId = initialNodeId,
+                Status = "Active",
+                PendingTakePort = null,
+                LocalJson = "{}",
+                LastOutputJson = null,
+                CompensationStackJson = null,
+                CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                RowVersion = [1]
+            };
+        }
+
+        private RecordingBranchProvider()
+        {
+        }
 
         public List<(long BranchId, Guid CurrentNodeId)> PointerUpdates { get; } = [];
+
+        public List<BranchRow> CreatedBranches { get; } = [];
 
         public bool SetCompletedCalled { get; private set; }
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
         {
-            _row = row;
-            return Task.FromResult(_row);
+            var created = row with { Id = (int)_nextBranchId++ };
+            _rows[created.Id] = created;
+            CreatedBranches.Add(created);
+            return Task.FromResult(created);
         }
 
         public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
         {
-            _row = row;
-            return Task.FromResult(_row);
+            _rows[row.Id] = row;
+            return Task.FromResult(row);
         }
 
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct)
         {
-            return Task.FromResult(_row);
+            return Task.FromResult(_rows[branchId]);
         }
 
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
         {
-            return Task.FromResult(_row);
+            return Task.FromResult(_rows.Values.Single(row => row.RefId == refId));
         }
 
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct)
         {
-            return Task.FromResult<IReadOnlyCollection<BranchRow>>([_row]);
+            return Task.FromResult<IReadOnlyCollection<BranchRow>>(_rows.Values.ToArray());
         }
 
         public Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct)
         {
-            return Task.FromResult<IReadOnlyCollection<BranchRow>>([_row]);
+            return Task.FromResult<IReadOnlyCollection<BranchRow>>(_rows.Values.Where(row => row.Status == "Active").ToArray());
         }
 
         public Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct)
         {
-            return Task.FromResult<IReadOnlyCollection<BranchRow>>([_row]);
+            return Task.FromResult<IReadOnlyCollection<BranchRow>>(_rows.Values.Where(row => row.Status == "Active").ToArray());
         }
 
         public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
         {
             PointerUpdates.Add((branchId, currentNodeId));
-            _row = _row with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson };
-            return Task.FromResult(_row);
+            BranchRow updated = _rows[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson };
+            _rows[branchId] = updated;
+            return Task.FromResult(updated);
         }
 
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
         {
             SetCompletedCalled = true;
-            _row = _row with { Status = "Completed" };
-            return Task.FromResult(_row);
+            BranchRow updated = _rows[branchId] with { Status = "Completed" };
+            _rows[branchId] = updated;
+            return Task.FromResult(updated);
         }
 
         public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
         {
-            _row = _row with { Status = "Failed", LastOutputJson = lastOutputJson };
-            return Task.FromResult(_row);
+            BranchRow updated = _rows[branchId] with { Status = "Failed", LastOutputJson = lastOutputJson };
+            _rows[branchId] = updated;
+            return Task.FromResult(updated);
         }
     }
 
@@ -229,11 +403,22 @@ public sealed class BranchLoopTests
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class StubRunCountersProvider : IRunCountersProvider
+    private sealed class StubRunCountersProvider(List<string>? operationLog = null) : IRunCountersProvider
     {
-        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
+        public List<int> IncrementCalls { get; } = [];
 
-        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(0);
+        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+        {
+            IncrementCalls.Add(delta);
+            operationLog?.Add($"increment:{delta}");
+            return Task.FromResult(0);
+        }
+
+        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+        {
+            operationLog?.Add($"decrement:{delta}");
+            return Task.FromResult(0);
+        }
 
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
     }
@@ -265,12 +450,13 @@ public sealed class BranchLoopTests
         }
     }
 
-    private sealed class RecordingRunDispatcher : IRunDispatcher
+    private sealed class RecordingRunDispatcher(List<string>? operationLog = null) : IRunDispatcher
     {
         public List<BranchExecutionRequest> Requests { get; } = [];
 
         public ValueTask DispatchAsync(BranchExecutionRequest request, CancellationToken ct)
         {
+            operationLog?.Add("dispatch");
             Requests.Add(request);
             return ValueTask.CompletedTask;
         }
