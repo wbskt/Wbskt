@@ -11,6 +11,7 @@
         <SqlFiles Include="StoredProcedures\*.sql" />
         <SqlFiles Include="Tables\*.sql" />
         <SqlFiles Include="Types\*.sql" />
+        <SqlFiles Include="Types\UserDefinedTableTypes\*.sql" />
         <SqlFiles Include="Views\*.sql" />
     </ItemGroup>
 
