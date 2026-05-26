@@ -9,8 +9,14 @@ CREATE PROCEDURE dbo.WorkflowDefinition_Publish
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
-    DECLARE @NextVersion INT = ISNULL((SELECT MAX(Version) FROM dbo.WorkflowDefinitions WHERE RefId = @RefId), 0) + 1;
+    BEGIN TRAN;
+
+    DECLARE @NextVersion INT =
+        ISNULL((SELECT MAX(Version)
+                  FROM dbo.WorkflowDefinitions WITH (HOLDLOCK, UPDLOCK)
+                 WHERE RefId = @RefId), 0) + 1;
 
     INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, IsEnabled, DefinitionJson, PublishedBy)
     VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @IsEnabled, @DefinitionJson, @PublishedBy);
@@ -26,7 +32,9 @@ BEGIN
         DefinitionJson,
         PublishedBy,
         CreatedAt
-    FROM dbo.WorkflowDefinitions
-    WHERE RefId = @RefId AND Version = @NextVersion;
+      FROM dbo.WorkflowDefinitions
+     WHERE RefId = @RefId AND Version = @NextVersion;
+
+    COMMIT TRAN;
 END;
 GO

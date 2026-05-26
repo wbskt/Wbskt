@@ -6,12 +6,17 @@ CREATE PROCEDURE dbo.SharedVariable_Initialize
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.SharedVariables WHERE WorkflowRefId = @WorkflowRefId AND VarName = @VarName)
-    BEGIN
-        INSERT INTO dbo.SharedVariables (WorkflowRefId, VarName, VarType, ValueJson)
-        VALUES (@WorkflowRefId, @VarName, @VarType, @ValueJson);
-    END;
+    BEGIN TRAN;
+
+    INSERT INTO dbo.SharedVariables (WorkflowRefId, VarName, VarType, ValueJson)
+    SELECT @WorkflowRefId, @VarName, @VarType, @ValueJson
+     WHERE NOT EXISTS (
+         SELECT 1
+           FROM dbo.SharedVariables WITH (HOLDLOCK)
+          WHERE WorkflowRefId = @WorkflowRefId AND VarName = @VarName
+     );
 
     SELECT
         Id,
@@ -21,8 +26,10 @@ BEGIN
         ValueJson,
         UpdatedAt,
         CreatedAt
-    FROM dbo.SharedVariables
-    WHERE WorkflowRefId = @WorkflowRefId
-      AND VarName = @VarName;
+      FROM dbo.SharedVariables
+     WHERE WorkflowRefId = @WorkflowRefId
+       AND VarName = @VarName;
+
+    COMMIT TRAN;
 END;
 GO
