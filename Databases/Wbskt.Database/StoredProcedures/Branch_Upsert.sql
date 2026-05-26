@@ -13,7 +13,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    MERGE dbo.Branches AS target
+    MERGE dbo.Branches WITH (HOLDLOCK) AS target
     USING (VALUES (
         @RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
         @Status, @PendingTakePort, @LocalJson, @LastOutputJson, @CompensationStackJson
