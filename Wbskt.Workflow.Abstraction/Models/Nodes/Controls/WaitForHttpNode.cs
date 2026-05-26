@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-public sealed record WaitForHttpNode(string NodeId, string Name, IReadOnlyCollection<PortDefinition> Ports,
+public sealed record WaitForHttpNode(Guid NodeId, string Name, IReadOnlyCollection<PortDefinition> Ports,
     [property: JsonPropertyName("config")] WaitForHttpConfig? Config) : BaseNode(NodeId, Name, Ports)
 {
     [JsonIgnore]

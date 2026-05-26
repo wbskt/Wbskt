@@ -89,7 +89,7 @@ public sealed class WorkflowValidator
 
     private static void WarnIfOrphans(WorkflowDefinition def, List<ValidationIssue> issues)
     {
-        var connectedNodeIds = new HashSet<string>();
+        var connectedNodeIds = new HashSet<Guid>();
 
         foreach (var edge in def.Edges)
         {

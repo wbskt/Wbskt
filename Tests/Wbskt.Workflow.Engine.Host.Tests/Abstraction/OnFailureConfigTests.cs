@@ -22,15 +22,16 @@ public class OnFailureConfigTests
     [Fact]
     public void OnFailureConfig_roundtrips_with_compensation()
     {
+        var refundNodeId = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var config = new OnFailureConfig(
             ErrorOutcome.Compensate,
-            new CompensationDeclaration("n-refund", "action:command", null));
+            new CompensationDeclaration(refundNodeId, "action:command", null));
 
         var json = JsonSerializer.Serialize(config, Options);
         var back = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);
 
         Assert.Equal(ErrorOutcome.Compensate, back!.Outcome);
         Assert.NotNull(back.Compensate);
-        Assert.Equal("n-refund", back.Compensate!.NodeId);
+        Assert.Equal(refundNodeId, back.Compensate!.NodeId);
     }
 }

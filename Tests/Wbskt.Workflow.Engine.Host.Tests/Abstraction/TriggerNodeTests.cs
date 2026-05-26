@@ -15,7 +15,7 @@ public class TriggerNodeTests
     {
         var json = """
             {
-                "nodeId": "T",
+                "nodeId": "11111111-1111-1111-1111-111111111111",
                 "kind": "trigger:device",
                 "name": "Temp Trigger",
                 "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
@@ -31,7 +31,7 @@ public class TriggerNodeTests
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
 
         var trigger = Assert.IsType<DeviceTriggerNode>(node);
-        Assert.Equal("T", trigger.NodeId);
+        Assert.Equal(new Guid("11111111-1111-1111-1111-111111111111"), trigger.NodeId);
         Assert.Equal("sensor-A", trigger.Config.DeviceRef);
         Assert.Equal("telemetry", trigger.Config.Event);
         Assert.Equal("$trigger.deviceId", trigger.Config.CorrelationKey);
@@ -43,7 +43,7 @@ public class TriggerNodeTests
     {
         var json = """
             {
-                "nodeId": "T",
+                "nodeId": "11111111-1111-1111-1111-111111111111",
                 "kind": "trigger:device",
                 "name": "Trigger",
                 "ports": [],
@@ -61,7 +61,7 @@ public class TriggerNodeTests
     {
         var json = """
             {
-                "nodeId": "S1",
+                "nodeId": "00000000-0000-0000-0000-000000000001",
                 "kind": "trigger:schedule",
                 "name": "Cron Trigger",
                 "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
@@ -78,7 +78,7 @@ public class TriggerNodeTests
     {
         var json = """
             {
-                "nodeId": "W1",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
                 "kind": "trigger:webhook",
                 "name": "Webhook",
                 "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
@@ -96,7 +96,7 @@ public class TriggerNodeTests
     {
         var json = """
             {
-                "nodeId": "M1",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
                 "kind": "trigger:manual",
                 "name": "Manual",
                 "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],

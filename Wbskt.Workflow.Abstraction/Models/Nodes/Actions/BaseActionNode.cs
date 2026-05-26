@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 
 public abstract record BaseActionNode(
-    string NodeId,
+    Guid NodeId,
     string Name,
     IReadOnlyCollection<PortDefinition> Ports,
     [property: JsonPropertyName("retry")] RetryPolicy? Retry,

@@ -16,7 +16,7 @@ public class WorkflowValidatorTests
     {
         var def = ValidWorkflowBuilder.Build() with
         {
-            Edges = [new Edge((Guid.NewGuid().ToString(), "out"), (Guid.NewGuid().ToString(), "in"))]
+            Edges = [new Edge((Guid.NewGuid(), "out"), (Guid.NewGuid(), "in"))]
         };
         var result = Validator.Validate(def);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "EDGE_UNKNOWN_NODE");
@@ -38,21 +38,21 @@ public class WorkflowValidatorTests
     public void Validate_returns_error_when_edge_references_unknown_target_port()
     {
         var def = ValidWorkflowBuilder.Build();
-        var fromNode = def.Nodes.First(n => n.NodeId == "trigger1");
-        var badEdge = new Edge((fromNode.NodeId, "out"), ("logic1", "missing-in"));
+        var fromNode = def.Nodes.First(n => n.NodeId == ValidWorkflowBuilder.Trigger1Id);
+        var badEdge = new Edge((fromNode.NodeId, "out"), (ValidWorkflowBuilder.Logic1Id, "missing-in"));
         var newDef = def with { Edges = [badEdge] };
         var result = Validator.Validate(newDef);
-        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "EDGE_UNKNOWN_PORT" && i.NodeId == "logic1");
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "EDGE_UNKNOWN_PORT" && i.NodeId == ValidWorkflowBuilder.Logic1Id);
     }
 
     [Fact]
     public void Validate_returns_error_when_node_ids_are_duplicated()
     {
         var def = ValidWorkflowBuilder.Build();
-        var duplicate = new LogicGateNode("logic1", "Duplicate", [], new LogicGateConfig("true"));
+        var duplicate = new LogicGateNode(ValidWorkflowBuilder.Logic1Id, "Duplicate", [], new LogicGateConfig("true"));
         var defWithDuplicate = def with { Nodes = [..def.Nodes, duplicate] };
         var result = Validator.Validate(defWithDuplicate);
-        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "DUPLICATE_NODE_ID" && i.NodeId == "logic1");
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "DUPLICATE_NODE_ID" && i.NodeId == ValidWorkflowBuilder.Logic1Id);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class WorkflowValidatorTests
     [Fact]
     public void Validate_returns_warning_when_no_trigger_nodes()
     {
-        var logicNode = new LogicGateNode("n1", "Logic", [new PortDefinition("out", PortDirection.Output, "Out")], new LogicGateConfig("true"));
+        var logicNode = new LogicGateNode(new Guid("aaaaaaaa-0000-0000-0000-000000000004"), "Logic", [new PortDefinition("out", PortDirection.Output, "Out")], new LogicGateConfig("true"));
         var defNoTriggers = ValidWorkflowBuilder.Build() with { Nodes = [logicNode], Edges = [] };
         var result = Validator.Validate(defNoTriggers);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "NO_TRIGGERS");
@@ -85,24 +85,28 @@ public class WorkflowValidatorTests
     public void Validate_returns_warning_for_orphan_node()
     {
         var def = ValidWorkflowBuilder.Build();
-        var orphan = new LogicGateNode("orphan", "Orphan", [], new LogicGateConfig("true"));
+        var orphanId = new Guid("aaaaaaaa-0000-0000-0000-000000000003");
+        var orphan = new LogicGateNode(orphanId, "Orphan", [], new LogicGateConfig("true"));
         var defWithOrphan = def with { Nodes = [..def.Nodes, orphan] };
         var result = Validator.Validate(defWithOrphan);
-        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "ORPHAN_NODE" && i.NodeId == "orphan");
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "ORPHAN_NODE" && i.NodeId == orphanId);
     }
 }
 
 public static class ValidWorkflowBuilder
 {
+    public static readonly Guid Trigger1Id = new("aaaaaaaa-0000-0000-0000-000000000001");
+    public static readonly Guid Logic1Id = new("aaaaaaaa-0000-0000-0000-000000000002");
+
     public static WorkflowDefinition Build()
     {
         var trigger = new DeviceTriggerNode(
-            "trigger1", "Trigger",
+            Trigger1Id, "Trigger",
             [new PortDefinition("out", PortDirection.Output, "Out")],
             new Wbskt.Workflow.Abstraction.Models.Triggers.DeviceTriggerConfig("dev-1", "telemetry"));
 
         var logic = new LogicGateNode(
-            "logic1", "Gate",
+            Logic1Id, "Gate",
             [
                 new PortDefinition("in", PortDirection.Input, "In"),
                 new PortDefinition("true", PortDirection.Output, "True"),
@@ -110,7 +114,7 @@ public static class ValidWorkflowBuilder
             ],
             new LogicGateConfig("$trigger.temperature > 35"));
 
-        var edge = new Edge(("trigger1", "out"), ("logic1", "in"));
+        var edge = new Edge((Trigger1Id, "out"), (Logic1Id, "in"));
 
         return new WorkflowDefinition(
             WorkflowRefId: Guid.NewGuid(),

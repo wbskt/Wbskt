@@ -16,7 +16,7 @@ public class ActionNodeTests
     {
         var json = """
             {
-                "nodeId": "OV",
+                "nodeId": "33333333-3333-3333-3333-333333333333",
                 "kind": "action:command",
                 "name": "OpenVent",
                 "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
@@ -38,7 +38,7 @@ public class ActionNodeTests
     [Fact]
     public void EmailNotificationNode_deserialises()
     {
-        var json = """{ "nodeId": "E1", "kind": "action:email", "name": "Email", "ports": [], "config": { "to": "ops@x", "subject": "Alert", "body": "Test" } }""";
+        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000011", "kind": "action:email", "name": "Email", "ports": [], "config": { "to": "ops@x", "subject": "Alert", "body": "Test" } }""";
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var email = Assert.IsType<EmailNotificationNode>(node);
         Assert.Equal("ops@x", email.Config.To);
@@ -47,7 +47,7 @@ public class ActionNodeTests
     [Fact]
     public void WebhookNotificationNode_deserialises()
     {
-        var json = """{ "nodeId": "WN1", "kind": "action:webhook", "name": "Webhook", "ports": [], "config": { "url": "https://example.com/hook", "method": "POST" } }""";
+        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000012", "kind": "action:webhook", "name": "Webhook", "ports": [], "config": { "url": "https://example.com/hook", "method": "POST" } }""";
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var wh = Assert.IsType<WebhookNotificationNode>(node);
         Assert.Equal("https://example.com/hook", wh.Config.Url);
@@ -56,7 +56,7 @@ public class ActionNodeTests
     [Fact]
     public void TelegramNotificationNode_deserialises()
     {
-        var json = """{ "nodeId": "TG1", "kind": "action:telegram", "name": "Telegram", "ports": [], "config": { "chatId": "123456", "message": "Hello" } }""";
+        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000013", "kind": "action:telegram", "name": "Telegram", "ports": [], "config": { "chatId": "123456", "message": "Hello" } }""";
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var tg = Assert.IsType<TelegramNotificationNode>(node);
         Assert.Equal("123456", tg.Config.ChatId);
@@ -65,7 +65,7 @@ public class ActionNodeTests
     [Fact]
     public void ToastNotificationNode_deserialises()
     {
-        var json = """{ "nodeId": "TN1", "kind": "action:toast", "name": "Toast", "ports": [], "config": { "title": "Alert", "message": "Something happened" } }""";
+        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000014", "kind": "action:toast", "name": "Toast", "ports": [], "config": { "title": "Alert", "message": "Something happened" } }""";
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var toast = Assert.IsType<ToastNotificationNode>(node);
         Assert.Equal("Alert", toast.Config.Title);
