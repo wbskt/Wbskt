@@ -19,8 +19,6 @@ using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
-using Wbskt.Workflow.Providers;
-
 namespace Wbskt.Management.Host;
 
 public static class Program
@@ -47,8 +45,6 @@ public static class Program
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
-        builder.Services.AddScoped<IWorkflowProvider, WorkflowProvider>();
-        builder.Services.AddScoped<IWorkflowService, WorkflowService>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
@@ -80,7 +76,6 @@ public static class Program
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkflowProvider>>("Workflow");
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

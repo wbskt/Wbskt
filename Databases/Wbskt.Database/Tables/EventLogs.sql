@@ -15,8 +15,7 @@ CREATE TABLE dbo.EventLogs (
     CONSTRAINT PK_EventLogs        PRIMARY KEY (Id),
     CONSTRAINT FK_EventLogs_Events FOREIGN KEY (EventId) REFERENCES dbo.Events(Id),
     CONSTRAINT FK_EventLogs_Policy FOREIGN KEY (PolicyId) REFERENCES dbo.RegistrationPolicies(Id),
-    CONSTRAINT FK_EventLogs_Client FOREIGN KEY (ClientId) REFERENCES dbo.Clients(Id),
-    CONSTRAINT FK_EventLogs_Workflow FOREIGN KEY (WorkflowId) REFERENCES dbo.Workflows(Id)
+    CONSTRAINT FK_EventLogs_Client FOREIGN KEY (ClientId) REFERENCES dbo.Clients(Id)
 );
 GO
 

@@ -19,19 +19,16 @@ public sealed class EventLogsController : ControllerBase
     private readonly IAuthServiceClient _authClient;
     private readonly IReferenceMapper _policyMapper;
     private readonly IReferenceMapper _clientMapper;
-    private readonly IReferenceMapper _workflowMapper;
 
     public EventLogsController(IEventLogService eventLogService, IAuthServiceClient authClient, 
         [FromKeyedServices("RegistrationPolicy")] IReferenceMapper policyMapper,
-        [FromKeyedServices("Client")] IReferenceMapper clientMapper,
-        [FromKeyedServices("Workflow")] IReferenceMapper workflowMapper
+        [FromKeyedServices("Client")] IReferenceMapper clientMapper
         )
     {
         _eventLogService = eventLogService;
         _authClient = authClient;
         _policyMapper = policyMapper;
         _clientMapper = clientMapper;
-        _workflowMapper = workflowMapper;
     }
 
     /// <summary>
@@ -40,7 +37,6 @@ public sealed class EventLogsController : ControllerBase
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
     /// <param name="eventName">Optional filter for a specific event name.</param>
     /// <param name="criticality">Optional filter by criticality (Information, Warning, Critical).</param>
-    /// <param name="workflowRefId"></param>
     /// <param name="policyRefId"></param>
     /// <param name="clientRefId"></param>
     /// <param name="skip">Number of records to skip for pagination.</param>
@@ -54,14 +50,12 @@ public sealed class EventLogsController : ControllerBase
         [FromQuery] EventCriticality? criticality,
         [FromQuery] Guid? policyRefId,
         [FromQuery] Guid? clientRefId,
-        [FromQuery] Guid? workflowRefId,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
         int? clientId = null;
-        int? workflowId = null;
         int? policyId = null;
 
         if (policyRefId.HasValue)
@@ -74,12 +68,7 @@ public sealed class EventLogsController : ControllerBase
             clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId.Value, cancellationToken);
         }
         
-        if (workflowRefId.HasValue)
-        {
-            workflowId = await _workflowMapper.FindIdByRefIdAsync(workflowRefId.Value, cancellationToken);
-        }
-        
-        var pagedList = await _eventLogService.GetLogsAsync(workspaceId, eventName, criticality, policyId, clientId, workflowId, skip, take, cancellationToken);
+        var pagedList = await _eventLogService.GetLogsAsync(workspaceId, eventName, criticality, policyId, clientId, null, skip, take, cancellationToken);
         
         Response.Headers.Append("X-Total-Count", pagedList.TotalCount.ToString());
 

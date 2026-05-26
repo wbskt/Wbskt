@@ -23,23 +23,15 @@ public static class Program
             Args = args,
             ContentRootPath = Directory.GetCurrentDirectory()
         });
-        
+
         builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
-        
-        // Event Bus
+
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
-
-        // Workflow Engine
-        builder.Services.AddWorkflowEngine();
         builder.Services.AddHttpClient();
-
-        // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
-
         builder.Services.AddAuthorization();
-
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
@@ -49,27 +41,16 @@ public static class Program
                       .AllowAnyMethod();
             });
         });
-
         builder.Services.AddControllers();
-        builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
 
         await app.RunStartupTasksAsync();
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
-
         app.UseCors();
-
-        if (app.Environment.IsDevelopment())
-        {
-            app.MapOpenApi();
-            app.MapCustomScalarApiReference();
-        }
-
         app.UseAuthentication();
         app.UseAuthorization();
-
         app.MapControllers();
 
         await app.RunAsync();

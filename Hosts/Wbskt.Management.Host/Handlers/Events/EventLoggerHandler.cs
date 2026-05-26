@@ -55,9 +55,7 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
                 PolicyId: (@event as IPolicyContext)?.PolicyId,
                 PolicyRefId: (@event as IPolicyContext)?.PolicyRefId,
                 ClientId: (@event as IClientContext)?.ClientId,
-                ClientRefId: (@event as IClientContext)?.ClientRefId,
-                WorkflowId: (@event as IWorkflowContext)?.WorkflowId,
-                WorkflowRefId: (@event as IWorkflowContext)?.WorkflowRefId
+                ClientRefId: (@event as IClientContext)?.ClientRefId
             );
 
             await _buffer.WriteAsync(entry, context.CancellationToken);
