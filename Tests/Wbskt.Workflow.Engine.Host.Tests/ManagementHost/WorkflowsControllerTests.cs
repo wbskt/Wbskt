@@ -25,6 +25,21 @@ public sealed class WorkflowsControllerTests
     }
 
     [Fact]
+    public async Task GetCurrent_returns_dto()
+    {
+        var service = new Mock<IWorkflowDefinitionService>();
+        var refId = Guid.NewGuid();
+        var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", JsonSerializer.SerializeToElement(new { version = 2 }), DateTime.UtcNow);
+        service.Setup(x => x.GetCurrentAsync(refId, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
+        var controller = new WorkflowsController(service.Object);
+
+        var actual = await controller.GetCurrent(refId, CancellationToken.None);
+
+        Assert.Equal(expected, actual);
+        service.Verify(x => x.GetCurrentAsync(refId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetCurrent_calls_service_and_returns_dto()
     {
         var service = new Mock<IWorkflowDefinitionService>();
@@ -37,6 +52,21 @@ public sealed class WorkflowsControllerTests
 
         Assert.Equal(expected, actual);
         service.Verify(x => x.GetCurrentAsync(refId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetVersion_returns_dto()
+    {
+        var service = new Mock<IWorkflowDefinitionService>();
+        var refId = Guid.NewGuid();
+        var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, JsonSerializer.SerializeToElement(new { version = 3 }), DateTime.UtcNow);
+        service.Setup(x => x.GetVersionAsync(refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
+        var controller = new WorkflowsController(service.Object);
+
+        var actual = await controller.GetVersion(refId, 3, CancellationToken.None);
+
+        Assert.Equal(expected, actual);
+        service.Verify(x => x.GetVersionAsync(refId, 3, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

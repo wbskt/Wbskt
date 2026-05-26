@@ -80,6 +80,79 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
+    public async Task GetCurrent_returns_dto()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
+
+        var dto = await service.GetCurrentAsync(refId, CancellationToken.None);
+
+        Assert.Equal(refId, dto.RefId);
+        Assert.Equal(4, dto.Version);
+        Assert.Equal("Published", dto.Status);
+        Assert.Equal("Vent control + escalation", dto.Name);
+    }
+
+    [Fact]
+    public async Task GetVersion_returns_dto()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetByRefIdVersionAsync(refId, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(13, refId, 2, false));
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
+
+        var dto = await service.GetVersionAsync(refId, 2, CancellationToken.None);
+
+        Assert.Equal(refId, dto.RefId);
+        Assert.Equal(2, dto.Version);
+        Assert.Equal("Deprecated", dto.Status);
+    }
+
+    [Fact]
+    public async Task Deprecate_marks_deprecated()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(14, refId, 6, true));
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
+
+        await service.DeprecateAsync(refId, CancellationToken.None);
+
+        workflowProvider.Verify(x => x.DeprecateAsync(14, It.IsAny<CancellationToken>()), Times.Once);
+        triggerService.Verify(x => x.OnDeprecatedAsync(14, It.IsAny<CancellationToken>()), Times.Once);
+        cache.Verify(x => x.Invalidate(14), Times.Once);
+    }
+
+    [Fact]
+    public async Task Publish_unknown_refId_returns_not_found_when_getting_current_after_deprecate()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var request = CreatePublishRequest();
+        workflowProvider.SetupSequence(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NotFoundException("missing"))
+            .ThrowsAsync(new NotFoundException("missing"));
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 15 });
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
+
+        await service.PublishAsync(request, CancellationToken.None);
+        await Assert.ThrowsAsync<NotFoundException>(() => service.GetCurrentAsync(request.RefId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Publish_invalid_definition_throws_ValidationException()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
