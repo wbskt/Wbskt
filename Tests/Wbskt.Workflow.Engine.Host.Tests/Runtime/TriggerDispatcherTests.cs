@@ -55,7 +55,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_starts_new_run_when_registration_exists_and_policy_permits()
     {
         // Arrange
-        var registration = CreateRegistration();
+        var registration = CreateRegistration("AllowParallel");
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
 
         // Act
@@ -66,14 +66,69 @@ public sealed class TriggerDispatcherTests
         Assert.Equal("device:serial-1:telemetry", result.Reason);
     }
 
+    [Fact]
+    public async Task Dispatch_returns_Dropped_when_enforcer_returns_Dropped()
+    {
+        // Arrange
+        var registration = CreateRegistration("DropIfRunning");
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Dropped, null)));
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.Dropped, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Dispatch_returns_Queued_when_enforcer_returns_Queued()
+    {
+        // Arrange
+        var registration = CreateRegistration("Queue");
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, null)));
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.Queued, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Dispatch_cancels_active_run_and_starts_new_when_enforcer_returns_ProceedAfterCancellingActive()
+    {
+        // Arrange
+        var registration = CreateRegistration("CancelExisting");
+        var cancellationService = new RecordingRunCancellationService();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, 55)),
+            runCancellationService: cancellationService);
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal([(55L, "Trigger-cancel-policy")], cancellationService.Requests);
+    }
+
     private static TriggerDispatcher CreateDispatcher(
         RecordingBookmarkResumer? bookmarkResumer = null,
-        RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null)
+        RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null,
+        RecordingTriggerConcurrencyEnforcer? concurrencyEnforcer = null,
+        RecordingRunCancellationService? runCancellationService = null)
     {
         return new TriggerDispatcher(
             new CorrelationKeyResolver(),
             bookmarkResumer ?? new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false)),
-            triggerRegistrationProvider ?? new RecordingTriggerRegistrationProvider());
+            triggerRegistrationProvider ?? new RecordingTriggerRegistrationProvider(),
+            concurrencyEnforcer ?? new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, null)),
+            runCancellationService ?? new RecordingRunCancellationService());
     }
 
     private static InboundEvent CreateInboundEvent()
@@ -90,7 +145,7 @@ public sealed class TriggerDispatcherTests
             DateTime.UtcNow);
     }
 
-    private static TriggerRegistrationRow CreateRegistration()
+    private static TriggerRegistrationRow CreateRegistration(string policy = "Queue")
     {
         return new TriggerRegistrationRow
         {
@@ -102,7 +157,7 @@ public sealed class TriggerDispatcherTests
             TriggerKind = "device",
             TriggerKey = "device:serial-1:telemetry",
             CorrelationExpression = null,
-            ConcurrencyPolicy = "Queue",
+            ConcurrencyPolicy = policy,
             FilterExpression = null,
             CreatedAt = DateTime.UtcNow
         };
@@ -135,6 +190,25 @@ public sealed class TriggerDispatcherTests
         {
             IReadOnlyCollection<TriggerRegistrationRow> matches = rows.Where(row => row.TriggerKind == channelKind && row.TriggerKey == channelKey).ToArray();
             return Task.FromResult(matches);
+        }
+    }
+
+    private sealed class RecordingTriggerConcurrencyEnforcer(TriggerConcurrencyDecision decision) : ITriggerConcurrencyEnforcer
+    {
+        public Task<TriggerConcurrencyDecision> EvaluateAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
+        {
+            return Task.FromResult(decision);
+        }
+    }
+
+    private sealed class RecordingRunCancellationService : IRunCancellationService
+    {
+        public List<(long RunId, string Reason)> Requests { get; } = [];
+
+        public Task RequestCancellationAsync(long runId, string reason, CancellationToken ct)
+        {
+            Requests.Add((runId, reason));
+            return Task.CompletedTask;
         }
     }
 }
