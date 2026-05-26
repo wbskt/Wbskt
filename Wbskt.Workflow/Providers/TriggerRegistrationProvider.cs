@@ -65,6 +65,45 @@ public class TriggerRegistrationProvider : BaseSqlProvider, ITriggerRegistration
         return results.AsReadOnly();
     }
 
+    public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelAsync(string channelKind, string channelKey, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            """
+            SELECT
+                Id,
+                WorkflowDefinitionId,
+                WorkflowRefId,
+                WorkflowVersion,
+                TriggerNodeId,
+                TriggerKind,
+                TriggerKey,
+                CorrelationExpression,
+                ConcurrencyPolicy,
+                FilterExpression,
+                CreatedAt
+            FROM dbo.TriggerRegistrations
+            WHERE TriggerKind = @TriggerKind
+              AND TriggerKey = @TriggerKey;
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+
+        command.Parameters.AddWithValue("@TriggerKind", channelKind);
+        command.Parameters.AddWithValue("@TriggerKey", channelKey);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new List<TriggerRegistrationRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(Map(reader));
+        }
+
+        return results.AsReadOnly();
+    }
+
     public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
