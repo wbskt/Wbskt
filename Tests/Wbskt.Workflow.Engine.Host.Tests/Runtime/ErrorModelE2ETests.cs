@@ -63,7 +63,7 @@ public sealed class ErrorModelE2ETests
         var cache = new StaticWorkflowDefinitionCache(definition);
         var providers = new NoOpProviderComposite();
         var orchestrator = new CompensationOrchestrator(runProvider, branchProvider, historyEventProvider, cache, registry, providers, state.Clock);
-        var finalizer = new RunFinalizer(runProvider, runCountersProvider, branchProvider, historyEventProvider, new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, state.Clock);
+        var finalizer = new RunFinalizer(runProvider, runCountersProvider, branchProvider, historyEventProvider, new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock);
         var branchLoop = new BranchLoop(branchProvider, runProvider, runCountersProvider, bookmarkProvider, historyEventProvider, cache, registry, runDispatcher, providers, state.Clock, new SequenceIdGenerator(), finalizer, new NoOpRunCancellationService(), orchestrator);
 
         await branchLoop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -156,6 +156,11 @@ public sealed class ErrorModelE2ETests
     private sealed class NoOpPendingTriggerEventDrainer : IPendingTriggerEventDrainer
     {
         public Task DrainAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpCompletionHook : ISubWorkflowCompletionHook
+    {
+        public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class SequenceIdGenerator : IIdGenerator

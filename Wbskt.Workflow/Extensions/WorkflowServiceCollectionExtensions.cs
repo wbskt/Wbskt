@@ -85,6 +85,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IRunStarter, RunStarter>();
         services.AddScoped<ITriggerDispatcher, TriggerDispatcher>();
         services.AddScoped<IInboundHub, InboundHub>();
+        services.AddScoped<ISubWorkflowCompletionHook, SubWorkflowCompletionHook>();
         services.AddScoped<IPendingTriggerEventDrainer, PendingTriggerEventDrainer>();
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
 
