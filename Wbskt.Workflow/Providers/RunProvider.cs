@@ -185,6 +185,27 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         throw new KeyNotFoundException($"Run with RefId={refId} not found.");
     }
 
+    public async Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Run_SetTerminal", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@RunId", checked((int)runId));
+        command.Parameters.AddWithValue("@Status", status);
+        command.Parameters.AddWithValue("@CompletedAt", completedAt);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
+        {
+            return Map(reader);
+        }
+
+        throw new KeyNotFoundException($"Run with Id={runId} not found.");
+    }
+
     internal static RunRow Map(DbDataReader reader)
     {
         return new RunRow

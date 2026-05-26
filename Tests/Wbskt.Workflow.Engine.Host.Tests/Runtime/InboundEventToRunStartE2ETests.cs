@@ -212,6 +212,13 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.FromResult(updated);
         }
 
+        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        {
+            RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
+            Runs[runId] = updated;
+            return Task.FromResult(updated);
+        }
+ 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
         {
             BranchRow created = row with { Id = ++_nextBranchId };
@@ -241,6 +248,17 @@ public sealed class InboundEventToRunStartE2ETests
 
         public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
 
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
+        {
+            return Task.FromResult(new RunCountersRow
+            {
+                RunId = runId,
+                ActiveBranchCount = _activeBranches.GetValueOrDefault(runId),
+                CreditsConsumed = 0m,
+                UpdatedAt = Clock.UtcNow
+            });
+        }
+ 
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             _activeBranches[runId] = _activeBranches.GetValueOrDefault(runId) + delta;
