@@ -20,19 +20,9 @@ CREATE TABLE dbo.Runs
 );
 GO
 
-CREATE INDEX IX_Runs_WorkflowRefId_CorrelationKey_Running
+CREATE INDEX IX_Runs_WorkflowRefId_CorrelationKey_Active
     ON dbo.Runs (WorkflowRefId, CorrelationKey)
-    WHERE Status = N'Running';
-GO
-
-CREATE INDEX IX_Runs_WorkflowRefId_CorrelationKey_Failing
-    ON dbo.Runs (WorkflowRefId, CorrelationKey)
-    WHERE Status = N'Failing';
-GO
-
-CREATE INDEX IX_Runs_WorkflowRefId_CorrelationKey_Cancelling
-    ON dbo.Runs (WorkflowRefId, CorrelationKey)
-    WHERE Status = N'Cancelling';
+    WHERE Status IN (N'Running', N'Failing', N'Cancelling');
 GO
 
 

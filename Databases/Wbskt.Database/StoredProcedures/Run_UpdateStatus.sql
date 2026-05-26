@@ -10,9 +10,9 @@ BEGIN
 
     UPDATE dbo.Runs
     SET Status                  = @Status,
-        CompletedAt             = @CompletedAt,
-        CancellationRequestedAt = @CancellationRequestedAt,
-        CancellationReason      = @CancellationReason
+        CompletedAt             = COALESCE(@CompletedAt, CompletedAt),
+        CancellationRequestedAt = COALESCE(@CancellationRequestedAt, CancellationRequestedAt),
+        CancellationReason      = COALESCE(@CancellationReason, CancellationReason)
     WHERE RefId = @RefId;
 
     SELECT
