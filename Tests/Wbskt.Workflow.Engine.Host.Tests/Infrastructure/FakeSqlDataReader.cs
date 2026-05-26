@@ -134,7 +134,7 @@ public class FakeSqlDataReader : DbDataReader
 
     public override short GetInt16(int ordinal) => throw new NotImplementedException();
 
-    public override long GetInt64(int ordinal) => throw new NotImplementedException();
+    public override long GetInt64(int ordinal) => (long)GetValue(ordinal);
 
     public override string GetName(int ordinal) => _currentRow?.Keys.ElementAt(ordinal) ?? throw new InvalidOperationException();
 
