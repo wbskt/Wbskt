@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -210,6 +211,53 @@ public sealed class BranchLoopTests
         // Assert
         Assert.Equal("increment:2", operationLog[0]);
         Assert.Equal(["increment:2", "dispatch", "dispatch"], operationLog.Take(3));
+    }
+
+    [Fact]
+    public async Task RunAsync_WaitForBookmark_persists_bookmark_and_returns()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "wait",
+            null,
+            true,
+            [new TestNode(nodeId, "wait", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var bookmarkProvider = new RecordingBookmarkProvider();
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            bookmarkProvider,
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("operator-ack", "corr-42"), CreatePatch("waiting", 1)))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Single(branchProvider.PointerUpdates);
+        Assert.Equal(nodeId, branchProvider.PointerUpdates[0].CurrentNodeId);
+        Assert.Single(bookmarkProvider.CreatedBookmarks);
+        Assert.Equal(nodeId, bookmarkProvider.CreatedBookmarks[0].NodeId);
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "BranchParked");
+        Assert.False(branchProvider.SetCompletedCalled);
     }
 
     private static IReadOnlyDictionary<string, JsonElement> CreatePatch(string name, int value)
@@ -425,7 +473,14 @@ public sealed class BranchLoopTests
 
     private sealed class RecordingBookmarkProvider : IBookmarkProvider
     {
-        public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => Task.FromResult(row);
+        public List<BookmarkRow> CreatedBookmarks { get; } = [];
+
+        public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
+        {
+            CreatedBookmarks.Add(row);
+            return Task.FromResult(row);
+        }
+
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
