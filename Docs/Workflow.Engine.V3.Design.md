@@ -1003,13 +1003,515 @@ chose".
   later (decision #8).
 - **Cancellation deletes all of a run's bookmarks in one indexed DELETE.**
 
-## Section 4 — Triggers & inbound (outline only)
+## Section 4 — Triggers & Inbound
 
-To be detailed.
+Sections 1–3 built up to this moment. We now know:
 
-- Trigger kinds: `trigger:device` (telemetry, property change), `trigger:schedule` (CRON), `trigger:webhook`, `trigger:manual`.
-- `TriggerKey` (e.g., `client:<deviceRefId>`, `webhook:/orders/kochi`, `timer:system`).
-- `TriggerDispatcher` resolves matching trigger nodes via the runtime registry, computes `CorrelationKey`, applies `ConcurrencyPolicy`, creates new Runs.
+- A workflow definition contains **trigger nodes** (graph roots) as data in the
+  JSON definition (Section 1).
+- A trigger node has a `correlationKey` expression on its config.
+- The Resumer hands events to the TriggerDispatcher only when no bookmark
+  claimed them (Section 3).
+
+Section 4 fills in the remaining half: **how does an inbound event find the
+matching trigger node(s), and what happens between "match found" and
+`Run.Status = Running`?**
+
+Six concepts: **TriggerRegistration → TriggerKey → InboundHub event shapes →
+TriggerDispatcher pipeline → CorrelationKey full mechanics → ConcurrencyPolicy
+enforcement**, plus the v1 trigger families.
+
+### 4.1 Trigger Node vs Trigger Registration — the two-tier model
+
+This is the conceptual split that makes everything else efficient.
+
+**Trigger Node** — a node in `WorkflowDefinition.Nodes`. Pure data. JSON. Lives
+wherever the definition lives.
+
+```jsonc
+{
+  "id": "n-trigger-1",
+  "kind": "trigger:device",
+  "config": {
+    "deviceRefId": "dev-greenhouse-thermo-01",
+    "propertyName": "temperature",
+    "correlationKey": "$trigger.deviceId"
+  },
+  "ports": [{ "id": "out" }]
+}
+```
+
+**Trigger Registration** — a row in a `TriggerRegistrations` SQL table created
+when the workflow definition is published. The indexed lookup row that says
+"this published workflow has this trigger armed".
+
+```text
+TriggerRegistration {
+  RegistrationId:   Guid
+  WorkflowRefId:    Guid
+  Version:          int
+  TriggerNodeId:    Guid         // which node in the definition
+  Kind:             string       // e.g. "trigger:device"
+  TriggerKey:       string       // computed at publish time (see 4.2)
+  CorrelationExpr:  string?      // copied from node config; nullable
+  ConcurrencyJson:  string       // policy as JSON
+  Enabled:          bool         // disabled while paused/draining versions
+  CreatedAt:        DateTime
+  // Indexed by: (TriggerKey WHERE Enabled = 1), (WorkflowRefId)
+}
+```
+
+Why two tiers:
+
+- The TriggerDispatcher needs **O(1) lookup**: "given this inbound event, what
+  trigger nodes match?" Searching every workflow definition's JSON on each
+  event is impossible. The `TriggerRegistration` row with an indexed
+  `TriggerKey` solves this.
+- Publishing does the **expensive work once:** parse the definition, find all
+  trigger nodes, compute their TriggerKeys, insert rows.
+- Version pinning (decision #6) works naturally because the registration
+  carries `Version`; an inbound event finds the right pinned definition.
+
+**Lifecycle:**
+
+- `PublishWorkflow(def)` → for each trigger node, INSERT a registration row.
+- "Supersede with new version" → `UPDATE Enabled = 0` on prior-version rows.
+- `DeleteWorkflow(refId)` → cascade-DELETE registrations (allowed once no live
+  runs reference the workflow, per decision #6).
+
+### 4.2 TriggerKey — the indexed lookup string
+
+Computed at publish time from the trigger node's `kind` + config.
+**Identity-shaped, not value-shaped** — does not depend on event payload.
+
+| Trigger node | TriggerKey |
+|---|---|
+| `trigger:device { deviceRefId: D, propertyName: P }` | `device\|D\|P` |
+| `trigger:device { deviceRefId: D }` (any property) | `device\|D\|*` |
+| `trigger:webhook { path: "/water-start", method: "POST" }` | `webhook\|POST\|/water-start` |
+| `trigger:schedule { cron: "0 6 * * *" }` | `schedule\|<workflowRef>\|<triggerNodeId>` |
+| `trigger:signal { name: "ops-emergency" }` | `signal\|ops-emergency` |
+| `trigger:event { topic: "billing.invoice.created" }` | `event\|billing.invoice.created` |
+
+Two details:
+
+- **Schedule triggers are workflow-scoped.** Each scheduled trigger is unique
+  to its workflow; there is no "shared bus" of scheduled fires. The Ticker
+  service (see 4.4) emits synthetic events with this exact key.
+- **Wildcards.** `device|D|*` lets a trigger fire on any property change for a
+  device. The InboundHub computes **both** `device|D|<propName>` and
+  `device|D|*` as candidate match-keys; the Dispatcher looks up registrations
+  matching any candidate key.
+
+The TriggerKey is identity, not data. The `correlationKey` expression — which
+**does** depend on event payload — is evaluated *after* TriggerKey lookup, not
+as part of it. That separation is what keeps lookup O(1).
+
+### 4.3 InboundHub event shapes
+
+The InboundHub is the normalizer in front of `Resumer → TriggerDispatcher`.
+Every inbound source has an adapter that produces a uniform event:
+
+```text
+InboundEvent {
+  Kind:        string         // "device-property" | "device-telemetry" | "http"
+                              // | "schedule" | "signal" | "event" | "child-run"
+  MatchKeys:   string[]       // 1..N candidate keys
+                              // (e.g. ["device|D|P", "device|D|*"])
+  Payload:     JsonElement    // arbitrary; what triggers/wakes see as $trigger.*
+  DeviceRefId: Guid?          // populated for device events; otherwise null
+  Source:      string         // diagnostic — "rabbitmq", "http", "ticker", …
+  ReceivedAt:  DateTime
+}
+```
+
+`MatchKeys[]` (an array, not a single key) is what makes wildcards work
+cleanly: a single device-property-change event produces two candidates and the
+engine checks both against bookmarks AND against trigger registrations. One
+inbound event, multiple potential matches, one lookup mechanism.
+
+**Adapters (one per source):**
+
+- `RabbitMqInboundAdapter` — consumes MassTransit topics (device-property,
+  device-telemetry, child-run-completed, generic `event` topics).
+- `HttpInboundAdapter` — ASP.NET Core endpoint. Wake URLs (`/wake/{token}`)
+  produce `Kind: "http", MatchKeys: ["manual|{token}"]`. Webhook URLs
+  (`/hooks/{path}`) produce `Kind: "http", MatchKeys: ["webhook|{method}|{path}"]`.
+- `TickerInboundAdapter` — schedule-driven; emits synthetic events at cron fire
+  times with `Kind: "schedule"`. (See 4.4 for the table backing it.)
+- `SignalInboundAdapter` — for both internal (engine-emitted) and external
+  (operator-emitted) signals; produces `Kind: "signal"`.
+
+#### The Ticker service (the schedule adapter's backing store)
+
+**Locked decision (Q7):** scheduled triggers are driven by a dedicated table
+that mirrors the Bookmark pattern.
+
+```text
+ScheduledFire {
+  ScheduledFireId:  Guid
+  RegistrationId:   Guid       // FK → TriggerRegistration
+  Cron:             string     // e.g. "0 6 * * *"
+  NextFireAt:       DateTime   // computed from Cron + last fire time
+  // Indexed by: (NextFireAt)
+}
+```
+
+On `PublishWorkflow` with a scheduled trigger, the Ticker inserts a row with
+the first computed `NextFireAt`. The Ticker service polls
+`WHERE NextFireAt <= SYSUTCDATETIME()`, claims rows atomically (same
+`UPDATE…OUTPUT` pattern as the BookmarkScheduler), synthesizes an
+`InboundEvent { Kind: "schedule", MatchKeys: ["schedule|<wf>|<node>"], Payload: { firedAt: now } }`,
+and computes/writes the next `NextFireAt` for the row.
+
+Why this and not in-memory cron lists:
+
+- Zero lag on publish — first fire is computed and persisted up front.
+- Survives restart — `NextFireAt` is durable.
+- Leader/standby promotable later — same SQL-lease pattern as BookmarkScheduler.
+- Identical operational shape to the BookmarkScheduler (decision #8 friendly).
+
+### 4.4 TriggerDispatcher — the pipeline
+
+The function the Resumer calls when no bookmark matched.
+
+```text
+function TriggerDispatcher.Dispatch(event):
+
+  // 1) Lookup all enabled registrations matching any candidate key
+  registrations ← SELECT * FROM TriggerRegistrations
+                  WHERE Enabled = 1 AND TriggerKey IN (event.MatchKeys)
+
+  if registrations empty:
+    DropEvent(event, reason: "no matching trigger")
+    return
+
+  // 2) For EACH matching registration, run the pipeline independently
+  //    (one inbound event can fan to multiple workflows)
+  for each reg in registrations:
+    RunDispatchPipeline(reg, event)
+
+
+function RunDispatchPipeline(reg, event):
+
+  // 2a) Load the definition at the registered version
+  def         ← LoadWorkflowDefinition(reg.WorkflowRefId, reg.Version)
+  triggerNode ← def.FindNode(reg.TriggerNodeId)
+
+  // 2b) Kind-specific filter (cheap, in-process)
+  //     e.g. trigger:device with `propertyName` AND a `valueFilter` config
+  if !triggerNode.MatchesFilter(event.Payload):
+    EmitHistoryEvent(TriggerDispatchSkipped { RegId: reg.RegistrationId, Reason: "filter" })
+    continue
+
+  // 2c) Evaluate correlationKey expression against payload
+  correlationValue ← null
+  if reg.CorrelationExpr != null:
+    try:
+      correlationValue ← ExpressionEvaluator.Eval(reg.CorrelationExpr,
+                                                  trigger: event.Payload)
+    catch ex:
+      EmitHistoryEvent(TriggerDispatchFailed { RegId: reg.RegistrationId, Error: ex })
+      continue
+  fullCorrelationKey ← (reg.WorkflowRefId, reg.TriggerNodeId, correlationValue)
+
+  // 2d) Apply ConcurrencyPolicy (see 4.6)
+  decision ← ConcurrencyEnforcer.Decide(reg, fullCorrelationKey)
+  switch decision:
+    case CreateRun:        // continue below
+    case QueueRun:         EnqueuePending(reg, correlationValue, event.Payload); return
+    case CancelExisting:   CancelExisting(reg, fullCorrelationKey); // then continue
+    case DropEvent:        EmitHistoryEvent(TriggerDropped { … }); return
+
+  // 2e) Create the Run
+  run ← Run {
+    RunId              = new Guid,
+    WorkflowRefId      = reg.WorkflowRefId,
+    Version            = reg.Version,
+    CorrelationKey     = correlationValue,
+    CorrelationKeyFull = fullCorrelationKey,
+    TriggerNodeId      = reg.TriggerNodeId,
+    TriggerPayload     = event.Payload,
+    Status             = Running,
+    CreatedAt          = now,
+    CreditBudget       = LookupBudgetForWorkflow(reg.WorkflowRefId)
+  }
+  PersistRun(run)
+
+  // 2f) Seed initial branch
+  //     IMPORTANT (Q6): we do NOT seed LastOutput from the trigger payload.
+  //     The first downstream node accesses the payload via $trigger.*.
+  //     $output is reserved for "what the previous *node* emitted".
+  branch ← Branch {
+    BranchId   = new Guid,
+    RunId      = run.RunId,
+    NodeId     = <first downstream node off triggerNode.out>,
+    Status     = Active,
+    LocalVars  = {},
+    LastOutput = null
+  }
+  PersistBranch(branch)
+
+  // 2g) Hand off to RunDispatcher (Section 2's Branch Loop)
+  RunDispatcher.Dispatch(BranchPointer { run.RunId, branch.BranchId, branch.NodeId })
+
+  // 2h) Lifecycle event
+  EmitHistoryEvent(RunStarted {
+    RunId         = run.RunId,
+    WorkflowRefId = reg.WorkflowRefId,
+    Version       = reg.Version,
+    TriggerNodeId = reg.TriggerNodeId,
+    CorrelationKey= correlationValue,
+    ReceivedAt    = event.ReceivedAt
+  })
+```
+
+Notes:
+
+- **One event can fan to many workflows.** Two workflows both subscribing to
+  `signal|ops-emergency` each get their own Run. Each runs the full pipeline
+  independently (its own correlation eval, its own concurrency decision).
+- **Failure inside the pipeline is per-registration.** A bad correlation
+  expression for workflow A does not stop workflow B from starting. Failures
+  emit a `TriggerDispatchFailed` history event scoped to the registration.
+- **The first executed node is the trigger node's downstream edge target, not
+  the trigger node itself.** Trigger nodes have no `INodeExecutor`; they are
+  metadata-only. The first executor invocation is whatever is wired off
+  `triggerNode.out`.
+
+### 4.5 CorrelationKey — the full mechanics
+
+**Where it's defined:** On the **trigger node's config**, as an expression
+string in our `$`-prefixed expression language.
+
+```jsonc
+{
+  "kind": "trigger:device",
+  "config": {
+    "deviceRefId": "dev-greenhouse-thermo-01",
+    "correlationKey": "$trigger.deviceId"
+  }
+}
+```
+
+**When it's evaluated:** At dispatch time, by
+`TriggerDispatcher.RunDispatchPipeline`, against the inbound event payload.
+The expression must be re-evaluated per event because different events can
+produce different correlation values from the same workflow.
+
+**What it can reference:** Only `$trigger.*` (the inbound payload) and
+constants. It cannot reference `$shared`, `$local`, or `$run` (the run does
+not exist yet). The expression evaluator validates this at publish time and
+rejects bad expressions before the registration row is inserted.
+
+**What it represents:** A scoping identifier for the ConcurrencyPolicy. "All
+runs of this workflow on this trigger node with the same correlation value
+are 'in scope' for the policy."
+
+**The full identity key:** `(WorkflowRefId, TriggerNodeId, correlationValue)`.
+All three are required:
+
+- `WorkflowRefId` — prevents Workflow A's correlation key from colliding with
+  Workflow B's.
+- `TriggerNodeId` — prevents two triggers in the same workflow from sharing
+  concurrency scope unexpectedly (e.g., a `device` trigger and a `signal`
+  trigger both evaluating to `"deviceX"` should not queue against each other).
+- `correlationValue` — the runtime-evaluated expression result.
+
+**Stored on the Run row** as both the raw value (`Run.CorrelationKey`, indexed
+for fast lookup) and the composite full key (used for policy enforcement).
+The index lets us answer "find all running runs with this correlation" in
+O(log n).
+
+**Null/empty correlation handling:**
+
+If `correlationKey` is absent or evaluates to null/empty → the run has no
+correlation, and **ConcurrencyPolicy is effectively `AllowParallel`
+regardless of what is declared**. We do not silently serialize all runs of a
+workflow just because someone forgot the expression. A publish-time soft
+warning flags the combination ("policy is `Queue` but no correlationKey is
+set; this may behave as AllowParallel").
+
+**If the expression throws** at dispatch time → `TriggerDispatchFailed` event
+for that registration only; other registrations matching the same event
+continue normally.
+
+### 4.6 ConcurrencyPolicy enforcement
+
+Policy is declared on the trigger node (locked decision #4). Four values:
+
+| Policy | When a new event arrives and an in-scope run exists |
+|---|---|
+| `AllowParallel` (default) | Start the new run; ignore the existing one. |
+| `Queue` | Persist a `PendingTriggerEvent` keyed to the correlation; start it when the current run finishes. |
+| `CancelExisting` | Cancel the existing run(s), then start the new one. |
+| `DropIfRunning` | Drop the new event; emit `TriggerDropped`. |
+
+**Enforcement query (the hot path):**
+
+```sql
+SELECT RunId, Status
+FROM Runs
+WHERE WorkflowRefId = @wf
+  AND TriggerNodeId = @triggerNodeId
+  AND CorrelationKey = @correlationValue
+  AND Status = 'Running'
+```
+
+The indexed read is the entire "do I have a conflict?" check.
+
+#### `Queue` semantics
+
+When the policy resolves to `Queue`, the inbound payload is preserved:
+
+```text
+PendingTriggerEvent {
+  PendingId:        Guid
+  RegistrationId:   Guid     -- which trigger registration
+  CorrelationKey:   string?  -- the scoping key
+  Payload:          JsonElement
+  EnqueuedAt:       DateTime
+  // Indexed by: (RegistrationId, CorrelationKey, EnqueuedAt ASC)
+}
+```
+
+When a Run reaches a terminal status, run finalization does:
+
+```text
+On run terminal:
+  pending ← SELECT TOP 1 * FROM PendingTriggerEvents
+            WHERE RegistrationId = @reg AND CorrelationKey = @key
+            ORDER BY EnqueuedAt ASC
+
+  if pending:
+    DELETE that pending row
+    TriggerDispatcher.RunDispatchPipeline(reg, synthetic event from pending)
+```
+
+**Locked design point:** `Queue` is FIFO per `(RegistrationId, CorrelationKey)`.
+Cross-correlation ordering is neither guaranteed nor meaningful.
+
+#### `CancelExisting`
+
+```text
+For each existing run with matching correlation:
+  CancelRun(run.RunId, reason: "preempted by new trigger")
+
+// Default v1 behavior: start the new run immediately, in parallel with cancellation drain.
+// Cancellation is cooperative (Section 2); a misbehaving Active branch must
+// not be able to wedge the new run.
+```
+
+Tunable in v2 if "wait for existing to fully drain before starting new" is
+needed.
+
+#### `DropIfRunning`
+
+```text
+EmitHistoryEvent(TriggerDropped {
+  RegistrationId, CorrelationKey,
+  Reason: "DropIfRunning",
+  Payload: event.Payload (truncated)
+})
+return
+```
+
+Always emit the history event — operators need to see "we dropped this
+because another was running" for debugging.
+
+### 4.7 Trigger families for v1
+
+Six kinds, all share the dispatcher pipeline:
+
+| Kind | TriggerKey shape | Source adapter | Typical use |
+|---|---|---|---|
+| `trigger:device` | `device\|<refId>\|<propName or *>` | RabbitMqInboundAdapter | "When this device's temperature changes" |
+| `trigger:webhook` | `webhook\|<METHOD>\|<path>` | HttpInboundAdapter | "When `/water-start` is POSTed" |
+| `trigger:schedule` | `schedule\|<workflowRef>\|<triggerNodeId>` | TickerInboundAdapter | "Every day at 6am" |
+| `trigger:signal` | `signal\|<name>` | SignalInboundAdapter | "When ops emits 'emergency' signal" |
+| `trigger:event` | `event\|<topic>` | RabbitMqInboundAdapter | "When `billing.invoice.created` is published" |
+| (not a trigger) `ChildRunCompleted` | — | — | Parent waits via Bookmark, never a Trigger |
+
+The last row is for symmetry: child-run completion is never a Trigger because
+it is always tied to a specific parent run. It only ever wakes a Bookmark.
+
+### 4.8 Edge cases
+
+#### Late-binding: workflow published while events are in flight
+
+Events that arrive before the registration insert commits will not match.
+Acceptable — publishing is an explicit operator action, not part of the event
+stream. Documented behavior: "events arriving within ~publish-commit latency
+of a new workflow may not fire it; retry from the source if needed".
+
+#### Trigger filter mismatch vs correlation throw
+
+Distinct outcomes:
+
+- **Filter no-match** (`triggerNode.MatchesFilter` returns false): silent drop
+  with `TriggerDispatchSkipped` event at debug level. Expected behavior.
+- **Correlation expression throws**: `TriggerDispatchFailed` event at error
+  level. The expression is buggy; operators need visibility.
+
+#### Burst / throttling
+
+Not in v1. If a device sprays 1000 property-change events per second, we
+start 1000 runs (subject to ConcurrencyPolicy). The `Queue` / `DropIfRunning`
+policies are the user's first-class throttle mechanism. Engine-level
+throttling, if needed later, slots in as a Section 7 (infrastructure) feature
+— a leaky-bucket pre-filter on the InboundHub — without changing this section.
+
+#### Disabled / paused workflows
+
+`Enabled = 0` on the registration makes it invisible to the dispatcher. No
+separate "paused" concept needed. To re-enable, flip the bit.
+
+### 4.9 The first node and `$trigger` vs `$output`
+
+**Locked decision (Q6):** the trigger does NOT seed `Branch.LastOutput` from
+the inbound payload.
+
+- The inbound payload is reachable as **`$trigger.*`** (immutable for the
+  lifetime of the run).
+- The first downstream node sees **`$output = null`** because no prior node
+  has emitted yet. It cannot accidentally read "the payload" via `$output`.
+- After the first node executes, `$output` becomes that node's output, and so
+  on through the branch.
+
+This keeps the semantics clean:
+
+- `$trigger` = what started this run, immutable.
+- `$output` = what the immediately previous node in this branch emitted.
+- `$local` = branch-private vars.
+- `$shared` = workflow-scoped atomic vars (Section 1).
+- `$run` = run-private vars (counters etc.).
+
+The first-node author writes `$trigger.deviceId` to get the device ID, never
+`$output.deviceId`. The distinction is taught once and never confused again.
+
+### Section 4 locked decisions
+
+- **Two-tier model:** static trigger nodes in definitions, indexed
+  `TriggerRegistration` rows at publish time. (4.1)
+- **TriggerKey is identity-only**, not data-dependent. Wildcards via multi-key
+  lookup. (4.2)
+- **One `InboundEvent` shape** with `MatchKeys[]`, normalized by per-source
+  adapters. (4.3)
+- **Scheduled triggers go through the unified Resumer → Dispatcher path** via
+  a `ScheduledFires` table + Ticker adapter. (Q7, 4.3)
+- **CorrelationKey** is an expression on the trigger node's config; evaluated
+  at dispatch time; full identity is `(WorkflowRefId, TriggerNodeId, value)`.
+  (4.5)
+- **Null correlation → effective `AllowParallel`**, with publish-time soft
+  warning. (4.5)
+- **Concurrency policies:** `AllowParallel` (default) / `Queue` (FIFO per
+  correlation) / `CancelExisting` / `DropIfRunning`. (4.6)
+- **`CancelExisting` starts the new run in parallel with cancellation drain**
+  (tunable). (4.6)
+- **First downstream node sees `$output = null`;** trigger payload is
+  `$trigger.*` only. (Q6, 4.9)
+- **One inbound event can fan to multiple workflows;** each registration runs
+  an independent pipeline. (4.4)
 
 ## Section 5 — Error model and run lifecycle (outline only)
 
@@ -1067,9 +1569,15 @@ To be detailed.
 | `control:waitForHttp` | Anonymous mid-graph HTTP wait; mints a one-shot `/wake/{token}` URL. |
 | `control:awaitSignal` | Named mid-graph signal wait with an authored correlation expression. |
 | Trigger | A node that starts a Run when its external condition is met. |
-| TriggerKey | String used to fan inbound events to matching trigger nodes (e.g. `client:<guid>`). |
-| CorrelationKey | Expression value used to scope `ConcurrencyPolicy`. |
+| TriggerRegistration | Indexed SQL row created at publish time; the dispatcher's lookup record. |
+| TriggerKey | Identity-shaped string used to index trigger registrations (e.g. `device\|D\|P`). |
+| InboundEvent | Normalized inbound shape `{Kind, MatchKeys[], Payload, DeviceRefId?, Source, ReceivedAt}`. |
+| TriggerDispatcher | Pipeline that turns a matched event into a new Run (or queues/cancels/drops per policy). |
+| Ticker | Service that fires scheduled trigger events from a `ScheduledFires` table. |
+| ScheduledFire | Row holding `(RegistrationId, Cron, NextFireAt)` polled by the Ticker. |
+| CorrelationKey | Expression value used to scope `ConcurrencyPolicy`; full identity = `(WorkflowRefId, TriggerNodeId, value)`. |
 | ConcurrencyPolicy | AllowParallel / Queue / CancelExisting / DropIfRunning, per correlation key. |
+| PendingTriggerEvent | Queued inbound payload waiting for current-correlation run to finish (Queue policy). |
 | RetryPolicy | Per-node attempts/backoff/retryable-filter config; retries inside the node executor. |
 | OnFailure | What the branch does after retries exhaust: FailBranch / FailRun / Continue / Compensate. |
 | RunStatus | Completed / Failed / PartiallyFailed / Cancelled / Faulted / OutOfCredits. |
