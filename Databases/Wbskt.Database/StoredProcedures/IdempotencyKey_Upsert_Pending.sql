@@ -7,14 +7,17 @@ CREATE PROCEDURE dbo.IdempotencyKey_Upsert_Pending
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM dbo.IdempotencyKeys WHERE KeyValue = @KeyValue)
-    BEGIN
-        INSERT INTO dbo.IdempotencyKeys
-            (KeyValue, RunId, BranchRefId, NodeId, Attempt, Status)
-        VALUES
-            (@KeyValue, @RunId, @BranchRefId, @NodeId, @Attempt, N'Pending');
-    END;
+    BEGIN TRAN;
+
+    INSERT INTO dbo.IdempotencyKeys (KeyValue, RunId, BranchRefId, NodeId, Attempt, Status)
+    SELECT @KeyValue, @RunId, @BranchRefId, @NodeId, @Attempt, N'Pending'
+    WHERE NOT EXISTS (
+        SELECT 1
+          FROM dbo.IdempotencyKeys WITH (HOLDLOCK)
+         WHERE KeyValue = @KeyValue
+    );
 
     SELECT
         Id,
@@ -28,7 +31,9 @@ BEGIN
         ErrorJson,
         CreatedAt,
         CompletedAt
-    FROM dbo.IdempotencyKeys
-    WHERE KeyValue = @KeyValue;
+      FROM dbo.IdempotencyKeys
+     WHERE KeyValue = @KeyValue;
+
+    COMMIT TRAN;
 END;
 GO
