@@ -2,7 +2,8 @@ namespace Wbskt.Workflow.Abstraction.Enums;
 
 public enum RetryStrategy
 {
-    None,
-    Linear,
-    Exponential
+    Constant = 0,
+    None = Constant,
+    Linear = 1,
+    Exponential = 2
 }
