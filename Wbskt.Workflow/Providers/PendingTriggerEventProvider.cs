@@ -95,6 +95,20 @@ public class PendingTriggerEventProvider : BaseSqlProvider, IPendingTriggerEvent
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.PendingTriggerEvent_DeleteExpired", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
+        command.Parameters.AddWithValue("@BatchSize", batchSize);
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is int count ? count : Convert.ToInt32(result ?? 0);
+    }
+
     internal static PendingTriggerEventRow Map(DbDataReader reader)
     {
         return new PendingTriggerEventRow
