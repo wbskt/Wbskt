@@ -16,5 +16,6 @@ public sealed record WorkflowDefinition(
     [property: JsonPropertyName("sharedVariableSchema")] IReadOnlyCollection<SharedVariableDeclaration> SharedVariableSchema,
     [property: JsonPropertyName("createdAt")] DateTime CreatedAt,
     [property: JsonPropertyName("publishedBy")] int PublishedBy,
-    [property: JsonPropertyName("runCompensationOnFailure")] bool RunCompensationOnFailure = false
+    [property: JsonPropertyName("runCompensationOnFailure")] bool RunCompensationOnFailure = false,
+    [property: JsonPropertyName("failFast")] bool FailFast = false
 );
