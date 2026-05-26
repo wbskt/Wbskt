@@ -6,6 +6,7 @@ public interface ITriggerRegistrationProvider
 {
     Task<TriggerRegistrationRow> InsertAsync(TriggerRegistrationRow row, CancellationToken ct);
     Task<IReadOnlyCollection<TriggerRegistrationRow>> GetByTriggerKeyAsync(string triggerKey, CancellationToken ct);
+    Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelAsync(string channelKind, string channelKey, CancellationToken ct);
     Task<IReadOnlyCollection<TriggerRegistrationRow>> GetAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct);
     Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct);
 }
