@@ -232,10 +232,17 @@ public sealed class TriggerDispatcherTests
     {
         public List<(long RunId, string Reason)> Requests { get; } = [];
 
-        public Task RequestCancellationAsync(long runId, string reason, CancellationToken ct)
+        public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
         {
             Requests.Add((runId, reason));
-            return Task.CompletedTask;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
+        {
+            _ = runId;
+            _ = ct;
+            return Task.FromResult(false);
         }
     }
 

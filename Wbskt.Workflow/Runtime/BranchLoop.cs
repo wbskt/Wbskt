@@ -24,6 +24,7 @@ public sealed class BranchLoop : IBranchLoop
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly IRunFinalizer? _runFinalizer;
+    private readonly IRunCancellationService _runCancellationService;
     private readonly OnFailureHandler _onFailureHandler = new();
 
     public BranchLoop(
@@ -38,7 +39,8 @@ public sealed class BranchLoop : IBranchLoop
         IProviderComposite providerComposite,
         IClock clock,
         IIdGenerator idGenerator,
-        IRunFinalizer? runFinalizer = null)
+        IRunFinalizer? runFinalizer = null,
+        IRunCancellationService? runCancellationService = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -52,6 +54,7 @@ public sealed class BranchLoop : IBranchLoop
         _clock = clock;
         _idGenerator = idGenerator;
         _runFinalizer = runFinalizer;
+        _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
     }
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
@@ -78,6 +81,12 @@ public sealed class BranchLoop : IBranchLoop
         //     Terminal: branch ends (Completed)
         while (true)
         {
+            if (await _runCancellationService.IsCancellationRequestedAsync(runId, ct))
+            {
+                await CancelBranchAsync(runRow.Id, branchId, branchRow, ct);
+                return;
+            }
+
             BaseNode? node = definition.Nodes.SingleOrDefault(candidate => candidate.NodeId == branchRow.NodeId);
             if (node is null)
             {
@@ -207,6 +216,10 @@ public sealed class BranchLoop : IBranchLoop
                     return;
                 }
 
+                case NodeExecutionResult.Terminal terminal when terminal.Reason == BranchTerminalReason.Cancelled:
+                    await CancelBranchAsync(runRow.Id, branchId, branchRow, ct);
+                    return;
+
                 case NodeExecutionResult.Terminal:
                     await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
                     return;
@@ -222,6 +235,18 @@ public sealed class BranchLoop : IBranchLoop
         await _branchProvider.SetCompletedAsync(branchId, ct);
         int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
         await AppendEventAsync(runId, branchRefId, null, "BranchCompleted", ct);
+
+        if (postDecrementCount == 0 && _runFinalizer is not null)
+        {
+            await _runFinalizer.FinalizeAsync(runId, ct);
+        }
+    }
+
+    private async Task CancelBranchAsync(int runId, long branchId, BranchRow branchRow, CancellationToken ct)
+    {
+        await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Cancelled", branchRow.LocalJson, branchRow.LastOutputJson, ct);
+        int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
+        await AppendEventAsync(runId, branchRow.RefId, null, "BranchCancelled", ct);
 
         if (postDecrementCount == 0 && _runFinalizer is not null)
         {
