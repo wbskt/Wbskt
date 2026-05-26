@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -164,6 +165,28 @@ public sealed class BranchLoop : IBranchLoop
                     break;
                 }
 
+                case NodeExecutionResult.WaitForBookmark wait:
+                {
+                    string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, wait.LocalStatePatch));
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Waiting", localJson, branchRow.LastOutputJson, ct);
+                    await AppendEventAsync(runRow.Id, branchRow.RefId, branchRow.NodeId, "BranchParked", ct);
+                    await _bookmarkProvider.CreateAsync(new BookmarkRow
+                    {
+                        Id = 0,
+                        RefId = _idGenerator.NewId(),
+                        RunId = runRow.Id,
+                        BranchRefId = branchRow.RefId,
+                        NodeId = branchRow.NodeId,
+                        WakeConditionKind = GetWakeConditionKind(wait.Condition),
+                        MatchKey = GetWakeConditionMatchKey(wait.Condition),
+                        WakeConditionJson = JsonSerializer.Serialize(wait.Condition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                        ExpiresAt = null,
+                        TtlPort = null,
+                        CreatedAt = _clock.UtcNow
+                    }, ct);
+                    return;
+                }
+
                 case NodeExecutionResult.Terminal:
                     await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
                     return;
@@ -233,6 +256,34 @@ public sealed class BranchLoop : IBranchLoop
     private static string SerializeLocalState(IReadOnlyDictionary<string, JsonElement> localState)
     {
         return JsonSerializer.Serialize(localState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
+    private static string GetWakeConditionKind(WakeCondition condition)
+    {
+        return condition switch
+        {
+            TimerWakeCondition => "timer",
+            SignalWakeCondition => "signal",
+            InboundWakeCondition => "inbound",
+            HttpWakeCondition => "http",
+            ChildRunCompletedWakeCondition => "childRunCompleted",
+            AnyOfWakeCondition => "anyOf",
+            _ => condition.GetType().Name
+        };
+    }
+
+    private static string GetWakeConditionMatchKey(WakeCondition condition)
+    {
+        return condition switch
+        {
+            TimerWakeCondition timer => timer.At.ToString("O"),
+            SignalWakeCondition signal => $"{signal.Name}:{signal.Correlation}",
+            InboundWakeCondition inbound => $"{inbound.DeviceRefId}:{inbound.PropertyName}",
+            HttpWakeCondition http => http.Token,
+            ChildRunCompletedWakeCondition child => child.ChildRunId.ToString(),
+            AnyOfWakeCondition => "anyOf",
+            _ => string.Empty
+        };
     }
 
     private static Guid ParseNodeId(string nodeId)
