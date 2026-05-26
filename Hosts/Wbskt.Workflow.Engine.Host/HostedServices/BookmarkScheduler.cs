@@ -44,6 +44,7 @@ public sealed class BookmarkScheduler : BackgroundService
             var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
             await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
+            await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
         }
     }
 

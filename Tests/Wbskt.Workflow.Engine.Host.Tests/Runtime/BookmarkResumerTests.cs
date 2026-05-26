@@ -172,6 +172,7 @@ public sealed class BookmarkResumerTests
             return Task.CompletedTask;
         }
 
+        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => Task.CompletedTask;
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }
 

@@ -11,5 +11,6 @@ public interface IBookmarkProvider
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);
     Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct);
     Task DeleteAsync(Guid refId, CancellationToken ct);
+    Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct);
     Task DeleteAllByRunIdAsync(int runId, CancellationToken ct);
 }

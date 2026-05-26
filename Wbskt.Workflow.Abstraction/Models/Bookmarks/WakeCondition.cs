@@ -9,4 +9,8 @@ namespace Wbskt.Workflow.Abstraction.Models.Bookmarks;
 [JsonDerivedType(typeof(HttpWakeCondition), "http")]
 [JsonDerivedType(typeof(ChildRunCompletedWakeCondition), "childRunCompleted")]
 [JsonDerivedType(typeof(AnyOfWakeCondition), "anyOf")]
-public abstract record WakeCondition;
+public abstract record WakeCondition
+{
+    [JsonPropertyName("ttl")]
+    public TimeSpan? Ttl { get; init; }
+}
