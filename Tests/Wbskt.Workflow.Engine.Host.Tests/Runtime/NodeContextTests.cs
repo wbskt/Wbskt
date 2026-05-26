@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -22,12 +22,18 @@ public sealed class NodeContextTests
     public void NodeContext_IsImmutable()
     {
         // Arrange
-        var branch = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
-        };
+        var branch = new BranchContext(
+            1,
+            2,
+            3,
+            Guid.NewGuid(),
+            4,
+            "node-a",
+            5,
+            new Dictionary<string, JsonElement>(),
+            new Dictionary<string, JsonElement>(),
+            "corr-1",
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
         var node = new TestNode(Guid.NewGuid(), "test", Array.Empty<PortDefinition>());
         var providers = new Mock<IProviderComposite>().Object;
         var cts = new CancellationTokenSource();
@@ -56,15 +62,21 @@ public sealed class NodeContextTests
     public void NodeContext_CanBeCreatedWithParentResults()
     {
         // Arrange
-        var branch = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
-        };
+        var branch = new BranchContext(
+            1,
+            2,
+            3,
+            Guid.NewGuid(),
+            4,
+            "node-a",
+            5,
+            new Dictionary<string, JsonElement>(),
+            new Dictionary<string, JsonElement>(),
+            "corr-1",
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
         var node = new TestNode(Guid.NewGuid(), "test", Array.Empty<PortDefinition>());
         var providers = new Mock<IProviderComposite>().Object;
-        var parentResults = new Dictionary<string, System.Text.Json.JsonElement>();
+        var parentResults = new Dictionary<string, JsonElement>();
 
         // Act
         var context = new NodeContext

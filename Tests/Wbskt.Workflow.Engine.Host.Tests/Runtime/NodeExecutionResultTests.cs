@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Xunit;
 
@@ -7,170 +8,118 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class NodeExecutionResultTests
 {
     [Fact]
-    public void Success_CreatesSuccessResult_WithAllProperties()
+    public void Continue_carries_outbound_port()
     {
         // Arrange
-        var output = JsonDocument.Parse("{\"result\":42}").RootElement;
+        var patch = new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonDocument.Parse("\"ok\"").RootElement.Clone()
+        };
 
         // Act
-        var result = NodeExecutionResult.Success(output, "outPort", skipSave: true);
+        NodeExecutionResult result = new NodeExecutionResult.Continue("next", patch);
 
         // Assert
-        Assert.IsType<NodeExecutionResult.SuccessResult>(result);
-        var success = (NodeExecutionResult.SuccessResult)result;
-        Assert.Equal(42, success.Output!.Value.GetProperty("result").GetInt32());
-        Assert.Equal("outPort", success.TakePort);
-        Assert.True(success.SkipSave);
+        var @continue = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal("next", @continue.OutboundPort);
+        Assert.Same(patch, @continue.LocalStatePatch);
     }
 
     [Fact]
-    public void Success_HandlesNullOutput()
-    {
-        // Act
-        var result = NodeExecutionResult.Success(null, null, skipSave: false);
-
-        // Assert
-        var success = (NodeExecutionResult.SuccessResult)result;
-        Assert.Null(success.Output);
-        Assert.Null(success.TakePort);
-        Assert.False(success.SkipSave);
-    }
-
-    [Fact]
-    public void Fork_CreatesForkResult_WithChildren()
+    public void Fork_with_two_children()
     {
         // Arrange
-        var child1 = new BranchContext
+        var childOneState = new Dictionary<string, JsonElement>
         {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new System.Text.Json.Nodes.JsonObject()
+            ["index"] = JsonDocument.Parse("1").RootElement.Clone()
         };
-        var child2 = new BranchContext
+        var childTwoState = new Dictionary<string, JsonElement>
         {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new System.Text.Json.Nodes.JsonObject()
+            ["index"] = JsonDocument.Parse("2").RootElement.Clone()
         };
-        var children = new[] { child1, child2 };
+        var children = new[]
+        {
+            new ForkSpec("child-1", childOneState),
+            new ForkSpec("child-2", childTwoState)
+        };
+        var patch = new Dictionary<string, JsonElement>
+        {
+            ["forked"] = JsonDocument.Parse("true").RootElement.Clone()
+        };
 
         // Act
-        var result = NodeExecutionResult.Fork(children, "cohort-123");
+        NodeExecutionResult result = new NodeExecutionResult.Fork(children, "continue-node", patch);
 
         // Assert
-        Assert.IsType<NodeExecutionResult.ForkResult>(result);
-        var fork = (NodeExecutionResult.ForkResult)result;
+        var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
         Assert.Equal(2, fork.Children.Count);
-        Assert.Equal("cohort-123", fork.CohortId);
+        Assert.Equal("continue-node", fork.ContinueNodeId);
+        Assert.Same(children, fork.Children);
+        Assert.Same(patch, fork.LocalStatePatch);
     }
 
     [Fact]
-    public void Bookmark_CreatesBookmarkResult_WithAllProperties()
+    public void WaitForBookmark_carries_condition()
     {
         // Arrange
-        var state = JsonDocument.Parse("{\"waitFor\":\"deviceA\"}").RootElement;
-
-        // Act
-        var result = NodeExecutionResult.Bookmark("signal:device-connected", TimeSpan.FromMinutes(5), "timeout", state);
-
-        // Assert
-        Assert.IsType<NodeExecutionResult.BookmarkResult>(result);
-        var bookmark = (NodeExecutionResult.BookmarkResult)result;
-        Assert.Equal("signal:device-connected", bookmark.MatchKey);
-        Assert.Equal(TimeSpan.FromMinutes(5), bookmark.Ttl);
-        Assert.Equal("timeout", bookmark.TtlPort);
-        Assert.NotNull(bookmark.State);
-        Assert.Equal("deviceA", bookmark.State!.Value.GetProperty("waitFor").GetString());
-    }
-
-    [Fact]
-    public void Bookmark_HandlesNullableFields()
-    {
-        // Act
-        var result = NodeExecutionResult.Bookmark("signal:any", null, null, null);
-
-        // Assert
-        var bookmark = (NodeExecutionResult.BookmarkResult)result;
-        Assert.Equal("signal:any", bookmark.MatchKey);
-        Assert.Null(bookmark.Ttl);
-        Assert.Null(bookmark.TtlPort);
-        Assert.Null(bookmark.State);
-    }
-
-    [Fact]
-    public void Fail_CreatesFailResult_WithAllProperties()
-    {
-        // Arrange
-        var details = JsonDocument.Parse("{\"statusCode\":500}").RootElement;
-
-        // Act
-        var result = NodeExecutionResult.Fail("Connection timeout", "E_TIMEOUT", details);
-
-        // Assert
-        Assert.IsType<NodeExecutionResult.FailResult>(result);
-        var fail = (NodeExecutionResult.FailResult)result;
-        Assert.Equal("Connection timeout", fail.ErrorMessage);
-        Assert.Equal("E_TIMEOUT", fail.ErrorCode);
-        Assert.NotNull(fail.ErrorDetails);
-        Assert.Equal(500, fail.ErrorDetails!.Value.GetProperty("statusCode").GetInt32());
-    }
-
-    [Fact]
-    public void Fail_HandlesNullableFields()
-    {
-        // Act
-        var result = NodeExecutionResult.Fail("Unknown error", null, null);
-
-        // Assert
-        var fail = (NodeExecutionResult.FailResult)result;
-        Assert.Equal("Unknown error", fail.ErrorMessage);
-        Assert.Null(fail.ErrorCode);
-        Assert.Null(fail.ErrorDetails);
-    }
-
-    [Fact]
-    public void Terminal_CreatesTerminalResult()
-    {
-        // Act
-        var result = NodeExecutionResult.Terminal();
-
-        // Assert
-        Assert.IsType<NodeExecutionResult.TerminalResult>(result);
-    }
-
-    [Fact]
-    public void Compensation_CreatesCompensationResult_WithBranchIds()
-    {
-        // Arrange
-        var branchIds = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
-
-        // Act
-        var result = NodeExecutionResult.Compensation(branchIds);
-
-        // Assert
-        Assert.IsType<NodeExecutionResult.CompensationResult>(result);
-        var compensation = (NodeExecutionResult.CompensationResult)result;
-        Assert.Equal(3, compensation.BranchesToCompensate.Count);
-    }
-
-    [Fact]
-    public void AllResultTypes_InheritFromBaseClass()
-    {
-        // Arrange & Act
-        var results = new NodeExecutionResult[]
+        WakeCondition condition = new SignalWakeCondition("operator-ack", "corr-1");
+        var patch = new Dictionary<string, JsonElement>
         {
-            NodeExecutionResult.Success(null, null, false),
-            NodeExecutionResult.Fork(Array.Empty<BranchContext>(), null),
-            NodeExecutionResult.Bookmark("key", null, null, null),
-            NodeExecutionResult.Fail("error", null, null),
-            NodeExecutionResult.Terminal(),
-            NodeExecutionResult.Compensation(Array.Empty<Guid>())
+            ["waiting"] = JsonDocument.Parse("true").RootElement.Clone()
         };
 
+        // Act
+        NodeExecutionResult result = new NodeExecutionResult.WaitForBookmark(condition, patch);
+
         // Assert
-        foreach (var result in results)
-        {
-            Assert.IsAssignableFrom<NodeExecutionResult>(result);
-        }
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
+        Assert.Same(condition, wait.Condition);
+        Assert.Same(patch, wait.LocalStatePatch);
+    }
+
+    [Fact]
+    public void Fail_with_retryable_flag()
+    {
+        // Arrange
+        var cause = new InvalidOperationException("boom");
+
+        // Act
+        NodeExecutionResult result = new NodeExecutionResult.Fail("E_TIMEOUT", "Connection timeout", true, cause);
+
+        // Assert
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal("E_TIMEOUT", fail.ErrorCode);
+        Assert.Equal("Connection timeout", fail.Message);
+        Assert.True(fail.Retryable);
+        Assert.Same(cause, fail.Cause);
+    }
+
+    [Fact]
+    public void Terminal_with_reason()
+    {
+        // Act
+        NodeExecutionResult result = new NodeExecutionResult.Terminal(BranchTerminalReason.Completed);
+
+        // Assert
+        var terminal = Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(BranchTerminalReason.Completed, terminal.Reason);
+    }
+
+    public static IEnumerable<object[]> ResultCases()
+    {
+        yield return [new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>()), typeof(NodeExecutionResult.Continue)];
+        yield return [new NodeExecutionResult.Fork(Array.Empty<ForkSpec>(), null, new Dictionary<string, JsonElement>()), typeof(NodeExecutionResult.Fork)];
+        yield return [new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("ack", "corr"), new Dictionary<string, JsonElement>()), typeof(NodeExecutionResult.WaitForBookmark)];
+        yield return [new NodeExecutionResult.Fail("ERR", "message", false, null), typeof(NodeExecutionResult.Fail)];
+        yield return [new NodeExecutionResult.Terminal(BranchTerminalReason.Failed), typeof(NodeExecutionResult.Terminal)];
+    }
+
+    [Theory]
+    [MemberData(nameof(ResultCases))]
+    public void Planned_result_types_are_assignable_from_base(NodeExecutionResult result, Type expectedType)
+    {
+        // Assert
+        Assert.IsAssignableFrom<NodeExecutionResult>(result);
+        Assert.IsType(expectedType, result);
     }
 }
