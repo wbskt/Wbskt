@@ -202,6 +202,7 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult<int?>(Runs.Values.Single(run => run.RefId == refId).Id);
         Task<RunRow> IRunProvider.GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(Runs[runId]);
         Task<RunRow> IRunProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Runs.Values.Single(run => run.RefId == refId));
+        public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<RunRow>>(Runs.Values.Where(run => run.WorkflowRefId == workflowRefId && run.CorrelationKey == correlationKey && run.Status == "Running").ToArray());
         public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<RunRow>>(Runs.Values.Where(run => run.WorkflowDefinitionId == workflowDefinitionId && run.CorrelationKey == correlationKey && (run.Status == "Running" || run.Status == "Cancelling" || run.Status == "Failing")).ToArray());
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
@@ -418,6 +419,7 @@ public sealed class InboundEventToRunStartE2ETests
         }
     }
 }
+
 
 
 

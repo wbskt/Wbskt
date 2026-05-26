@@ -51,6 +51,7 @@ public static class Program
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
         builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddSingleton<WorkflowValidator>();
         
         builder.Services.AddTransient<AuthenticationForwardingHandler>();

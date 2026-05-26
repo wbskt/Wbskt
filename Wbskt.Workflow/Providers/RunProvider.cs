@@ -120,6 +120,11 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         throw new KeyNotFoundException($"Run with RefId={refId} not found.");
     }
 
+    public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    {
+        throw new NotImplementedException();
+    }
+
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
