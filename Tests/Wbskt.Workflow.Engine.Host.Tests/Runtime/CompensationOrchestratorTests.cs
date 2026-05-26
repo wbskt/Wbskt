@@ -216,11 +216,9 @@ public sealed class CompensationOrchestratorTests
             InsertedEvents.AddRange(events);
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct)
-        {
-            return Task.FromResult(existingEvents);
-        }
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubWorkflowDefinitionCache(WorkflowDefinition definition) : IWorkflowDefinitionCache
@@ -250,4 +248,6 @@ public sealed class CompensationOrchestratorTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 }
+
+
 

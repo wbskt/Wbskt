@@ -226,11 +226,9 @@ public sealed class BranchLoopEndToEndTests
             HistoryEvents.AddRange(events);
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct)
-        {
-            return Task.FromResult<IReadOnlyCollection<HistoryEventRow>>(HistoryEvents);
-        }
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
 
@@ -289,4 +287,6 @@ public sealed class BranchLoopEndToEndTests
         }
     }
 }
+
+
 

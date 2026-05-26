@@ -197,8 +197,9 @@ public sealed class RunFinalizerTests
             Events.AddRange(events);
             return Task.CompletedTask;
         }
-
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingPendingTriggerEventDrainer : IPendingTriggerEventDrainer
@@ -250,4 +251,6 @@ public sealed class RunFinalizerTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 }
+
+
 

@@ -109,8 +109,9 @@ public sealed class RunStarterTests
             Events.AddRange(events);
             return Task.CompletedTask;
         }
-
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingWorkflowDefinitionProvider : IWorkflowDefinitionProvider
@@ -167,4 +168,6 @@ public sealed class RunStarterTests
         public Guid NewId() => _ids.Dequeue();
     }
 }
+
+
 

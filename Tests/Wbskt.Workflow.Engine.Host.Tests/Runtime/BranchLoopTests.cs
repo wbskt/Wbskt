@@ -1118,11 +1118,9 @@ public sealed class BranchLoopTests
             Events.AddRange(events);
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct)
-        {
-            return Task.FromResult<IReadOnlyCollection<HistoryEventRow>>(Events);
-        }
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingRunDispatcher(List<string>? operationLog = null) : IRunDispatcher
@@ -1180,4 +1178,6 @@ public sealed class BranchLoopTests
         }
     }
 }
+
+
 

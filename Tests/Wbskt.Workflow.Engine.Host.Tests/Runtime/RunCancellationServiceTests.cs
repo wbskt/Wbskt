@@ -152,8 +152,9 @@ public sealed class RunCancellationServiceTests
             Events.AddRange(events);
             return Task.CompletedTask;
         }
-
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class AlwaysCancelledRunCancellationService : IRunCancellationService
@@ -330,4 +331,6 @@ public sealed class RunCancellationServiceTests
         public Guid NewId() => Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     }
 }
+
+
 

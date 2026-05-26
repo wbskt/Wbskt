@@ -349,10 +349,10 @@ public sealed class ErrorModelE2ETests
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct)
-        {
-            return Task.FromResult<IReadOnlyCollection<HistoryEventRow>>(state.HistoryEvents.Where(evt => evt.RunId == runId && evt.HistoryEventId > afterEventId).Take(pageSize).ToArray());
-        }
+        
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class NoOpProviderComposite : IProviderComposite
@@ -439,4 +439,6 @@ public sealed class ErrorModelE2ETests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 }
+
+
 
