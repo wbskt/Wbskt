@@ -212,6 +212,8 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.FromResult(updated);
         }
 
+        public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
         {
             RunRow run = Runs[runId];
@@ -409,3 +411,4 @@ public sealed class InboundEventToRunStartE2ETests
         }
     }
 }
+

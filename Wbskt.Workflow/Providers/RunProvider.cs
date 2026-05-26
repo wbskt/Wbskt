@@ -185,6 +185,27 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         throw new KeyNotFoundException($"Run with RefId={refId} not found.");
     }
 
+    public async Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Run_GetStuck", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
+        command.Parameters.AddWithValue("@BatchSize", batchSize);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new List<RunRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(Map(reader));
+        }
+
+        return results.AsReadOnly();
+    }
+
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
