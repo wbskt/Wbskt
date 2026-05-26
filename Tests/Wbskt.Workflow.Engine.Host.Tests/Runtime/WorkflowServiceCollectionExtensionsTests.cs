@@ -11,7 +11,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class WorkflowServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddWorkflowRuntime_registers_phase7_services_with_expected_lifetimes()
+    public void AddWorkflowRuntime_registers_phase8_services_with_expected_lifetimes()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
@@ -59,6 +59,14 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var pendingDrainer2 = scope2.ServiceProvider.GetRequiredService<IPendingTriggerEventDrainer>();
         var triggerRegistrationService1 = scope1.ServiceProvider.GetRequiredService<ITriggerRegistrationService>();
         var triggerRegistrationService2 = scope2.ServiceProvider.GetRequiredService<ITriggerRegistrationService>();
+        var runFinalizer1 = scope1.ServiceProvider.GetRequiredService<IRunFinalizer>();
+        var runFinalizer2 = scope2.ServiceProvider.GetRequiredService<IRunFinalizer>();
+        var cancellationService1 = scope1.ServiceProvider.GetRequiredService<IRunCancellationService>();
+        var cancellationService2 = scope2.ServiceProvider.GetRequiredService<IRunCancellationService>();
+        var compensationOrchestrator1 = scope1.ServiceProvider.GetRequiredService<ICompensationOrchestrator>();
+        var compensationOrchestrator2 = scope2.ServiceProvider.GetRequiredService<ICompensationOrchestrator>();
+        var runCompletedPublisher1 = scope1.ServiceProvider.GetRequiredService<IRunCompletedPublisher>();
+        var runCompletedPublisher2 = scope2.ServiceProvider.GetRequiredService<IRunCompletedPublisher>();
         var executors1 = scope1.ServiceProvider.GetServices<INodeExecutor>().ToArray();
         var hostedServices = provider.GetServices<IHostedService>().ToArray();
 
@@ -89,6 +97,14 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.NotSame(pendingDrainer1, pendingDrainer2);
         Assert.IsType<TriggerRegistrationService>(triggerRegistrationService1);
         Assert.NotSame(triggerRegistrationService1, triggerRegistrationService2);
+        Assert.IsType<RunFinalizer>(runFinalizer1);
+        Assert.NotSame(runFinalizer1, runFinalizer2);
+        Assert.IsType<RunCancellationService>(cancellationService1);
+        Assert.NotSame(cancellationService1, cancellationService2);
+        Assert.IsType<CompensationOrchestrator>(compensationOrchestrator1);
+        Assert.NotSame(compensationOrchestrator1, compensationOrchestrator2);
+        Assert.IsType<NullRunCompletedPublisher>(runCompletedPublisher1);
+        Assert.NotSame(runCompletedPublisher1, runCompletedPublisher2);
         Assert.Contains(executors1, executor => executor.GetType().Name == "DeviceTriggerExecutor");
         Assert.Contains(executors1, executor => executor.GetType().Name == "ScheduleTriggerExecutor");
         Assert.Contains(executors1, executor => executor.GetType().Name == "WebhookTriggerExecutor");
