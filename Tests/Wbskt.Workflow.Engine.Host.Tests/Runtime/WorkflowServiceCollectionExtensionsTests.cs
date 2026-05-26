@@ -26,6 +26,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();
         services.AddHostedService<BranchExecutionPump>();
+        services.AddHostedService<BookmarkScheduler>();
 
         using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
@@ -36,10 +37,14 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var registry2 = provider.GetRequiredService<INodeExecutorRegistry>();
         var cache1 = provider.GetRequiredService<IWorkflowDefinitionCache>();
         var cache2 = provider.GetRequiredService<IWorkflowDefinitionCache>();
+        var hostIdentity1 = provider.GetRequiredService<IHostIdentity>();
+        var hostIdentity2 = provider.GetRequiredService<IHostIdentity>();
         using IServiceScope scope1 = provider.CreateScope();
         using IServiceScope scope2 = provider.CreateScope();
         var loop1 = scope1.ServiceProvider.GetRequiredService<IBranchLoop>();
         var loop2 = scope2.ServiceProvider.GetRequiredService<IBranchLoop>();
+        var bookmarkResumer1 = scope1.ServiceProvider.GetRequiredService<IBookmarkResumer>();
+        var bookmarkResumer2 = scope2.ServiceProvider.GetRequiredService<IBookmarkResumer>();
         var hostedServices = provider.GetServices<IHostedService>().ToArray();
 
         // Assert
@@ -49,8 +54,13 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Same(registry1, registry2);
         Assert.IsType<WorkflowDefinitionCache>(cache1);
         Assert.Same(cache1, cache2);
+        Assert.IsType<HostIdentity>(hostIdentity1);
+        Assert.Same(hostIdentity1, hostIdentity2);
         Assert.IsType<BranchLoop>(loop1);
         Assert.NotSame(loop1, loop2);
+        Assert.IsType<BookmarkResumer>(bookmarkResumer1);
+        Assert.NotSame(bookmarkResumer1, bookmarkResumer2);
         Assert.Contains(hostedServices, service => service is BranchExecutionPump);
+        Assert.Contains(hostedServices, service => service is BookmarkScheduler);
     }
 }

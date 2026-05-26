@@ -36,6 +36,7 @@ public static class Program
         builder.Services.AddWorkflowProviders();
         builder.Services.AddWorkflowRuntime();
         builder.Services.AddHostedService<BranchExecutionPump>();
+        builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddAuthorization();
         builder.Services.AddCors(options =>
         {
