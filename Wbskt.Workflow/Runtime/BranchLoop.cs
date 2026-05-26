@@ -335,6 +335,12 @@ public sealed class BranchLoop : IBranchLoop
 
     private static Guid? ResolveNextNodeId(WorkflowDefinition definition, Guid currentNodeId, string outboundPort)
     {
+        if (Guid.TryParse(outboundPort, out Guid jumpNodeId)
+            && definition.Nodes.Any(candidate => candidate.NodeId == jumpNodeId))
+        {
+            return jumpNodeId;
+        }
+
         Edge? edge = definition.Edges.SingleOrDefault(candidate => candidate.From.NodeId == currentNodeId && string.Equals(candidate.From.PortId, outboundPort, StringComparison.Ordinal));
         return edge?.To.NodeId;
     }

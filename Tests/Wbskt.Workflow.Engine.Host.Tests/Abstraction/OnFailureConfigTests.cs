@@ -34,4 +34,17 @@ public class OnFailureConfigTests
         Assert.NotNull(back.Compensate);
         Assert.Equal(refundNodeId, back.Compensate!.NodeId);
     }
+
+    [Fact]
+    public void OnFailureConfig_roundtrips_with_jump_target()
+    {
+        var targetNodeId = new Guid("11111111-2222-3333-4444-555555555555");
+        var config = new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: targetNodeId);
+
+        var json = JsonSerializer.Serialize(config, Options);
+        var back = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);
+
+        Assert.Equal(ErrorOutcome.JumpToNode, back!.Outcome);
+        Assert.Equal(targetNodeId, back.TargetNodeId);
+    }
 }

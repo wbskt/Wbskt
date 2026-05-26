@@ -5,6 +5,11 @@ namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public abstract record NodeExecutionResult
 {
+    public static Continue JumpTo(Guid nodeId, IReadOnlyDictionary<string, JsonElement> localStatePatch)
+    {
+        return new Continue(nodeId.ToString(), localStatePatch);
+    }
+
     public sealed record Continue(string OutboundPort, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
 
     public sealed record Fork(IReadOnlyCollection<ForkSpec> Children, string? ContinueNodeId, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
