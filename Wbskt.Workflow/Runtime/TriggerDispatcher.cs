@@ -11,19 +11,25 @@ public sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
     private readonly ITriggerConcurrencyEnforcer _triggerConcurrencyEnforcer;
     private readonly IRunCancellationService _runCancellationService;
+    private readonly IRunStarter _runStarter;
+    private readonly IRunDispatcher _runDispatcher;
 
     public TriggerDispatcher(
         ICorrelationKeyResolver correlationKeyResolver,
         IBookmarkResumer bookmarkResumer,
         ITriggerRegistrationProvider triggerRegistrationProvider,
         ITriggerConcurrencyEnforcer triggerConcurrencyEnforcer,
-        IRunCancellationService runCancellationService)
+        IRunCancellationService runCancellationService,
+        IRunStarter runStarter,
+        IRunDispatcher runDispatcher)
     {
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
         _triggerRegistrationProvider = triggerRegistrationProvider;
         _triggerConcurrencyEnforcer = triggerConcurrencyEnforcer;
         _runCancellationService = runCancellationService;
+        _runStarter = runStarter;
+        _runDispatcher = runDispatcher;
     }
 
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
@@ -61,6 +67,8 @@ public sealed class TriggerDispatcher : ITriggerDispatcher
                 break;
         }
 
-        return new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, null, null, correlationKey);
+        (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
+        await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
+        return new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, runId, null, correlationKey);
     }
 }
