@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Wbskt.Workflow.Runtime;
+namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public abstract class NodeExecutionResult
 {

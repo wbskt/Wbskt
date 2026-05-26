@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Abstraction.Runtime;
 using Xunit;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
