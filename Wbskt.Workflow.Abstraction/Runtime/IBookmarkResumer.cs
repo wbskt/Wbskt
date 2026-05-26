@@ -8,11 +8,4 @@ public interface IBookmarkResumer
     Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct);
 }
 
-public sealed record InboundEvent(
-    string ChannelKind,
-    string CorrelationKey,
-    string InboundEventId,
-    IReadOnlyDictionary<string, JsonElement> Payload,
-    DateTime ReceivedAt);
-
 public sealed record BookmarkMatchResult(bool Matched, long? BookmarkId, bool Idempotent);
