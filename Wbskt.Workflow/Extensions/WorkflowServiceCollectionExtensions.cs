@@ -10,7 +10,7 @@ public static class WorkflowServiceCollectionExtensions
 {
     public static IServiceCollection AddWorkflowProviders(this IServiceCollection services)
     {
-        services.AddScoped<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
+        services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
         services.AddScoped<ITriggerRegistrationProvider, TriggerRegistrationProvider>();
         services.AddScoped<IRunProvider, RunProvider>();
         services.AddScoped<IRunCountersProvider, RunCountersProvider>();
@@ -27,9 +27,16 @@ public static class WorkflowServiceCollectionExtensions
 
     public static IServiceCollection AddWorkflowRuntime(this IServiceCollection services)
     {
+        services.AddMemoryCache();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
+        services.AddSingleton<ChannelRunDispatcher>();
+        services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
+        services.AddSingleton<INodeExecutorRegistry, NodeExecutorRegistry>();
+        services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
+        services.AddScoped<IProviderComposite, RuntimeProviderComposite>();
+        services.AddScoped<IBranchLoop, BranchLoop>();
 
         return services;
     }

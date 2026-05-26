@@ -6,6 +6,8 @@ using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Engine.Host.Extensions;
+using Wbskt.Workflow.Engine.Host.HostedServices;
+using Wbskt.Workflow.Extensions;
 
 namespace Wbskt.Workflow.Engine.Host;
 
@@ -31,6 +33,9 @@ public static class Program
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
         builder.Services.AddHttpClient();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
+        builder.Services.AddWorkflowProviders();
+        builder.Services.AddWorkflowRuntime();
+        builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddAuthorization();
         builder.Services.AddCors(options =>
         {
