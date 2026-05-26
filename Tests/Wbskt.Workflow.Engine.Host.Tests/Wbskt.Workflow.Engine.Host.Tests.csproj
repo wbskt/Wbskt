@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\Wbskt.Workflow\Wbskt.Workflow.csproj" />
     <ProjectReference Include="..\..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
     <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />
+    <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
   </ItemGroup>
 
   <ItemGroup>
