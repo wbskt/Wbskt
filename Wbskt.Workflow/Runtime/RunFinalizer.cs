@@ -14,6 +14,7 @@ public sealed class RunFinalizer : IRunFinalizer
     private readonly IPendingTriggerEventDrainer _pendingTriggerEventDrainer;
     private readonly IRunCompletedPublisher _runCompletedPublisher;
     private readonly IBookmarkProvider _bookmarkProvider;
+    private readonly ISubWorkflowCompletionHook _completionHook;
     private readonly IClock _clock;
 
     public RunFinalizer(
@@ -24,6 +25,7 @@ public sealed class RunFinalizer : IRunFinalizer
         IPendingTriggerEventDrainer pendingTriggerEventDrainer,
         IRunCompletedPublisher runCompletedPublisher,
         IBookmarkProvider bookmarkProvider,
+        ISubWorkflowCompletionHook completionHook,
         IClock clock)
     {
         _runProvider = runProvider;
@@ -33,6 +35,7 @@ public sealed class RunFinalizer : IRunFinalizer
         _pendingTriggerEventDrainer = pendingTriggerEventDrainer;
         _runCompletedPublisher = runCompletedPublisher;
         _bookmarkProvider = bookmarkProvider;
+        _completionHook = completionHook;
         _clock = clock;
     }
 
@@ -63,6 +66,7 @@ public sealed class RunFinalizer : IRunFinalizer
         await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowDefinitionId, updatedRun.CorrelationKey ?? string.Empty, ct);
         await _runCompletedPublisher.PublishAsync(updatedRun.Id, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
+        await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);
     }
 
     private static string DetermineTerminalStatus(string currentStatus, IReadOnlyCollection<BranchRow> branches)
