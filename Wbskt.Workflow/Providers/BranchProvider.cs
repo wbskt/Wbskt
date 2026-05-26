@@ -166,6 +166,24 @@ public class BranchProvider : BaseSqlProvider, IBranchProvider
         return results.AsReadOnly();
     }
 
+    public async Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Branch_GetRunning", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new List<BranchRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(Map(reader));
+        }
+
+        return results.AsReadOnly();
+    }
+
     public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
     {
         return UpdateBranchAsync(branchId, currentNodeId, status, localJson, lastOutputJson, ct);

@@ -11,6 +11,7 @@ public interface IBranchProvider
     Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);
     Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct);
     Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct);
+    Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct);
     Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct);
     Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct);
     Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct);
