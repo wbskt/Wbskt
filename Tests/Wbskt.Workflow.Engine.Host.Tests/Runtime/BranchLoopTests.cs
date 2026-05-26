@@ -401,6 +401,115 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task Loop_applies_on_failure_continue_as_succeeded()
+    {
+        // Arrange
+        var startNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var nextNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "on-failure-continue",
+            null,
+            true,
+            [
+                new SendCommandActionNode(
+                    startNodeId,
+                    "command",
+                    [new PortDefinition("default", PortDirection.Output, "Default")],
+                    new SendCommandConfig("device-1", "DoThing"),
+                    null,
+                    new OnFailureConfig(ErrorOutcome.ContinueAsSucceeded)),
+                new TestNode(nextNodeId, "next", "test")
+            ],
+            [new Edge((startNodeId, "default"), (nextNodeId, "in"))],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(startNodeId);
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fail("E_FAIL", "boom", false, null),
+                    new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Contains(branchProvider.PointerUpdates, update => update.CurrentNodeId == nextNodeId);
+        Assert.True(branchProvider.SetCompletedCalled);
+        Assert.False(branchProvider.SetFailedCalled);
+    }
+
+    [Fact]
+    public async Task Loop_applies_on_failure_jump_to_node()
+    {
+        // Arrange
+        var startNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var skippedNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var jumpNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "on-failure-jump",
+            null,
+            true,
+            [
+                new SendCommandActionNode(
+                    startNodeId,
+                    "command",
+                    [new PortDefinition("default", PortDirection.Output, "Default")],
+                    new SendCommandConfig("device-1", "DoThing"),
+                    null,
+                    new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: jumpNodeId)),
+                new TestNode(skippedNodeId, "skipped", "test"),
+                new TestNode(jumpNodeId, "jump", "test")
+            ],
+            [new Edge((startNodeId, "default"), (skippedNodeId, "in"))],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(startNodeId);
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fail("E_FAIL", "boom", false, null),
+                    new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Contains(branchProvider.PointerUpdates, update => update.CurrentNodeId == jumpNodeId);
+        Assert.DoesNotContain(branchProvider.PointerUpdates, update => update.CurrentNodeId == skippedNodeId);
+        Assert.True(branchProvider.SetCompletedCalled);
+        Assert.False(branchProvider.SetFailedCalled);
+    }
+
+    [Fact]
     public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
     {
         // Arrange
@@ -616,6 +725,8 @@ public sealed class BranchLoopTests
         public bool SetCompletedCalled { get; private set; }
 
         public bool SetFailedCalled { get; private set; }
+
+        public BranchRow CurrentBranch => _rows[1001];
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
         {

@@ -24,6 +24,7 @@ public sealed class BranchLoop : IBranchLoop
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly IRunFinalizer? _runFinalizer;
+    private readonly OnFailureHandler _onFailureHandler = new();
 
     public BranchLoop(
         IBranchProvider branchProvider,
@@ -185,9 +186,19 @@ public sealed class BranchLoop : IBranchLoop
 
                 case NodeExecutionResult.Fail fail:
                 {
-                    if (fail.Retryable)
+                    NodeExecutionResult handledResult = _onFailureHandler.Apply(fail, node, branchContext);
+                    if (handledResult is NodeExecutionResult.Continue handledContinue)
                     {
-                        throw new NotImplementedException("Retry handled in Phase 8");
+                        Guid? nextNodeId = ResolveNextNodeId(definition, node.NodeId, handledContinue.OutboundPort);
+                        if (nextNodeId is null)
+                        {
+                            await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
+                            return;
+                        }
+
+                        string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, handledContinue.LocalStatePatch));
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, ActiveStatus, localJson, branchRow.LastOutputJson, ct);
+                        break;
                     }
 
                     string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
