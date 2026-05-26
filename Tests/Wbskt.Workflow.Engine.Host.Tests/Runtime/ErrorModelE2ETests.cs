@@ -241,6 +241,7 @@ public sealed class ErrorModelE2ETests
         public Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(state.Branches.Values.Where(branch => branch.RunId == runId && branch.Status == "Active").ToArray());
         public Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(state.Branches.Values.Where(branch => branch.Status == "Active").ToArray());
 
+        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
         {
             BranchRow updated = state.Branches[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson, UpdatedAt = state.Clock.UtcNow };
@@ -440,6 +441,7 @@ public sealed class ErrorModelE2ETests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 }
+
 
 
 
