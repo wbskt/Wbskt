@@ -63,6 +63,44 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         return null;
     }
 
+    public async Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            """
+            SELECT
+                Id,
+                RefId,
+                WorkflowDefinitionId,
+                WorkflowRefId,
+                WorkflowVersion,
+                TriggerNodeId,
+                CorrelationKey,
+                Status,
+                StartedAt,
+                CompletedAt,
+                CancellationRequestedAt,
+                CancellationReason,
+                CreditBudget,
+                CreatedAt
+            FROM dbo.Runs
+            WHERE Id = @Id;
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+        command.Parameters.AddWithValue("@Id", checked((int)runId));
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
+        {
+            return Map(reader);
+        }
+
+        throw new KeyNotFoundException($"Run with Id={runId} not found.");
+    }
+
     public async Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
