@@ -31,12 +31,14 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
+        services.AddSingleton<IHostIdentity, HostIdentity>();
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
         services.AddSingleton<INodeExecutorRegistry, NodeExecutorRegistry>();
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         services.AddScoped<IProviderComposite, RuntimeProviderComposite>();
         services.AddScoped<IBranchLoop, BranchLoop>();
+        services.AddScoped<IBookmarkResumer, BookmarkResumer>();
 
         return services;
     }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -10,8 +11,7 @@ public sealed class BookmarkScheduler : BackgroundService
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(2);
     private readonly IClock _clock;
     private readonly IHostIdentity _hostIdentity;
-    private readonly IBranchProvider _branchProvider;
-    private readonly IBookmarkProvider _bookmarkProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<BookmarkScheduler> _logger;
     private readonly TimeSpan _pollInterval;
@@ -20,8 +20,7 @@ public sealed class BookmarkScheduler : BackgroundService
     public BookmarkScheduler(
         IClock clock,
         IHostIdentity hostIdentity,
-        IBranchProvider branchProvider,
-        IBookmarkProvider bookmarkProvider,
+        IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
         ILogger<BookmarkScheduler> logger,
         TimeSpan? pollInterval = null,
@@ -29,31 +28,55 @@ public sealed class BookmarkScheduler : BackgroundService
     {
         _clock = clock;
         _hostIdentity = hostIdentity;
-        _branchProvider = branchProvider;
-        _bookmarkProvider = bookmarkProvider;
+        _scopeFactory = scopeFactory;
         _runDispatcher = runDispatcher;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromSeconds(1);
         _orphanGcInterval = orphanGcInterval ?? TimeSpan.FromMinutes(5);
     }
 
+    internal BookmarkScheduler(
+        IClock clock,
+        IHostIdentity hostIdentity,
+        IBranchProvider branchProvider,
+        IBookmarkProvider bookmarkProvider,
+        IRunDispatcher runDispatcher,
+        ILogger<BookmarkScheduler> logger,
+        TimeSpan? pollInterval = null,
+        TimeSpan? orphanGcInterval = null)
+        : this(
+            clock,
+            hostIdentity,
+            new StaticScopeFactory(branchProvider, bookmarkProvider),
+            runDispatcher,
+            logger,
+            pollInterval,
+            orphanGcInterval)
+    {
+    }
+
     public async Task ProcessDueBookmarksAsync(CancellationToken ct)
     {
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
+        var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
         IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.BookmarkRow> leasedBookmarks =
-            await _bookmarkProvider.LeaseDueAsync(_clock.UtcNow, BatchSize, _hostIdentity.HostId, LeaseDuration, ct);
+            await bookmarkProvider.LeaseDueAsync(_clock.UtcNow, BatchSize, _hostIdentity.HostId, LeaseDuration, ct);
 
         foreach (var bookmark in leasedBookmarks)
         {
-            var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+            var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-            await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
-            await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
+            await bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
+            await bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
         }
     }
 
-    public Task RunOrphanGcAsync(CancellationToken ct)
+    public async Task RunOrphanGcAsync(CancellationToken ct)
     {
-        return _bookmarkProvider.DeleteOrphansAsync(ct);
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
+        await bookmarkProvider.DeleteOrphansAsync(ct);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -114,6 +137,46 @@ public sealed class BookmarkScheduler : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, errorMessage);
+        }
+    }
+
+    private sealed class StaticScopeFactory(IBranchProvider branchProvider, IBookmarkProvider bookmarkProvider) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope()
+        {
+            return new StaticServiceScope(branchProvider, bookmarkProvider);
+        }
+    }
+
+    private sealed class StaticServiceScope(IBranchProvider branchProvider, IBookmarkProvider bookmarkProvider) : IServiceScope, IAsyncDisposable
+    {
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(branchProvider, bookmarkProvider);
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StaticServiceProvider(IBranchProvider branchProvider, IBookmarkProvider bookmarkProvider) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+        {
+            if (serviceType == typeof(IBranchProvider))
+            {
+                return branchProvider;
+            }
+
+            if (serviceType == typeof(IBookmarkProvider))
+            {
+                return bookmarkProvider;
+            }
+
+            return null;
         }
     }
 }
