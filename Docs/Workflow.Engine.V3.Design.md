@@ -448,7 +448,7 @@ loop:
 ### 2.11 Branch.Status — first-class enum
 
 ```text
-BranchStatus = Active | Waiting | WaitingAtJoin | Completed | Failed | Cancelled
+BranchStatus = Active | Waiting | WaitingAtJoin | Compensating | Completed | Failed | Cancelled
 ```
 
 Persisted on Branch. Used by:
@@ -498,7 +498,7 @@ Backing: one SQL row per `(WorkflowRefId, VarName)` with a typed value column. C
 The Run row owns an atomic `ActiveBranchCount`:
 - **+1** when a branch is created (root, fork, join continuation).
 - **-1** when a branch reaches `Completed`, `Failed`, or `Cancelled`.
-- **No change** for `Waiting` or `WaitingAtJoin`.
+- **No change** for `Waiting`, `WaitingAtJoin`, or `Compensating` (a Compensating branch is still draining work for the Run; it decrements when it transitions to its final `Failed` after compensation completes).
 
 When `ActiveBranchCount = 0` AND there are no pending Bookmarks/Joins for this Run → the engine aggregates branch statuses into `RunStatus` and marks the Run terminal.
 
@@ -1605,10 +1605,14 @@ Why:
 
 **Credit accounting (locked, Q8): each attempt consumes credits.** A node
 with `Exponential(1s, 2x, 30s)` and `MaxAttempts: 5` can burn 5× the
-per-execution credit cost. The `Run.CreditBudget` check happens **before each
-attempt**, not just at the start of the node. This matches user intuition:
-"retries cost real money", and discourages "retry forever, what is the worst
-that could happen".
+per-execution credit cost. The check is performed **inside the executor's
+retry loop before each attempt**, against the same `Run.CreditBudget` /
+`Run.CreditsConsumed` columns that the Branch Loop checks at node entry
+(Section 2.10). If a retry attempt would exceed the budget, the executor
+short-circuits, returns `Fail(Permanent, OutOfCredits)`, and the Branch
+Loop transitions the Run to `OutOfCredits`. This matches user intuition:
+"retries cost real money", and discourages "retry forever, what is the
+worst that could happen".
 
 **Jitter:** ± up to *N*% of backoff, randomized, to spread retry storms when
 many devices hit the same outage simultaneously.
@@ -1682,9 +1686,19 @@ function RunFinalizer.Finalize(runId):
     EmitTerminalEvent()
     return
 
+  // Intermediate drain states resolve to their terminal counterpart
+  // (Section 5.7). Branch counts are advisory at this point.
+  if Run.Status = Cancelling:
+    Run.Status ← Cancelled
+    PersistRun(Run); EmitHistoryEvent(RunCompleted { … }); return
+  if Run.Status = Failing:
+    Run.Status ← Failed
+    PersistRun(Run); EmitHistoryEvent(RunCompleted { … }); return
+
   newStatus ← case:
     failedCount > 0    AND completedCount = 0  → Failed
     failedCount > 0    AND completedCount > 0  → PartiallyFailed
+    cancelledCount > 0 AND completedCount > 0  → PartiallyFailed
     cancelledCount > 0 AND completedCount = 0  → Cancelled
     all completed                              → Completed
     otherwise                                  → Failed   // defensive
@@ -1839,6 +1853,13 @@ relevant nodes — but cancellation does not trigger OnFailure, it just stops
 the branch. If this is too sharp an edge, a future `CancellationBehavior:
 StopOnly | Compensate` setting slots in. v1 is StopOnly.
 
+**Cancellation while branches are `Compensating`:** compensation is allowed
+to finish. Cancelling a Run flips the CTS, but a branch already executing
+compensation steps (Section 5.5) is in a `Compensating` state — it runs its
+compensation list to completion and then transitions to `Failed`. Aborting
+compensation midway would leave external systems in a worse state than
+either fully-undone or never-undone.
+
 ### 5.7 The Run lifecycle state machine
 
 ```text
@@ -1917,7 +1938,8 @@ where the history-event catalog earns its keep.
 All carry `(RunId, BranchId?, NodeId?, Timestamp, Payload)`. **Append-only,
 never updated, per-run partitioned** (so deleting a run's history is one
 indexed DELETE). Bedrock for replay, debugging, and billing (credits
-consumed = sum of `NodeCompleted` + `NodeAttemptFailed`).
+consumed = sum of `NodeCompleted` + `NodeAttemptFailed` + `NodeFailed` —
+i.e., one charge per attempt, terminal or not, matching Q8).
 
 ### 5.9 What we deliberately do NOT do
 
