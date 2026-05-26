@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Moq;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Services;
@@ -51,6 +52,23 @@ public sealed class WorkflowRunsControllerTests
         await controller.Cancel(runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
 
         service.Verify(x => x.CancelAsync(runRefId, "operator request", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Signal_calls_inbound_hub_with_signal_channel()
+    {
+        var service = new Mock<IWorkflowRunQueryService>();
+        var inboundHub = new Mock<IInboundHub>();
+        var runRefId = Guid.NewGuid();
+        inboundHub.Setup(x => x.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.ResumedBookmark, 77, 88, "matched"));
+        var controller = new WorkflowRunsController(service.Object, inboundHub.Object);
+
+        var response = await controller.Signal(runRefId, "wake", new SignalRequest("wake", JsonSerializer.SerializeToElement(new { ready = true })), CancellationToken.None);
+
+        Assert.True(response.Matched);
+        Assert.Equal("ResumedBookmark", response.Outcome);
+        inboundHub.Verify(x => x.HandleAsync(It.Is<InboundEvent>(evt => evt.ChannelKind == "signal" && evt.CorrelationKey == $"{runRefId}:wake"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
