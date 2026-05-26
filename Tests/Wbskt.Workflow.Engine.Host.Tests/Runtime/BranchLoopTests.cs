@@ -98,7 +98,7 @@ public sealed class BranchLoopTests
 
         // Assert
         Assert.Empty(dispatcher.Requests);
-        Assert.Empty(counters.IncrementCalls);
+        Assert.DoesNotContain(counters.IncrementCalls, value => value > 0);
         Assert.Contains(branchProvider.PointerUpdates, update => update.CurrentNodeId == childNodeId);
         Assert.True(branchProvider.SetCompletedCalled);
     }
@@ -341,6 +341,124 @@ public sealed class BranchLoopTests
         Assert.Equal("Retry handled in Phase 8", exception.Message);
     }
 
+    [Fact]
+    public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "terminal",
+            null,
+            true,
+            [new TestNode(nodeId, "terminal", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var counters = new StubRunCountersProvider(incrementResults: [1]);
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.True(branchProvider.SetCompletedCalled);
+        Assert.Equal([-1], counters.IncrementCalls);
+    }
+
+    [Fact]
+    public async Task Terminal_when_post_decrement_count_is_zero_signals_run_finalizer()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "terminal-finalize",
+            null,
+            true,
+            [new TestNode(nodeId, "terminal", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var finalizer = new RecordingRunFinalizer();
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            new StubRunProvider(),
+            new StubRunCountersProvider(incrementResults: [0]),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            finalizer);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([42L], finalizer.RunIds);
+    }
+
+    [Fact]
+    public async Task Terminal_when_post_decrement_count_is_nonzero_does_not_call_finalizer()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "terminal-not-finalize",
+            null,
+            true,
+            [new TestNode(nodeId, "terminal", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var finalizer = new RecordingRunFinalizer();
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            new StubRunProvider(),
+            new StubRunCountersProvider(incrementResults: [2]),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            finalizer);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(finalizer.RunIds);
+    }
+
     private static IReadOnlyDictionary<string, JsonElement> CreatePatch(string name, int value)
     {
         return new Dictionary<string, JsonElement>
@@ -535,8 +653,10 @@ public sealed class BranchLoopTests
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class StubRunCountersProvider(List<string>? operationLog = null) : IRunCountersProvider
+    private sealed class StubRunCountersProvider(List<string>? operationLog = null, IReadOnlyCollection<int>? incrementResults = null) : IRunCountersProvider
     {
+        private readonly Queue<int> _incrementResults = new(incrementResults ?? [0]);
+
         public List<int> IncrementCalls { get; } = [];
 
         public List<int> DecrementCalls { get; } = [];
@@ -545,7 +665,7 @@ public sealed class BranchLoopTests
         {
             IncrementCalls.Add(delta);
             operationLog?.Add($"increment:{delta}");
-            return Task.FromResult(0);
+            return Task.FromResult(_incrementResults.Count > 0 ? _incrementResults.Dequeue() : 0);
         }
 
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
@@ -623,5 +743,16 @@ public sealed class BranchLoopTests
     private sealed class SequentialIdGenerator : IIdGenerator
     {
         public Guid NewId() => Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+    }
+
+    private sealed class RecordingRunFinalizer : IRunFinalizer
+    {
+        public List<long> RunIds { get; } = [];
+
+        public Task FinalizeAsync(long runId, CancellationToken ct)
+        {
+            RunIds.Add(runId);
+            return Task.CompletedTask;
+        }
     }
 }

@@ -23,6 +23,7 @@ public sealed class BranchLoop : IBranchLoop
     private readonly IProviderComposite _providerComposite;
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
+    private readonly IRunFinalizer? _runFinalizer;
 
     public BranchLoop(
         IBranchProvider branchProvider,
@@ -35,7 +36,8 @@ public sealed class BranchLoop : IBranchLoop
         IRunDispatcher runDispatcher,
         IProviderComposite providerComposite,
         IClock clock,
-        IIdGenerator idGenerator)
+        IIdGenerator idGenerator,
+        IRunFinalizer? runFinalizer = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -48,6 +50,7 @@ public sealed class BranchLoop : IBranchLoop
         _providerComposite = providerComposite;
         _clock = clock;
         _idGenerator = idGenerator;
+        _runFinalizer = runFinalizer;
     }
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
@@ -213,7 +216,13 @@ public sealed class BranchLoop : IBranchLoop
     private async Task CompleteBranchAsync(int runId, long branchId, Guid branchRefId, CancellationToken ct)
     {
         await _branchProvider.SetCompletedAsync(branchId, ct);
+        int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
         await AppendEventAsync(runId, branchRefId, null, "BranchCompleted", ct);
+
+        if (postDecrementCount == 0 && _runFinalizer is not null)
+        {
+            await _runFinalizer.FinalizeAsync(runId, ct);
+        }
     }
 
     private async Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, CancellationToken ct)
