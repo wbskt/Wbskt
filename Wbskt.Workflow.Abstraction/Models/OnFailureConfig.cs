@@ -5,5 +5,6 @@ namespace Wbskt.Workflow.Abstraction.Models;
 
 public sealed record OnFailureConfig(
     [property: JsonPropertyName("outcome")][property: JsonConverter(typeof(JsonStringEnumConverter))] ErrorOutcome Outcome,
-    [property: JsonPropertyName("compensate")] CompensationDeclaration? Compensate
+    [property: JsonPropertyName("compensate")] CompensationDeclaration? Compensate = null,
+    [property: JsonPropertyName("targetNodeId")] Guid? TargetNodeId = null
 );

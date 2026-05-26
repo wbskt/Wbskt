@@ -5,5 +5,7 @@ public enum ErrorOutcome
     ContinueOnError,
     FailBranch,
     FailRun,
-    Compensate
+    Compensate,
+    ContinueAsSucceeded,
+    JumpToNode
 }

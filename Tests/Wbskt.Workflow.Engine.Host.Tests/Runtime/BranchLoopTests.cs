@@ -358,6 +358,49 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task Continue_with_node_id_outbound_port_jumps_directly_to_target_node()
+    {
+        // Arrange
+        var startNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var jumpedNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "branch-loop-jump",
+            null,
+            true,
+            [new TestNode(startNodeId, "start", "test"), new TestNode(jumpedNodeId, "jumped", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(startNodeId);
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    NodeExecutionResult.JumpTo(jumpedNodeId, CreatePatch("jump", 1)),
+                    new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Contains(branchProvider.PointerUpdates, update => update.CurrentNodeId == jumpedNodeId);
+        Assert.True(branchProvider.SetCompletedCalled);
+    }
+
+    [Fact]
     public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
     {
         // Arrange
