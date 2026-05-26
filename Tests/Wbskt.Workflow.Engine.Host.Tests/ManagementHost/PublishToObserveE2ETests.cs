@@ -1,0 +1,155 @@
+using System.Reflection;
+using System.Text.Json;
+using Wbskt.Management.Host.Services;
+using Wbskt.Management.Models.Workflow;
+using Wbskt.Primitives.Exceptions;
+using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Validation;
+
+namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
+
+public sealed class PublishToObserveE2ETests
+{
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task Full_publish_deprecate_cycle_calls_correct_hooks()
+    {
+        var provider = new InMemoryWorkflowDefinitionProvider();
+        var triggerService = new RecordingTriggerRegistrationService();
+        var cache = new RecordingWorkflowDefinitionCache();
+        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator());
+        var request = CreatePublishRequest();
+
+        var v1 = await service.PublishAsync(request, CancellationToken.None);
+        var v2 = await service.PublishAsync(request, CancellationToken.None);
+        await service.DeprecateAsync(request.RefId, CancellationToken.None);
+
+        Assert.Equal(1, v1.Version);
+        Assert.Equal(2, v2.Version);
+        Assert.Equal([1, 2], triggerService.PublishedWorkflowDefinitionIds);
+        Assert.Equal([1, 2], triggerService.DeprecatedWorkflowDefinitionIds);
+        Assert.Equal([1, 2], cache.InvalidatedWorkflowDefinitionIds.Distinct().OrderBy(x => x));
+    }
+
+    [Fact]
+    public async Task Publish_workflow_increments_version()
+    {
+        var provider = new InMemoryWorkflowDefinitionProvider();
+        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator());
+        var request = CreatePublishRequest();
+
+        var first = await service.PublishAsync(request, CancellationToken.None);
+        var second = await service.PublishAsync(request, CancellationToken.None);
+        var current = await service.GetCurrentAsync(request.RefId, CancellationToken.None);
+
+        Assert.Equal(1, first.Version);
+        Assert.Equal(2, second.Version);
+        Assert.Equal(2, current.Version);
+    }
+
+    private static WorkflowPublishRequest CreatePublishRequest()
+    {
+        var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "Abstraction", "Fixtures", "greenhouse-workflow.json")));
+        var refId = document.RootElement.GetProperty("workflowRefId").GetGuid();
+        return new WorkflowPublishRequest(refId, "Vent control + escalation", null, document.RootElement.Clone());
+    }
+
+    private sealed class InMemoryWorkflowDefinitionProvider : IWorkflowDefinitionProvider
+    {
+        private readonly Dictionary<Guid, List<WorkflowDefinitionRow>> _rows = [];
+        private int _nextId;
+
+        public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
+        {
+            WorkflowDefinitionRow? row = _rows.GetValueOrDefault(refId)?.SingleOrDefault(candidate => candidate.Version == version);
+            return Task.FromResult(row?.Id as int?);
+        }
+
+        public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)
+        {
+            WorkflowDefinitionRow row = _rows.Values.SelectMany(list => list).Single(candidate => candidate.Id == id);
+            return Task.FromResult(row);
+        }
+
+        public Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
+        {
+            WorkflowDefinitionRow? row = _rows.GetValueOrDefault(refId)?.SingleOrDefault(candidate => candidate.Version == version);
+            return row is null
+                ? Task.FromException<WorkflowDefinitionRow>(new NotFoundException("missing"))
+                : Task.FromResult(row);
+        }
+
+        public Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct)
+        {
+            WorkflowDefinitionRow? row = _rows.GetValueOrDefault(refId)?.SingleOrDefault(candidate => candidate.IsEnabled);
+            return row is null
+                ? Task.FromException<WorkflowDefinitionRow>(new NotFoundException("missing"))
+                : Task.FromResult(row);
+        }
+
+        public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)
+        {
+            WorkflowDefinitionRow inserted = row with { Id = ++_nextId };
+            if (!_rows.TryGetValue(inserted.RefId, out List<WorkflowDefinitionRow>? versions))
+            {
+                versions = [];
+                _rows.Add(inserted.RefId, versions);
+            }
+
+            versions.Add(inserted);
+            return Task.FromResult(inserted);
+        }
+
+        public Task DeprecateAsync(int id, CancellationToken ct)
+        {
+            foreach (var pair in _rows)
+            {
+                int index = pair.Value.FindIndex(candidate => candidate.Id == id);
+                if (index >= 0)
+                {
+                    pair.Value[index] = pair.Value[index] with { IsEnabled = false };
+                    return Task.CompletedTask;
+                }
+            }
+
+            throw new NotFoundException("missing");
+        }
+    }
+
+    private sealed class RecordingTriggerRegistrationService : ITriggerRegistrationService
+    {
+        public List<int> PublishedWorkflowDefinitionIds { get; } = [];
+        public List<int> DeprecatedWorkflowDefinitionIds { get; } = [];
+
+        public Task OnPublishedAsync(int workflowDefinitionId, CancellationToken ct)
+        {
+            PublishedWorkflowDefinitionIds.Add(workflowDefinitionId);
+            return Task.CompletedTask;
+        }
+
+        public Task OnDeprecatedAsync(int workflowDefinitionId, CancellationToken ct)
+        {
+            DeprecatedWorkflowDefinitionIds.Add(workflowDefinitionId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingWorkflowDefinitionCache : IWorkflowDefinitionCache
+    {
+        public List<int> InvalidatedWorkflowDefinitionIds { get; } = [];
+
+        public Task<Wbskt.Workflow.Abstraction.Models.WorkflowDefinition> GetAsync(int workflowDefinitionId, CancellationToken ct)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void Invalidate(int workflowDefinitionId)
+        {
+            InvalidatedWorkflowDefinitionIds.Add(workflowDefinitionId);
+        }
+    }
+}
