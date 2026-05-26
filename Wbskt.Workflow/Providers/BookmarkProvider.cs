@@ -156,6 +156,20 @@ public class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Bookmark_DeleteSiblings", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@RunId", runId);
+        command.Parameters.AddWithValue("@BranchId", branchId);
+        command.Parameters.AddWithValue("@ExcludeId", excludeBookmarkId);
+
+        await connection.OpenAsync(ct);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task DeleteAllByRunIdAsync(int runId, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);

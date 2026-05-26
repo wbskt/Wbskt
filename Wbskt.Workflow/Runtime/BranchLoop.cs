@@ -173,20 +173,17 @@ public sealed class BranchLoop : IBranchLoop
                     string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, wait.LocalStatePatch));
                     branchRow = await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Waiting", localJson, branchRow.LastOutputJson, ct);
                     await AppendEventAsync(runRow.Id, branchRow.RefId, branchRow.NodeId, "BranchParked", ct);
-                    await _bookmarkProvider.CreateAsync(new BookmarkRow
+
+                    DateTime nowUtc = _clock.UtcNow;
+                    await _bookmarkProvider.CreateAsync(CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, wait.Condition, nowUtc), ct);
+
+                    if (wait.Condition.Ttl is TimeSpan ttl)
                     {
-                        Id = 0,
-                        RefId = _idGenerator.NewId(),
-                        RunId = runRow.Id,
-                        BranchRefId = branchRow.RefId,
-                        NodeId = branchRow.NodeId,
-                        WakeConditionKind = GetWakeConditionKind(wait.Condition),
-                        MatchKey = GetWakeConditionMatchKey(wait.Condition),
-                        WakeConditionJson = JsonSerializer.Serialize(wait.Condition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                        ExpiresAt = null,
-                        TtlPort = null,
-                        CreatedAt = _clock.UtcNow
-                    }, ct);
+                        await _bookmarkProvider.CreateAsync(
+                            CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, new TimerWakeCondition(nowUtc + ttl), nowUtc),
+                            ct);
+                    }
+
                     return;
                 }
 
@@ -275,9 +272,36 @@ public sealed class BranchLoop : IBranchLoop
             ?? new Dictionary<string, JsonElement>();
     }
 
-    private static string SerializeLocalState(IReadOnlyDictionary<string, JsonElement> localState)
+    private string SerializeLocalState(IReadOnlyDictionary<string, JsonElement> localState)
     {
         return JsonSerializer.Serialize(localState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
+    private BookmarkRow CreateBookmarkRow(int runId, Guid branchRefId, Guid nodeId, WakeCondition condition, DateTime createdAt)
+    {
+        return new BookmarkRow
+        {
+            Id = 0,
+            RefId = _idGenerator.NewId(),
+            RunId = runId,
+            BranchRefId = branchRefId,
+            NodeId = nodeId,
+            WakeConditionKind = GetWakeConditionKind(condition),
+            MatchKey = GetWakeConditionMatchKey(condition),
+            WakeConditionJson = JsonSerializer.Serialize(condition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            ExpiresAt = GetWakeConditionExpiresAt(condition),
+            TtlPort = null,
+            CreatedAt = createdAt
+        };
+    }
+
+    private static DateTime? GetWakeConditionExpiresAt(WakeCondition condition)
+    {
+        return condition switch
+        {
+            TimerWakeCondition timer => timer.At,
+            _ => null
+        };
     }
 
     private static string GetWakeConditionKind(WakeCondition condition)
