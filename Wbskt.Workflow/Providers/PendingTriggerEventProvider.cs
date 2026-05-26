@@ -61,6 +61,26 @@ public class PendingTriggerEventProvider : BaseSqlProvider, IPendingTriggerEvent
         return null;
     }
 
+    public async Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.PendingTriggerEvent_DequeueNextBy_WorkflowDefinitionId_Correlation", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
+        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
+        {
+            return Map(reader);
+        }
+
+        return null;
+    }
+
     public async Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
