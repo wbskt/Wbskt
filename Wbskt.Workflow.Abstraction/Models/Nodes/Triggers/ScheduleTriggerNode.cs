@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Models.Triggers;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 
 public sealed record ScheduleTriggerNode(
-    string NodeId,
+    Guid NodeId,
     string Name,
     IReadOnlyCollection<PortDefinition> Ports,
     [property: JsonPropertyName("config")] ScheduleTriggerConfig Config

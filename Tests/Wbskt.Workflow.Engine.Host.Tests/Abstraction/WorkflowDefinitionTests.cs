@@ -50,7 +50,7 @@ public class WorkflowDefinitionTests
         var def = JsonSerializer.Deserialize<WorkflowDefinition>(json, Options);
 
         var trigger = def!.Nodes.OfType<DeviceTriggerNode>().Single();
-        Assert.Equal("T", trigger.NodeId);
+        Assert.Equal(new Guid("11111111-1111-1111-1111-111111111111"), trigger.NodeId);
         Assert.Equal("CancelExisting", trigger.Config.ConcurrencyPolicy.ToString());
 
         var logicNodes = def.Nodes.OfType<LogicGateNode>().ToList();
