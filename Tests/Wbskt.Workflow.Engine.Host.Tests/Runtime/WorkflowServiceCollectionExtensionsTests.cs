@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Extensions;
@@ -15,6 +16,28 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
 public sealed class WorkflowServiceCollectionExtensionsTests
 {
+    [Fact]
+    public void AddWorkflowEngine_with_includeHostedServices_false_excludes_workflow_hosted_services()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Server=(localdb)\\MSSQLLocalDB;Database=Wbskt;Trusted_Connection=True;"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddLogging();
+        services.AddHttpClient();
+        services.AddWorkflowEngine(configuration, false);
+
+        using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        Assert.NotNull(provider.GetRequiredService<IWorkflowDefinitionProvider>());
+        Assert.NotNull(provider.GetRequiredService<IWorkflowDefinitionCache>());
+        Assert.Empty(provider.GetServices<IHostedService>());
+    }
+
     [Fact]
     public void AddWorkflowRuntime_registers_phase10_services_with_expected_lifetimes()
     {

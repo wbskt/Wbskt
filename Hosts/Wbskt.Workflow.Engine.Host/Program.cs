@@ -35,8 +35,7 @@ public static class Program
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
         builder.Services.AddHttpClient();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
-        builder.Services.AddWorkflowProviders();
-        builder.Services.AddWorkflowRuntime(builder.Configuration);
+        builder.Services.AddWorkflowEngine(builder.Configuration, true);
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddHostedService<ScheduledFireTicker>();

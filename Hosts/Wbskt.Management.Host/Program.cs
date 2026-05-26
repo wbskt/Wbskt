@@ -20,6 +20,7 @@ using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Abstraction.Validation;
+using Wbskt.Workflow.Extensions;
 namespace Wbskt.Management.Host;
 
 public static class Program
@@ -64,6 +65,7 @@ public static class Program
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
+        builder.Services.AddWorkflowEngine(builder.Configuration, includeHostedServices: false);
 
         // Event Bus & Logging
         var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);
