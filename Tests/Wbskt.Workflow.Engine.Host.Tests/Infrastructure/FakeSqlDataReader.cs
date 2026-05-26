@@ -114,7 +114,7 @@ public class FakeSqlDataReader : DbDataReader
 
     public override int RecordsAffected => -1;
 
-    public override bool GetBoolean(int ordinal) => throw new NotImplementedException();
+    public override bool GetBoolean(int ordinal) => (bool)GetValue(ordinal);
 
     public override byte GetByte(int ordinal) => throw new NotImplementedException();
 
