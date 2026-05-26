@@ -65,6 +65,7 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj" />
+    <Project Path="Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj" />
     <Project Path="Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
   </Folder>
   <Project Path="Wbskt.Infrastructure/Wbskt.Infrastructure.csproj" />
