@@ -82,6 +82,22 @@ public class ScheduledFireProvider : BaseSqlProvider, IScheduledFireProvider
         throw new InvalidOperationException("ScheduledFire_AdvanceNext did not return a row.");
     }
 
+    public async Task DeleteByIdAsync(long id, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            """
+            DELETE FROM dbo.ScheduledFires
+            WHERE Id = @Id;
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+        command.Parameters.AddWithValue("@Id", checked((int)id));
+
+        await connection.OpenAsync(ct);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
