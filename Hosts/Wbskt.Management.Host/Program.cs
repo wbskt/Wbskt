@@ -19,6 +19,7 @@ using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
+using Wbskt.Workflow.Abstraction.Validation;
 namespace Wbskt.Management.Host;
 
 public static class Program
@@ -49,6 +50,8 @@ public static class Program
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+        builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        builder.Services.AddSingleton<WorkflowValidator>();
         
         builder.Services.AddTransient<AuthenticationForwardingHandler>();
         builder.Services.AddHttpContextAccessor();
