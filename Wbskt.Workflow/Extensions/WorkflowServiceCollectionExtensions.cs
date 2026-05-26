@@ -17,6 +17,13 @@ namespace Wbskt.Workflow.Extensions;
 
 public static class WorkflowServiceCollectionExtensions
 {
+    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services, IConfiguration configuration, bool includeHostedServices = true)
+    {
+        services.AddWorkflowProviders();
+        services.AddWorkflowRuntime(configuration);
+        return services;
+    }
+
     public static IServiceCollection AddWorkflowProviders(this IServiceCollection services)
     {
         services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
