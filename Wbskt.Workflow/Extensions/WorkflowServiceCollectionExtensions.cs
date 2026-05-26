@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.NodeExecutors.Triggers;
 using Wbskt.Workflow.Providers;
 using Wbskt.Workflow.Runtime;
 
@@ -34,11 +35,23 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IHostIdentity, HostIdentity>();
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
-        services.AddSingleton<INodeExecutorRegistry, NodeExecutorRegistry>();
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
+        services.AddSingleton<ICorrelationKeyResolver, CorrelationKeyResolver>();
+        services.AddScoped<INodeExecutor, DeviceTriggerExecutor>();
+        services.AddScoped<INodeExecutor, ScheduleTriggerExecutor>();
+        services.AddScoped<INodeExecutor, WebhookTriggerExecutor>();
+        services.AddScoped<INodeExecutor, ManualTriggerExecutor>();
+        services.AddScoped<INodeExecutorRegistry, NodeExecutorRegistry>();
         services.AddScoped<IProviderComposite, RuntimeProviderComposite>();
         services.AddScoped<IBranchLoop, BranchLoop>();
         services.AddScoped<IBookmarkResumer, BookmarkResumer>();
+        services.AddScoped<ITriggerConcurrencyEnforcer, TriggerConcurrencyEnforcer>();
+        services.AddScoped<IRunCancellationService, NoOpRunCancellationService>();
+        services.AddScoped<IRunStarter, RunStarter>();
+        services.AddScoped<ITriggerDispatcher, TriggerDispatcher>();
+        services.AddScoped<IInboundHub, InboundHub>();
+        services.AddScoped<IPendingTriggerEventDrainer, PendingTriggerEventDrainer>();
+        services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
 
         return services;
     }
