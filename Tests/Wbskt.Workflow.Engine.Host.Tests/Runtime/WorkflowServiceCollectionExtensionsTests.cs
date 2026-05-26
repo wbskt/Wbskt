@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
@@ -8,13 +9,14 @@ using Wbskt.Workflow.Extensions;
 using Wbskt.Workflow.NodeExecutors.Actions;
 using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
 public sealed class WorkflowServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddWorkflowRuntime_registers_phase8_services_with_expected_lifetimes()
+    public void AddWorkflowRuntime_registers_phase10_services_with_expected_lifetimes()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
@@ -30,6 +32,12 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddWorkflowRuntime();
         services.AddHostedService<BranchExecutionPump>();
         services.AddHostedService<BookmarkScheduler>();
+        services.AddHostedService<ScheduledFireTicker>();
+        services.AddHostedService<RunReaper>();
+        services.AddHostedService<HistoryRetentionGc>();
+        services.AddHostedService<PendingTriggerEventBacklogReaper>();
+        services.AddHostedService<RunRecoveryService>();
+        services.AddHostedService<MetricsExporter>();
 
         using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
@@ -44,6 +52,10 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var correlationKeyResolver2 = provider.GetRequiredService<ICorrelationKeyResolver>();
         var expressionEvaluator1 = provider.GetRequiredService<IExpressionEvaluator>();
         var expressionEvaluator2 = provider.GetRequiredService<IExpressionEvaluator>();
+        var leaseHolder1 = provider.GetRequiredService<ILeaseHolder>();
+        var leaseHolder2 = provider.GetRequiredService<ILeaseHolder>();
+        var workflowMetrics1 = provider.GetRequiredService<WorkflowMetrics>();
+        var workflowMetrics2 = provider.GetRequiredService<WorkflowMetrics>();
         using IServiceScope scope1 = provider.CreateScope();
         using IServiceScope scope2 = provider.CreateScope();
         var registry1 = scope1.ServiceProvider.GetRequiredService<INodeExecutorRegistry>();
@@ -88,6 +100,10 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Same(correlationKeyResolver1, correlationKeyResolver2);
         Assert.IsType<ExpressionEvaluator>(expressionEvaluator1);
         Assert.Same(expressionEvaluator1, expressionEvaluator2);
+        Assert.True(leaseHolder1.GetType().Name == "AlwaysHoldsLeaseHolder");
+        Assert.Same(leaseHolder1, leaseHolder2);
+        Assert.IsType<WorkflowMetrics>(workflowMetrics1);
+        Assert.Same(workflowMetrics1, workflowMetrics2);
         Assert.IsType<BranchLoop>(loop1);
         Assert.NotSame(loop1, loop2);
         Assert.IsType<BookmarkResumer>(bookmarkResumer1);
@@ -146,5 +162,12 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.IsType<TelegramNodeExecutor>(registry1.For(NodeKind.ActionTelegram));
         Assert.Contains(hostedServices, service => service is BranchExecutionPump);
         Assert.Contains(hostedServices, service => service is BookmarkScheduler);
+        Assert.Contains(hostedServices, service => service is ScheduledFireTicker);
+        Assert.Contains(hostedServices, service => service is RunReaper);
+        Assert.Contains(hostedServices, service => service is HistoryRetentionGc);
+        Assert.Contains(hostedServices, service => service is PendingTriggerEventBacklogReaper);
+        Assert.Contains(hostedServices, service => service is RunRecoveryService);
+        Assert.Contains(hostedServices, service => service is MetricsExporter);
     }
 }
+

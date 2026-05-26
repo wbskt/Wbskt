@@ -39,6 +39,12 @@ public static class Program
         builder.Services.AddWorkflowRuntime(builder.Configuration);
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
+        builder.Services.AddHostedService<ScheduledFireTicker>();
+        builder.Services.AddHostedService<RunReaper>();
+        builder.Services.AddHostedService<HistoryRetentionGc>();
+        builder.Services.AddHostedService<PendingTriggerEventBacklogReaper>();
+        builder.Services.AddHostedService<RunRecoveryService>();
+        builder.Services.AddHostedService<MetricsExporter>();
         builder.Services.AddAuthorization();
         builder.Services.AddCors(options =>
         {

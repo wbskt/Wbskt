@@ -48,6 +48,8 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
         services.AddSingleton<IHostIdentity, HostIdentity>();
+        services.AddSingleton<ILeaseHolder, AlwaysHoldsLeaseHolder>();
+        services.AddSingleton<WorkflowMetrics>();
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
