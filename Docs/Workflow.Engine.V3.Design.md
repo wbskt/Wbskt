@@ -1513,35 +1513,1359 @@ The first-node author writes `$trigger.deviceId` to get the device ID, never
 - **One inbound event can fan to multiple workflows;** each registration runs
   an independent pipeline. (4.4)
 
-## Section 5 — Error model and run lifecycle (outline only)
+## Section 5 — Error Model and Run Lifecycle
 
-To be detailed.
+Sections 1–4 designed the happy paths. Section 5 is what happens when **a
+node throws**, **a policy says give up**, or **a run needs to be wound down
+gracefully**. This is the section most workflow engines underspecify, and
+where the worst production surprises live.
 
-- `RetryPolicy` (per node — attempts, backoff, retryable filters; long waits between retries promote to Bookmark).
-- `OnFailure` (`FailBranch` default | `FailRun` | `Continue` | `Compensate(nodeId)`).
-- `RunStatus` aggregation (`Completed | Failed | PartiallyFailed | Cancelled | Faulted | OutOfCredits`).
-- `CancelRun(runId, reason)` API.
-- `IdempotencyKey` per action invocation, persisted before invoking.
+Five concepts: **error classification → RetryPolicy → OnFailure outcomes →
+Run aggregation → Compensation**, plus the Run lifecycle state machine that
+ties them together.
 
-## Section 6 — Durability and versioning (outline only)
+### 5.1 Error classification — three categories, not one
 
-To be detailed.
+Every error inside the engine falls into one of three buckets. The bucket
+determines what the engine *can* do about it.
 
-- `RunSnapshot` — full run state after each node completion.
-- `HistoryEvent` — append-only log; powers audit and observability.
-- `WorkflowVersionStore` — every published definition version persisted; in-flight runs reference theirs.
-- Version GC — eligible when zero runs reference AND not the latest.
+#### Category A — Transient (retryable)
 
-## Section 7 — Engine infrastructure (outline only)
+The operation might succeed if tried again. Network blips, 503s from a
+downstream service, SQL deadlocks, MQTT disconnect, refreshable expired
+tokens.
 
-To be detailed.
+- **Engine response:** governed by `RetryPolicy` (5.2). If retries exhaust,
+  demote to Category B.
+- **Sources:** thrown as `TransientNodeException`, or any exception matching
+  the retry policy's filter.
+- **Cost:** **one credit per attempt** (so retry storms hit the budget — a
+  feature, not a bug).
 
-- `WorkflowEngine` (top-level service): owns TriggerDispatcher, BookmarkScheduler, RunDispatcher, RuntimeRegistry, persistence services.
-- `RuntimeRegistry`: in-memory `(WorkflowRefId → latest Version)` for new triggers; `(WorkflowRefId, Version) → definition` for resumes.
-- `IRunDispatcher`: interface; V1 impl = in-process `Channel<BranchPointer>`; future = SQL-backed `SELECT … FOR UPDATE SKIP LOCKED`.
-- `NodeExecutorRegistry`: strategy registry keyed by node-kind string.
-- `ExpressionEvaluator`: root paths `$trigger`, `$state`/`$run`, `$local`, `$output`, `$shared`.
-- EventBus integration: `HistoryEvent`s also published to RabbitMQ (`Wbskt.Events.WorkflowEngine`) for external observability dashboards.
+#### Category B — Permanent (business logic failed)
+
+The operation completed and produced a "no" answer. Validation failed, the
+device returned 404, the expression evaluated to a forbidden value, a guard
+raised.
+
+- **Engine response:** governed by `OnFailure` (5.3). Never retried.
+- **Sources:** `PermanentNodeException`, or executor returns
+  `Fail { error, classification: Permanent }`.
+- **Cost:** one credit (the failing execution).
+
+#### Category C — Engine fault
+
+State load failed, snapshot JSON corrupted, an unknown `kind` discriminator
+appeared after a definition was already running, the executor registry is
+missing a kind we already validated.
+
+- **Engine response:** **`Run.Status = Faulted`**. No retries, no OnFailure,
+  no compensation. Operator attention required.
+- **Sources:** uncaught engine exceptions, or explicit `EngineFaultException`.
+- **Cost:** **zero credits** — engine's fault, not the user's.
+
+**The most important property of this taxonomy:** `Faulted` is distinct from
+`Failed`. A `Failed` run did what it was told and the business logic said
+"no" — working as designed. A `Faulted` run is the engine telling on itself.
+Mixing them buries engine bugs under business-logic noise. We will not mix
+them.
+
+**Mapping rule (locked):** unclassified exceptions from an executor default
+to **Category B**, not Category C. The engine is conservative: "I assume your
+code meant to fail, even if you did not say so politely." Engine faults must
+be explicit.
+
+### 5.2 RetryPolicy — per-node, executed inside the executor
+
+Configured on the node (Section 1). One shape:
+
+```text
+RetryPolicy {
+  MaxAttempts:  int          // total attempts including first; default 1 (no retry)
+  Backoff:      Backoff      // None | Fixed(d) | Linear(d) | Exponential(initial, factor, max)
+  RetryOn:      string[]?    // exception names / error codes; null = all Category A
+  Jitter:       double       // 0.0–1.0; portion of backoff randomized; default 0.2
+}
+```
+
+**Retries happen INSIDE the executor**, not as a control loop in the engine.
+Why:
+
+- The executor knows its own work and can decide "this was halfway through;
+  clean up first".
+- The engine's Branch Loop (Section 2) sees retries as a single
+  `ExecuteAsync` call that might take seconds; no difference between "one
+  slow call" and "three retried calls".
+- The bookmark mechanism (Section 3) is reserved for **long** waits.
+  Backoff durations under ~1 minute stay in-process with `Task.Delay`.
+  **Backoffs over ~1 minute must promote to `WaitForBookmark { Timer }`**
+  with a retry-attempt marker in `$local` so we do not pin a thread for
+  10 minutes. Guideline, not hard rule: small retries inline, big retries
+  via bookmark.
+
+**Credit accounting (locked, Q8): each attempt consumes credits.** A node
+with `Exponential(1s, 2x, 30s)` and `MaxAttempts: 5` can burn 5× the
+per-execution credit cost. The `Run.CreditBudget` check happens **before each
+attempt**, not just at the start of the node. This matches user intuition:
+"retries cost real money", and discourages "retry forever, what is the worst
+that could happen".
+
+**Jitter:** ± up to *N*% of backoff, randomized, to spread retry storms when
+many devices hit the same outage simultaneously.
+
+**RetryOn filter:** lets users say "retry on `Timeout`/`ServiceUnavailable`
+but not on `ValidationFailed`". Matched against `exception.GetType().Name` or
+the structured `ErrorCode` returned by executors. Empty filter = retry on all
+Transient.
+
+**Per-attempt logging:** every attempt emits `NodeAttemptFailed` with
+attempt-number, backoff, and error. Only the final attempt-number's failure
+transitions the branch.
+
+### 5.3 OnFailure — what the branch does when retries exhaust
+
+Per-node, four values:
+
+| OnFailure | Branch | Siblings | Run |
+|---|---|---|---|
+| `FailBranch` (default) | `Status = Failed`; ActiveBranchCount-- | Continue unaffected | Aggregated at finalization (5.4) |
+| `FailRun` | `Status = Failed`; engine cancels siblings | Cancelled cooperatively | `Status = Failed` immediately |
+| `Continue` | Continues as if node took its `error` output port | Unaffected | Unaffected |
+| `Compensate` | Enters compensation mode (5.5) | Unaffected | Aggregated at finalization |
+
+#### `FailBranch` (the default)
+
+A branch dies. Other branches keep working. The Run is **not** failed yet —
+it is aggregated when ActiveBranchCount hits zero (5.4). Correct default for
+IoT: if "send alert via email" fails but "send alert via SMS" succeeds, the
+success is still useful.
+
+#### `FailRun`
+
+A branch dies *and pulls the run down with it*. Engine flips
+`Run.Status = Failing`, cancels the Run's CTS (Active branches observe it),
+DELETEs all bookmarks (Waiting branches transition to Cancelled), and once
+ActiveBranchCount drains, sets `Run.Status = Failed`. "If THIS fails, the
+whole thing is meaningless — stop everything."
+
+#### `Continue`
+
+The branch proceeds **as if the failing node took its `error` output port**.
+The error payload becomes `$output.error` for downstream nodes.
+
+**Locked (Q9):** the node must **explicitly declare** an `error` port at
+authoring time. Publish-time validation rejects `OnFailure: Continue` on a
+node without an `error` port. This forces authors to wire the failure path
+deliberately (discoverability + linting); we do not synthesize a silent
+catch-all port.
+
+#### `Compensate`
+
+Branch enters compensation mode (5.5). Opt-in piece.
+
+### 5.4 Run aggregation — how branch outcomes roll up
+
+When `ActiveBranchCount` hits zero, **`RunFinalizer`** runs:
+
+```text
+function RunFinalizer.Finalize(runId):
+
+  branches ← SELECT * FROM Branches WHERE RunId = @runId
+
+  failedCount    ← count Status = Failed
+  cancelledCount ← count Status = Cancelled
+  completedCount ← count Status = Completed
+
+  if Run.Status is already terminal:
+    // explicit transition already set it (Faulted / Failed-via-FailRun /
+    // Cancelled / OutOfCredits); honor it
+    EmitTerminalEvent()
+    return
+
+  newStatus ← case:
+    failedCount > 0    AND completedCount = 0  → Failed
+    failedCount > 0    AND completedCount > 0  → PartiallyFailed
+    cancelledCount > 0 AND completedCount = 0  → Cancelled
+    all completed                              → Completed
+    otherwise                                  → Failed   // defensive
+
+  Run.Status      ← newStatus
+  Run.CompletedAt ← now
+  PersistRun(Run)
+
+  EmitHistoryEvent(RunCompleted { … })
+
+  // Drain queued triggers (Section 4.6 Queue policy)
+  TryDrainPendingTriggers(Run.WorkflowRefId, Run.TriggerNodeId, Run.CorrelationKey)
+```
+
+**Six terminal `Run.Status` values:**
+
+| Status | Meaning |
+|---|---|
+| `Completed` | All branches succeeded. |
+| `Failed` | One or more branches failed; none succeeded. Or a `FailRun` cascade. |
+| `PartiallyFailed` | Mixed: at least one success AND at least one failure. |
+| `Cancelled` | Cancelled by operator or `CancelExisting` policy. |
+| `Faulted` | Engine fault (Category C); operator attention required. |
+| `OutOfCredits` | Credit budget exhausted (Section 1 safety net). |
+
+Two non-obvious points:
+
+- **`PartiallyFailed` is first-class**, not "Failed with an asterisk". IoT
+  workflows fan out a lot; 9-of-10 differs qualitatively from 0-of-10.
+  Dashboards distinguish them; alerting can target one and not the other.
+- **Terminal status is sticky.** Once set, the finalizer's later passes do
+  not overwrite it. When a `FailRun` cascade has already set `Failed`, then
+  slow Active branches finally drain — we do not want aggregation to
+  second-guess.
+
+### 5.5 Compensation — opt-in, scoped to the failing branch
+
+The "undo" mechanism for sagas. **Opt-in per node; flat (no automatic
+reverse-order stack) in v1.**
+
+#### The model
+
+When a node has `OnFailure: Compensate` and retries exhaust:
+
+1. `Branch.Status = Compensating` (a new branch status).
+2. Walk the branch's executed-node history in reverse; for each prior node
+   that declared a `compensation` config, schedule its compensation step.
+3. Each compensation step is a fresh sub-graph execution against the
+   recorded forward-node output.
+4. When all declared compensations finish (success-or-failure of
+   compensation steps does not block), `Branch.Status = Failed`.
+
+#### The node-level compensation config
+
+```jsonc
+{
+  "id": "n-charge-card",
+  "kind": "action:payment-charge",
+  "config": { "amount": "$shared.cartTotal" },
+  "ports": [{ "id": "out" }, { "id": "error" }],
+  "compensation": {
+    "kind": "action:payment-refund",
+    "config": { "amount": "$output.chargedAmount", "txId": "$output.txId" }
+  }
+}
+```
+
+Key properties:
+
+- **Declared on the forward node**, not as a separate edge. Authors never
+  wire compensation paths; they decorate the forward action with "here is how
+  to undo".
+- **Compensation has access to the forward output** (`$output.*`) and run
+  scope (`$shared.*`, `$run.*`, `$trigger.*`). The engine snapshots node
+  outputs into history events so we can replay them into the compensation
+  expression at undo time.
+
+#### Why flat (locked, Q10)
+
+A "proper" saga walks compensations in strict reverse order, blocking on
+each. v1 is parallel because:
+
+- IoT compensations are usually independent ("close valve" and "send
+  cancellation email" do not depend on each other).
+- Strict-order semantics introduce their own failure modes ("comp #3 failed;
+  do we still run #4?"). Avoiding the question avoids the bug class.
+- Ordered compensation, if needed, can be modeled explicitly with
+  sub-workflows.
+
+A future v2 may introduce `compensationOrder: "parallel" | "reverseSequential"`
+if real workloads demand it. **Not in v1.**
+
+#### What is NOT compensated
+
+- Branches that forked off **before** the failing branch. Compensation is
+  per-branch-lineage.
+- Earlier nodes in the same branch **without** a declared `compensation`
+  config — silently skipped; the author opted out.
+- **Consumed bookmarks** do not get unconsumed. Time is not reversed.
+- **Triggered child runs** (`SubWorkflowNode`) are NOT automatically
+  cancelled or compensated. User explicitly models this if needed.
+
+These limits are conscious. Making compensation "total" would force the
+engine into modeling causality across the whole run — a research project,
+not a v1 deliverable.
+
+### 5.6 Cancellation — operator-initiated and policy-initiated
+
+Two paths reach `CancelRun`:
+
+- Operator API call (`POST /runs/{runId}/cancel`).
+- `ConcurrencyPolicy.CancelExisting` from Section 4.6.
+
+Same function:
+
+```text
+function CancelRun(runId, reason):
+
+  // 1) Atomic status flip — only proceed if currently runnable
+  rowsChanged ← UPDATE Runs
+                SET Status = 'Cancelling', CancellationReason = @reason
+                WHERE RunId = @runId AND Status = 'Running'
+
+  if rowsChanged = 0:
+    return  // already terminal; idempotent
+
+  // 2) Flip the run-level CancellationTokenSource
+  GetRunCts(runId).Cancel()
+
+  // 3) Bookmark mass-delete (Section 3.7)
+  DELETE FROM Bookmarks WHERE RunId = @runId
+  UPDATE Branches SET Status = 'Cancelled'
+    WHERE RunId = @runId AND Status IN ('Waiting', 'WaitingAtJoin')
+
+  // 4) Active branches observe the CTS at their next check and transition
+  //    themselves to Cancelled, decrementing ActiveBranchCount.
+
+  EmitHistoryEvent(RunCancellationRequested { runId, reason })
+
+  // 5) The run finalizer runs when ActiveBranchCount = 0, picks up the
+  //    Cancelling status, and transitions to Cancelled.
+```
+
+**Cooperative, not pre-emptive.** A branch that ignores its CancellationToken
+runs to completion. We log a "branch ignored cancellation for >30s" warning
+but do not thread-abort. Long HTTP call inside an executor is the executor's
+problem, not ours to murder.
+
+**Cancellation does NOT compensate.** By design. "Stop, do not undo." If
+undo-on-cancel is desired, the author uses `OnFailure: Compensate` on the
+relevant nodes — but cancellation does not trigger OnFailure, it just stops
+the branch. If this is too sharp an edge, a future `CancellationBehavior:
+StopOnly | Compensate` setting slots in. v1 is StopOnly.
+
+### 5.7 The Run lifecycle state machine
+
+```text
+                       (TriggerDispatcher creates Run)
+                                    │
+                                    ▼
+                              ┌───────────┐
+                              │  Running  │
+                              └─────┬─────┘
+              ┌─────────────────────┼─────────────────────────────────┐
+              │                     │                                 │
+   FailRun cascade        Cancel API / policy            ActiveBranchCount → 0
+   or budget exhaust              │                                   │
+              ▼                   ▼                                   ▼
+        ┌─────────┐         ┌────────────┐                     (run finalizer)
+        │ Failing │         │ Cancelling │                            │
+        └────┬────┘         └─────┬──────┘                            │
+             │                    │                                   │
+             │ (drain Active)     │ (drain Active)                    │
+             ▼                    ▼                                   │
+        ┌─────────┐         ┌───────────┐                             │
+        │ Failed  │         │ Cancelled │                             │
+        │   or    │         └───────────┘                             │
+        │OutOfCr. │                                                   │
+        └─────────┘                                                   ▼
+                                                       ┌────────────────────────┐
+                                                       │ aggregate branches:    │
+                                                       │  Completed             │
+                                                       │  PartiallyFailed       │
+                                                       │  Failed                │
+                                                       └────────────────────────┘
+
+  Faulted is a separate terminal — reachable from any non-terminal status
+  when the engine itself raises a Category C error.
+```
+
+State invariants:
+
+- **`Running` is the only non-terminal status.** Everything else is terminal.
+- **`Failing` and `Cancelling` are intermediate** drain states; never the
+  final answer.
+- **Once terminal, never re-entered.** `Cancelled` cannot become `Completed`;
+  `Failed` cannot become `PartiallyFailed`.
+- **`PendingTriggerEvents` for this `(workflow, correlation)` drain at
+  terminal transition** (Section 4.6) — whether terminal is success or
+  failure. Queueing is "wait your turn", not "wait for success".
+
+### 5.8 History events — the append-only audit trail
+
+Hybrid durability (decision #2) = snapshots + history events. Section 5 is
+where the history-event catalog earns its keep.
+
+| Event | Emitted when | Severity |
+|---|---|---|
+| `RunStarted` | Trigger dispatched, Run row created (4.4) | Info |
+| `RunCompleted` | Finalizer assigns terminal status | Info / Warn / Error |
+| `RunCancellationRequested` | `CancelRun` called (5.6) | Info |
+| `RunFaulted` | Engine fault (5.1 Category C) | Error |
+| `BranchStarted` | Each branch creation (initial or fork) | Info |
+| `BranchCompleted` | Branch reaches Completed | Info |
+| `BranchFailed` | Branch reaches Failed | Warn |
+| `BranchCancelled` | Branch reaches Cancelled | Info |
+| `NodeStarted` | Executor about to run | Debug |
+| `NodeCompleted` | Executor returned non-Fail result | Debug |
+| `NodeAttemptFailed` | Per-attempt failure during retries | Debug |
+| `NodeFailed` | Final failure after retries (A) or first-shot Permanent (B) | Warn |
+| `NodeCompensated` | Compensation step completed | Info |
+| `BookmarkCreated` | New bookmark inserted | Debug |
+| `BookmarkConsumed` | Bookmark resumed (3.4.2) | Debug |
+| `BookmarkTimedOut` | TTL companion fired before primary | Debug |
+| `TriggerDropped` | `DropIfRunning` decision | Warn |
+| `TriggerDispatchSkipped` | Filter no-match (4.8) | Debug |
+| `TriggerDispatchFailed` | Correlation expression threw (4.5) | Error |
+| `OutOfCredits` | Run hit credit ceiling | Warn |
+
+All carry `(RunId, BranchId?, NodeId?, Timestamp, Payload)`. **Append-only,
+never updated, per-run partitioned** (so deleting a run's history is one
+indexed DELETE). Bedrock for replay, debugging, and billing (credits
+consumed = sum of `NodeCompleted` + `NodeAttemptFailed`).
+
+### 5.9 What we deliberately do NOT do
+
+Worth making explicit because every workflow-engine debate touches these:
+
+- **No automatic retry of cancelled runs.** Cancel means cancel; rerun
+  requires a new trigger.
+- **No "resume from failure" replay-with-fix.** History events make it
+  *possible* later; v1 does not. Fix the definition, publish a new version,
+  trigger again.
+- **No cross-run rollback.** Compensation is per-branch within one run. If
+  a workflow modifies SharedVariables and then fails, those changes stay.
+  Authors who need cross-run undo write explicit compensation actions that
+  touch SharedVariables.
+- **No automatic dead-letter queue for `Faulted` runs.** Faulted appears in
+  the dashboard; the operator decides. We will not silently retry our own
+  engine bugs.
+
+### Section 5 locked decisions
+
+- **Three-category error classification:** Transient (retryable) / Permanent
+  (no retry) / Engine fault → Faulted. (5.1)
+- **Conservative default:** unclassified executor exceptions → Permanent
+  (Category B), not engine fault. (5.1)
+- **Retries inside executors**, governed by `RetryPolicy`; backoff > ~1min
+  must promote to Bookmark Timer. (5.2)
+- **Each retry attempt costs credits.** (Q8, 5.2)
+- **`OnFailure` values:** `FailBranch` (default) / `FailRun` / `Continue` /
+  `Compensate`. (5.3)
+- **`Continue` requires an explicitly declared `error` port** on the node;
+  publish-time validation enforces. (Q9, 5.3)
+- **Six terminal Run statuses:** Completed / Failed / PartiallyFailed /
+  Cancelled / Faulted / OutOfCredits. (5.4)
+- **`PartiallyFailed` is first-class**, not a degenerate of Failed. (5.4)
+- **Compensation is flat (parallel) in v1**; declared per forward node;
+  reverse-sequential deferred. (Q10, 5.5)
+- **Cancellation is cooperative**; does NOT trigger compensation. (5.6)
+- **`Running` is the only non-terminal status**; `Failing` and `Cancelling`
+  are intermediate. (5.7)
+- **History events are append-only** and source-of-truth for credits, replay,
+  debugging. (5.8)
+
+## Section 6 — Durability and Versioning
+
+Section 5 closed with "history events are the bedrock for replay, debugging,
+and billing". Section 6 is what **actually stores them**, plus the snapshot
+they ride next to, plus the version-pinning rules that determine which
+definition a snapshot can be restored against.
+
+Least glamorous section. The one that decides whether the engine survives a
+Tuesday-morning restart.
+
+Six concepts: **what we persist → snapshot format → history-event log →
+idempotency keys → version pinning → retention/GC**.
+
+### 6.1 What we persist (the storage map)
+
+Locked decision #2 is hybrid durability: snapshots + history events +
+idempotency keys. The full table inventory:
+
+| Table | Holds | Written by | Read by |
+|---|---|---|---|
+| `WorkflowDefinitions` | JSON definition + version + status | Publish API | TriggerDispatcher, Branch Loop |
+| `TriggerRegistrations` | Indexed lookup row per trigger node (4.1) | Publish API | TriggerDispatcher (hot path) |
+| `Runs` | One row per Run (RunId, Status, CorrelationKey, …) | Branch Loop, RunFinalizer, CancelRun | Everywhere |
+| `Branches` | Per-branch state snapshot (see 6.2) | Branch Loop (after each node), Resumer | Branch Loop, Resumer |
+| `Bookmarks` | Active suspensions (3.1) | Branch Loop on `WaitForBookmark` | Resumer, BookmarkScheduler |
+| `HistoryEvents` | Append-only audit log (5.8) | Everywhere | Replay, UI, billing |
+| `IdempotencyKeys` | One row per side-effecting action invocation (6.4) | Branch Loop | Branch Loop |
+| `SharedVariables` | Workflow-scoped atomic vars (Section 1) | Atomic ops only | Expression evaluator |
+| `PendingTriggerEvents` | `Queue`-policy backlog (4.6) | TriggerDispatcher | RunFinalizer (drain) |
+| `ScheduledFires` | Ticker schedule table (4.3) | Publish API, Ticker (advance) | Ticker (poll) |
+| `RunCounters` | Per-Run atomic `ActiveBranchCount`, `CreditsConsumed` | Branch Loop | Branch Loop, RunFinalizer |
+
+Non-obvious points:
+
+- **`Branches` IS the snapshot**, not a separate `RunSnapshot` table. Every
+  time a node finishes (returns `Continue` / `Fork` / `WaitForBookmark` /
+  `Fail` / `Terminal`), the engine UPSERTs the Branch row with its new
+  `NodeId`, `Status`, `Local`, `LastOutput`. **That is the whole snapshot.**
+  No global "freeze the Run" step — each branch persists independently.
+  Essential for concurrency: forking 50 branches writes 50 small rows in
+  parallel, not one 50× larger blob.
+
+- **`RunCounters` is split out from `Runs`** so the hot atomic increments on
+  `ActiveBranchCount` and `CreditsConsumed` do not contend with the cold
+  updates on `Runs.Status` / `Runs.CompletedAt`. Different update patterns →
+  different row.
+
+- **`SharedVariables` is workflow-scoped**, keyed by `(WorkflowRefId, VarName)`.
+  Atomic ops (`Increment`, `CompareAndSet`) translate to single SQL `UPDATE`
+  statements; authors never write retry loops.
+
+- **No event-sourced resume.** Snapshots are the source of truth for *resume*.
+  History events are for *audit, debugging, billing, observability*. If a
+  snapshot were ever lost, reconstruction from events is a disaster-recovery
+  step — never the normal path. This separation keeps the hot path fast.
+
+### 6.2 Snapshot format (the `Branches` row)
+
+```text
+Branch {
+  BranchId:          Guid PK
+  RunId:             Guid FK
+  ParentBranchId:    Guid?         // null = initial; set when forked
+  ForkCohortId:      Guid?         // null unless in a ParallelForEach cohort
+  NodeId:            Guid          // current position
+  Status:            BranchStatus  // Active|Waiting|WaitingAtJoin|Compensating
+                                   //  |Completed|Failed|Cancelled
+  PendingTakePort:   string?       // set by Resumer on timeout path (3.4.2)
+  Local:             JsonElement   // $local vars (JSON object)
+  LastOutput:        JsonElement?  // $output from previous node
+                                   //  (null at trigger boundary, Q6)
+  CompensationStack: JsonElement?  // ordered [{nodeId, recordedOutput}]
+                                   //  for compensation (5.5)
+  CreatedAt:         DateTime2(3)
+  UpdatedAt:         DateTime2(3)
+  RowVersion:        rowversion    // optimistic concurrency
+  // Indexed by: (RunId), (RunId, Status)
+}
+```
+
+Flagged details:
+
+- **`Local` and `LastOutput` are `JsonElement`**, not pre-stringified
+  `nvarchar(max)`. SQL Server's native JSON lets debugging queries
+  (`JSON_VALUE`) index into them without parsing the whole blob. PG → `jsonb`.
+
+- **`CompensationStack`** is a list of `(nodeId, recordedOutput)` pairs,
+  appended as each forward node with a `compensation` config completes. When
+  `Compensate`-on-failure fires, this stack IS the work list (5.5). It is
+  data, not a CLR call stack.
+
+- **`RowVersion` (optimistic concurrency).** When the Resumer wakes a branch,
+  it loads `RowVersion` into the BranchContext; on persist, the engine does
+  `UPDATE … WHERE BranchId = @id AND RowVersion = @loaded`. Zero rows
+  updated → another path raced (extremely rare with single-host, free
+  insurance, forward-compatible with leader/standby).
+
+- **No "frozen at last save" full state blob.** Re-running an executor from a
+  snapshot does not restore a CLR object graph; it loads the Branch row +
+  Run row + (if expressions need them) SharedVariables. Cold-start cost is
+  one indexed SELECT.
+
+### 6.3 History-event log
+
+```text
+HistoryEvent {
+  HistoryEventId:  bigint PK identity   -- monotonic; ordering within a run
+  RunId:           Guid                 -- partition key
+  BranchId:        Guid?                -- null for run-level events
+  NodeId:          Guid?                -- null for run/branch-level events
+  EventKind:       string               -- "RunStarted", "NodeFailed", …
+  Severity:        string               -- "Debug" | "Info" | "Warn" | "Error"
+  Timestamp:       DateTime2(3)
+  Payload:         JsonElement?
+  -- CLUSTERED on (RunId, HistoryEventId) — per-run locality
+  -- Index: (Timestamp), (EventKind, Severity)
+}
+```
+
+Design points:
+
+- **`HistoryEventId` is a monotonic identity column**, not `(RunId, sequence)`.
+  Identity columns are insert-friendly under load AND give us a global causal
+  order across runs for free (useful for cross-run debugging).
+- **Within a run, order is `HistoryEventId` ascending.** Works under
+  concurrent emit from multiple branches because identity allocation is
+  monotonic per-instance.
+- **Clustered on `(RunId, HistoryEventId)`** so all events for a run are
+  physically co-located. Deleting a run's history is one indexed range-DELETE.
+- **Severity is on the event**, not derived from `EventKind`. Lets us filter
+  `WHERE Severity IN ('Warn', 'Error')` at the SQL layer without enumerating
+  kinds.
+- **NO transactional binding to the snapshot write.** History events are
+  emitted via a fire-and-forget channel (Section 7). If the engine crashes
+  between a snapshot and a history event, the snapshot wins; history might
+  be missing the last "BranchCompleted" record. The finalizer reconstructs
+  it from the snapshot. **Events are observability, not correctness.**
+
+### 6.4 Idempotency keys for action invocations
+
+The single most important durability primitive for "this workflow already
+called the billing API; do not call it twice on restart".
+
+#### The problem
+
+A node like `action:payment-charge` makes an outbound side-effecting call:
+
+1. Branch executes the node. The HTTP call to the payment provider succeeds.
+2. **Before the Branch UPSERT commits**, the host crashes.
+3. On restart, the engine does not know whether the action ran. The Branch
+   is still at the action node. Re-executing would charge the card twice.
+
+#### The solution
+
+Before invoking a side-effecting executor:
+
+```text
+IdempotencyKey {
+  IdempotencyKeyId:  Guid PK     -- engine-generated; passed to the executor
+  RunId:             Guid
+  BranchId:          Guid
+  NodeId:            Guid
+  Attempt:           int          -- matches retry attempts
+  Status:            string       -- "Pending" | "Succeeded" | "Failed"
+  RequestPayload:    JsonElement  -- input the executor will see
+  ResultPayload:     JsonElement? -- set on Succeeded
+  ErrorPayload:      JsonElement? -- set on Failed
+  CreatedAt:         DateTime2(3)
+  UpdatedAt:         DateTime2(3)
+  -- UNIQUE (RunId, BranchId, NodeId, Attempt)
+}
+```
+
+Flow:
+
+```text
+1. Engine generates IdempotencyKeyId = G
+2. INSERT IdempotencyKey { Id = G, Status = Pending, RequestPayload = input }
+   (unique constraint catches race)
+3. Engine calls executor.ExecuteAsync(input, idempotencyKey = G)
+   - Executor includes G in its outbound HTTP call (provider dedups on it)
+   - Or uses G as part of its own write key
+4. Executor returns success/failure
+5. UPDATE IdempotencyKey SET Status = Succeeded/Failed, ResultPayload, …
+6. Branch row UPSERT (snapshot advances)
+```
+
+On restart, **before invoking**:
+
+```text
+existing ← SELECT * FROM IdempotencyKeys
+           WHERE RunId=@r AND BranchId=@b AND NodeId=@n AND Attempt=@a
+
+if existing is null:
+  // First time through; proceed normally
+else if existing.Status = Pending:
+  // Crashed mid-call; do not know if it ran. Re-invoke with the SAME key G;
+  // executor / downstream provider is responsible for dedup.
+  ReinvokeWithKey(existing.IdempotencyKeyId)
+else if existing.Status = Succeeded:
+  // Already done; skip the executor; use existing.ResultPayload as $output
+  SkipToResult(existing.ResultPayload)
+else if existing.Status = Failed:
+  // Already failed; treat as final NodeFailed; let OnFailure kick in
+  // (Retries get a new Attempt = new row = new key.)
+  TreatAsFailed(existing.ErrorPayload)
+```
+
+Properties:
+
+- **Crash safety.** Side-effect completed but engine crashed → restart skips
+  via `Succeeded`.
+- **Retry safety.** Retries get a new `Attempt` → new row → new key passed to
+  the provider → provider treats them as separate (correct: retry IS a new
+  logical attempt at the provider's level if their semantics demand it).
+- **Provider integration is uniform.** Every action executor receives an
+  idempotency-key parameter. Whether it forwards it, hashes it for its own
+  dedup, or ignores it (naturally-idempotent ops like "set property to
+  value") is the executor's call.
+
+#### Side-effect-free executors
+
+Read-only / naturally-idempotent nodes opt in via
+`INodeExecutor.IsSideEffectFree => true`. For these the IdempotencyKey row is
+written *after* the executor returns (purely as a results cache for replay
+optimization), not before. Saves one round-trip per branch step for cheap
+pure computations.
+
+**Locked (Q11): default `IsSideEffectFree = false`.** Authors must opt into
+the optimization. In IoT, "send command to device" looks pure but is not; we
+will not let executor authors guess wrong by default.
+
+### 6.5 Version pinning
+
+Locked decision #6: pin runs to `WorkflowDefinition.Version`.
+
+#### Publish creates a new version, never mutates
+
+```text
+function Publish(definition):
+  v_next ← (SELECT MAX(Version) FROM WorkflowDefinitions
+            WHERE WorkflowRefId = @ref) + 1
+
+  INSERT WorkflowDefinitions { WorkflowRefId, Version = v_next,
+                               Json = definition, PublishedAt = now }
+
+  // Disable old registrations
+  UPDATE TriggerRegistrations
+    SET Enabled = 0
+    WHERE WorkflowRefId = @ref AND Version < v_next
+
+  // Create new registrations
+  for each triggerNode in definition.Nodes where kind starts with "trigger:":
+    INSERT TriggerRegistration { Version = v_next, …, Enabled = 1 }
+
+  // Reschedule scheduled triggers (4.3) — re-seed ScheduledFires for v_next
+```
+
+#### Existing runs keep their pinned version
+
+A run that started on `Version = 3` continues to load
+`WorkflowDefinitions WHERE WorkflowRefId AND Version = 3` for every executor
+lookup, expression compilation, and node-config read. The new `Version = 4`
+is invisible to it.
+
+This is the central simplification that makes "in-flight workflows" survive
+edits. Without it, every publish would have to migrate live state — schema-
+migration nightmare. With it, publishes are O(1) regardless of how many runs
+are live.
+
+#### Garbage collection
+
+```text
+GC pass (background, hourly):
+  for each (WorkflowRefId, Version) in WorkflowDefinitions:
+    if Version = (MAX Version for this WorkflowRefId):
+      continue  // never GC the latest, even if unused
+    if exists (Run) where matches AND Status = 'Running':
+      continue  // still in use
+    if exists (PendingTriggerEvent) where RegistrationId in (this version's regs):
+      continue  // queued events still target this version
+    DELETE WorkflowDefinitions WHERE WorkflowRefId = @ref AND Version = @v
+    // cascade: TriggerRegistrations, ScheduledFires
+```
+
+Subtle points:
+
+- **Latest is never GC'd**, even if it has zero live runs — operators need to
+  see the current published version.
+- **`PendingTriggerEvents` keep the version alive.** A `Queue`-policy event
+  from an hour ago still references its registration version; the definition
+  must remain loadable.
+- **History events outlive their definitions.** GC does NOT delete history
+  events that referenced its nodes. The history shows `NodeId = G` and the
+  display name is no longer available, but the audit trail survives. UI
+  renders "(definition deleted)" for missing nodes.
+
+**Locked (Q13): auto-GC unused old versions** rather than marking
+`Archived`. Storage is otherwise unbounded; history events preserve the
+audit trail regardless.
+
+### 6.6 Retention and pruning
+
+History events are append-only; without pruning they grow without bound.
+Two axes:
+
+#### Time-based (default)
+
+```text
+DELETE FROM HistoryEvents
+WHERE RunId IN (
+  SELECT RunId FROM Runs
+  WHERE Status NOT IN ('Running')
+    AND CompletedAt < DATEADD(day, -@retentionDays, SYSUTCDATETIME())
+)
+AND Severity IN ('Debug', 'Info')   -- always keep Warn/Error
+```
+
+**Locked (Q12) defaults:**
+
+- **90 days** for `Info` / `Debug`.
+- **Indefinite** for `Warn` / `Error` — operators need long-term forensic
+  visibility ("this device has been flaky since 2024"). Warn/Error volume is
+  much lower than Info/Debug, so the storage trade is acceptable.
+
+#### Per-workflow overrides
+
+```jsonc
+{
+  "retention": {
+    "debugInfoDays": 30,
+    "warnErrorDays": 365,
+    "keepLastN": 100
+  }
+}
+```
+
+`keepLastN` is the "always keep at least N runs' worth of history per
+workflow" floor — ensures low-traffic workflows remain debuggable when the
+time window has elapsed.
+
+#### Other tables
+
+- **`Runs`** rows: kept indefinitely (small).
+- **`Branches`** rows: pruned with terminal runs older than retention.
+- **`Bookmarks`**: already mass-DELETEd at terminal transition (Section 3.7).
+  Nothing to prune.
+- **`IdempotencyKeys`**: pruned with `Branches`. **Crucial: never prune for a
+  non-terminal run.**
+
+### 6.7 Replay (audit reader, not a resume mechanism)
+
+"Replay" here means **reading the history-event stream**, not re-executing.
+A re-execution is "rerun" and requires a new trigger.
+
+A read-only `ReplayReader` service exposes:
+
+```text
+GetRunHistory(runId, options)       → ordered HistoryEvent stream
+GetBranchTimeline(runId, branchId)  → events filtered to one branch
+GetNodeAttempts(runId, branchId, nodeId)
+                                    → all attempts for one node execution
+```
+
+Pure indexed reads against `HistoryEvents`. No engine state is touched. The
+UI's "Run Details" page is a thin layer over these calls.
+
+### 6.8 What v1 deliberately does NOT do
+
+- **No automatic schema migration.** Adding a column to `Branches` between
+  engine versions requires a one-time DB migration script; not done
+  automatically inside the engine binary.
+- **No multi-region replication.** Single SQL instance per environment.
+- **No "import a snapshot from another environment".** Snapshots are
+  environment-local. Definition JSON is portable; Runs are not.
+- **No live history-event streaming.** Reads are pull-based. Push-based
+  observability (CDC, poll-and-publish) sits as a future layer on top, not a
+  change to the engine.
+
+### Section 6 locked decisions
+
+- **Snapshots are per-branch, not per-run** — `Branches` row IS the snapshot.
+  (6.1, 6.2)
+- **`RunCounters` split out from `Runs`** for hot atomic increments. (6.1)
+- **History events are fire-and-forget, not transactionally bound** to
+  snapshots; correctness in snapshots, observability in events. (6.3)
+- **Identity-column `HistoryEventId` for global causal order**, clustered by
+  `(RunId, HistoryEventId)` for per-run locality. (6.3)
+- **IdempotencyKey per `(RunId, BranchId, NodeId, Attempt)`** written
+  *before* invocation for side-effecting nodes; results cached on
+  Succeeded for replay skipping. (6.4)
+- **Default `IsSideEffectFree = false`** — authors opt into the optimization.
+  (Q11, 6.4)
+- **Publish creates a new version row**; existing runs continue on pinned
+  old version. (6.5)
+- **Latest version is never GC'd**, even if unused. (6.5)
+- **History events outlive their definitions.** (6.5)
+- **Auto-GC unused old definition versions** (no Archived state). (Q13, 6.5)
+- **Default retention: 90d Info/Debug; indefinite Warn/Error.** Per-workflow
+  override available. (Q12, 6.6)
+- **No event-sourced resume**; snapshots are source of truth, events for
+  audit only. (6.1)
+
+## Section 7 — Engine Infrastructure
+
+Sections 1–6 designed *what the engine does*. Section 7 is *how the host
+hangs together*: the DI graph, the background services, the interface
+boundaries that decouple "what runs today" from "what runs in 6 months when
+we go multi-host", and the event-bus wiring.
+
+The section that determines whether the engine is **operable**.
+
+Five concepts: **layered host architecture → IRunDispatcher seam →
+background services catalog → InboundHub adapter pattern → DI composition
+and configuration**.
+
+### 7.1 The layered host architecture
+
+The Workflow Engine host is one ASP.NET Core process. Inside it, four
+crisp layers, each depending only on the ones below:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 4 — Inbound Adapters                                 │
+│   RabbitMqAdapter, HttpAdapter, TickerAdapter, SignalAdapter│
+│   (turn the outside world into InboundEvent)                │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│  Layer 3 — InboundHub & Resumer & TriggerDispatcher         │
+│   (route events to bookmarks or to new runs)                │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│  Layer 2 — Engine Core                                      │
+│   IRunDispatcher (the seam), Branch Loop, RunFinalizer,     │
+│   ConcurrencyEnforcer, CancellationCoordinator,             │
+│   ExpressionEvaluator, ICreditCostCalculator,               │
+│   INodeExecutor registry                                    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│  Layer 1 — Providers (SQL Providers)                        │
+│   RunProvider, BranchProvider, BookmarkProvider,            │
+│   HistoryEventProvider, IdempotencyProvider, …              │
+│   (BaseSqlProvider; no cross-provider deps; orchestration   │
+│   happens above)                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The repo's convention is that providers never depend on other providers;
+orchestration lives in the Service layer. **Layer 2 (Engine Core) IS the
+service layer** for the engine. It's where multi-provider transactions and
+decisions happen.
+
+Why this matters: **Layer 2's `IRunDispatcher` is where the leader/standby
+promotion lands later.** Swapping to a SQL-backed work queue tomorrow
+touches only that implementation; Layers 3, 4, and the executors do not
+know.
+
+### 7.2 The `IRunDispatcher` seam
+
+The load-bearing abstraction promised by decision #8. Everything that wants
+to "advance a branch one step" goes through it. Today: in-process Channel.
+Tomorrow: SQL-backed work queue. The engine doesn't care which.
+
+```csharp
+public interface IRunDispatcher
+{
+    // Schedule a branch to be advanced (resumed or freshly started).
+    // Returns when the work is durably scheduled (NOT when execution completes).
+    ValueTask DispatchAsync(BranchPointer pointer, CancellationToken ct);
+
+    // Back-pressure signal for callers that want to know "is the queue saturated?"
+    int ApproximateQueueDepth { get; }
+}
+
+public sealed record BranchPointer(Guid RunId, Guid BranchId, Guid NodeId);
+```
+
+#### Implementation A — `ChannelRunDispatcher` (v1, single-host)
+
+- `System.Threading.Channels.Channel<BranchPointer>`, bounded capacity.
+- Worker pool (default = `Environment.ProcessorCount`; configurable) reads
+  pointers and runs the Branch Loop.
+- Inline-first fan-out (Section 2): edge 0 runs inline, edges 1..N-1 go to
+  the channel.
+- Zero in-process latency; **does NOT survive host restart** (startup
+  recovery service re-enqueues Active branches; see 7.6).
+- Bounded capacity → back-pressure on the InboundHub when saturated.
+
+**Locked (Q14): default worker count = `Environment.ProcessorCount`.**
+Conservative CPU-bound assumption; under-utilizes I/O parallelism out of
+the box but easy to tune up via config. Predictable over performant by
+default.
+
+#### Implementation B — `SqlRunDispatcher` (future, leader/standby)
+
+- `DispatchAsync` INSERTs into a `WorkItems` table.
+- Worker pools across all hosts poll with
+  `SELECT TOP 1 … WITH (UPDLOCK, READPAST, ROWLOCK)`; mark `LeasedBy`,
+  process, DELETE on success.
+- Adds milliseconds of latency; enables multi-host distribution, crash
+  survival (pointers stay in queue), and lease-based recovery.
+
+**Key point: nothing above this interface changes.** The Branch Loop
+receives a `BranchPointer`, runs the executor, persists the new Branch row,
+calls `IRunDispatcher.DispatchAsync(nextPointer)`. Whether that next
+pointer is in a Channel or a SQL row is invisible.
+
+#### Where work pointers come from (the dispatch fan-in)
+
+Five sources, all converging on `IRunDispatcher.DispatchAsync`:
+
+1. **TriggerDispatcher** — new Run created → initial branch pointer.
+2. **BookmarkResumer** — bookmark consumed → resumed branch pointer.
+3. **The Branch Loop itself** — node returned `Continue` or `Fork` → next-step pointers.
+4. **StartupRecoveryService** — host start → sweep `Branches WHERE Status = Active`, dispatch each.
+5. **CancellationCoordinator** — `Cancelling` runs need their Active branches woken to observe the CTS; dispatcher kicks them.
+
+Five sources, one seam.
+
+### 7.3 Background services catalog
+
+The host runs these as `IHostedService`s. Each has a single responsibility:
+
+| Service | Job | Cadence |
+|---|---|---|
+| `BookmarkSchedulerService` | Poll due `TimeoutAt` bookmarks (3.3) | Adaptive (1s default; tightens on burst) |
+| `TickerService` | Poll due `ScheduledFires` (4.3) | 1s default |
+| `RunFinalizerSweeper` | Re-check Runs with `ActiveBranchCount = 0` that haven't finalized inline (defensive) | 30s |
+| `StartupRecoveryService` | At host start: re-dispatch Active branches; release stale leases (on SqlRunDispatcher) | Once at startup |
+| `HistoryEventFlusher` | Drain in-memory history-event channel into SQL via batched INSERT | Continuous; flushes on size or time threshold |
+| `DefinitionGCService` | Delete unused old definition versions (6.5) | Hourly |
+| `RetentionPrunerService` | Delete history events past retention (6.6) | Hourly, off-peak |
+| `MetricsExporter` | OpenTelemetry/Prometheus metrics | Continuous |
+
+Clarifications:
+
+- **`RunFinalizerSweeper` is defensive.** Inline path: Branch Loop
+  decrements `ActiveBranchCount` to 0 → calls `RunFinalizer.Finalize`
+  directly. The sweeper exists for the corner case where the decrementing
+  transaction committed but the in-process finalize call lost (crash,
+  swallowed exception). Without it, those runs would be stuck in `Running`
+  forever.
+
+- **`HistoryEventFlusher`** is the batching layer for the fire-and-forget
+  event channel (6.3). Events enter an unbounded in-memory channel; the
+  flusher INSERTs in batches (e.g. 250 events or 250ms, whichever first).
+  Crash window: the unbatched in-memory events. **Locked (Q15): all
+  severities go through the same path; some loss on crash is acceptable per
+  the "observability not correctness" rule (6.3). The run's `Status` is
+  durable independently, so operator dashboards still surface failures.**
+
+#### `ILeaseHolder` — the forward-compatible standby seam
+
+Each background service wraps its tick:
+
+```csharp
+while (!ct.IsCancellationRequested)
+{
+    if (await _leaseHolder.TryAcquireAsync("BookmarkScheduler", _ttl, ct))
+    {
+        try
+        {
+            await DoTickAsync(ct);
+            await _leaseHolder.RenewAsync("BookmarkScheduler", _ttl, ct);
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Tick failed"); }
+    }
+    await Task.Delay(_pollInterval, ct);
+}
+```
+
+```csharp
+public interface ILeaseHolder
+{
+    Task<bool> TryAcquireAsync(string leaseName, TimeSpan ttl, CancellationToken ct);
+    Task RenewAsync(string leaseName, TimeSpan ttl, CancellationToken ct);
+    Task ReleaseAsync(string leaseName, CancellationToken ct);
+}
+```
+
+- v1: `AlwaysHoldsLeaseHolder` — `TryAcquireAsync` always returns true. No
+  SQL involved. No behavior change vs not having the seam.
+- Future: `SqlLeaseHolder` — row in a `Leases` table holds `HostId` +
+  `ExpiresAt`. Only one host's `TryAcquireAsync` succeeds at a time;
+  standby naturally idles.
+
+### 7.4 InboundHub adapter pattern
+
+Section 4.3 defined the `InboundEvent` shape. Each external source has an
+adapter that produces one:
+
+```csharp
+public interface IInboundAdapter
+{
+    Task StartAsync(IInboundEventSink sink, CancellationToken ct);
+    Task StopAsync(CancellationToken ct);
+}
+
+public interface IInboundEventSink
+{
+    ValueTask PublishAsync(InboundEvent evt, CancellationToken ct);
+}
+```
+
+The sink is the **InboundHub**, which:
+
+1. Validates and enriches the event.
+2. Calls `BookmarkResumer.MatchInbound(evt)`.
+3. If no match → falls through to `TriggerDispatcher.Dispatch(evt)`.
+
+#### Concrete adapters for v1
+
+```text
+RabbitMqInboundAdapter      // MassTransit consumer (device-property/telemetry/event)
+HttpInboundAdapter          // ASP.NET endpoint group for /wake/{token}, /hooks/{path}
+TickerInboundAdapter        // Wraps TickerService → emits InboundEvent on each ScheduledFire claim
+SignalInboundAdapter        // Subscribes to internal signal bus AND exposes /signals/{name}
+ChildRunCompletedAdapter    // Subscribes to internal "run terminal" events → InboundEvent for parent wakes
+```
+
+The last one is subtle: the engine itself emits an internal signal when a
+Run hits a terminal status; this adapter converts that emission into a
+normalized InboundEvent → Resumer → wakes the parent's `ChildRunCompleted`
+bookmark. **The engine is its own inbound event source for this case.**
+Keeps the routing path uniform.
+
+**Outbound is NOT in scope here.** Outbound calls (executors talking to
+devices, payment providers, etc.) live inside the executor implementations,
+not Layer 4. Layer 4 is inbound only.
+
+### 7.5 DI composition and configuration
+
+Composition root in `Program.cs` (sketch):
+
+```csharp
+// Layer 1 — Providers (Scoped)
+services.AddScoped<IRunProvider, SqlRunProvider>();
+services.AddScoped<IBranchProvider, SqlBranchProvider>();
+services.AddScoped<IBookmarkProvider, SqlBookmarkProvider>();
+services.AddScoped<IHistoryEventProvider, SqlHistoryEventProvider>();
+services.AddScoped<IIdempotencyProvider, SqlIdempotencyProvider>();
+services.AddScoped<ISharedVariableProvider, SqlSharedVariableProvider>();
+services.AddScoped<IDefinitionProvider, SqlDefinitionProvider>();
+services.AddScoped<IPendingTriggerEventProvider, SqlPendingTriggerEventProvider>();
+services.AddScoped<IScheduledFireProvider, SqlScheduledFireProvider>();
+services.AddScoped<IRunCountersProvider, SqlRunCountersProvider>();
+services.AddScoped<ITriggerRegistrationProvider, SqlTriggerRegistrationProvider>();
+
+// Layer 2 — Engine Core (Singleton)
+services.AddSingleton<IRunDispatcher, ChannelRunDispatcher>();   // SWAP POINT
+services.AddSingleton<IBranchLoop, BranchLoop>();
+services.AddSingleton<IRunFinalizer, RunFinalizer>();
+services.AddSingleton<IConcurrencyEnforcer, ConcurrencyEnforcer>();
+services.AddSingleton<ICancellationCoordinator, CancellationCoordinator>();
+services.AddSingleton<IExpressionEvaluator, ExpressionEvaluator>();
+services.AddSingleton<ICreditCostCalculator, CreditCostCalculator>();
+services.AddSingleton<ILeaseHolder, AlwaysHoldsLeaseHolder>();   // SWAP POINT
+
+// Node executors — keyed Transient
+services.AddNodeExecutor<DeviceCommandExecutor>("action:device-command");
+services.AddNodeExecutor<HttpRequestExecutor>("action:http");
+services.AddNodeExecutor<DelayExecutor>("control:delay");
+services.AddNodeExecutor<WaitForHttpExecutor>("control:waitForHttp");
+services.AddNodeExecutor<AwaitSignalExecutor>("control:awaitSignal");
+services.AddNodeExecutor<ForEachExecutor>("control:forEach");
+services.AddNodeExecutor<ParallelForEachExecutor>("control:parallelForEach");
+services.AddNodeExecutor<JoinExecutor>("control:join");
+services.AddNodeExecutor<SubWorkflowExecutor>("control:subWorkflow");
+// …
+
+// Layer 3 — Routing (Singleton)
+services.AddSingleton<IInboundHub, InboundHub>();
+services.AddSingleton<IBookmarkResumer, BookmarkResumer>();
+services.AddSingleton<ITriggerDispatcher, TriggerDispatcher>();
+
+// Layer 4 — Adapters (IHostedService implementing IInboundAdapter)
+services.AddHostedAdapter<RabbitMqInboundAdapter>();
+services.AddHostedAdapter<HttpInboundAdapter>();
+services.AddHostedAdapter<TickerInboundAdapter>();
+services.AddHostedAdapter<SignalInboundAdapter>();
+services.AddHostedAdapter<ChildRunCompletedAdapter>();
+
+// Background services
+services.AddHostedService<BookmarkSchedulerService>();
+services.AddHostedService<TickerService>();
+services.AddHostedService<RunFinalizerSweeper>();
+services.AddHostedService<StartupRecoveryService>();
+services.AddHostedService<HistoryEventFlusher>();
+services.AddHostedService<DefinitionGCService>();
+services.AddHostedService<RetentionPrunerService>();
+```
+
+#### Non-obvious lifetime choices
+
+- **Providers `Scoped`** because they wrap `SqlConnection`. Matches
+  `BaseSqlProvider` and repo conventions.
+- **Engine core `Singleton`** because stateless or holds only process-global
+  state (channels, counters).
+- **Engine core resolves providers from `IServiceScopeFactory`** per piece
+  of work, not via constructor injection. The only way to mix Singleton +
+  Scoped without long-lived `SqlConnection`s. Matches existing hosts.
+- **Executors `Transient`, keyed by `kind` string.** Branch Loop resolves:
+  ```csharp
+  var executor = scope.ServiceProvider
+                      .GetRequiredKeyedService<INodeExecutor>(node.Kind);
+  ```
+  Aligns with the repo's existing Reference Mapper Pattern.
+
+#### Configuration (`WorkflowEngineOptions`)
+
+```jsonc
+{
+  "WorkflowEngine": {
+    "RunDispatcher": {
+      "WorkerCount": null,           // null → Environment.ProcessorCount
+      "ChannelCapacity": 10000
+    },
+    "BookmarkScheduler": { "PollIntervalMs": 1000, "BatchSize": 100 },
+    "Ticker":             { "PollIntervalMs": 1000 },
+    "HistoryEventFlusher":{ "BatchSize": 250, "FlushIntervalMs": 250 },
+    "Retention": {
+      "DebugInfoDays": 90,
+      "WarnErrorDays": null,         // null → indefinite
+      "DefinitionGcEnabled": true
+    },
+    "CreditBudget": {
+      "DefaultPerRun": 10000,
+      "ResetPolicy": "PerRun"
+    },
+    "Leader": { "Mode": "AlwaysHold" }   // future: "SqlLease" | "Etcd"
+  }
+}
+```
+
+`Leader.Mode` is the configuration switch that picks the right
+`ILeaseHolder` implementation at DI registration time.
+
+### 7.6 Startup, shutdown, and crash recovery
+
+#### Startup sequence
+
+```text
+1. ASP.NET Core builds the DI graph.
+2. StartupRecoveryService runs FIRST:
+   a. SELECT * FROM Runs
+      WHERE Status IN ('Running', 'Failing', 'Cancelling')
+      For each:
+        - Recreate run-level CTS (or honor existing Failing/Cancelling)
+        - SELECT * FROM Branches WHERE RunId = @r AND Status = 'Active'
+        - For each Active branch: IRunDispatcher.DispatchAsync(BranchPointer)
+   b. (Future SqlRunDispatcher) DELETE WorkItems WHERE LeasedBy = (this HostId)
+3. Other IHostedServices start (BookmarkScheduler, Ticker, …).
+4. Inbound adapters start LAST — only after the engine can accept work.
+```
+
+Inbound is last so we do not accept new triggers while rehydrating
+existing work. Enforced via `IHostedService` registration order plus an
+`AddHostedAdapter` extension that wraps adapters in a "wait until engine
+ready" guard.
+
+#### Shutdown sequence
+
+```text
+1. Inbound adapters STOP FIRST — no new events accepted.
+2. IRunDispatcher drains:
+   - ChannelRunDispatcher: complete the channel, wait for workers.
+   - (Future) SqlRunDispatcher: release leases; in-flight items stay queued.
+3. Background services stop.
+4. HistoryEventFlusher does a final flush (best-effort).
+5. SQL connections drained.
+```
+
+#### Crash recovery semantics
+
+The startup sweep + IdempotencyKey machinery (6.4) gives us:
+
+| Event during crash | Recovery behavior |
+|---|---|
+| Crash while Branch Loop was advancing a node | Branch still `Active` per snapshot → re-dispatched → executor sees existing IdempotencyKey if any |
+| Crash mid-side-effect (IdempotencyKey = Pending) | Re-invoke with same key; downstream provider dedupes |
+| Crash after side-effect, before snapshot UPSERT | IdempotencyKey = Succeeded → skip executor, use cached result |
+| Crash while waking a bookmark | Bookmark either DELETEd or not; if not, next event/scheduler tick re-attempts |
+| Crash after run finalized | Terminal status persisted; nothing to redo |
+| Crash mid-history-event flush | Unbatched events are lost (acceptable per 6.3) |
+
+The engine never claims "exactly-once side effect" — that is an
+external-system property. It claims **at-least-once with
+idempotency-key passing**, which is the strongest contract we can offer
+with cooperating downstream providers.
+
+### 7.7 Observability surface
+
+#### Logs (Serilog)
+
+Each Branch Loop tick logs with structured properties:
+
+```
+{RunId, BranchId, NodeId, NodeKind, Attempt, Outcome, DurationMs}
+```
+
+Severity matches history-event severity rules.
+
+#### Metrics (Prometheus via OpenTelemetry)
+
+| Metric | Type | Labels |
+|---|---|---|
+| `wbskt_workflow_runs_started_total` | counter | workflow_ref, trigger_kind |
+| `wbskt_workflow_runs_completed_total` | counter | workflow_ref, status |
+| `wbskt_workflow_branches_active` | gauge | — |
+| `wbskt_workflow_bookmarks_outstanding` | gauge | wake_kind |
+| `wbskt_workflow_node_duration_ms` | histogram | node_kind, outcome |
+| `wbskt_workflow_dispatcher_queue_depth` | gauge | — |
+| `wbskt_workflow_credits_consumed_total` | counter | workflow_ref |
+| `wbskt_workflow_history_event_flusher_lag` | gauge | — |
+| `wbskt_workflow_pending_triggers` | gauge | policy |
+
+Alertable canaries: the `_lag` and `_outstanding` metrics. Unbounded growth
+signals trouble.
+
+#### Traces
+
+Each Branch Loop tick is a single span. Sub-spans for executor invocation,
+expression evaluation, provider calls. Run carries a trace ID at creation;
+spans correlate by `(RunId, BranchId)`.
+
+### 7.8 Testing seams
+
+| Layer | What to mock |
+|---|---|
+| Unit-test a single executor | `INodeExecutor` against a fake `IBranchContext` |
+| Unit-test the Branch Loop | Real BranchLoop + real `ChannelRunDispatcher` + in-memory providers |
+| Unit-test routing | Real Resumer + Dispatcher + in-memory providers |
+| Integration-test a workflow | Real engine + real SQL (testcontainers) + synthetic InboundEvents |
+| End-to-end | Real adapters + real SQL + real MassTransit |
+
+In-memory provider implementations live in a `Tests.Support` project as
+first-class artifacts. They implement the same `I*Provider` interfaces as
+the SQL providers; tests plug them in. Enabled by Layer 1 / Layer 2
+separation — providers are interfaces with two real implementations, no
+business logic in either.
+
+### 7.9 API ownership (engine vs management hosts)
+
+**Locked (Q16): the Engine Host exposes NO public HTTP API.** Only the
+internal callback endpoints owned by `HttpInboundAdapter` (the
+`/wake/{token}` and `/hooks/{path}` paths from 7.4).
+
+All operator / admin / UX APIs (CancelRun, query runs, publish definitions,
+fetch run details, etc.) live in the **Management Host**, which:
+
+- Reads from the same SQL tables for query endpoints (ReplayReader, run
+  listings).
+- Publishes events on RabbitMQ for state-changing operations (e.g., a
+  `CancelRunRequested` event that the Engine consumes via its
+  `RabbitMqInboundAdapter` → routes to `CancelRun`).
+- Publishes new workflow definitions via a `WorkflowPublished` event
+  similarly consumed by the Engine.
+
+Matches the repo's "each host has its own role" architecture and the
+event-first philosophy from the repo-level copilot instructions. Engine
+Host stays purely backend.
+
+### 7.10 What v1 deliberately does NOT include
+
+- **No `SqlRunDispatcher`.** Channel only. Interface stays for future swap.
+- **No `SqlLeaseHolder`.** AlwaysHold only.
+- **No CDC streaming of history events.** Pull-only via `ReplayReader`.
+- **No multi-tenant isolation at the engine level.** `WorkspaceId` is on
+  Runs for filtering / billing; engine treats all workspaces uniformly.
+- **No hot-reload of node executors.** Adding a new node kind requires a
+  deploy.
+- **No public HTTP API on the Engine Host.** Management Host owns operator
+  APIs (Q16).
+
+### Section 7 locked decisions
+
+- **Four crisp layers:** Providers → Engine Core → Routing → Adapters; each
+  depends only on layers below. (7.1)
+- **`IRunDispatcher` is THE seam** that decouples in-process from
+  SQL-backed work distribution. v1 = `ChannelRunDispatcher`. (7.2)
+- **Default worker count = `Environment.ProcessorCount`** (CPU-bound
+  default, easily tunable). (Q14, 7.2)
+- **`ILeaseHolder` is the standby seam.** v1 = `AlwaysHoldsLeaseHolder`. (7.3)
+- **Background services list locked:** BookmarkScheduler, Ticker,
+  RunFinalizerSweeper, StartupRecovery, HistoryEventFlusher,
+  DefinitionGC, RetentionPruner, MetricsExporter. (7.3)
+- **All history events flow through the same fire-and-forget pipeline;**
+  some loss on crash acceptable per 6.3. (Q15, 7.3)
+- **InboundHub is the single fan-in point** for external events; per-source
+  adapters normalize. (7.4)
+- **Providers are Scoped, engine core is Singleton, executors are keyed
+  Transient.** (7.5)
+- **Single `WorkflowEngineOptions` config tree** with `Leader.Mode`
+  toggling between today's `AlwaysHold` and tomorrow's `SqlLease`. (7.5)
+- **Startup order:** recovery first, then services, then adapters. (7.6)
+- **Shutdown reverse:** adapters first, then dispatcher drain, then
+  services. (7.6)
+- **At-least-once with idempotency-key passing** is the engine's contract;
+  "exactly-once side effect" is an external-system property. (7.6)
+- **Engine Host exposes no public HTTP API**; Management Host owns
+  operator APIs. (Q16, 7.9)
+- **In-memory provider impls are first-class** (in `Tests.Support`),
+  enabling fast deterministic integration tests. (7.8)
 
 ---
 
@@ -1578,14 +2902,32 @@ To be detailed.
 | CorrelationKey | Expression value used to scope `ConcurrencyPolicy`; full identity = `(WorkflowRefId, TriggerNodeId, value)`. |
 | ConcurrencyPolicy | AllowParallel / Queue / CancelExisting / DropIfRunning, per correlation key. |
 | PendingTriggerEvent | Queued inbound payload waiting for current-correlation run to finish (Queue policy). |
-| RetryPolicy | Per-node attempts/backoff/retryable-filter config; retries inside the node executor. |
+| RetryPolicy | Per-node attempts/backoff/retryable-filter config; retries inside the node executor; each attempt costs credits. |
 | OnFailure | What the branch does after retries exhaust: FailBranch / FailRun / Continue / Compensate. |
 | RunStatus | Completed / Failed / PartiallyFailed / Cancelled / Faulted / OutOfCredits. |
-| BranchStatus | Active / Waiting / WaitingAtJoin / Completed / Failed / Cancelled. |
-| HistoryEvent | Append-only audit/observability event. |
-| RunSnapshot | Persisted state of a run at a moment in time. |
+| BranchStatus | Active / Waiting / WaitingAtJoin / Compensating / Completed / Failed / Cancelled. |
+| ErrorCategory | Transient (retryable) / Permanent (no retry) / Engine fault (→ Faulted). |
+| Compensation | Per-node opt-in undo step; runs in parallel across declared nodes when a branch with `OnFailure: Compensate` fails. |
+| RunFinalizer | Aggregates branch outcomes into a terminal `RunStatus` when ActiveBranchCount → 0. |
+| HistoryEvent | Append-only audit/observability event; source-of-truth for credits, replay, debugging; fire-and-forget. |
+| RunSnapshot | Conceptual term — there is no dedicated table; the `Branches` row IS the snapshot. |
+| RunCounters | Split-out table holding atomic per-run counters (`ActiveBranchCount`, `CreditsConsumed`). |
+| IdempotencyKey | Row per `(RunId, BranchId, NodeId, Attempt)` written before side-effecting executor calls; enables crash-safe replay. |
+| IsSideEffectFree | Per-executor flag (default false); when true, the engine writes the IdempotencyKey *after* invocation as a results cache. |
+| WorkflowDefinitions | Versioned, immutable per `(WorkflowRefId, Version)`; publish creates a new row. |
+| ReplayReader | Read-only service exposing ordered history-event streams for the UI / debugging. |
+| Retention | Default 90d for Info/Debug; indefinite for Warn/Error; per-workflow override available. |
 | Credits | Per-node-execution cost; safety net + billing primitive. |
 | Fork | A `NodeExecutionResult` variant that creates N branches with per-branch seed state (ParallelForEach uses this). |
 | Join | A node that gates on a cohort of forked branches arriving; emits one continuation branch. |
 | ForkCohortId | Guid tag on a Branch identifying which fan-out it belongs to; used by Join. |
 | Sub-workflow | A child Run kicked off by the parent; parent waits via `ChildRunCompleted` bookmark. |
+| IRunDispatcher | The Section 7.2 seam; advances a `BranchPointer`. v1 = `ChannelRunDispatcher`; future = `SqlRunDispatcher`. |
+| BranchPointer | `(RunId, BranchId, NodeId)` — the unit of work scheduled through `IRunDispatcher`. |
+| ILeaseHolder | The Section 7.3 standby seam; v1 = `AlwaysHoldsLeaseHolder`; future = `SqlLeaseHolder`. |
+| InboundHub | The Section 7.4 single fan-in point for external events; routes to Resumer → TriggerDispatcher. |
+| IInboundAdapter | Per-source normalizer (RabbitMQ, HTTP, Ticker, Signal, ChildRunCompleted) that produces `InboundEvent`s. |
+| StartupRecoveryService | At host start, re-dispatches Active branches and releases stale leases. |
+| RunFinalizerSweeper | Defensive background pass that finalizes Runs whose inline finalize was lost. |
+| HistoryEventFlusher | Background batcher draining the in-memory history-event channel into SQL. |
+| WorkflowEngineOptions | The single configuration tree under `WorkflowEngine` in `appsettings.json`. |
