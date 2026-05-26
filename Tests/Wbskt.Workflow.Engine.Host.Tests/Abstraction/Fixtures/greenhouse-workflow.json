@@ -1,0 +1,34 @@
+{
+  "workflowRefId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "version": 1,
+  "workspaceId": 1,
+  "name": "Vent control + escalation",
+  "description": null,
+  "isEnabled": true,
+  "createdAt": "2026-01-01T00:00:00Z",
+  "publishedBy": 1,
+  "sharedVariableSchema": [
+    { "name": "smsToday", "type": "Counter", "default": 0, "resetPolicy": { "kind": "dailyAtUtc", "time": "02:00:00" } }
+  ],
+  "nodes": [
+    { "nodeId": "T", "kind": "trigger:device", "name": "Temp Trigger", "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }], "config": { "deviceRef": "sensor-A", "event": "telemetry", "correlationKey": "$trigger.deviceId", "concurrencyPolicy": "CancelExisting" } },
+    { "nodeId": "G1", "kind": "control:logic", "name": "Gate 1", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "true", "direction": "Output", "label": "True" }, { "portId": "false", "direction": "Output", "label": "False" }], "config": { "condition": "$trigger.temperature > 35" } },
+    { "nodeId": "OV", "kind": "action:command", "name": "OpenVent", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "deviceRef": "$trigger.deviceId", "command": "OpenVent" } },
+    { "nodeId": "D", "kind": "control:delay", "name": "Delay 10m", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "duration": "00:10:00" } },
+    { "nodeId": "G2", "kind": "control:logic", "name": "Gate 2", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "true", "direction": "Output", "label": "True" }, { "portId": "false", "direction": "Output", "label": "False" }], "config": { "condition": "$trigger.temperature > 35" } },
+    { "nodeId": "SMS", "kind": "action:email", "name": "Send SMS", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "to": "ops@x", "subject": "Alert", "body": "Vent didn't cool" } },
+    { "nodeId": "INC", "kind": "control:variable", "name": "Increment smsToday", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "scope": "Shared", "op": "Increment", "var": "smsToday" } },
+    { "nodeId": "G3", "kind": "control:logic", "name": "Gate 3", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "true", "direction": "Output", "label": "True" }, { "portId": "false", "direction": "Output", "label": "False" }], "config": { "condition": "$shared.smsToday >= 2" } },
+    { "nodeId": "CALL", "kind": "action:email", "name": "Call ops", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "to": "ops@x", "subject": "URGENT", "body": "Call ops" } }
+  ],
+  "edges": [
+    { "from": ["T", "out"], "to": ["G1", "in"] },
+    { "from": ["G1", "true"], "to": ["OV", "in"] },
+    { "from": ["OV", "out"], "to": ["D", "in"] },
+    { "from": ["D", "out"], "to": ["G2", "in"] },
+    { "from": ["G2", "true"], "to": ["SMS", "in"] },
+    { "from": ["SMS", "out"], "to": ["INC", "in"] },
+    { "from": ["INC", "out"], "to": ["G3", "in"] },
+    { "from": ["G3", "true"], "to": ["CALL", "in"] }
+  ]
+}
