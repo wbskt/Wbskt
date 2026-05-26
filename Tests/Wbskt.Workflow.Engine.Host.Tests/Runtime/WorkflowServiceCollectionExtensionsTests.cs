@@ -28,6 +28,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
+        services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();
         services.AddHostedService<BranchExecutionPump>();
