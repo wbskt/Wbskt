@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Extensions;
+using Wbskt.Workflow.NodeExecutors.Actions;
+using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
@@ -39,6 +42,8 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var hostIdentity2 = provider.GetRequiredService<IHostIdentity>();
         var correlationKeyResolver1 = provider.GetRequiredService<ICorrelationKeyResolver>();
         var correlationKeyResolver2 = provider.GetRequiredService<ICorrelationKeyResolver>();
+        var expressionEvaluator1 = provider.GetRequiredService<IExpressionEvaluator>();
+        var expressionEvaluator2 = provider.GetRequiredService<IExpressionEvaluator>();
         using IServiceScope scope1 = provider.CreateScope();
         using IServiceScope scope2 = provider.CreateScope();
         var registry1 = scope1.ServiceProvider.GetRequiredService<INodeExecutorRegistry>();
@@ -81,6 +86,8 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Same(hostIdentity1, hostIdentity2);
         Assert.IsType<CorrelationKeyResolver>(correlationKeyResolver1);
         Assert.Same(correlationKeyResolver1, correlationKeyResolver2);
+        Assert.IsType<ExpressionEvaluator>(expressionEvaluator1);
+        Assert.Same(expressionEvaluator1, expressionEvaluator2);
         Assert.IsType<BranchLoop>(loop1);
         Assert.NotSame(loop1, loop2);
         Assert.IsType<BookmarkResumer>(bookmarkResumer1);
@@ -109,6 +116,34 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Contains(executors1, executor => executor.GetType().Name == "ScheduleTriggerExecutor");
         Assert.Contains(executors1, executor => executor.GetType().Name == "WebhookTriggerExecutor");
         Assert.Contains(executors1, executor => executor.GetType().Name == "ManualTriggerExecutor");
+        Assert.Contains(executors1, executor => executor is LogicNodeExecutor);
+        Assert.Contains(executors1, executor => executor is VariableNodeExecutor);
+        Assert.Contains(executors1, executor => executor is ForEachNodeExecutor);
+        Assert.Contains(executors1, executor => executor is DelayNodeExecutor);
+        Assert.Contains(executors1, executor => executor is WaitForHttpNodeExecutor);
+        Assert.Contains(executors1, executor => executor is AwaitSignalNodeExecutor);
+        Assert.Contains(executors1, executor => executor is JoinNodeExecutor);
+        Assert.Contains(executors1, executor => executor is SubWorkflowNodeExecutor);
+        Assert.Contains(executors1, executor => executor is FailRunNodeExecutor);
+        Assert.Contains(executors1, executor => executor is EndNodeExecutor);
+        Assert.Contains(executors1, executor => executor is CommandNodeExecutor);
+        Assert.Contains(executors1, executor => executor is WebhookNodeExecutor);
+        Assert.Contains(executors1, executor => executor is EmailNodeExecutor);
+        Assert.Contains(executors1, executor => executor is TelegramNodeExecutor);
+        Assert.IsType<LogicNodeExecutor>(registry1.For(NodeKind.ControlLogic));
+        Assert.IsType<VariableNodeExecutor>(registry1.For(NodeKind.ControlVariable));
+        Assert.IsType<ForEachNodeExecutor>(registry1.For(NodeKind.ControlForEach));
+        Assert.IsType<DelayNodeExecutor>(registry1.For(NodeKind.ControlDelay));
+        Assert.IsType<WaitForHttpNodeExecutor>(registry1.For(NodeKind.ControlWaitForHttp));
+        Assert.IsType<AwaitSignalNodeExecutor>(registry1.For(NodeKind.ControlAwaitSignal));
+        Assert.IsType<JoinNodeExecutor>(registry1.For(NodeKind.ControlJoin));
+        Assert.IsType<SubWorkflowNodeExecutor>(registry1.For(NodeKind.ControlSubWorkflow));
+        Assert.IsType<FailRunNodeExecutor>(registry1.For(NodeKind.ControlFailRun));
+        Assert.IsType<EndNodeExecutor>(registry1.For(NodeKind.ControlEnd));
+        Assert.IsType<CommandNodeExecutor>(registry1.For(NodeKind.ActionCommand));
+        Assert.IsType<WebhookNodeExecutor>(registry1.For(NodeKind.ActionWebhook));
+        Assert.IsType<EmailNodeExecutor>(registry1.For(NodeKind.ActionEmail));
+        Assert.IsType<TelegramNodeExecutor>(registry1.For(NodeKind.ActionTelegram));
         Assert.Contains(hostedServices, service => service is BranchExecutionPump);
         Assert.Contains(hostedServices, service => service is BookmarkScheduler);
     }
