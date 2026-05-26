@@ -260,6 +260,87 @@ public sealed class BranchLoopTests
         Assert.False(branchProvider.SetCompletedCalled);
     }
 
+    [Fact]
+    public async Task Fail_non_retryable_marks_branch_failed_and_decrements_counter()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fail",
+            null,
+            true,
+            [new TestNode(nodeId, "fail", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var counters = new StubRunCountersProvider();
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.True(branchProvider.SetFailedCalled);
+        Assert.Equal([-1], counters.DecrementCalls);
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "NodeFailed");
+    }
+
+    [Fact]
+    public async Task Fail_retryable_throws_NotImplementedException()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fail-retry",
+            null,
+            true,
+            [new TestNode(nodeId, "fail", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fail("E_RETRY", "boom", true, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act / Assert
+        var exception = await Assert.ThrowsAsync<NotImplementedException>(() => loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None));
+        Assert.Equal("Retry handled in Phase 8", exception.Message);
+    }
+
     private static IReadOnlyDictionary<string, JsonElement> CreatePatch(string name, int value)
     {
         return new Dictionary<string, JsonElement>
@@ -354,6 +435,8 @@ public sealed class BranchLoopTests
 
         public bool SetCompletedCalled { get; private set; }
 
+        public bool SetFailedCalled { get; private set; }
+
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
         {
             var created = row with { Id = (int)_nextBranchId++ };
@@ -411,6 +494,7 @@ public sealed class BranchLoopTests
 
         public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
         {
+            SetFailedCalled = true;
             BranchRow updated = _rows[branchId] with { Status = "Failed", LastOutputJson = lastOutputJson };
             _rows[branchId] = updated;
             return Task.FromResult(updated);
@@ -455,6 +539,8 @@ public sealed class BranchLoopTests
     {
         public List<int> IncrementCalls { get; } = [];
 
+        public List<int> DecrementCalls { get; } = [];
+
         public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             IncrementCalls.Add(delta);
@@ -464,6 +550,7 @@ public sealed class BranchLoopTests
 
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
+            DecrementCalls.Add(-delta);
             operationLog?.Add($"decrement:{delta}");
             return Task.FromResult(0);
         }
