@@ -114,6 +114,56 @@ public sealed class BranchLoop : IBranchLoop
                     break;
                 }
 
+                case NodeExecutionResult.Fork fork:
+                {
+                    IReadOnlyDictionary<string, JsonElement> baseLocalState = MergeLocalState(branchRow.LocalJson, fork.LocalStatePatch);
+                    if (fork.Children.Count == 1 && string.IsNullOrWhiteSpace(fork.ContinueNodeId))
+                    {
+                        ForkSpec child = fork.Children.Single();
+                        string childLocalJson = SerializeLocalState(MergeLocalState(SerializeLocalState(baseLocalState), child.LocalState));
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ParseNodeId(child.NodeId), ActiveStatus, childLocalJson, branchRow.LastOutputJson, ct);
+                        break;
+                    }
+
+                    if (fork.Children.Count > 0)
+                    {
+                        await _runCountersProvider.IncrementActiveBranchesAsync(runRow.Id, fork.Children.Count, ct);
+                        Guid cohortId = _idGenerator.NewId();
+                        foreach (ForkSpec child in fork.Children)
+                        {
+                            string childLocalJson = SerializeLocalState(MergeLocalState(SerializeLocalState(baseLocalState), child.LocalState));
+                            BranchRow created = await _branchProvider.CreateAsync(new BranchRow
+                            {
+                                Id = 0,
+                                RefId = _idGenerator.NewId(),
+                                RunId = runRow.Id,
+                                ParentBranchId = branchRow.RefId,
+                                ForkCohortId = cohortId,
+                                NodeId = ParseNodeId(child.NodeId),
+                                Status = ActiveStatus,
+                                PendingTakePort = null,
+                                LocalJson = childLocalJson,
+                                LastOutputJson = null,
+                                CompensationStackJson = branchRow.CompensationStackJson,
+                                CreatedAt = _clock.UtcNow,
+                                UpdatedAt = _clock.UtcNow,
+                                RowVersion = Array.Empty<byte>()
+                            }, ct);
+                            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, created.Id, BranchExecutionReason.ForkChild), ct);
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(fork.ContinueNodeId))
+                    {
+                        await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
+                        return;
+                    }
+
+                    string continueLocalJson = SerializeLocalState(baseLocalState);
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ParseNodeId(fork.ContinueNodeId), ActiveStatus, continueLocalJson, branchRow.LastOutputJson, ct);
+                    break;
+                }
+
                 case NodeExecutionResult.Terminal:
                     await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
                     return;
@@ -183,6 +233,11 @@ public sealed class BranchLoop : IBranchLoop
     private static string SerializeLocalState(IReadOnlyDictionary<string, JsonElement> localState)
     {
         return JsonSerializer.Serialize(localState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
+    private static Guid ParseNodeId(string nodeId)
+    {
+        return Guid.Parse(nodeId);
     }
 
     private static Guid? ResolveNextNodeId(WorkflowDefinition definition, Guid currentNodeId, string outboundPort)
