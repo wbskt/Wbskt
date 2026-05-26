@@ -215,6 +215,11 @@ public sealed class BranchLoop : IBranchLoop
 
                     string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
+                    if (definition.FailFast)
+                    {
+                        await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", ct);
+                    }
+
                     if (definition.RunCompensationOnFailure && _compensationOrchestrator is not null)
                     {
                         await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);

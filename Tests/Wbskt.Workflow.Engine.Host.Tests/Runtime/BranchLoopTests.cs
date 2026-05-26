@@ -550,6 +550,123 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task Branch_fail_with_failFast_transitions_run_to_Failing()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fail-fast",
+            null,
+            true,
+            [new TestNode(nodeId, "fail", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7,
+            FailFast: true);
+        var runProvider = new StubRunProvider();
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            runProvider,
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([(42L, "Running", "Failing")], runProvider.TransitionRequests);
+    }
+
+    [Fact]
+    public async Task Branch_fail_without_failFast_keeps_run_Running()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "no-fail-fast",
+            null,
+            true,
+            [new TestNode(nodeId, "fail", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var runProvider = new StubRunProvider();
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            runProvider,
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(runProvider.TransitionRequests);
+    }
+
+    [Fact]
+    public async Task Branch_fail_with_failFast_when_run_already_Cancelling_does_nothing()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "fail-fast-cancelling",
+            null,
+            true,
+            [new TestNode(nodeId, "fail", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7,
+            FailFast: true);
+        var runProvider = new StubRunProvider("Cancelling");
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            runProvider,
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([(42L, "Running", "Failing")], runProvider.TransitionRequests);
+        Assert.Equal("Cancelling", runProvider.Status);
+    }
+
+    [Fact]
     public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
     {
         // Arrange
@@ -832,8 +949,12 @@ public sealed class BranchLoopTests
         }
     }
 
-    private sealed class StubRunProvider : IRunProvider
+    private sealed class StubRunProvider(string initialStatus = "Running") : IRunProvider
     {
+        public string Status { get; private set; } = initialStatus;
+
+        public List<(long RunId, string FromStatus, string ToStatus)> TransitionRequests { get; } = [];
+
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
@@ -849,7 +970,7 @@ public sealed class BranchLoopTests
                 WorkflowVersion = 1,
                 TriggerNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
                 CorrelationKey = "corr-42",
-                Status = "Running",
+                Status = Status,
                 StartedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 CompletedAt = null,
                 CancellationRequestedAt = null,
@@ -864,7 +985,19 @@ public sealed class BranchLoopTests
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+        {
+            TransitionRequests.Add((runId, fromStatus, toStatus));
+            if (!string.Equals(Status, fromStatus, StringComparison.Ordinal))
+            {
+                return Task.FromResult(false);
+            }
+
+            Status = toStatus;
+            return Task.FromResult(true);
+        }
+
         public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
