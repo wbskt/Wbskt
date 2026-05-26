@@ -104,13 +104,13 @@ public class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         return results.AsReadOnly();
     }
 
-    public async Task<IReadOnlyCollection<BookmarkRow>> GetDueAsync(DateTime now, int batchSize, CancellationToken ct)
+    public async Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
         await using var command = new SqlCommand("dbo.Bookmark_GetDue", connection);
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@Now", now);
+        command.Parameters.AddWithValue("@Now", nowUtc);
         command.Parameters.AddWithValue("@BatchSize", batchSize);
 
         await connection.OpenAsync(ct);
