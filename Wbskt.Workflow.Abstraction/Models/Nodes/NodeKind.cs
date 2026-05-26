@@ -16,6 +16,7 @@ public static class NodeKind
     public const string ControlWaitForHttp = "control:waitForHttp";
     public const string ControlAwaitSignal = "control:awaitSignal";
     public const string ControlFailRun = "control:failRun";
+    public const string ControlEnd = "control:end";
     public const string ActionCommand = "action:command";
     public const string ActionEmail = "action:email";
     public const string ActionWebhook = "action:webhook";
