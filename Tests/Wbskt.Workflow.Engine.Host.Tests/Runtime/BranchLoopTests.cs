@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Runtime;
@@ -305,7 +307,7 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
-    public async Task Fail_retryable_throws_NotImplementedException()
+    public async Task Loop_invokes_retry_executor_on_each_step()
     {
         // Arrange
         var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -316,29 +318,43 @@ public sealed class BranchLoopTests
             "fail-retry",
             null,
             true,
-            [new TestNode(nodeId, "fail", "test")],
+            [
+                new SendCommandActionNode(
+                    nodeId,
+                    "fail",
+                    [new PortDefinition("default", PortDirection.Output, "Default")],
+                    new SendCommandConfig("device-1", "DoThing"),
+                    new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 2, 0, []),
+                    null)
+            ],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var executor = new ScriptedExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         var loop = new BranchLoop(
-            new RecordingBranchProvider(nodeId),
+            branchProvider,
             new StubRunProvider(),
             new StubRunCountersProvider(),
             new RecordingBookmarkProvider(),
             new RecordingHistoryEventProvider(),
             new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(
-                new ScriptedExecutor(
-                    new NodeExecutionResult.Fail("E_RETRY", "boom", true, null))),
+            new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
             new StubProviderComposite(),
             new FixedClock(),
             new SequentialIdGenerator());
 
-        // Act / Assert
-        var exception = await Assert.ThrowsAsync<NotImplementedException>(() => loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None));
-        Assert.Equal("Retry handled in Phase 8", exception.Message);
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, executor.CallCount);
+        Assert.True(branchProvider.SetCompletedCalled);
+        Assert.False(branchProvider.SetFailedCalled);
     }
 
     [Fact]
@@ -495,10 +511,13 @@ public sealed class BranchLoopTests
     {
         private readonly Queue<NodeExecutionResult> _results = new(results);
 
+        public int CallCount { get; private set; }
+
         public string Kind => "test";
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
+            CallCount++;
             return Task.FromResult(_results.Dequeue());
         }
     }
