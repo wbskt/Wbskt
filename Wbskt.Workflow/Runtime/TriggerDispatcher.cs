@@ -9,15 +9,21 @@ public sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IBookmarkResumer _bookmarkResumer;
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
+    private readonly ITriggerConcurrencyEnforcer _triggerConcurrencyEnforcer;
+    private readonly IRunCancellationService _runCancellationService;
 
     public TriggerDispatcher(
         ICorrelationKeyResolver correlationKeyResolver,
         IBookmarkResumer bookmarkResumer,
-        ITriggerRegistrationProvider triggerRegistrationProvider)
+        ITriggerRegistrationProvider triggerRegistrationProvider,
+        ITriggerConcurrencyEnforcer triggerConcurrencyEnforcer,
+        IRunCancellationService runCancellationService)
     {
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
         _triggerRegistrationProvider = triggerRegistrationProvider;
+        _triggerConcurrencyEnforcer = triggerConcurrencyEnforcer;
+        _runCancellationService = runCancellationService;
     }
 
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
@@ -40,6 +46,19 @@ public sealed class TriggerDispatcher : ITriggerDispatcher
         if (registrations.Count == 0)
         {
             return new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, correlationKey);
+        }
+
+        TriggerRegistrationRow registration = registrations.First();
+        TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
+        switch (concurrencyDecision.Outcome)
+        {
+            case TriggerConcurrencyOutcome.Dropped:
+                return new TriggerDispatchResult(TriggerDispatchOutcome.Dropped, null, null, correlationKey);
+            case TriggerConcurrencyOutcome.Queued:
+                return new TriggerDispatchResult(TriggerDispatchOutcome.Queued, null, null, correlationKey);
+            case TriggerConcurrencyOutcome.ProceedAfterCancellingActive when concurrencyDecision.RunIdToCancel.HasValue:
+                await _runCancellationService.RequestCancellationAsync(concurrencyDecision.RunIdToCancel.Value, "Trigger-cancel-policy", ct);
+                break;
         }
 
         return new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, null, null, correlationKey);
