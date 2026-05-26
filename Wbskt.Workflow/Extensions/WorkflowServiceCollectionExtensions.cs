@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Providers;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Extensions;
 
@@ -19,6 +21,15 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
         services.AddScoped<IPendingTriggerEventProvider, PendingTriggerEventProvider>();
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddWorkflowRuntime(this IServiceCollection services)
+    {
+        services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<IIdGenerator, GuidIdGenerator>();
+        services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
 
         return services;
     }
