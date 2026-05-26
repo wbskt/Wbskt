@@ -117,18 +117,45 @@ public sealed class TriggerDispatcherTests
         Assert.Equal([(55L, "Trigger-cancel-policy")], cancellationService.Requests);
     }
 
+    [Fact]
+    public async Task Dispatch_with_StartedRun_outcome_invokes_RunStarter_and_RunDispatcher()
+    {
+        // Arrange
+        var operations = new List<string>();
+        var registration = CreateRegistration("AllowParallel");
+        var runStarter = new RecordingRunStarter(operations);
+        var runDispatcher = new RecordingRunDispatcher(operations);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: runStarter,
+            runDispatcher: runDispatcher);
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal(501L, result.RunId);
+        Assert.Equal(["start", "dispatch"], operations);
+        Assert.Equal([(501L, 801L, BranchExecutionReason.TriggerStarted)], runDispatcher.Requests);
+    }
+
     private static TriggerDispatcher CreateDispatcher(
         RecordingBookmarkResumer? bookmarkResumer = null,
         RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null,
         RecordingTriggerConcurrencyEnforcer? concurrencyEnforcer = null,
-        RecordingRunCancellationService? runCancellationService = null)
+        RecordingRunCancellationService? runCancellationService = null,
+        RecordingRunStarter? runStarter = null,
+        RecordingRunDispatcher? runDispatcher = null)
     {
         return new TriggerDispatcher(
             new CorrelationKeyResolver(),
             bookmarkResumer ?? new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false)),
             triggerRegistrationProvider ?? new RecordingTriggerRegistrationProvider(),
             concurrencyEnforcer ?? new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, null)),
-            runCancellationService ?? new RecordingRunCancellationService());
+            runCancellationService ?? new RecordingRunCancellationService(),
+            runStarter ?? new RecordingRunStarter([]),
+            runDispatcher ?? new RecordingRunDispatcher([]));
     }
 
     private static InboundEvent CreateInboundEvent()
@@ -209,6 +236,27 @@ public sealed class TriggerDispatcherTests
         {
             Requests.Add((runId, reason));
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingRunStarter(List<string> operations) : IRunStarter
+    {
+        public Task<(long RunId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
+        {
+            operations.Add("start");
+            return Task.FromResult((501L, 801L));
+        }
+    }
+
+    private sealed class RecordingRunDispatcher(List<string> operations) : IRunDispatcher
+    {
+        public List<(long RunId, long BranchId, BranchExecutionReason Reason)> Requests { get; } = [];
+
+        public ValueTask DispatchAsync(BranchExecutionRequest request, CancellationToken ct)
+        {
+            operations.Add("dispatch");
+            Requests.Add((request.RunId, request.BranchId, request.Reason));
+            return ValueTask.CompletedTask;
         }
     }
 }
