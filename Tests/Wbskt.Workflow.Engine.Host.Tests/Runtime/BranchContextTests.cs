@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Xunit;
 
@@ -8,232 +7,124 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class BranchContextTests
 {
     [Fact]
-    public void GetVariable_ReturnsValue_WhenKeyExists()
+    public void BranchContext_with_local_state_replaces_local_state_only()
     {
         // Arrange
-        var ctx = new BranchContext
+        var originalState = new Dictionary<string, JsonElement>
         {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject
-            {
-                ["myKey"] = JsonValue.Create("myValue")
-            }
+            ["count"] = JsonDocument.Parse("1").RootElement.Clone()
         };
+        var replacementState = new Dictionary<string, JsonElement>
+        {
+            ["count"] = JsonDocument.Parse("2").RootElement.Clone()
+        };
+        var triggerPayload = new Dictionary<string, JsonElement>
+        {
+            ["source"] = JsonDocument.Parse("\"device-a\"").RootElement.Clone()
+        };
+        var startedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
+        var context = CreateContext(originalState, triggerPayload, startedAt);
 
         // Act
-        var result = ctx.GetVariable("myKey");
+        var updated = context with { LocalState = replacementState };
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal("myValue", result.GetValue<string>());
+        Assert.Same(replacementState, updated.LocalState);
+        Assert.Same(triggerPayload, updated.TriggerPayload);
+        Assert.Equal(context.RunId, updated.RunId);
+        Assert.Equal(context.BranchId, updated.BranchId);
+        Assert.Equal(context.WorkflowDefinitionId, updated.WorkflowDefinitionId);
+        Assert.Equal(context.WorkflowDefinitionRefId, updated.WorkflowDefinitionRefId);
+        Assert.Equal(context.Version, updated.Version);
+        Assert.Equal(context.CurrentNodeId, updated.CurrentNodeId);
+        Assert.Equal(context.Attempt, updated.Attempt);
+        Assert.Equal(context.CorrelationKey, updated.CorrelationKey);
+        Assert.Equal(context.StartedAt, updated.StartedAt);
+        Assert.Same(originalState, context.LocalState);
     }
 
-    [Fact]
-    public void GetVariable_ReturnsNull_WhenKeyDoesNotExist()
+    [Theory]
+    [InlineData("RunId")]
+    [InlineData("BranchId")]
+    [InlineData("WorkflowDefinitionId")]
+    [InlineData("WorkflowDefinitionRefId")]
+    [InlineData("Version")]
+    [InlineData("CurrentNodeId")]
+    [InlineData("Attempt")]
+    [InlineData("CorrelationKey")]
+    [InlineData("StartedAt")]
+    public void BranchContext_with_local_state_preserves_other_fields(string fieldName)
     {
         // Arrange
-        var ctx = new BranchContext
+        var originalState = new Dictionary<string, JsonElement>
         {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
+            ["count"] = JsonDocument.Parse("1").RootElement.Clone()
         };
+        var replacementState = new Dictionary<string, JsonElement>
+        {
+            ["count"] = JsonDocument.Parse("2").RootElement.Clone()
+        };
+        var triggerPayload = new Dictionary<string, JsonElement>
+        {
+            ["source"] = JsonDocument.Parse("\"device-a\"").RootElement.Clone()
+        };
+        var startedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
+        var context = CreateContext(originalState, triggerPayload, startedAt);
 
         // Act
-        var result = ctx.GetVariable("nonexistent");
+        var updated = context with { LocalState = replacementState };
 
         // Assert
-        Assert.Null(result);
+        switch (fieldName)
+        {
+            case "RunId":
+                Assert.Equal(context.RunId, updated.RunId);
+                break;
+            case "BranchId":
+                Assert.Equal(context.BranchId, updated.BranchId);
+                break;
+            case "WorkflowDefinitionId":
+                Assert.Equal(context.WorkflowDefinitionId, updated.WorkflowDefinitionId);
+                break;
+            case "WorkflowDefinitionRefId":
+                Assert.Equal(context.WorkflowDefinitionRefId, updated.WorkflowDefinitionRefId);
+                break;
+            case "Version":
+                Assert.Equal(context.Version, updated.Version);
+                break;
+            case "CurrentNodeId":
+                Assert.Equal(context.CurrentNodeId, updated.CurrentNodeId);
+                break;
+            case "Attempt":
+                Assert.Equal(context.Attempt, updated.Attempt);
+                break;
+            case "CorrelationKey":
+                Assert.Equal(context.CorrelationKey, updated.CorrelationKey);
+                break;
+            case "StartedAt":
+                Assert.Equal(context.StartedAt, updated.StartedAt);
+                break;
+            default:
+                throw new InvalidOperationException($"Unexpected field '{fieldName}'.");
+        }
     }
 
-    [Fact]
-    public void SetVariable_AddsVariable_WhenKeyDoesNotExist()
+    private static BranchContext CreateContext(
+        IReadOnlyDictionary<string, JsonElement> localState,
+        IReadOnlyDictionary<string, JsonElement> triggerPayload,
+        DateTime startedAt)
     {
-        // Arrange
-        var ctx = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
-        };
-
-        // Act
-        ctx.SetVariable("newKey", JsonValue.Create(42));
-
-        // Assert
-        var result = ctx.GetVariable("newKey");
-        Assert.NotNull(result);
-        Assert.Equal(42, result.GetValue<int>());
-    }
-
-    [Fact]
-    public void SetVariable_UpdatesVariable_WhenKeyExists()
-    {
-        // Arrange
-        var ctx = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject
-            {
-                ["existingKey"] = JsonValue.Create("oldValue")
-            }
-        };
-
-        // Act
-        ctx.SetVariable("existingKey", JsonValue.Create("newValue"));
-
-        // Assert
-        var result = ctx.GetVariable("existingKey");
-        Assert.NotNull(result);
-        Assert.Equal("newValue", result.GetValue<string>());
-    }
-
-    [Fact]
-    public void SetVariable_HandlesNull_Value()
-    {
-        // Arrange
-        var ctx = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
-        };
-
-        // Act
-        ctx.SetVariable("nullKey", null);
-
-        // Assert
-        var result = ctx.GetVariable("nullKey");
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ClearVariable_RemovesVariable_WhenKeyExists()
-    {
-        // Arrange
-        var ctx = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject
-            {
-                ["keyToRemove"] = JsonValue.Create("value")
-            }
-        };
-
-        // Act
-        ctx.ClearVariable("keyToRemove");
-
-        // Assert
-        var result = ctx.GetVariable("keyToRemove");
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ClearVariable_DoesNotThrow_WhenKeyDoesNotExist()
-    {
-        // Arrange
-        var ctx = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
-        };
-
-        // Act & Assert (no exception)
-        ctx.ClearVariable("nonexistent");
-    }
-
-    [Fact]
-    public void DeepClone_CreatesIndependentCopy()
-    {
-        // Arrange
-        var original = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            ParentBranchRefId = Guid.NewGuid(),
-            ForkCohortId = Guid.NewGuid(),
-            Local = new JsonObject
-            {
-                ["sharedKey"] = JsonValue.Create("originalValue")
-            },
-            LocalBag = new Dictionary<string, object?>
-            {
-                ["bagKey"] = "bagValue"
-            },
-            LastOutput = JsonDocument.Parse("{\"test\":123}").RootElement
-        };
-
-        // Act
-        var clone = original.DeepClone();
-
-        // Assert - values copied
-        Assert.Equal(original.BranchRefId, clone.BranchRefId);
-        Assert.Equal(original.NodeId, clone.NodeId);
-        Assert.Equal(original.ParentBranchRefId, clone.ParentBranchRefId);
-        Assert.Equal(original.ForkCohortId, clone.ForkCohortId);
-
-        // Assert - JSON deep copied (modifying clone doesn't affect original)
-        clone.SetVariable("sharedKey", JsonValue.Create("clonedValue"));
-        Assert.Equal("originalValue", original.GetVariable("sharedKey")?.GetValue<string>());
-        Assert.Equal("clonedValue", clone.GetVariable("sharedKey")?.GetValue<string>());
-
-        // Assert - LocalBag is new dictionary (not shared reference)
-        clone.LocalBag["bagKey"] = "modifiedValue";
-        Assert.Equal("bagValue", original.LocalBag["bagKey"]);
-        Assert.Equal("modifiedValue", clone.LocalBag["bagKey"]);
-
-        // Assert - LastOutput is copied
-        Assert.NotNull(clone.LastOutput);
-        Assert.Equal(123, clone.LastOutput.Value.GetProperty("test").GetInt32());
-    }
-
-    [Fact]
-    public void DeepClone_HandlesNullableFields()
-    {
-        // Arrange
-        var original = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject()
-        };
-
-        // Act
-        var clone = original.DeepClone();
-
-        // Assert
-        Assert.Null(clone.ParentBranchRefId);
-        Assert.Null(clone.ForkCohortId);
-        Assert.Null(clone.LastOutput);
-        Assert.NotNull(clone.LocalBag);
-        Assert.Empty(clone.LocalBag);
-    }
-
-    [Fact]
-    public void LocalBag_IsIndependent_FromJsonLocal()
-    {
-        // Arrange
-        var ctx = new BranchContext
-        {
-            BranchRefId = Guid.NewGuid(),
-            NodeId = Guid.NewGuid(),
-            Local = new JsonObject
-            {
-                ["jsonKey"] = JsonValue.Create("jsonValue")
-            },
-            LocalBag = new Dictionary<string, object?>
-            {
-                ["bagKey"] = "bagValue"
-            }
-        };
-
-        // Assert - separate storage
-        Assert.NotNull(ctx.GetVariable("jsonKey"));
-        Assert.True(ctx.LocalBag.ContainsKey("bagKey"));
-        Assert.False(ctx.LocalBag.ContainsKey("jsonKey"));
+        return new BranchContext(
+            10,
+            20,
+            30,
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            4,
+            "node-a",
+            1,
+            localState,
+            triggerPayload,
+            "corr-1",
+            startedAt);
     }
 }

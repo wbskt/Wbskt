@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
@@ -23,7 +25,7 @@ public sealed class DefaultCreditCostCalculatorTests
         // Arrange
         var calculator = new DefaultCreditCostCalculator();
         var node = new TestNode(Guid.NewGuid(), "test", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Success(null, null, false);
+        NodeExecutionResult result = new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>());
 
         // Act
         var cost = calculator.Calculate(node, result);
@@ -33,12 +35,12 @@ public sealed class DefaultCreditCostCalculatorTests
     }
 
     [Fact]
-    public void Calculate_Returns1_ForSuccessResult()
+    public void Calculate_Returns1_ForContinueResult()
     {
         // Arrange
         var calculator = new DefaultCreditCostCalculator();
         var node = new TestNode(Guid.NewGuid(), "action", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Success(null, null, false);
+        NodeExecutionResult result = new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>());
 
         // Act
         var cost = calculator.Calculate(node, result);
@@ -53,7 +55,7 @@ public sealed class DefaultCreditCostCalculatorTests
         // Arrange
         var calculator = new DefaultCreditCostCalculator();
         var node = new TestNode(Guid.NewGuid(), "parallel-foreach", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Fork(Array.Empty<BranchContext>(), null);
+        NodeExecutionResult result = new NodeExecutionResult.Fork(Array.Empty<ForkSpec>(), null, new Dictionary<string, JsonElement>());
 
         // Act
         var cost = calculator.Calculate(node, result);
@@ -63,12 +65,12 @@ public sealed class DefaultCreditCostCalculatorTests
     }
 
     [Fact]
-    public void Calculate_Returns1_ForBookmarkResult()
+    public void Calculate_Returns1_ForWaitForBookmarkResult()
     {
         // Arrange
         var calculator = new DefaultCreditCostCalculator();
         var node = new TestNode(Guid.NewGuid(), "wait-for-signal", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Bookmark("signal:test", null, null, null);
+        NodeExecutionResult result = new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("signal:test", "corr-1"), new Dictionary<string, JsonElement>());
 
         // Act
         var cost = calculator.Calculate(node, result);
@@ -83,7 +85,7 @@ public sealed class DefaultCreditCostCalculatorTests
         // Arrange
         var calculator = new DefaultCreditCostCalculator();
         var node = new TestNode(Guid.NewGuid(), "action", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Fail("error", null, null);
+        NodeExecutionResult result = new NodeExecutionResult.Fail("error", "message", false, null);
 
         // Act
         var cost = calculator.Calculate(node, result);
@@ -98,22 +100,7 @@ public sealed class DefaultCreditCostCalculatorTests
         // Arrange
         var calculator = new DefaultCreditCostCalculator();
         var node = new TestNode(Guid.NewGuid(), "end", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Terminal();
-
-        // Act
-        var cost = calculator.Calculate(node, result);
-
-        // Assert
-        Assert.Equal(1.0m, cost);
-    }
-
-    [Fact]
-    public void Calculate_Returns1_ForCompensationResult()
-    {
-        // Arrange
-        var calculator = new DefaultCreditCostCalculator();
-        var node = new TestNode(Guid.NewGuid(), "compensate", Array.Empty<PortDefinition>());
-        var result = NodeExecutionResult.Compensation(Array.Empty<Guid>());
+        NodeExecutionResult result = new NodeExecutionResult.Terminal(BranchTerminalReason.Completed);
 
         // Act
         var cost = calculator.Calculate(node, result);
