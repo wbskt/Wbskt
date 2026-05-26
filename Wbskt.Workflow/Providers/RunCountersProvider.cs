@@ -110,4 +110,15 @@ public class RunCountersProvider : BaseSqlProvider, IRunCountersProvider
 
         throw new InvalidOperationException("RunCounters_AddCreditsConsumed did not return a value.");
     }
+
+    public async Task<long> SumActiveBranchesAsync(CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.RunCounters_SumActiveBranches", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is long count ? count : Convert.ToInt64(result ?? 0L);
+    }
 }

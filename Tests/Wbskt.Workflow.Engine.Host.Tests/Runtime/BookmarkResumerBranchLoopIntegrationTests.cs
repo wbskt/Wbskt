@@ -189,6 +189,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => Task.FromResult((long)Runs.Values.Count(run => run.Status == status));
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
@@ -221,6 +222,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             return Task.FromResult(_activeBranches);
         }
 
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult((long)_activeBranches);
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
         Task<BookmarkRow> IBookmarkProvider.CreateAsync(BookmarkRow row, CancellationToken ct)
         {
@@ -245,6 +247,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             return Task.CompletedTask;
         }
 
+        public Task<long> CountAsync(CancellationToken ct) => Task.FromResult((long)Bookmarks.Count);
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task InsertBatchAsync(IReadOnlyCollection<HistoryEventRow> events, CancellationToken ct) => Task.CompletedTask;
@@ -326,6 +329,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Guid NewId() => _ids.Dequeue();
     }
 }
+
 
 
 

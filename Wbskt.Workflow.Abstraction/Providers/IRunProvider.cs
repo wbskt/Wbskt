@@ -12,6 +12,7 @@ public interface IRunProvider
     Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct);
     Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
+    Task<long> CountByStatusAsync(string status, CancellationToken ct);
     Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct);
     Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct);
 }

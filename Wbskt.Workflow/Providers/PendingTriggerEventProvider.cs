@@ -109,6 +109,17 @@ public class PendingTriggerEventProvider : BaseSqlProvider, IPendingTriggerEvent
         return result is int count ? count : Convert.ToInt32(result ?? 0);
     }
 
+    public async Task<long> CountAllAsync(CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.PendingTriggerEvent_CountAll", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is long count ? count : Convert.ToInt64(result ?? 0L);
+    }
+
     internal static PendingTriggerEventRow Map(DbDataReader reader)
     {
         return new PendingTriggerEventRow

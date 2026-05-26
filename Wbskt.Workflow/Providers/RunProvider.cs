@@ -206,6 +206,19 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         return results.AsReadOnly();
     }
 
+    public async Task<long> CountByStatusAsync(string status, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Run_CountByStatus", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@Status", status);
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is long count ? count : Convert.ToInt64(result ?? 0L);
+    }
+
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);

@@ -1038,6 +1038,7 @@ public sealed class BranchLoopTests
 
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
+        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
         {
             TransitionRequests.Add((runId, fromStatus, toStatus));
@@ -1086,6 +1087,7 @@ public sealed class BranchLoopTests
             return Task.FromResult(0);
         }
 
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
     }
 
@@ -1106,6 +1108,7 @@ public sealed class BranchLoopTests
         public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }
@@ -1179,6 +1182,7 @@ public sealed class BranchLoopTests
         }
     }
 }
+
 
 
 
