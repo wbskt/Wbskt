@@ -51,6 +51,7 @@ public class GlobalExceptionMiddleware
             SecurityException => (int)HttpStatusCode.Unauthorized,
             ValidationException => (int)HttpStatusCode.BadRequest,
             NotFoundException => (int)HttpStatusCode.NotFound,
+            OptimisticConcurrencyException => (int)HttpStatusCode.Conflict,
             ArgumentException => (int)HttpStatusCode.BadRequest,
             UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
             _ => (int)HttpStatusCode.InternalServerError
