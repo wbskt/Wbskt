@@ -142,7 +142,7 @@ public sealed class BranchLoop : IBranchLoop
                     {
                         ForkSpec child = fork.Children.Single();
                         string childLocalJson = SerializeLocalState(MergeLocalState(SerializeLocalState(baseLocalState), child.LocalState));
-                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ParseNodeId(child.NodeId), ActiveStatus, childLocalJson, branchRow.LastOutputJson, ct);
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, child.NodeId), ActiveStatus, childLocalJson, branchRow.LastOutputJson, ct);
                         break;
                     }
 
@@ -160,7 +160,7 @@ public sealed class BranchLoop : IBranchLoop
                                 RunId = runRow.Id,
                                 ParentBranchId = branchRow.RefId,
                                 ForkCohortId = cohortId,
-                                NodeId = ParseNodeId(child.NodeId),
+                                NodeId = ResolveForkTargetNodeId(definition, node.NodeId, child.NodeId),
                                 Status = ActiveStatus,
                                 PendingTakePort = null,
                                 LocalJson = childLocalJson,
@@ -181,7 +181,7 @@ public sealed class BranchLoop : IBranchLoop
                     }
 
                     string continueLocalJson = SerializeLocalState(baseLocalState);
-                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ParseNodeId(fork.ContinueNodeId), ActiveStatus, continueLocalJson, branchRow.LastOutputJson, ct);
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, fork.ContinueNodeId), ActiveStatus, continueLocalJson, branchRow.LastOutputJson, ct);
                     break;
                 }
 
@@ -390,9 +390,15 @@ public sealed class BranchLoop : IBranchLoop
         };
     }
 
-    private static Guid ParseNodeId(string nodeId)
+    private static Guid ResolveForkTargetNodeId(WorkflowDefinition definition, Guid currentNodeId, string target)
     {
-        return Guid.Parse(nodeId);
+        Guid? resolvedNodeId = ResolveNextNodeId(definition, currentNodeId, target);
+        if (resolvedNodeId is Guid nodeId)
+        {
+            return nodeId;
+        }
+
+        throw new InvalidOperationException($"Unable to resolve fork target '{target}' from node {currentNodeId}.");
     }
 
     private static Guid? ResolveNextNodeId(WorkflowDefinition definition, Guid currentNodeId, string outboundPort)
