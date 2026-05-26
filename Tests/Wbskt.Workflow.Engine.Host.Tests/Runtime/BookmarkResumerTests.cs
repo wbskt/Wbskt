@@ -86,6 +86,40 @@ public sealed class BookmarkResumerTests
         Assert.Equal([bookmark.RefId], bookmarkProvider.DeletedRefIds);
     }
 
+    [Fact]
+    public async Task ResumeByBookmarkId_dispatches_branch()
+    {
+        // Arrange
+        var bookmark = CreateBookmark(88, 42, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), Guid.Parse("44444444-4444-4444-4444-444444444444"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 2001));
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, dispatcher);
+
+        // Act
+        await resumer.ResumeViaBookmarkAsync(88, new Dictionary<string, JsonElement>(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal([bookmark.RefId], bookmarkProvider.DeletedRefIds);
+        Assert.Equal([(42L, 2001L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
+    }
+
+    [Fact]
+    public async Task ResumeByBookmarkId_is_idempotent_when_bookmark_already_deleted()
+    {
+        // Arrange
+        var bookmarkProvider = new RecordingBookmarkProvider();
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), new RecordingBranchProvider(), dispatcher);
+
+        // Act
+        await resumer.ResumeViaBookmarkAsync(999, new Dictionary<string, JsonElement>(), CancellationToken.None);
+
+        // Assert
+        Assert.Empty(bookmarkProvider.DeletedRefIds);
+        Assert.Empty(dispatcher.Requests);
+    }
+
     private static InboundEvent CreateInboundEvent()
     {
         return new InboundEvent(
@@ -121,6 +155,7 @@ public sealed class BookmarkResumerTests
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(bookmark is not null && bookmark.Id == bookmarkId ? bookmark : null);
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct)
         {
             LastMatchKey = matchKey;

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -44,5 +45,20 @@ public sealed class BookmarkResumer : IBookmarkResumer
         var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
         await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
         return new BookmarkMatchResult(true, bookmark.Id, false);
+    }
+
+    public async Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct)
+    {
+        _ = wakePayload;
+
+        BookmarkRow? bookmark = await _bookmarkProvider.GetByIdAsync(bookmarkId, ct);
+        if (bookmark is null)
+        {
+            return;
+        }
+
+        await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
+        var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+        await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
     }
 }

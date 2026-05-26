@@ -64,6 +64,25 @@ public class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         throw new KeyNotFoundException($"Bookmark with RefId={refId} not found.");
     }
 
+    public async Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Bookmark_GetBy_Id", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@Id", bookmarkId);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
+        {
+            return Map(reader);
+        }
+
+        return null;
+    }
+
     public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
