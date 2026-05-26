@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Abstraction.Runtime;
 using Xunit;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;

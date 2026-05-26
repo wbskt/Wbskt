@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Wbskt.Workflow.Runtime;
+namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public sealed class BranchContext
 {
