@@ -141,6 +141,27 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         return results.AsReadOnly();
     }
 
+    public async Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Run_GetActiveBy_Correlation", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
+        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new List<RunRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(Map(reader));
+        }
+
+        return results.AsReadOnly();
+    }
+
     public async Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
