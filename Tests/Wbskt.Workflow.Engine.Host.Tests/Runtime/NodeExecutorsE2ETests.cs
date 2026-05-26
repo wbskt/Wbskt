@@ -221,8 +221,9 @@ public sealed class NodeExecutorsE2ETests
             HistoryEvents.AddRange(events);
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<HistoryEventRow>>(HistoryEvents);
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubWorkflowDefinitionCache(WorkflowDefinition definition) : IWorkflowDefinitionCache
@@ -293,4 +294,6 @@ public sealed class NodeExecutorsE2ETests
         public Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct) => throw new NotSupportedException();
     }
 }
+
+
 
