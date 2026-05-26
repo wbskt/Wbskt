@@ -155,6 +155,7 @@ public sealed class TriggerRegistrationServiceTests
 
         public Task<IReadOnlyCollection<ScheduledFireRow>> LeaseDueAsync(int leaseSec, int batch, CancellationToken ct) => throw new NotSupportedException();
         public Task<ScheduledFireRow> AdvanceNextAsync(int id, DateTime nextFireAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task DeleteByIdAsync(long id, CancellationToken ct) => throw new NotSupportedException();
 
         public Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
         {
