@@ -15,5 +15,6 @@ public sealed record WorkflowDefinition(
     [property: JsonPropertyName("edges")] IReadOnlyCollection<Edge> Edges,
     [property: JsonPropertyName("sharedVariableSchema")] IReadOnlyCollection<SharedVariableDeclaration> SharedVariableSchema,
     [property: JsonPropertyName("createdAt")] DateTime CreatedAt,
-    [property: JsonPropertyName("publishedBy")] int PublishedBy
+    [property: JsonPropertyName("publishedBy")] int PublishedBy,
+    [property: JsonPropertyName("runCompensationOnFailure")] bool RunCompensationOnFailure = false
 );

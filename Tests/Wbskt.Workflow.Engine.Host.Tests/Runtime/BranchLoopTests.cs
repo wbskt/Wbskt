@@ -510,6 +510,46 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task Branch_failure_invokes_compensation_when_definition_opts_in()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "compensation-opt-in",
+            null,
+            true,
+            [new TestNode(nodeId, "fail", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7,
+            RunCompensationOnFailure: true);
+        var compensationOrchestrator = new RecordingCompensationOrchestrator();
+        var loop = new BranchLoop(
+            new RecordingBranchProvider(nodeId),
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            compensationOrchestrator: compensationOrchestrator);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([(42L, 1001L)], compensationOrchestrator.Calls);
+    }
+
+    [Fact]
     public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
     {
         // Arrange
@@ -941,6 +981,17 @@ public sealed class BranchLoopTests
         public Task FinalizeAsync(long runId, CancellationToken ct)
         {
             RunIds.Add(runId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingCompensationOrchestrator : ICompensationOrchestrator
+    {
+        public List<(long RunId, long BranchId)> Calls { get; } = [];
+
+        public Task RunAsync(long runId, long branchId, CancellationToken ct)
+        {
+            Calls.Add((runId, branchId));
             return Task.CompletedTask;
         }
     }
