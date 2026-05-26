@@ -233,7 +233,12 @@ public sealed class BranchLoop : IBranchLoop
                         await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
                     }
 
-                    await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
+                    int postDecrementCount = await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
+                    if (postDecrementCount == 0 && _runFinalizer is not null)
+                    {
+                        await _runFinalizer.FinalizeAsync(runRow.Id, ct);
+                    }
+
                     return;
                 }
 
