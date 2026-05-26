@@ -124,7 +124,7 @@ public class FakeSqlDataReader : DbDataReader
 
     public override string GetDataTypeName(int ordinal) => throw new NotImplementedException();
 
-    public override decimal GetDecimal(int ordinal) => throw new NotImplementedException();
+    public override decimal GetDecimal(int ordinal) => (decimal)GetValue(ordinal);
 
     public override double GetDouble(int ordinal) => throw new NotImplementedException();
 
