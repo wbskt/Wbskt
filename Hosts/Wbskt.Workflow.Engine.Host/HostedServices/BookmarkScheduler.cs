@@ -15,6 +15,7 @@ public sealed class BookmarkScheduler : BackgroundService
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<BookmarkScheduler> _logger;
     private readonly TimeSpan _pollInterval;
+    private readonly TimeSpan _orphanGcInterval;
 
     public BookmarkScheduler(
         IClock clock,
@@ -23,7 +24,8 @@ public sealed class BookmarkScheduler : BackgroundService
         IBookmarkProvider bookmarkProvider,
         IRunDispatcher runDispatcher,
         ILogger<BookmarkScheduler> logger,
-        TimeSpan? pollInterval = null)
+        TimeSpan? pollInterval = null,
+        TimeSpan? orphanGcInterval = null)
     {
         _clock = clock;
         _hostIdentity = hostIdentity;
@@ -32,6 +34,7 @@ public sealed class BookmarkScheduler : BackgroundService
         _runDispatcher = runDispatcher;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromSeconds(1);
+        _orphanGcInterval = orphanGcInterval ?? TimeSpan.FromMinutes(5);
     }
 
     public async Task ProcessDueBookmarksAsync(CancellationToken ct)
@@ -48,36 +51,69 @@ public sealed class BookmarkScheduler : BackgroundService
         }
     }
 
+    public Task RunOrphanGcAsync(CancellationToken ct)
+    {
+        return _bookmarkProvider.DeleteOrphansAsync(ct);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(_pollInterval);
+        await ExecuteGuardedAsync(ProcessDueBookmarksAsync, "Bookmark scheduler tick failed.", stoppingToken);
+
+        using var pollTimer = new PeriodicTimer(_pollInterval);
+        using var orphanGcTimer = new PeriodicTimer(_orphanGcInterval);
+
+        Task<bool> nextPoll = pollTimer.WaitForNextTickAsync(stoppingToken).AsTask();
+        Task<bool> nextOrphanGc = orphanGcTimer.WaitForNextTickAsync(stoppingToken).AsTask();
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await ProcessDueBookmarksAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Bookmark scheduler tick failed.");
-            }
+            Task<bool> completed;
 
             try
             {
-                if (!await timer.WaitForNextTickAsync(stoppingToken))
-                {
-                    return;
-                }
+                completed = await Task.WhenAny(nextPoll, nextOrphanGc);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 return;
             }
+
+            if (completed == nextPoll)
+            {
+                if (!await nextPoll)
+                {
+                    return;
+                }
+
+                await ExecuteGuardedAsync(ProcessDueBookmarksAsync, "Bookmark scheduler tick failed.", stoppingToken);
+                nextPoll = pollTimer.WaitForNextTickAsync(stoppingToken).AsTask();
+                continue;
+            }
+
+            if (!await nextOrphanGc)
+            {
+                return;
+            }
+
+            await ExecuteGuardedAsync(RunOrphanGcAsync, "Bookmark orphan GC failed.", stoppingToken);
+            nextOrphanGc = orphanGcTimer.WaitForNextTickAsync(stoppingToken).AsTask();
+        }
+    }
+
+    private async Task ExecuteGuardedAsync(Func<CancellationToken, Task> operation, string errorMessage, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await operation(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, errorMessage);
         }
     }
 }

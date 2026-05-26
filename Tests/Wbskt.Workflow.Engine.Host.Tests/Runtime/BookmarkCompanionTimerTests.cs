@@ -267,6 +267,7 @@ public sealed class BookmarkCompanionTimerTests
             return Task.CompletedTask;
         }
 
+        public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct)
         {
