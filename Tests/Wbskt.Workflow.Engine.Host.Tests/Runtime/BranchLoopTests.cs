@@ -667,6 +667,45 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task Loop_converts_thrown_exception_to_NonRetryable_Fail()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "executor-crash",
+            null,
+            true,
+            [new TestNode(nodeId, "crash", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ThrowingExecutor()),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.True(branchProvider.SetFailedCalled);
+        Assert.Contains("EXECUTOR_CRASH", branchProvider.CurrentBranch.LastOutputJson);
+    }
+
+    [Fact]
     public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
     {
         // Arrange
@@ -834,6 +873,16 @@ public sealed class BranchLoopTests
     private sealed class StubNodeExecutorRegistry(INodeExecutor executor) : INodeExecutorRegistry
     {
         public INodeExecutor For(string kind) => executor;
+    }
+
+    private sealed class ThrowingExecutor : INodeExecutor
+    {
+        public string Kind => "test";
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            throw new InvalidOperationException("executor crashed");
+        }
     }
 
     private sealed class StubWorkflowDefinitionCache(WorkflowDefinition definition) : IWorkflowDefinitionCache

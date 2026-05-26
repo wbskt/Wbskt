@@ -101,13 +101,21 @@ public sealed class BranchLoop : IBranchLoop
 
             BranchContext branchContext = BuildBranchContext(branchRow, runRow);
             INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
-            NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
-                node,
-                branchContext,
-                executor,
-                new NodeExecutionServices(_providerComposite),
-                _clock,
-                ct);
+            NodeExecutionResult result;
+            try
+            {
+                result = await RetryExecutor.RunWithRetryAsync(
+                    node,
+                    branchContext,
+                    executor,
+                    new NodeExecutionServices(_providerComposite),
+                    _clock,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
+            }
 
             await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", ct);
 
