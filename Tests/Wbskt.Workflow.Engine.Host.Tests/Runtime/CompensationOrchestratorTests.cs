@@ -37,7 +37,7 @@ public sealed class CompensationOrchestratorTests
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
         Assert.Equal(["action:refund", "action:notify"], harness.Executor.ExecutedKinds);
-        Assert.Single(harness.InsertedCompensationEvents.Where(evt => evt.EventKind == "CompensationExecuted"));
+        Assert.Single(harness.InsertedCompensationEvents, evt => evt.EventKind == "CompensationExecuted");
     }
 
     [Fact]

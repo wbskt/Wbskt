@@ -25,6 +25,7 @@ public sealed class BranchLoop : IBranchLoop
     private readonly IIdGenerator _idGenerator;
     private readonly IRunFinalizer? _runFinalizer;
     private readonly IRunCancellationService _runCancellationService;
+    private readonly ICompensationOrchestrator? _compensationOrchestrator;
     private readonly OnFailureHandler _onFailureHandler = new();
 
     public BranchLoop(
@@ -40,7 +41,8 @@ public sealed class BranchLoop : IBranchLoop
         IClock clock,
         IIdGenerator idGenerator,
         IRunFinalizer? runFinalizer = null,
-        IRunCancellationService? runCancellationService = null)
+        IRunCancellationService? runCancellationService = null,
+        ICompensationOrchestrator? compensationOrchestrator = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -55,6 +57,7 @@ public sealed class BranchLoop : IBranchLoop
         _idGenerator = idGenerator;
         _runFinalizer = runFinalizer;
         _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
+        _compensationOrchestrator = compensationOrchestrator;
     }
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
@@ -212,6 +215,11 @@ public sealed class BranchLoop : IBranchLoop
 
                     string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
+                    if (definition.RunCompensationOnFailure && _compensationOrchestrator is not null)
+                    {
+                        await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
+                    }
+
                     await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
                     return;
                 }
