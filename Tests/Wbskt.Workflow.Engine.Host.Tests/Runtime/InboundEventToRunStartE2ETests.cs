@@ -212,6 +212,18 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.FromResult(updated);
         }
 
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+        {
+            RunRow run = Runs[runId];
+            if (!string.Equals(run.Status, fromStatus, StringComparison.Ordinal))
+            {
+                return Task.FromResult(false);
+            }
+
+            Runs[runId] = run with { Status = toStatus };
+            return Task.FromResult(true);
+        }
+
         public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
             RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };

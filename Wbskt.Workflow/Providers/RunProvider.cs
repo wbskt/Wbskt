@@ -185,6 +185,21 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         throw new KeyNotFoundException($"Run with RefId={refId} not found.");
     }
 
+    public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Run_TransitionStatus", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@RunId", checked((int)runId));
+        command.Parameters.AddWithValue("@FromStatus", fromStatus);
+        command.Parameters.AddWithValue("@ToStatus", toStatus);
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is int rowsAffected && rowsAffected > 0;
+    }
+
     public async Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
