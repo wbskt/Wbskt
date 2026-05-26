@@ -187,6 +187,19 @@ public sealed class BranchLoop : IBranchLoop
                     return;
                 }
 
+                case NodeExecutionResult.Fail fail:
+                {
+                    if (fail.Retryable)
+                    {
+                        throw new NotImplementedException("Retry handled in Phase 8");
+                    }
+
+                    string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
+                    await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
+                    return;
+                }
+
                 case NodeExecutionResult.Terminal:
                     await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
                     return;
