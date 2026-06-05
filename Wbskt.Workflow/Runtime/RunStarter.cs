@@ -8,6 +8,7 @@ namespace Wbskt.Workflow.Runtime;
 public sealed class RunStarter : IRunStarter
 {
     private readonly IRunProvider _runProvider;
+    private readonly IRunCountersProvider _runCountersProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IHistoryEventProvider _historyEventProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
@@ -17,6 +18,7 @@ public sealed class RunStarter : IRunStarter
 
     public RunStarter(
         IRunProvider runProvider,
+        IRunCountersProvider runCountersProvider,
         IBranchProvider branchProvider,
         IHistoryEventProvider historyEventProvider,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
@@ -25,6 +27,7 @@ public sealed class RunStarter : IRunStarter
         IIdGenerator idGenerator)
     {
         _runProvider = runProvider;
+        _runCountersProvider = runCountersProvider;
         _branchProvider = branchProvider;
         _historyEventProvider = historyEventProvider;
         _workflowDefinitionProvider = workflowDefinitionProvider;
@@ -56,6 +59,11 @@ public sealed class RunStarter : IRunStarter
             CreditBudget = 0m,
             CreatedAt = nowUtc
         }, ct);
+
+        // Account for the initial branch in the run's active-branch counter so the
+        // run can finalize when this branch completes (mirrors the Fork path, which
+        // counts the child branches it creates). Run_Create seeds the counter at 0.
+        await _runCountersProvider.IncrementActiveBranchesAsync(createdRun.Id, 1, ct);
 
         string localJson = JsonSerializer.Serialize(
             new Dictionary<string, JsonElement>

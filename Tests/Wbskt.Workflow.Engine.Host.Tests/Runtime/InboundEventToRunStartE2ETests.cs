@@ -31,7 +31,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, providers, providers, providers, new CorrelationKeyResolver(), new FixedClock(), new SequenceIdGenerator()),
+            new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new FixedClock(), new SequenceIdGenerator()),
             runDispatcher);
         var inboundHub = new InboundHub(triggerDispatcher, new FixedClock(), new TestLogger<InboundHub>());
         var branchLoop = new BranchLoop(
@@ -195,7 +195,10 @@ public sealed class InboundEventToRunStartE2ETests
         {
             RunRow created = row with { Id = ++_nextRunId };
             Runs[created.Id] = created;
-            _activeBranches[created.Id] = 1;
+
+            // Run_Create seeds the RunCounters row at 0; RunStarter increments it
+            // for the initial branch (matches the real stored procedure).
+            _activeBranches[created.Id] = 0;
             return Task.FromResult(created);
         }
 
