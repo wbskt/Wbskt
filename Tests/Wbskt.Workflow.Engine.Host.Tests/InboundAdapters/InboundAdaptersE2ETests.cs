@@ -24,7 +24,9 @@ public sealed class InboundAdaptersE2ETests
         await consumer.Consume(context.Object);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.ChannelKind == "client-payload"),
+            It.Is<InboundEvent>(e =>
+                e.ChannelKind == "device"
+                && e.CorrelationKey == $"device:{evt.ClientRefId}:{evt.MessageType}"),
             CancellationToken.None), Times.Once);
     }
 
