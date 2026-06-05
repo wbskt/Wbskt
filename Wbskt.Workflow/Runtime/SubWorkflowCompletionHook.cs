@@ -13,7 +13,7 @@ public sealed class SubWorkflowCompletionHook(IInboundHub hub, IIdGenerator idGe
             $"child-completed:{runRefId}:{idGenerator.NewId()}",
             new Dictionary<string, JsonElement>
             {
-                ["runRefId"] = JsonSerializer.SerializeToElement(runRefId),
+                ["childRunRefId"] = JsonSerializer.SerializeToElement(runRefId),
                 ["status"] = JsonSerializer.SerializeToElement(terminalStatus)
             },
             default);
