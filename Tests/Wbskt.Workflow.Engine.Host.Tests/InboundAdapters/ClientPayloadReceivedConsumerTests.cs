@@ -9,7 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.InboundAdapters;
 public sealed class ClientPayloadReceivedConsumerTests
 {
     [Fact]
-    public async Task Consume_invokes_inbound_hub_with_client_payload_channel()
+    public async Task Consume_invokes_inbound_hub_with_device_channel_and_device_correlation_key()
     {
         // Arrange
         var hub = new Mock<IInboundHub>();
@@ -27,23 +27,26 @@ public sealed class ClientPayloadReceivedConsumerTests
         // Assert
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
-                e.ChannelKind == "client-payload"
-                && e.CorrelationKey == $"client:{evt.ClientRefId}"
+                e.ChannelKind == "device"
+                && e.CorrelationKey == $"device:{evt.ClientRefId}:{evt.MessageType}"
                 && e.InboundEventId.StartsWith($"client-payload:{evt.ClientRefId}:", StringComparison.Ordinal)
+                && e.Payload["deviceSerial"].GetString() == evt.ClientRefId.ToString()
+                && e.Payload["payloadType"].GetString() == evt.MessageType
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
-                && e.Payload["messageType"].GetString() == evt.MessageType
+                && e.Payload["clientId"].GetInt32() == evt.ClientId
+                && e.Payload["workspaceId"].GetInt32() == evt.WorkspaceId
                 && e.Payload["payload"].GetString() == evt.Payload),
             CancellationToken.None), Times.Once);
     }
 
     [Fact]
-    public async Task Consume_uses_client_ref_id_as_correlation_key()
+    public async Task Consume_uses_device_ref_id_and_message_type_as_correlation_key()
     {
         // Arrange
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
-        ClientPayloadReceivedEvent evt = new(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), 12, 34, "sensor", "{}");
+        ClientPayloadReceivedEvent evt = new(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), 12, 34, "temperature", "{}");
         var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
@@ -54,7 +57,33 @@ public sealed class ClientPayloadReceivedConsumerTests
 
         // Assert
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.CorrelationKey == "client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            It.Is<InboundEvent>(e =>
+                e.ChannelKind == "device"
+                && e.CorrelationKey == "device:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:temperature"),
+            CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task Consume_includes_clientId_and_workspaceId_in_payload()
+    {
+        // Arrange
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        ClientPayloadReceivedEvent evt = new(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), 99, 77, "humidity", "{}");
+        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+
+        // Act
+        await consumer.Consume(context.Object);
+
+        // Assert
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e =>
+                e.Payload["clientId"].GetInt32() == 99
+                && e.Payload["workspaceId"].GetInt32() == 77),
             CancellationToken.None), Times.Once);
     }
 }
