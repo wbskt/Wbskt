@@ -1,8 +1,7 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
-using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Management.Host.Controllers;
 
@@ -11,17 +10,12 @@ namespace Wbskt.Management.Host.Controllers;
 public sealed class WorkflowRunsController : ControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
-    private readonly IInboundHub? _inboundHub;
+    private readonly IWorkflowEngineClient _engineClient;
 
-    public WorkflowRunsController(IWorkflowRunQueryService runQueryService)
+    public WorkflowRunsController(IWorkflowRunQueryService runQueryService, IWorkflowEngineClient engineClient)
     {
         _runQueryService = runQueryService;
-    }
-
-    public WorkflowRunsController(IWorkflowRunQueryService runQueryService, IInboundHub inboundHub)
-    {
-        _runQueryService = runQueryService;
-        _inboundHub = inboundHub;
+        _engineClient = engineClient;
     }
 
     [HttpGet("workflows/{workflowRefId:guid}/runs")]
@@ -45,19 +39,7 @@ public sealed class WorkflowRunsController : ControllerBase
     [HttpPost("runs/{runRefId:guid}/signals/{signalName}")]
     public async Task<SignalResponse> Signal(Guid runRefId, string signalName, [FromBody] SignalRequest req, CancellationToken ct)
     {
-        _ = _inboundHub ?? throw new InvalidOperationException("Inbound hub is not configured.");
-
-        var payload = new Dictionary<string, JsonElement>
-        {
-            ["body"] = req.Payload
-        };
-        TriggerDispatchResult result = await _inboundHub.HandleAsync(new InboundEvent(
-            "signal",
-            $"{runRefId}:{signalName}",
-            $"signal:{runRefId}:{signalName}:{Guid.NewGuid()}",
-            payload,
-            DateTime.UtcNow), ct);
-        bool matched = result.Outcome != TriggerDispatchOutcome.NoRegistration;
-        return new SignalResponse(matched, result.Outcome.ToString());
+        return await _engineClient.SignalAsync(runRefId, signalName, req, ct);
     }
 }
+

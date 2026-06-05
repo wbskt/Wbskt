@@ -64,7 +64,7 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         var services = new ServiceCollection();
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
         services.AddSingleton(config);
-        services.AddWorkflowEngine(config, includeHostedServices: false);
+        services.AddWorkflowEngine(config);
         services.AddLogging();
 
         await using ServiceProvider sp = services.BuildServiceProvider();
@@ -154,7 +154,7 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         var services = new ServiceCollection();
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
         services.AddSingleton(config);
-        services.AddWorkflowEngine(config, includeHostedServices: false);
+        services.AddWorkflowEngine(config);
         services.AddLogging();
 
         await using ServiceProvider sp = services.BuildServiceProvider();

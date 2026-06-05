@@ -2,11 +2,12 @@ using System.Text.Json;
 using Moq;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
-using Wbskt.Primitives.Exceptions;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -16,10 +17,11 @@ public sealed class WorkflowRunsControllerTests
     public async Task List_calls_service_with_params()
     {
         var service = new Mock<IWorkflowRunQueryService>();
+        var engineClient = new Mock<IWorkflowEngineClient>();
         var workflowRefId = Guid.NewGuid();
         var expected = new RunListResponse([], null);
         service.Setup(x => x.ListByWorkflowAsync(workflowRefId, "Running", 25, 12, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
-        var controller = new WorkflowRunsController(service.Object);
+        var controller = new WorkflowRunsController(service.Object, engineClient.Object);
 
         var actual = await controller.List(workflowRefId, "Running", 25, 12, CancellationToken.None);
 
@@ -31,10 +33,11 @@ public sealed class WorkflowRunsControllerTests
     public async Task Get_returns_detail_dto()
     {
         var service = new Mock<IWorkflowRunQueryService>();
+        var engineClient = new Mock<IWorkflowEngineClient>();
         var runRefId = Guid.NewGuid();
         var detail = new RunDetailDto(new RunSummaryDto(runRefId, Guid.NewGuid(), 3, "Running", "corr", DateTime.UtcNow, null), []);
         service.Setup(x => x.GetDetailAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
-        var controller = new WorkflowRunsController(service.Object);
+        var controller = new WorkflowRunsController(service.Object, engineClient.Object);
 
         var actual = await controller.Get(runRefId, CancellationToken.None);
 
@@ -46,8 +49,9 @@ public sealed class WorkflowRunsControllerTests
     public async Task Cancel_calls_service()
     {
         var service = new Mock<IWorkflowRunQueryService>();
+        var engineClient = new Mock<IWorkflowEngineClient>();
         var runRefId = Guid.NewGuid();
-        var controller = new WorkflowRunsController(service.Object);
+        var controller = new WorkflowRunsController(service.Object, engineClient.Object);
 
         await controller.Cancel(runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
 
@@ -55,20 +59,21 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
-    public async Task Signal_calls_inbound_hub_with_signal_channel()
+    public async Task Signal_delegates_to_engine_client_and_returns_result()
     {
         var service = new Mock<IWorkflowRunQueryService>();
-        var inboundHub = new Mock<IInboundHub>();
+        var engineClient = new Mock<IWorkflowEngineClient>();
         var runRefId = Guid.NewGuid();
-        inboundHub.Setup(x => x.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.ResumedBookmark, 77, 88, "matched"));
-        var controller = new WorkflowRunsController(service.Object, inboundHub.Object);
+        var expected = new SignalResponse(true, "ResumedBookmark");
+        engineClient.Setup(x => x.SignalAsync(runRefId, "wake", It.IsAny<SignalRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+        var controller = new WorkflowRunsController(service.Object, engineClient.Object);
 
         var response = await controller.Signal(runRefId, "wake", new SignalRequest("wake", JsonSerializer.SerializeToElement(new { ready = true })), CancellationToken.None);
 
         Assert.True(response.Matched);
         Assert.Equal("ResumedBookmark", response.Outcome);
-        inboundHub.Verify(x => x.HandleAsync(It.Is<InboundEvent>(evt => evt.ChannelKind == "signal" && evt.CorrelationKey == $"{runRefId}:wake"), It.IsAny<CancellationToken>()), Times.Once);
+        engineClient.Verify(x => x.SignalAsync(runRefId, "wake", It.IsAny<SignalRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -145,3 +150,4 @@ public sealed class WorkflowRunsControllerTests
         };
     }
 }
+
