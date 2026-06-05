@@ -7,7 +7,9 @@ using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Engine.Host.Extensions;
 using Wbskt.Workflow.Engine.Host.HostedServices;
+using Wbskt.Workflow.Engine.Host.InboundAdapters;
 using Wbskt.Workflow.Extensions;
+using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host;
 
@@ -36,6 +38,7 @@ public static class Program
         builder.Services.AddHttpClient();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration, true);
+        builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddHostedService<ScheduledFireTicker>();

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Moq;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -54,6 +55,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddHttpClient();
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();
+        services.AddScoped<IDeviceCommandPublisher>(_ => Mock.Of<IDeviceCommandPublisher>());
         services.AddHostedService<BranchExecutionPump>();
         services.AddHostedService<BookmarkScheduler>();
         services.AddHostedService<ScheduledFireTicker>();
