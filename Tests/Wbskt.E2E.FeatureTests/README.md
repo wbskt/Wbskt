@@ -57,6 +57,8 @@ All base URLs can be overridden so the tests can target non-default environments
 | `E2E_SOCKET_URL`      | `https://localhost:7020`   |
 | `E2E_SOCKET_WS_URL`   | `ws://localhost:5020`      |
 | `E2E_WORKFLOW_URL`    | `https://localhost:7030`   |
+| `E2E_ADMIN_EMAIL`     | `admin@wbskt.com`          |
+| `E2E_ADMIN_PASSWORD`  | `Password123!`             |
 
 ---
 
@@ -64,18 +66,27 @@ All base URLs can be overridden so the tests can target non-default environments
 
 | Class | What it tests |
 |---|---|
-| `AuthAndRegistrationTests` | Register user → login → create AutoApproval policy → device registration → client login |
+| `AuthAndRegistrationTests` | A new user can register + login; then the **seeded admin** creates an AutoApproval policy → device registration → client login |
 | `WorkflowCommandLoopTests` | Full round-trip: publish `DeviceTrigger→action:command` workflow, connect WbsktClient, send telemetry, assert OpenVent command received and run completes |
 
 ---
 
-## Workspace acquisition (design note)
+## Privileged identity (seeded admin)
 
-After login the fixture calls `GET /api/workspaces` on the Auth host to list workspaces.  
-If the user has none (fresh registration), it calls `POST /api/workspaces` to create one.  
-The returned workspace `RefId` (GUID) is used for the registration-policy endpoint.
+Permission-gated operations (registration-policy creation, workflow publish) are performed as the
+**seeded administrator** provisioned by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`:
 
-The `WorkflowDefinition.WorkspaceId` (internal `int`) is set to `1` as a placeholder — the Management host stores it as-is from the submitted JSON without cross-validating against the authenticated user's workspace.
+- Username `root`, email `admin@wbskt.com`, password `Password123!`
+- `Admin` role → **all** permissions
+- Owner of the **Default Workspace** (internal `Id = 1`)
+
+The fixture's `LoginAsAdminAsync()` logs in as this admin and resolves its Default Workspace `RefId`
+via `GET /api/workspaces`. A freshly-registered user only gets the `User` role and would be `403`-rejected
+on the policy/workspace-scoped endpoints, which is why the admin is used. Override the credentials with
+`E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` if your deployment seeds a different admin.
+
+Because the admin owns the workspace whose internal `Id = 1`, the published
+`WorkflowDefinition.WorkspaceId = 1` (and `PublishedBy = 1`, the root user id) correspond to real seeded rows.
 
 ## Workflow definition published by Task 3
 

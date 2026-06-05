@@ -37,8 +37,11 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Auth + workspace + policy + device registration ───────────────
-        var (userToken, workspaceRef) = await fixture.RegisterAndLoginUserAsync();
+        // ── 1. Admin auth + workspace + policy + device registration ─────────
+        // Use the seeded admin (all permissions, owns Default Workspace Id=1) so the
+        // permission-gated policy/publish calls succeed and the definition's
+        // workspaceId:1 matches a real workspace.
+        var (userToken, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(userToken, workspaceRef, autoApproval: true);
 
         var deviceName = $"e2e-vent-{Guid.NewGuid():N}";
@@ -149,9 +152,10 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
     ///
     /// Edge: from=[triggerNodeId,"default"] → to=[actionNodeId,"in"]
     ///
-    /// workspaceId and publishedBy use placeholder values (1) because the
-    /// Management host stores them as-is from the definition JSON without
-    /// validating them against the authenticated user's workspace int-id.
+    /// WorkspaceId = 1 corresponds to the seeded Default Workspace owned by the admin
+    /// (Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql). PublishedBy = 1
+    /// is the seeded root admin user id. The Management host stores both as-is from the
+    /// definition JSON.
     /// </summary>
     private static WorkflowDefinition BuildMinimalDefinition(Guid workflowRefId, string deviceRef)
     {
