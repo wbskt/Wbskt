@@ -120,9 +120,27 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         throw new KeyNotFoundException($"Run with RefId={refId} not found.");
     }
 
-    public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
     {
-        throw new NotImplementedException();
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Run_ListBy_WorkflowRefId", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
+        command.Parameters.AddWithValue("@StatusFilter", (object?)statusFilter ?? DBNull.Value);
+        command.Parameters.AddWithValue("@Top", top);
+        command.Parameters.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new List<RunRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(Map(reader));
+        }
+
+        return results.AsReadOnly();
     }
 
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct)
