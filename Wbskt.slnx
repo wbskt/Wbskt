@@ -64,6 +64,7 @@
     <File Path="Docs/workflow_engine_concepts.html" />
   </Folder>
   <Folder Name="/Tests/">
+    <Project Path="Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj" />
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj" />
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj" />
     <Project Path="Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
