@@ -17,11 +17,13 @@ public sealed class RunStarterTests
         // Arrange
         List<string> operations = [];
         var runProvider = new RecordingRunProvider(operations);
+        var countersProvider = new RecordingRunCountersProvider(operations);
         var branchProvider = new RecordingBranchProvider(operations);
         var historyProvider = new RecordingHistoryEventProvider(operations);
         var workflowDefinitionProvider = new RecordingWorkflowDefinitionProvider();
         var starter = new RunStarter(
             runProvider,
+            countersProvider,
             branchProvider,
             historyProvider,
             workflowDefinitionProvider,
@@ -46,6 +48,7 @@ public sealed class RunStarterTests
         Assert.Equal(501L, runId);
         Assert.Equal(801L, branchId);
         Assert.Equal(["run", "counters", "branch", "history"], operations);
+        Assert.Equal(1, countersProvider.TotalDelta);
         Assert.Equal("device:serial-1:telemetry", runProvider.CreatedRun!.CorrelationKey);
         Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), runProvider.CreatedRun.RefId);
         Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), branchProvider.CreatedBranch!.RefId);
@@ -60,7 +63,6 @@ public sealed class RunStarterTests
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct)
         {
             operations.Add("run");
-            operations.Add("counters");
             CreatedRun = row with { Id = 501 };
             return Task.FromResult(CreatedRun);
         }
@@ -77,6 +79,23 @@ public sealed class RunStarterTests
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingRunCountersProvider(List<string> operations) : IRunCountersProvider
+    {
+        public int TotalDelta { get; private set; }
+
+        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+        {
+            operations.Add("counters");
+            TotalDelta += delta;
+            return Task.FromResult(TotalDelta);
+        }
+
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
+        public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingBranchProvider(List<string> operations) : IBranchProvider
