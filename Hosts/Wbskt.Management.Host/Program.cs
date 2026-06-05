@@ -65,7 +65,7 @@ public static class Program
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
-        builder.Services.AddWorkflowEngine(builder.Configuration, includeHostedServices: false);
+        builder.Services.AddWorkflowManagementServices(builder.Configuration);
 
         // Event Bus & Logging
         var dbEventLoggingBusConfig = builder.Services.AddDatabaseEventLogging(builder.Configuration);

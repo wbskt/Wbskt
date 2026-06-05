@@ -17,10 +17,25 @@ namespace Wbskt.Workflow.Extensions;
 
 public static class WorkflowServiceCollectionExtensions
 {
-    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services, IConfiguration configuration, bool includeHostedServices = true)
+    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime(configuration);
+        return services;
+    }
+
+    public static IServiceCollection AddWorkflowManagementServices(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddWorkflowProviders();
+        services.AddMemoryCache();
+        services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
+        services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
+        services.AddScoped<IRunCancellationService, RunCancellationService>();
+
+        WorkflowEngineOptions options = configuration.GetSection("WorkflowEngine").Get<WorkflowEngineOptions>() ?? new WorkflowEngineOptions();
+        services.AddSingleton(Options.Create(options));
+
         return services;
     }
 
