@@ -16,7 +16,12 @@ public sealed class CorrelationKeyResolver : ICorrelationKeyResolver
             "signal" => $"signal:{GetRequiredString(evt, "signalName")}:{GetRequiredString(evt, "scopeRunRefId")}",
             "child-completed" => $"child-completed:{GetRequiredString(evt, "childRunRefId")}",
             "http-wake" => $"http-wake:{GetRequiredString(evt, "wakeToken")}",
-            _ => throw new InvalidOperationException($"Unsupported inbound channel '{evt.ChannelKind}'.")
+
+            // Inbound channels that are valid but currently have no trigger-registration
+            // type (e.g. client-connected, client-registered). Fall back to the
+            // correlation key supplied by the inbound adapter so dispatch resolves to
+            // NoRegistration gracefully instead of faulting the message.
+            _ => evt.CorrelationKey
         };
     }
 

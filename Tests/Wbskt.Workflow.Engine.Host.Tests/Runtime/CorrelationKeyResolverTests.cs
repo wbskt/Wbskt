@@ -57,4 +57,23 @@ public sealed class CorrelationKeyResolverTests
         Assert.Contains("deviceSerial", ex.Message, StringComparison.Ordinal);
         Assert.Contains("device", ex.Message, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("client-connected", "client:abc")]
+    [InlineData("client-registered", "client:def")]
+    [InlineData("some-future-channel", "whatever:key")]
+    public void Resolve_falls_back_to_supplied_correlation_key_for_channels_without_a_trigger_type(
+        string channelKind,
+        string suppliedCorrelationKey)
+    {
+        // Arrange
+        var resolver = new CorrelationKeyResolver();
+        var evt = new InboundEvent(channelKind, suppliedCorrelationKey, "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
+
+        // Act
+        string actual = resolver.Resolve(evt);
+
+        // Assert
+        Assert.Equal(suppliedCorrelationKey, actual);
+    }
 }
