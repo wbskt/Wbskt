@@ -24,7 +24,7 @@ public sealed class SubWorkflowCompletionHookTests
                 e.ChannelKind == "child-completed"
                 && e.CorrelationKey == $"child-completed:{runRefId}"
                 && e.InboundEventId == $"child-completed:{runRefId}:11111111-1111-1111-1111-111111111111"
-                && e.Payload["runRefId"].GetGuid() == runRefId
+                && e.Payload["childRunRefId"].GetGuid() == runRefId
                 && e.Payload["status"].GetString() == "Succeeded"),
             CancellationToken.None), Times.Once);
     }
