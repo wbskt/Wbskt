@@ -5,6 +5,16 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Resolve the definition's RefId up front so the deletable CTE targets a single
+    -- base table. Deleting through a CTE that joins WorkflowDefinitions fails with
+    -- error 4405 ('modification affects multiple base tables').
+    DECLARE @WorkflowRefId UNIQUEIDENTIFIER =
+    (
+        SELECT RefId
+        FROM dbo.WorkflowDefinitions
+        WHERE Id = @WorkflowDefinitionId
+    );
+
     WITH Dequeue AS (
         SELECT TOP (1)
             p.Id,
@@ -15,9 +25,7 @@ BEGIN
             p.EnqueuedAt,
             p.CreatedAt
         FROM dbo.PendingTriggerEvents AS p WITH (ROWLOCK, UPDLOCK, READPAST)
-        INNER JOIN dbo.WorkflowDefinitions AS w
-            ON w.RefId = p.WorkflowRefId
-        WHERE w.Id = @WorkflowDefinitionId
+        WHERE p.WorkflowRefId = @WorkflowRefId
           AND p.CorrelationKey = @CorrelationKey
         ORDER BY p.EnqueuedAt ASC
     )
