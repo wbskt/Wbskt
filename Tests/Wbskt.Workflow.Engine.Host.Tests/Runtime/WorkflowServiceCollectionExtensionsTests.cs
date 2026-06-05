@@ -18,7 +18,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class WorkflowServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddWorkflowEngine_with_includeHostedServices_false_excludes_workflow_hosted_services()
+    public void AddWorkflowEngine_registers_full_runtime_without_hosted_services()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -30,7 +30,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
         services.AddHttpClient();
-        services.AddWorkflowEngine(configuration, false);
+        services.AddWorkflowEngine(configuration);
 
         using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 

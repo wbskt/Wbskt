@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Wbskt.Management.Host.Services;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Validation;
@@ -23,7 +22,7 @@ public sealed class ManagementHostDiTests
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
         services.AddHttpClient();
-        services.AddWorkflowEngine(configuration, includeHostedServices: false);
+        services.AddWorkflowManagementServices(configuration);
         services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         services.AddSingleton<WorkflowValidator>();
@@ -33,7 +32,6 @@ public sealed class ManagementHostDiTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowDefinitionService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowRunQueryService>());
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IInboundHub>());
-        Assert.Empty(provider.GetServices<IHostedService>());
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IInboundHub));
     }
 }
