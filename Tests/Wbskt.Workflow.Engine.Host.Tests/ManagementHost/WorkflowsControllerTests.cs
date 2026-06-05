@@ -19,7 +19,7 @@ public sealed class WorkflowsControllerTests
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", JsonSerializer.SerializeToElement(new { version = 1 }));
         var expected = new WorkflowPublishResponse(request.RefId, 1, "Published");
         service.Setup(x => x.PublishAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
-        var controller = new WorkflowsController(service.Object);
+        var controller = new WorkflowsController(service.Object, Mock.Of<IInboundHub>(), Mock.Of<IRunProvider>());
 
         var actual = await controller.Publish(request, CancellationToken.None);
 
@@ -34,7 +34,7 @@ public sealed class WorkflowsControllerTests
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", JsonSerializer.SerializeToElement(new { version = 2 }), DateTime.UtcNow);
         service.Setup(x => x.GetCurrentAsync(refId, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
-        var controller = new WorkflowsController(service.Object);
+        var controller = new WorkflowsController(service.Object, Mock.Of<IInboundHub>(), Mock.Of<IRunProvider>());
 
         var actual = await controller.GetCurrent(refId, CancellationToken.None);
 
@@ -49,7 +49,7 @@ public sealed class WorkflowsControllerTests
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", JsonSerializer.SerializeToElement(new { version = 2 }), DateTime.UtcNow);
         service.Setup(x => x.GetCurrentAsync(refId, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
-        var controller = new WorkflowsController(service.Object);
+        var controller = new WorkflowsController(service.Object, Mock.Of<IInboundHub>(), Mock.Of<IRunProvider>());
 
         var actual = await controller.GetCurrent(refId, CancellationToken.None);
 
@@ -64,7 +64,7 @@ public sealed class WorkflowsControllerTests
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, JsonSerializer.SerializeToElement(new { version = 3 }), DateTime.UtcNow);
         service.Setup(x => x.GetVersionAsync(refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
-        var controller = new WorkflowsController(service.Object);
+        var controller = new WorkflowsController(service.Object, Mock.Of<IInboundHub>(), Mock.Of<IRunProvider>());
 
         var actual = await controller.GetVersion(refId, 3, CancellationToken.None);
 
@@ -79,7 +79,7 @@ public sealed class WorkflowsControllerTests
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, JsonSerializer.SerializeToElement(new { version = 3 }), DateTime.UtcNow);
         service.Setup(x => x.GetVersionAsync(refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
-        var controller = new WorkflowsController(service.Object);
+        var controller = new WorkflowsController(service.Object, Mock.Of<IInboundHub>(), Mock.Of<IRunProvider>());
 
         var actual = await controller.GetVersion(refId, 3, CancellationToken.None);
 
@@ -92,7 +92,7 @@ public sealed class WorkflowsControllerTests
     {
         var service = new Mock<IWorkflowDefinitionService>();
         var refId = Guid.NewGuid();
-        var controller = new WorkflowsController(service.Object);
+        var controller = new WorkflowsController(service.Object, Mock.Of<IInboundHub>(), Mock.Of<IRunProvider>());
 
         await controller.Deprecate(refId, CancellationToken.None);
 

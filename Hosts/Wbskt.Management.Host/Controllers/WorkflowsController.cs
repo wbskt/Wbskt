@@ -15,11 +15,6 @@ public sealed class WorkflowsController : ControllerBase
     private readonly IInboundHub? _inboundHub;
     private readonly IRunProvider? _runProvider;
 
-    public WorkflowsController(IWorkflowDefinitionService service)
-    {
-        _service = service;
-    }
-
     public WorkflowsController(IWorkflowDefinitionService service, IInboundHub inboundHub, IRunProvider runProvider)
     {
         _service = service;
