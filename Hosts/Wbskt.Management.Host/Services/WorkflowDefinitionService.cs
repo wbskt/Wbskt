@@ -44,12 +44,16 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             throw new ValidationException(message);
         }
 
-        WorkflowDefinitionRow? existing = null;
+        WorkflowDefinitionRow? existing;
         try
         {
             existing = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(request.RefId, ct);
         }
         catch (NotFoundException)
+        {
+            existing = null;
+        }
+        catch (KeyNotFoundException)
         {
             existing = null;
         }

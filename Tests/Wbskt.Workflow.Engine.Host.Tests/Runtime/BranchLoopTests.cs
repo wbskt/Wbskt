@@ -823,6 +823,105 @@ public sealed class BranchLoopTests
         Assert.Empty(finalizer.RunIds);
     }
 
+    [Fact]
+    public async Task BuildBranchContext_hydrates_TriggerPayload_from_trigger_key_in_LocalJson()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "trigger-payload-hydration",
+            null,
+            true,
+            [new TestNode(nodeId, "act", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        const string localJson = """{"trigger":{"clientRefId":"cccccccc-cccc-cccc-cccc-cccccccccccc","clientId":7,"workspaceId":3}}""";
+        var branchProvider = new RecordingBranchProvider(nodeId, localJson);
+        var capturingExecutor = new CapturingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(incrementResults: [1]),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(capturingExecutor),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(capturingExecutor.LastContext);
+        IReadOnlyDictionary<string, JsonElement> payload = capturingExecutor.LastContext.Branch.TriggerPayload;
+        Assert.True(payload.ContainsKey("clientRefId"), "TriggerPayload should contain clientRefId");
+        Assert.True(payload.ContainsKey("clientId"), "TriggerPayload should contain clientId");
+        Assert.True(payload.ContainsKey("workspaceId"), "TriggerPayload should contain workspaceId");
+        Assert.Equal("cccccccc-cccc-cccc-cccc-cccccccccccc", payload["clientRefId"].GetString());
+        Assert.Equal(7, payload["clientId"].GetInt32());
+        Assert.Equal(3, payload["workspaceId"].GetInt32());
+    }
+
+    [Fact]
+    public async Task BuildBranchContext_TriggerPayload_is_empty_when_no_trigger_key_in_LocalJson()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "no-trigger-key",
+            null,
+            true,
+            [new TestNode(nodeId, "act", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(nodeId, "{}");
+        var capturingExecutor = new CapturingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(incrementResults: [1]),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(capturingExecutor),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(capturingExecutor.LastContext);
+        Assert.Empty(capturingExecutor.LastContext.Branch.TriggerPayload);
+    }
+
+    private sealed class CapturingExecutor(NodeExecutionResult result) : INodeExecutor
+    {
+        public string Kind => "test";
+        public NodeContext? LastContext { get; private set; }
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            LastContext = ctx;
+            return Task.FromResult(result);
+        }
+    }
+
     private static IReadOnlyDictionary<string, JsonElement> CreatePatch(string name, int value)
     {
         return new Dictionary<string, JsonElement>
@@ -899,7 +998,7 @@ public sealed class BranchLoopTests
         private readonly Dictionary<long, BranchRow> _rows = new();
         private long _nextBranchId = 2000;
 
-        public RecordingBranchProvider(Guid initialNodeId)
+        public RecordingBranchProvider(Guid initialNodeId, string? initialLocalJson = null)
         {
             _rows[1001] = new BranchRow
             {
@@ -911,7 +1010,7 @@ public sealed class BranchLoopTests
                 NodeId = initialNodeId,
                 Status = "Active",
                 PendingTakePort = null,
-                LocalJson = "{}",
+                LocalJson = initialLocalJson ?? "{}",
                 LastOutputJson = null,
                 CompensationStackJson = null,
                 CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),

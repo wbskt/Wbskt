@@ -299,6 +299,20 @@ public sealed class BranchLoop : IBranchLoop
 
     private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow)
     {
+        IReadOnlyDictionary<string, JsonElement> localState = DeserializeDictionary(branchRow.LocalJson);
+
+        IReadOnlyDictionary<string, JsonElement> triggerPayload;
+        if (localState.TryGetValue("trigger", out JsonElement triggerElement)
+            && triggerElement.ValueKind == JsonValueKind.Object)
+        {
+            triggerPayload = triggerElement.EnumerateObject()
+                .ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal);
+        }
+        else
+        {
+            triggerPayload = new Dictionary<string, JsonElement>();
+        }
+
         return new BranchContext(
             runRow.Id,
             branchRow.Id,
@@ -307,8 +321,8 @@ public sealed class BranchLoop : IBranchLoop
             runRow.WorkflowVersion,
             branchRow.NodeId.ToString(),
             1,
-            DeserializeDictionary(branchRow.LocalJson),
-            new Dictionary<string, JsonElement>(),
+            localState,
+            triggerPayload,
             runRow.CorrelationKey ?? string.Empty,
             runRow.StartedAt);
     }
