@@ -20,4 +20,13 @@ internal static class E2EConfig
 
     public static string WorkflowBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_WORKFLOW_URL") ?? "https://localhost:7030";
+
+    // Seeded administrator (Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql):
+    // user 'root' / admin@wbskt.com / Password123!, Admin role (all permissions),
+    // owner of the Default Workspace (internal Id = 1).
+    public static string AdminEmail =>
+        Environment.GetEnvironmentVariable("E2E_ADMIN_EMAIL") ?? "admin@wbskt.com";
+
+    public static string AdminPassword =>
+        Environment.GetEnvironmentVariable("E2E_ADMIN_PASSWORD") ?? "Password123!";
 }

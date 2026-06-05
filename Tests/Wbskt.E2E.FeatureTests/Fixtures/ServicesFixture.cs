@@ -72,6 +72,55 @@ public sealed class ServicesFixture : IDisposable
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Logs in as the seeded administrator (admin@wbskt.com / Password123!) which has the
+    /// Admin role (all permissions) and owns the Default Workspace (internal Id = 1).
+    /// Returns the bearer token and the admin's workspace RefId. This is the privileged
+    /// identity used for permission-gated operations (policy creation, workflow publish).
+    /// </summary>
+    public async Task<(string Token, Guid WorkspaceRef)> LoginAsAdminAsync()
+    {
+        var loginResp = await _http.PostAsJsonAsync(
+            $"{E2EConfig.AuthBaseUrl}/api/auth/login",
+            new { Email = E2EConfig.AdminEmail, Password = E2EConfig.AdminPassword });
+        loginResp.EnsureSuccessStatusCode();
+
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Empty admin login response.");
+
+        var workspaceRef = await ResolveOrCreateWorkspaceAsync(login.AccessToken);
+
+        return (login.AccessToken, workspaceRef);
+    }
+
+    /// <summary>
+    /// Registers a brand-new user (unique per run) and logs in, returning only the bearer
+    /// token. Does not resolve or create a workspace, so it exercises the public signup
+    /// path without depending on workspace permissions.
+    /// </summary>
+    public async Task<string> RegisterAndLoginNewUserAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var email = $"e2e-{suffix}@test.local";
+        var password = $"P@ss{suffix}!";
+        var username = $"e2e-{suffix}";
+
+        var registerResp = await _http.PostAsJsonAsync(
+            $"{E2EConfig.AuthBaseUrl}/api/auth/register",
+            new { Username = username, Email = email, Password = password });
+        registerResp.EnsureSuccessStatusCode();
+
+        var loginResp = await _http.PostAsJsonAsync(
+            $"{E2EConfig.AuthBaseUrl}/api/auth/login",
+            new { Email = email, Password = password });
+        loginResp.EnsureSuccessStatusCode();
+
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Empty login response.");
+
+        return login.AccessToken;
+    }
+
+    /// <summary>
     /// Registers a brand-new user (unique per run) and logs in.
     /// Returns the bearer token and the first workspace RefId.
     /// If the user has no workspaces yet a new one is created automatically.
@@ -276,6 +325,6 @@ public sealed class ServicesFixture : IDisposable
     private record LoginDto(string AccessToken, string RefreshToken);
     private record WorkspaceDto(Guid RefId, string Name, string? Description, DateTime CreatedAt);
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
-    private record ClientRegistrationDto(Guid ClientRefId, string Secret, string Status);
+    private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
     private record ClientLoginDto(string AccessToken, int ExpiresIn);
 }
