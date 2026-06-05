@@ -63,6 +63,11 @@ public static class Program
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
+        builder.Services.AddHttpClient<IWorkflowEngineClient, WorkflowEngineClient>(client =>
+        {
+            client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"]
+                ?? throw new ArgumentNullException("Services:WorkflowEngine", "Services:WorkflowEngine configuration is missing."));
+        });
         
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
         builder.Services.AddWorkflowManagementServices(builder.Configuration);
