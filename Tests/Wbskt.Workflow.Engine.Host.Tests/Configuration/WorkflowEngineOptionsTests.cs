@@ -14,6 +14,7 @@ public sealed class WorkflowEngineOptionsTests
             {
                 ["WorkflowEngine:BookmarkPollInterval"] = "00:00:02",
                 ["WorkflowEngine:RunStuckThreshold"] = "00:45:00",
+                ["WorkflowEngine:IdempotencyRetentionWindow"] = "2.00:00:00",
                 ["WorkflowEngine:LeaseDurationSeconds"] = "180",
                 ["WorkflowEngine:ScheduledFireLeaseBatchSize"] = "32"
             })
@@ -25,6 +26,7 @@ public sealed class WorkflowEngineOptionsTests
         // Assert
         Assert.Equal(TimeSpan.FromSeconds(2), options.BookmarkPollInterval);
         Assert.Equal(TimeSpan.FromMinutes(45), options.RunStuckThreshold);
+        Assert.Equal(TimeSpan.FromDays(2), options.IdempotencyRetentionWindow);
         Assert.Equal(180, options.LeaseDurationSeconds);
         Assert.Equal(32, options.ScheduledFireLeaseBatchSize);
     }
