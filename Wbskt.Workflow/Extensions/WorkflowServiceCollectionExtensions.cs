@@ -52,6 +52,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
         services.AddScoped<IPendingTriggerEventProvider, PendingTriggerEventProvider>();
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
+        services.AddScoped<IJoinAggregatorProvider, JoinAggregatorProvider>();
 
         return services;
     }
