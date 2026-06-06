@@ -11,12 +11,18 @@ namespace Wbskt.Workflow.Engine.Host.Controllers;
 public sealed class InboundManualController(IInboundHub hub, IRunProvider runProvider) : ControllerBase
 {
     [HttpPost("{workflowRefId:guid}")]
-    public async Task<InboundManualResponse> Post(Guid workflowRefId, [FromBody] JsonElement payload, CancellationToken ct)
+    public async Task<InboundManualResponse> Post(Guid workflowRefId, [FromBody] JsonElement payload, [FromQuery] string? idempotencyKey, CancellationToken ct)
     {
+        // A caller-supplied idempotency key makes the inbound event id stable across retries,
+        // so re-POSTing the same key dedupes to a single run instead of starting another.
+        string inboundEventId = string.IsNullOrWhiteSpace(idempotencyKey)
+            ? $"manual:{workflowRefId}:{Guid.NewGuid()}"
+            : $"manual:{workflowRefId}:{idempotencyKey}";
+
         InboundEvent evt = new(
             "manual",
             $"manual:{workflowRefId}",
-            $"manual:{workflowRefId}:{Guid.NewGuid()}",
+            inboundEventId,
             new Dictionary<string, JsonElement>
             {
                 ["workflowDefinitionRefId"] = JsonSerializer.SerializeToElement(workflowRefId.ToString()),

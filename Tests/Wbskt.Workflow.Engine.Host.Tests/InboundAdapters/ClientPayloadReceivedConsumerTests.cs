@@ -86,4 +86,39 @@ public sealed class ClientPayloadReceivedConsumerTests
                 && e.Payload["workspaceId"].GetInt32() == 77),
             CancellationToken.None), Times.Once);
     }
+
+    [Fact]
+    public async Task Consume_uses_bus_message_id_so_redelivery_is_deduplicated()
+    {
+        // Two deliveries of the SAME message (same MessageId) must produce the SAME
+        // InboundEventId, so the downstream idempotency claim dedupes the redelivery.
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        ClientPayloadReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{}");
+        Guid messageId = Guid.Parse("11112222-3333-4444-5555-666677778888");
+
+        var capturedIds = new List<string>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<InboundEvent, CancellationToken>((e, _) => capturedIds.Add(e.InboundEventId))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+
+        await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
+        await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
+
+        Assert.Equal(2, capturedIds.Count);
+        Assert.Equal(capturedIds[0], capturedIds[1]);
+        Assert.EndsWith(messageId.ToString(), capturedIds[0]);
+    }
+
+    private static Mock<ConsumeContext<ClientPayloadReceivedEvent>> ContextWithMessageId(ClientPayloadReceivedEvent evt, Guid messageId)
+    {
+        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        context.SetupGet(c => c.MessageId).Returns(messageId);
+        return context;
+    }
 }

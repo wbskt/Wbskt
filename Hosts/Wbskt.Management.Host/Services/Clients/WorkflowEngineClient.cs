@@ -18,10 +18,20 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
     public async Task<StartRunResponse> StartManualRunAsync(Guid workflowRefId, StartRunRequest request, CancellationToken ct)
     {
         object body = (object?)request.Payload ?? new { };
-        var response = await _httpClient.PostAsJsonAsync($"api/inbound/manual/{workflowRefId}", body, SerializerOptions, ct);
+        string url = string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            ? $"api/inbound/manual/{workflowRefId}"
+            : $"api/inbound/manual/{workflowRefId}?idempotencyKey={Uri.EscapeDataString(request.IdempotencyKey)}";
+
+        var response = await _httpClient.PostAsJsonAsync(url, body, SerializerOptions, ct);
         response.EnsureSuccessStatusCode();
 
         EngineManualResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineManualResponse>(SerializerOptions, ct);
+
+        // A duplicate idempotent call is suppressed by the engine (no new run started).
+        if (string.Equals(engineResponse?.Outcome, "Idempotent", StringComparison.Ordinal))
+        {
+            return new StartRunResponse(Guid.Empty, 0);
+        }
 
         if (engineResponse?.RunRefId is null)
         {
