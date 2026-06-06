@@ -288,7 +288,7 @@ public sealed class ServicesFixture : IDisposable
             HttpMethod.Post,
             $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/signals/{signalName}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        req.Content = JsonContent.Create(new { Name = signalName, Payload = payload ?? new { } }, options: JsonOptions);
+        req.Content = JsonContent.Create(new { SignalName = signalName, Payload = payload ?? new { } }, options: JsonOptions);
 
         var resp = await _http.SendAsync(req);
         resp.EnsureSuccessStatusCode();
