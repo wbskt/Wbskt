@@ -87,6 +87,46 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
+    public async Task MatchInbound_persists_wake_payload_into_branch_local_state()
+    {
+        // Arrange
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, dispatcher);
+        var evt = new InboundEvent("signal", "device-1", "event-1", new Dictionary<string, JsonElement>
+        {
+            ["signalName"] = JsonSerializer.SerializeToElement("approve"),
+            ["body"] = JsonSerializer.SerializeToElement(new { approvedBy = "ops" })
+        }, new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+
+        // Act
+        await resumer.MatchInboundAsync(evt, CancellationToken.None);
+
+        // Assert
+        (long branchId, string localJson) = Assert.Single(branchProvider.PointerUpdates);
+        Assert.Equal(1001L, branchId);
+        using JsonDocument doc = JsonDocument.Parse(localJson);
+        JsonElement wake = doc.RootElement.GetProperty("__wake");
+        Assert.Equal("approve", wake.GetProperty("signalName").GetString());
+        Assert.Equal("ops", wake.GetProperty("body").GetProperty("approvedBy").GetString());
+    }
+
+    [Fact]
+    public async Task MatchInbound_with_empty_payload_does_not_touch_branch_local_state()
+    {
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
+        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, new RecordingRunDispatcher());
+
+        await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Empty(branchProvider.PointerUpdates);
+    }
+
+    [Fact]
     public async Task ResumeByBookmarkId_dispatches_branch()
     {
         // Arrange
@@ -234,6 +274,7 @@ public sealed class BookmarkResumerTests
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingBranchProvider(params (Guid RefId, long Id)[] branches) : IBranchProvider
@@ -262,11 +303,16 @@ public sealed class BookmarkResumerTests
         public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_branches[refId]);
+        public List<(long BranchId, string LocalJson)> PointerUpdates { get; } = [];
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+        {
+            PointerUpdates.Add((branchId, localJson));
+            return Task.FromResult(_branches.Values.First());
+        }
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
     }

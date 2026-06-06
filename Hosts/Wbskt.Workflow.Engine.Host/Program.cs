@@ -44,6 +44,7 @@ public static class Program
         builder.Services.AddHostedService<ScheduledFireTicker>();
         builder.Services.AddHostedService<RunReaper>();
         builder.Services.AddHostedService<HistoryRetentionGc>();
+        builder.Services.AddHostedService<IdempotencyKeyGc>();
         builder.Services.AddHostedService<PendingTriggerEventBacklogReaper>();
         builder.Services.AddHostedService<RunRecoveryService>();
         builder.Services.AddHostedService<MetricsExporter>();
