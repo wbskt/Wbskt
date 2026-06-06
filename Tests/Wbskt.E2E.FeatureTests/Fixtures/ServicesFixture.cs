@@ -410,6 +410,25 @@ public sealed class ServicesFixture : IDisposable
         return summary;
     }
 
+    /// <summary>Reads the central event-log feed for a workspace, optionally filtered by event name.</summary>
+    public async Task<IReadOnlyList<EventLogItemDto>> GetEventLogsAsync(string token, Guid workspaceRef, string? eventName = null, int take = 200)
+    {
+        var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/event-logs?take={take}";
+        if (!string.IsNullOrWhiteSpace(eventName))
+        {
+            url += $"&eventName={Uri.EscapeDataString(eventName)}";
+        }
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+
+        var result = await resp.Content.ReadFromJsonAsync<EventLogListDto>(JsonOptions);
+        return result?.Items ?? [];
+    }
+
     /// <summary>The set of run statuses that represent a finalized run.</summary>
     public static bool IsTerminalStatus(string status) =>
         status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
@@ -462,4 +481,8 @@ public sealed class ServicesFixture : IDisposable
     private record ClientLoginDto(string AccessToken, int ExpiresIn);
     private record SignalDto(bool Matched, string Outcome);
     private record WakeDto(string Outcome, bool Matched);
+    private record EventLogListDto(IReadOnlyList<EventLogItemDto> Items);
 }
+
+/// <summary>Mirror of the Management Host's EventLogResponse (criticality serializes as a number: Info=0, Warning=1, Error=2).</summary>
+public sealed record EventLogItemDto(string EventName, string EventData, int Criticality, Guid? PolicyRefId, Guid? ClientRefId, Guid? WorkflowRefId, DateTime CreatedAtUtc);
