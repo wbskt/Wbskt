@@ -281,6 +281,19 @@ public sealed class ServicesFixture : IDisposable
         return result?.Runs ?? [];
     }
 
+    /// <summary>Starts a manual run, optionally with an idempotency key (re-posting the same key dedupes).</summary>
+    public async Task StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey)
+    {
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        req.Content = JsonContent.Create(new { TriggerNodeId = triggerNodeId, Payload = (object?)null, IdempotencyKey = idempotencyKey }, options: JsonOptions);
+
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+    }
+
     /// <summary>Sends a named signal to a parked run via the workspace-scoped management endpoint.</summary>
     public async Task<(bool Matched, string Outcome)> SendSignalAsync(string token, Guid workspaceRef, Guid runRefId, string signalName, object? payload = null)
     {

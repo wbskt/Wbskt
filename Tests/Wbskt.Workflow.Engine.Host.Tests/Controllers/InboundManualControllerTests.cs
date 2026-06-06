@@ -44,7 +44,7 @@ public sealed class InboundManualControllerTests
         var controller = new InboundManualController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        await controller.Post(workflowRefId, payload, CancellationToken.None);
+        await controller.Post(workflowRefId, payload, null, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e => e.ChannelKind == "manual"),
@@ -65,7 +65,7 @@ public sealed class InboundManualControllerTests
         var controller = new InboundManualController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        await controller.Post(workflowRefId, payload, CancellationToken.None);
+        await controller.Post(workflowRefId, payload, null, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e => e.CorrelationKey == $"manual:{workflowRefId}"),
@@ -86,7 +86,7 @@ public sealed class InboundManualControllerTests
         var controller = new InboundManualController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        await controller.Post(workflowRefId, payload, CancellationToken.None);
+        await controller.Post(workflowRefId, payload, null, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
@@ -109,7 +109,7 @@ public sealed class InboundManualControllerTests
         var controller = new InboundManualController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        InboundManualResponse response = await controller.Post(workflowRefId, payload, CancellationToken.None);
+        InboundManualResponse response = await controller.Post(workflowRefId, payload, null, CancellationToken.None);
 
         Assert.Equal("StartedRun", response.Outcome);
         Assert.Equal(runRefId, response.RunRefId);
@@ -127,11 +127,30 @@ public sealed class InboundManualControllerTests
         var controller = new InboundManualController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { });
 
-        InboundManualResponse response = await controller.Post(workflowRefId, payload, CancellationToken.None);
+        InboundManualResponse response = await controller.Post(workflowRefId, payload, null, CancellationToken.None);
 
         Assert.Equal("NoRegistration", response.Outcome);
         Assert.Null(response.RunRefId);
         Assert.Null(response.RunId);
         runProvider.Verify(r => r.GetByIdAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task Post_with_idempotency_key_uses_it_as_the_inbound_event_id()
+    {
+        var workflowRefId = Guid.NewGuid();
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, null, null, "ok"));
+        var runProvider = new Mock<IRunProvider>();
+        var controller = new InboundManualController(hub.Object, runProvider.Object);
+        JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
+
+        await controller.Post(workflowRefId, payload, "order-123", CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e => e.InboundEventId == $"manual:{workflowRefId}:order-123"),
+            CancellationToken.None), Times.Once);
+    }
 }
+
