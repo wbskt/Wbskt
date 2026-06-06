@@ -393,6 +393,27 @@ public sealed class ServicesFixture : IDisposable
         return match;
     }
 
+    /// <summary>Polls a specific run by RefId until it reaches any terminal status, returning its final summary (or null on timeout).</summary>
+    public async Task<RunSummaryDto?> WaitForRunTerminalAsync(string token, Guid workspaceRef, Guid runRefId, TimeSpan timeout)
+    {
+        RunSummaryDto? summary = null;
+        await PollAsync(
+            async () =>
+            {
+                var detail = await GetRunDetailAsync(token, workspaceRef, runRefId);
+                summary = detail.Summary;
+                return IsTerminalStatus(detail.Summary.Status);
+            },
+            timeout,
+            TimeSpan.FromSeconds(2));
+
+        return summary;
+    }
+
+    /// <summary>The set of run statuses that represent a finalized run.</summary>
+    public static bool IsTerminalStatus(string status) =>
+        status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
+
     // ─────────────────────────────────────────────────────────────────────────
     // Polling helper
     // ─────────────────────────────────────────────────────────────────────────
