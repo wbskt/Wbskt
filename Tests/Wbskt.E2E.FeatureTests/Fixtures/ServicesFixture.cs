@@ -294,6 +294,19 @@ public sealed class ServicesFixture : IDisposable
         resp.EnsureSuccessStatusCode();
     }
 
+    /// <summary>POSTs to the Engine Host's public http-wake callback to resume a parked WaitForHttp branch.</summary>
+    public async Task<bool> SendHttpWakeAsync(Guid token, object? payload = null)
+    {
+        var resp = await _http.PostAsJsonAsync(
+            $"{E2EConfig.WorkflowBaseUrl}/api/inbound/wake/{token}",
+            payload ?? new { });
+        resp.EnsureSuccessStatusCode();
+
+        var result = await resp.Content.ReadFromJsonAsync<WakeDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Wake returned empty response.");
+        return result.Matched;
+    }
+
     /// <summary>Sends a named signal to a parked run via the workspace-scoped management endpoint.</summary>
     public async Task<(bool Matched, string Outcome)> SendSignalAsync(string token, Guid workspaceRef, Guid runRefId, string signalName, object? payload = null)
     {
@@ -358,4 +371,5 @@ public sealed class ServicesFixture : IDisposable
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
     private record ClientLoginDto(string AccessToken, int ExpiresIn);
     private record SignalDto(bool Matched, string Outcome);
+    private record WakeDto(string Outcome, bool Matched);
 }
