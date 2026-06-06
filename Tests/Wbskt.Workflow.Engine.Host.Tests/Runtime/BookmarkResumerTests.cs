@@ -42,7 +42,7 @@ public sealed class BookmarkResumerTests
         Assert.False(result.Matched);
         Assert.Null(result.BookmarkId);
         Assert.False(result.Idempotent);
-        Assert.Equal("mqtt:device-1", bookmarkProvider.LastMatchKey);
+        Assert.Equal("device-1", bookmarkProvider.LastMatchKey);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class BookmarkResumerTests
             BranchRefId = branchRefId,
             NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             WakeConditionKind = "Inbound",
-            MatchKey = "mqtt:device-1",
+            MatchKey = "device-1",
             WakeConditionJson = "{}",
             ExpiresAt = null,
             TtlPort = null,

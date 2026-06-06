@@ -8,27 +8,29 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Controllers;
 public sealed class InboundSignalControllerTests
 {
     [Fact]
-    public async Task Post_signal_routes_to_hub_with_signal_channel()
+    public async Task Post_signal_routes_to_hub_with_run_scoped_correlation()
     {
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.ResumedBookmark, 42, 11, "ok"));
         var controller = new InboundSignalController(hub.Object);
+        Guid scopeRunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        await controller.Post("corr-1", payload, CancellationToken.None);
+        await controller.Post(scopeRunRefId, "approve", payload, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "signal"
-                && e.CorrelationKey == "corr-1"
-                && e.InboundEventId.StartsWith("signal:corr-1:", StringComparison.Ordinal)
+                && e.CorrelationKey == $"signal:approve:{scopeRunRefId}"
+                && e.Payload["signalName"].GetString() == "approve"
+                && e.Payload["scopeRunRefId"].GetString() == scopeRunRefId.ToString()
                 && e.Payload["body"].GetProperty("value").GetInt32() == 1),
             CancellationToken.None), Times.Once);
     }
 
     [Fact]
-    public async Task Post_signal_uses_provided_correlation_key()
+    public async Task Post_signal_reports_matched_when_bookmark_resumed()
     {
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
@@ -36,7 +38,7 @@ public sealed class InboundSignalControllerTests
         var controller = new InboundSignalController(hub.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        InboundSignalResponse response = await controller.Post("corr-1", payload, CancellationToken.None);
+        InboundSignalResponse response = await controller.Post(Guid.NewGuid(), "approve", payload, CancellationToken.None);
 
         Assert.Equal("ResumedBookmark", response.Outcome);
         Assert.True(response.Matched);

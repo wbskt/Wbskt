@@ -49,7 +49,7 @@ public sealed class BookmarkCompanionTimerTests
     {
         // Arrange
         Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:device-1", null);
+        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "device-1", null);
         var companion = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
         var bookmarkProvider = new RecordingBookmarkProvider(primary, companion);
         var resumer = new BookmarkResumer(

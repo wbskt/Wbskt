@@ -324,7 +324,10 @@ public sealed class BranchLoop : IBranchLoop
             localState,
             triggerPayload,
             runRow.CorrelationKey ?? string.Empty,
-            runRow.StartedAt);
+            runRow.StartedAt)
+        {
+            RunRefId = runRow.RefId
+        };
     }
 
     private static IReadOnlyDictionary<string, JsonElement> MergeLocalState(string existingJson, IReadOnlyDictionary<string, JsonElement> patch)
@@ -392,13 +395,15 @@ public sealed class BranchLoop : IBranchLoop
 
     private static string GetWakeConditionMatchKey(WakeCondition condition)
     {
+        // Must equal the channel-namespaced correlation key produced by CorrelationKeyResolver
+        // for the corresponding inbound channel, so an inbound event can find this bookmark.
         return condition switch
         {
             TimerWakeCondition timer => timer.At.ToString("O"),
-            SignalWakeCondition signal => $"{signal.Name}:{signal.Correlation}",
+            SignalWakeCondition signal => $"signal:{signal.Name}:{signal.Correlation}",
             InboundWakeCondition inbound => $"{inbound.DeviceRefId}:{inbound.PropertyName}",
-            HttpWakeCondition http => http.Token,
-            ChildRunCompletedWakeCondition child => child.ChildRunId.ToString(),
+            HttpWakeCondition http => $"http-wake:{http.Token}",
+            ChildRunCompletedWakeCondition child => $"child-completed:{child.ChildRunId}",
             AnyOfWakeCondition => "anyOf",
             _ => string.Empty
         };

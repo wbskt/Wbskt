@@ -281,6 +281,23 @@ public sealed class ServicesFixture : IDisposable
         return result?.Runs ?? [];
     }
 
+    /// <summary>Sends a named signal to a parked run via the workspace-scoped management endpoint.</summary>
+    public async Task<(bool Matched, string Outcome)> SendSignalAsync(string token, Guid workspaceRef, Guid runRefId, string signalName, object? payload = null)
+    {
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/signals/{signalName}");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        req.Content = JsonContent.Create(new { Name = signalName, Payload = payload ?? new { } }, options: JsonOptions);
+
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+
+        var result = await resp.Content.ReadFromJsonAsync<SignalDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Signal returned empty response.");
+        return (result.Matched, result.Outcome);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Polling helper
     // ─────────────────────────────────────────────────────────────────────────
@@ -327,4 +344,5 @@ public sealed class ServicesFixture : IDisposable
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
     private record ClientLoginDto(string AccessToken, int ExpiresIn);
+    private record SignalDto(bool Matched, string Outcome);
 }

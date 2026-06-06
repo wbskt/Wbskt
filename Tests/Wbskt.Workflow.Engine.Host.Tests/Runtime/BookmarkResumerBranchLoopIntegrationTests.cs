@@ -48,7 +48,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
         BookmarkMatchResult result = await resumer.MatchInboundAsync(
-            new InboundEvent("mqtt", "device-1", "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)),
+            new InboundEvent("mqtt", "mqtt:device-1", "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)),
             CancellationToken.None);
 
         // Assert

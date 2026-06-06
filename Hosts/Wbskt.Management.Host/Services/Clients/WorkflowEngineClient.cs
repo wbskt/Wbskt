@@ -33,7 +33,7 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
 
     public async Task<SignalResponse> SignalAsync(Guid runRefId, string signalName, SignalRequest request, CancellationToken ct)
     {
-        var response = await _httpClient.PostAsJsonAsync($"api/inbound/signal/{runRefId}:{signalName}", request.Payload, SerializerOptions, ct);
+        var response = await _httpClient.PostAsJsonAsync($"api/inbound/signal/{runRefId}/{signalName}", request.Payload, SerializerOptions, ct);
         response.EnsureSuccessStatusCode();
 
         EngineSignalResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineSignalResponse>(SerializerOptions, ct);
