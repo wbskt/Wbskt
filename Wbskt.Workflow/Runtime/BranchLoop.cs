@@ -117,7 +117,13 @@ public sealed class BranchLoop : IBranchLoop
                 result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
             }
 
-            await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", ct);
+            string? eventPayload = result switch
+            {
+                NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                _ => null
+            };
+            await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
 
             switch (result)
             {
@@ -280,7 +286,12 @@ public sealed class BranchLoop : IBranchLoop
         }
     }
 
-    private async Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, CancellationToken ct)
+    private Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, CancellationToken ct)
+    {
+        return AppendEventAsync(runId, branchRefId, nodeId, eventKind, null, ct);
+    }
+
+    private async Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, string? payloadJson, CancellationToken ct)
     {
         await _historyEventProvider.InsertBatchAsync([
             new HistoryEventRow
@@ -291,7 +302,7 @@ public sealed class BranchLoop : IBranchLoop
                 NodeId = nodeId,
                 EventKind = eventKind,
                 Severity = eventKind == "NodeFailed" ? "Warn" : "Info",
-                PayloadJson = null,
+                PayloadJson = payloadJson,
                 Timestamp = _clock.UtcNow
             }
         ], ct);
