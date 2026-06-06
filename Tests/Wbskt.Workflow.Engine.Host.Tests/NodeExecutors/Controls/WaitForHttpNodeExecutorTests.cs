@@ -61,6 +61,40 @@ public sealed class WaitForHttpNodeExecutorTests
         Assert.Equal("expired", cont.OutboundPort);
     }
 
+    [Fact]
+    public async Task Resume_with_wake_payload_promotes_body_under_wakePayload()
+    {
+        var executor = new WaitForHttpNodeExecutor(new MutableClock(T0.AddMinutes(1)));
+        var node = new WaitForHttpNode(Guid.NewGuid(), "wait-http", Ports(), new WaitForHttpConfig(TimeSpan.FromMinutes(15)));
+        var wake = JsonSerializer.SerializeToElement(new { wakeToken = RunRefId.ToString(), body = new { status = "done" } });
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(RunRefId.ToString()),
+            [DeadlineKey] = JsonSerializer.SerializeToElement(T0.AddMinutes(15).ToString("O")),
+            ["__wake"] = wake
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("default", cont.OutboundPort);
+        Assert.Equal("done", cont.LocalStatePatch["wakePayload"].GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Resume_with_wake_payload_wins_over_elapsed_deadline()
+    {
+        var executor = new WaitForHttpNodeExecutor(new MutableClock(T0.AddMinutes(20)));
+        var node = new WaitForHttpNode(Guid.NewGuid(), "wait-http", Ports(), new WaitForHttpConfig(TimeSpan.FromMinutes(15), OnTimeout: "expired"));
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(RunRefId.ToString()),
+            [DeadlineKey] = JsonSerializer.SerializeToElement(T0.AddMinutes(15).ToString("O")),
+            ["__wake"] = JsonSerializer.SerializeToElement(new { body = new { ok = true } })
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("default", cont.OutboundPort);
+    }
+
     private static NodeContext CreateContext(WaitForHttpNode node, IReadOnlyDictionary<string, JsonElement> localState)
     {
         return new NodeContext

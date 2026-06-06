@@ -19,6 +19,8 @@ public sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
 {
     internal const string ParkedKey = "__http_wait";
     internal const string DeadlineKey = "__http_deadline";
+    internal const string WakeKey = "__wake";
+    internal const string WakePayloadKey = "wakePayload";
     private const string DefaultPort = "default";
     private const string DefaultTimeoutPort = "timeout";
 
@@ -34,6 +36,14 @@ public sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
         // Resume visit.
         if (ctx.Branch.LocalState.ContainsKey(ParkedKey))
         {
+            // The resumer stores the callback payload under "__wake"; its presence distinguishes a
+            // callback wake (continue via "default", promoting the payload under "wakePayload") from
+            // a TTL timeout (a timer wake carries no payload).
+            if (ctx.Branch.LocalState.TryGetValue(WakeKey, out JsonElement wake))
+            {
+                return Continue(DefaultPort, PromoteWake(wake, WakePayloadKey));
+            }
+
             if (ctx.Branch.LocalState.TryGetValue(DeadlineKey, out JsonElement deadlineElement)
                 && deadlineElement.ValueKind == JsonValueKind.String
                 && DateTime.TryParse(deadlineElement.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime deadline)
@@ -61,7 +71,20 @@ public sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
 
     private static Task<NodeExecutionResult> Continue(string port)
     {
-        return Task.FromResult<NodeExecutionResult>(
-            new NodeExecutionResult.Continue(port, new Dictionary<string, JsonElement>()));
+        return Continue(port, new Dictionary<string, JsonElement>());
+    }
+
+    private static Task<NodeExecutionResult> Continue(string port, IReadOnlyDictionary<string, JsonElement> patch)
+    {
+        return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue(port, patch));
+    }
+
+    // Surface the caller-supplied "body" from the raw wake payload under a friendly key.
+    private static IReadOnlyDictionary<string, JsonElement> PromoteWake(JsonElement wake, string key)
+    {
+        JsonElement payload = wake.ValueKind == JsonValueKind.Object && wake.TryGetProperty("body", out JsonElement body)
+            ? body
+            : wake;
+        return new Dictionary<string, JsonElement> { [key] = payload.Clone() };
     }
 }
