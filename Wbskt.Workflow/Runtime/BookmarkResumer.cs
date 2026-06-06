@@ -45,6 +45,16 @@ public sealed class BookmarkResumer : IBookmarkResumer
 
         await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
         var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+
+        // Deliver the wake payload to the resumed branch under the reserved "__wake" key so the
+        // parked node (and downstream nodes) can read what woke them. The branch keeps its pointer
+        // and Waiting status; the re-executed node flips it to Active when it continues.
+        if (evt.Payload.Count > 0)
+        {
+            string mergedLocalJson = MergeWakePayload(branch.LocalJson, evt.Payload);
+            await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
+        }
+
         await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
         await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
         return new BookmarkMatchResult(true, bookmark.Id, false);
@@ -52,8 +62,6 @@ public sealed class BookmarkResumer : IBookmarkResumer
 
     public async Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct)
     {
-        _ = wakePayload;
-
         BookmarkRow? bookmark = await _bookmarkProvider.GetByIdAsync(bookmarkId, ct);
         if (bookmark is null)
         {
@@ -62,7 +70,23 @@ public sealed class BookmarkResumer : IBookmarkResumer
 
         await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
         var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+
+        if (wakePayload.Count > 0)
+        {
+            string mergedLocalJson = MergeWakePayload(branch.LocalJson, wakePayload);
+            await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
+        }
+
         await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
         await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
+    }
+
+    private static string MergeWakePayload(string localJson, IReadOnlyDictionary<string, JsonElement> wakePayload)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        Dictionary<string, JsonElement> local = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localJson, options)
+            ?? new Dictionary<string, JsonElement>();
+        local["__wake"] = JsonSerializer.SerializeToElement(wakePayload, options);
+        return JsonSerializer.Serialize(local, options);
     }
 }

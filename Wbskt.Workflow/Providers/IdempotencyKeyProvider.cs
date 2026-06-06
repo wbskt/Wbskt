@@ -100,6 +100,20 @@ public class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyProvider
         throw new InvalidOperationException("IdempotencyKey_MarkFailed did not return a row.");
     }
 
+    public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.IdempotencyKey_DeleteExpired", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
+        command.Parameters.AddWithValue("@BatchSize", batchSize);
+
+        await connection.OpenAsync(ct);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is int count ? count : Convert.ToInt32(result ?? 0);
+    }
+
     internal static IdempotencyKeyRow Map(DbDataReader reader)
     {
         return new IdempotencyKeyRow

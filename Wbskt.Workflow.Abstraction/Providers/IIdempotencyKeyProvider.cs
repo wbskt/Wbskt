@@ -8,4 +8,7 @@ public interface IIdempotencyKeyProvider
     Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct);
     Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct);
     Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct);
+
+    /// <summary>Deletes up to <paramref name="batchSize"/> idempotency rows created before the cutoff. Returns the count deleted.</summary>
+    Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
 }
