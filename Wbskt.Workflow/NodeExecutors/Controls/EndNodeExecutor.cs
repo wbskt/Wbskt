@@ -3,6 +3,10 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
+/// <summary>
+/// Explicit terminal node. Completes the branch; when the run's last active branch completes,
+/// the run finalizes (Succeeded unless other branches failed).
+/// </summary>
 public sealed class EndNodeExecutor : INodeExecutor
 {
     public string Kind => NodeKind.ControlEnd;
@@ -11,6 +15,6 @@ public sealed class EndNodeExecutor : INodeExecutor
     {
         _ = ctx;
         _ = ct;
-        throw new NotImplementedException("EndNodeExecutor not yet implemented - Phase 9 TODO");
+        return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
     }
 }
