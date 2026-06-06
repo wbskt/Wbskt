@@ -165,6 +165,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Contains(executors1, executor => executor is LogicNodeExecutor);
         Assert.Contains(executors1, executor => executor is VariableNodeExecutor);
         Assert.Contains(executors1, executor => executor is ForEachNodeExecutor);
+        Assert.Contains(executors1, executor => executor is ParallelForEachNodeExecutor);
         Assert.Contains(executors1, executor => executor is DelayNodeExecutor);
         Assert.Contains(executors1, executor => executor is WaitForHttpNodeExecutor);
         Assert.Contains(executors1, executor => executor is AwaitSignalNodeExecutor);
@@ -179,6 +180,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.IsType<LogicNodeExecutor>(registry1.For(NodeKind.ControlLogic));
         Assert.IsType<VariableNodeExecutor>(registry1.For(NodeKind.ControlVariable));
         Assert.IsType<ForEachNodeExecutor>(registry1.For(NodeKind.ControlForEach));
+        Assert.IsType<ParallelForEachNodeExecutor>(registry1.For(NodeKind.ControlParallelForEach));
         Assert.IsType<DelayNodeExecutor>(registry1.For(NodeKind.ControlDelay));
         Assert.IsType<WaitForHttpNodeExecutor>(registry1.For(NodeKind.ControlWaitForHttp));
         Assert.IsType<AwaitSignalNodeExecutor>(registry1.For(NodeKind.ControlAwaitSignal));
