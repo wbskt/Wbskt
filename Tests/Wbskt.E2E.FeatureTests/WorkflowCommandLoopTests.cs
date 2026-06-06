@@ -61,6 +61,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
 
         var publishedRef = await fixture.PublishWorkflowAsync(
             userToken,
+            workspaceRef,
             workflowRefId,
             $"E2E-OpenVent-{workflowRefId:N}",
             definitionElement);
@@ -101,7 +102,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         if (commandReceived != commandTcs.Task)
         {
             // Gather diagnostics before failing.
-            var runs = await fixture.ListRunsAsync(userToken, publishedRef);
+            var runs = await fixture.ListRunsAsync(userToken, workspaceRef, publishedRef);
             var runDiag = runs.Count == 0
                 ? "no runs found"
                 : string.Join(", ", runs.Select(r => $"RefId={r.RefId} Status={r.Status}"));
@@ -121,7 +122,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         var runCompleted = await ServicesFixture.PollAsync(
             async () =>
             {
-                var runs = await fixture.ListRunsAsync(userToken, publishedRef);
+                var runs = await fixture.ListRunsAsync(userToken, workspaceRef, publishedRef);
                 return runs.Any(r => IsTerminal(r.Status));
             },
             timeout: TimeSpan.FromSeconds(30),
@@ -130,7 +131,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         runCompleted.Should().BeTrue(
             "the workflow run must reach a terminal status (Succeeded / Failed) within 30 s");
 
-        var finalRuns = await fixture.ListRunsAsync(userToken, publishedRef);
+        var finalRuns = await fixture.ListRunsAsync(userToken, workspaceRef, publishedRef);
         finalRuns.Should().Contain(r => IsTerminal(r.Status),
             "at least one run for the workflow must have completed");
     }

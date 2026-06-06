@@ -244,11 +244,11 @@ public sealed class ServicesFixture : IDisposable
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>Publishes a workflow definition JSON and returns the workflow RefId.</summary>
-    public async Task<Guid> PublishWorkflowAsync(string token, Guid workflowRefId, string name, JsonElement definitionElement)
+    public async Task<Guid> PublishWorkflowAsync(string token, Guid workspaceRef, Guid workflowRefId, string name, JsonElement definitionElement)
     {
         var request = new WorkflowPublishRequest(workflowRefId, name, null, definitionElement);
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{E2EConfig.ManagementBaseUrl}/api/workflows");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         req.Content = JsonContent.Create(request, options: JsonOptions);
 
@@ -262,11 +262,11 @@ public sealed class ServicesFixture : IDisposable
     }
 
     /// <summary>Lists runs for a workflow definition.</summary>
-    public async Task<IReadOnlyList<RunSummaryDto>> ListRunsAsync(string token, Guid workflowRefId)
+    public async Task<IReadOnlyList<RunSummaryDto>> ListRunsAsync(string token, Guid workspaceRef, Guid workflowRefId)
     {
         using var req = new HttpRequestMessage(
             HttpMethod.Get,
-            $"{E2EConfig.ManagementBaseUrl}/api/workflows/{workflowRefId}/runs");
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var resp = await _http.SendAsync(req);
