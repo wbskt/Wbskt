@@ -324,6 +324,75 @@ public sealed class ServicesFixture : IDisposable
         return (result.Matched, result.Outcome);
     }
 
+    /// <summary>Fetches the full run detail (summary + all branches, each carrying its LocalJson state).</summary>
+    public async Task<RunDetailDto> GetRunDetailAsync(string token, Guid workspaceRef, Guid runRefId)
+    {
+        using var req = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+
+        return await resp.Content.ReadFromJsonAsync<RunDetailDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Run detail returned empty response.");
+    }
+
+    /// <summary>Fetches the ordered history events for a run (each carrying NodeCompleted/NodeFailed PayloadJson).</summary>
+    public async Task<IReadOnlyList<HistoryEventDto>> GetHistoryAsync(string token, Guid workspaceRef, Guid runRefId, int top = 200)
+    {
+        using var req = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/history?top={top}");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+
+        var result = await resp.Content.ReadFromJsonAsync<HistoryListResponse>(JsonOptions);
+        return result?.Events ?? [];
+    }
+
+    /// <summary>Polls until the first run for a workflow appears, returning its RefId (or Guid.Empty on timeout).</summary>
+    public async Task<Guid> WaitForFirstRunAsync(string token, Guid workspaceRef, Guid workflowRefId, TimeSpan timeout)
+    {
+        Guid runRefId = Guid.Empty;
+        await PollAsync(
+            async () =>
+            {
+                var runs = await ListRunsAsync(token, workspaceRef, workflowRefId);
+                if (runs.Count > 0)
+                {
+                    runRefId = runs[0].RefId;
+                    return true;
+                }
+
+                return false;
+            },
+            timeout,
+            TimeSpan.FromSeconds(1));
+
+        return runRefId;
+    }
+
+    /// <summary>Polls a workflow's runs until one reaches the requested terminal status, returning it (or null on timeout).</summary>
+    public async Task<RunSummaryDto?> WaitForRunStatusAsync(string token, Guid workspaceRef, Guid workflowRefId, string status, TimeSpan timeout)
+    {
+        RunSummaryDto? match = null;
+        await PollAsync(
+            async () =>
+            {
+                var runs = await ListRunsAsync(token, workspaceRef, workflowRefId);
+                match = runs.FirstOrDefault(r => string.Equals(r.Status, status, StringComparison.Ordinal));
+                return match is not null;
+            },
+            timeout,
+            TimeSpan.FromSeconds(2));
+
+        return match;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Polling helper
     // ─────────────────────────────────────────────────────────────────────────
