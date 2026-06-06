@@ -31,7 +31,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new FixedClock(), new SequenceIdGenerator()),
+            new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator()),
             runDispatcher);
         var inboundHub = new InboundHub(triggerDispatcher, new FixedClock(), new TestLogger<InboundHub>());
         var branchLoop = new BranchLoop(

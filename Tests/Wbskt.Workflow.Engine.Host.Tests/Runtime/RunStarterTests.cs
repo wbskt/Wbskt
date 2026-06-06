@@ -28,6 +28,7 @@ public sealed class RunStarterTests
             historyProvider,
             workflowDefinitionProvider,
             new CorrelationKeyResolver(),
+            new NullRunStartedPublisher(),
             new FixedClock(),
             new SequenceIdGenerator());
         InboundEvent triggerEvent = new(

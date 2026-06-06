@@ -64,7 +64,7 @@ public sealed class RunFinalizer : IRunFinalizer
             }
         ], ct);
         await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowDefinitionId, updatedRun.CorrelationKey ?? string.Empty, ct);
-        await _runCompletedPublisher.PublishAsync(updatedRun.Id, terminalStatus, ct);
+        await _runCompletedPublisher.PublishAsync(updatedRun, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);
     }

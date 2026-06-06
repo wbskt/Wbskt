@@ -163,7 +163,7 @@ public sealed class SubWorkflowCompletionHookTests
 
     private sealed class RecordingRunCompletedPublisher : IRunCompletedPublisher
     {
-        public Task PublishAsync(long runId, string terminalStatus, CancellationToken ct) => Task.CompletedTask;
+        public Task PublishAsync(RunRow run, string terminalStatus, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class RecordingBookmarkProvider : IBookmarkProvider

@@ -13,6 +13,7 @@ public sealed class RunStarter : IRunStarter
     private readonly IHistoryEventProvider _historyEventProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
+    private readonly IRunStartedPublisher _runStartedPublisher;
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
 
@@ -23,6 +24,7 @@ public sealed class RunStarter : IRunStarter
         IHistoryEventProvider historyEventProvider,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ICorrelationKeyResolver correlationKeyResolver,
+        IRunStartedPublisher runStartedPublisher,
         IClock clock,
         IIdGenerator idGenerator)
     {
@@ -32,6 +34,7 @@ public sealed class RunStarter : IRunStarter
         _historyEventProvider = historyEventProvider;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _correlationKeyResolver = correlationKeyResolver;
+        _runStartedPublisher = runStartedPublisher;
         _clock = clock;
         _idGenerator = idGenerator;
     }
@@ -103,6 +106,8 @@ public sealed class RunStarter : IRunStarter
                 Timestamp = nowUtc
             }
         ], ct);
+
+        await _runStartedPublisher.PublishAsync(createdRun, ct);
 
         return (createdRun.Id, createdBranch.Id);
     }

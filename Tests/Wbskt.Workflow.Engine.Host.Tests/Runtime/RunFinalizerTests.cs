@@ -223,10 +223,10 @@ public sealed class RunFinalizerTests
     {
         public List<long> RunIds { get; } = [];
 
-        public Task PublishAsync(long runId, string terminalStatus, CancellationToken ct)
+        public Task PublishAsync(RunRow run, string terminalStatus, CancellationToken ct)
         {
             _ = terminalStatus;
-            RunIds.Add(runId);
+            RunIds.Add(run.Id);
             return Task.CompletedTask;
         }
     }

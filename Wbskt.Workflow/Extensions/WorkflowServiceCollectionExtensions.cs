@@ -106,6 +106,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IRunCancellationService, RunCancellationService>();
         services.AddScoped<ICompensationOrchestrator, CompensationOrchestrator>();
         services.AddScoped<IRunCompletedPublisher, NullRunCompletedPublisher>();
+        services.AddScoped<IRunStartedPublisher, NullRunStartedPublisher>();
         services.AddScoped<IRunStarter, RunStarter>();
         services.AddScoped<ITriggerDispatcher, TriggerDispatcher>();
         services.AddScoped<IInboundHub, InboundHub>();

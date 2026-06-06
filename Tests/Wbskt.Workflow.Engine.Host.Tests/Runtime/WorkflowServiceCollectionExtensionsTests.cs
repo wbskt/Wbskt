@@ -110,6 +110,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var compensationOrchestrator2 = scope2.ServiceProvider.GetRequiredService<ICompensationOrchestrator>();
         var runCompletedPublisher1 = scope1.ServiceProvider.GetRequiredService<IRunCompletedPublisher>();
         var runCompletedPublisher2 = scope2.ServiceProvider.GetRequiredService<IRunCompletedPublisher>();
+        var runStartedPublisher1 = scope1.ServiceProvider.GetRequiredService<IRunStartedPublisher>();
         var completionHook1 = scope1.ServiceProvider.GetRequiredService<ISubWorkflowCompletionHook>();
         var completionHook2 = scope2.ServiceProvider.GetRequiredService<ISubWorkflowCompletionHook>();
         var executors1 = scope1.ServiceProvider.GetServices<INodeExecutor>().ToArray();
@@ -156,6 +157,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.NotSame(compensationOrchestrator1, compensationOrchestrator2);
         Assert.IsType<NullRunCompletedPublisher>(runCompletedPublisher1);
         Assert.NotSame(runCompletedPublisher1, runCompletedPublisher2);
+        Assert.IsType<NullRunStartedPublisher>(runStartedPublisher1);
         Assert.IsType<SubWorkflowCompletionHook>(completionHook1);
         Assert.NotSame(completionHook1, completionHook2);
         Assert.Contains(executors1, executor => executor.GetType().Name == "DeviceTriggerExecutor");
