@@ -104,6 +104,40 @@ public sealed class AwaitSignalNodeExecutorTests
         Assert.Equal("default", cont.OutboundPort);
     }
 
+    [Fact]
+    public async Task Resume_with_wake_payload_promotes_body_under_signalPayload()
+    {
+        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
+        var node = new AwaitSignalNode(Guid.NewGuid(), "await", Ports(), new AwaitSignalConfig("approve"));
+        var wake = JsonSerializer.SerializeToElement(new { signalName = "approve", body = new { approvedBy = "ops" } });
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement("approve"),
+            ["__wake"] = wake
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("default", cont.OutboundPort);
+        Assert.Equal("ops", cont.LocalStatePatch["signalPayload"].GetProperty("approvedBy").GetString());
+    }
+
+    [Fact]
+    public async Task Resume_with_wake_payload_wins_over_elapsed_deadline()
+    {
+        // A signal that arrives at/after the deadline still resumes via the signal path, not timeout.
+        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(20)));
+        var node = new AwaitSignalNode(Guid.NewGuid(), "await", Ports(), new AwaitSignalConfig("approve", Ttl: TimeSpan.FromMinutes(10), OnTimeout: "expired"));
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement("approve"),
+            [DeadlineKey] = JsonSerializer.SerializeToElement(T0.AddMinutes(10).ToString("O")),
+            ["__wake"] = JsonSerializer.SerializeToElement(new { body = new { ok = true } })
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("default", cont.OutboundPort);
+    }
+
     private static NodeContext CreateContext(AwaitSignalNode node, IReadOnlyDictionary<string, JsonElement> localState)
     {
         return new NodeContext
