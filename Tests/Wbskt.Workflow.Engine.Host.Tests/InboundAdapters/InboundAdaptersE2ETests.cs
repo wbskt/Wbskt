@@ -48,11 +48,12 @@ public sealed class InboundAdaptersE2ETests
     {
         var hub = CreateHub();
         var controller = new InboundSignalController(hub.Object);
+        Guid scopeRunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
 
-        await controller.Post("corr-1", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
+        await controller.Post(scopeRunRefId, "approve", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.ChannelKind == "signal" && e.CorrelationKey == "corr-1"),
+            It.Is<InboundEvent>(e => e.ChannelKind == "signal" && e.CorrelationKey == $"signal:approve:{scopeRunRefId}"),
             CancellationToken.None), Times.Once);
     }
 

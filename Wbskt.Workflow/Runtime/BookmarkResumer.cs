@@ -34,7 +34,9 @@ public sealed class BookmarkResumer : IBookmarkResumer
             return new BookmarkMatchResult(false, null, true);
         }
 
-        string matchKey = $"{evt.ChannelKind}:{evt.CorrelationKey}";
+        // The resolved correlation key is already channel-namespaced (e.g. "signal:approve:{run}")
+        // and is the canonical bookmark match key. Do NOT prefix the channel again.
+        string matchKey = evt.CorrelationKey;
         BookmarkRow? bookmark = (await _bookmarkProvider.GetAllByMatchKeyAsync(matchKey, ct)).FirstOrDefault();
         if (bookmark is null)
         {

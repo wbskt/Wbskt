@@ -71,7 +71,7 @@ public sealed class WorkflowEngineClientTests
 
         await client.SignalAsync(runRefId, "wake", request, CancellationToken.None);
 
-        Assert.Equal($"/api/inbound/signal/{runRefId}:wake", handler.LastRequestUri?.PathAndQuery);
+        Assert.Equal($"/api/inbound/signal/{runRefId}/wake", handler.LastRequestUri?.PathAndQuery);
         Assert.Equal(HttpMethod.Post, handler.LastMethod);
     }
 

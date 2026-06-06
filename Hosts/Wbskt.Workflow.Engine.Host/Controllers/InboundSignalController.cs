@@ -8,15 +8,19 @@ namespace Wbskt.Workflow.Engine.Host.Controllers;
 [Route("api/inbound/signal")]
 public sealed class InboundSignalController(IInboundHub hub) : ControllerBase
 {
-    [HttpPost("{correlationKey}")]
-    public async Task<InboundSignalResponse> Post(string correlationKey, [FromBody] JsonElement payload, CancellationToken ct)
+    [HttpPost("{scopeRunRefId:guid}/{signalName}")]
+    public async Task<InboundSignalResponse> Post(Guid scopeRunRefId, string signalName, [FromBody] JsonElement payload, CancellationToken ct)
     {
+        // CorrelationKeyResolver maps the "signal" channel to "signal:{signalName}:{scopeRunRefId}",
+        // which must match the bookmark minted by AwaitSignalNodeExecutor for this run.
         InboundEvent inboundEvent = new(
             "signal",
-            correlationKey,
-            $"signal:{correlationKey}:{Guid.NewGuid()}",
+            $"signal:{signalName}:{scopeRunRefId}",
+            $"signal:{scopeRunRefId}:{signalName}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {
+                ["signalName"] = JsonSerializer.SerializeToElement(signalName),
+                ["scopeRunRefId"] = JsonSerializer.SerializeToElement(scopeRunRefId.ToString()),
                 ["body"] = payload
             },
             default);
