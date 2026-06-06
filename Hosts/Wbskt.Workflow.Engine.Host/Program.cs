@@ -39,6 +39,8 @@ public static class Program
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration);
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
+        builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
+        builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddHostedService<ScheduledFireTicker>();
