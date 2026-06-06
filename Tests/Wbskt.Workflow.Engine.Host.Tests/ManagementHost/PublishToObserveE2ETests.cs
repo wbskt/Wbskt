@@ -23,9 +23,9 @@ public sealed class PublishToObserveE2ETests
         var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator());
         var request = CreatePublishRequest();
 
-        var v1 = await service.PublishAsync(request, CancellationToken.None);
-        var v2 = await service.PublishAsync(request, CancellationToken.None);
-        await service.DeprecateAsync(request.RefId, CancellationToken.None);
+        var v1 = await service.PublishAsync(1, request, CancellationToken.None);
+        var v2 = await service.PublishAsync(1, request, CancellationToken.None);
+        await service.DeprecateAsync(1, request.RefId, CancellationToken.None);
 
         Assert.Equal(1, v1.Version);
         Assert.Equal(2, v2.Version);
@@ -41,9 +41,9 @@ public sealed class PublishToObserveE2ETests
         var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator());
         var request = CreatePublishRequest();
 
-        var first = await service.PublishAsync(request, CancellationToken.None);
-        var second = await service.PublishAsync(request, CancellationToken.None);
-        var current = await service.GetCurrentAsync(request.RefId, CancellationToken.None);
+        var first = await service.PublishAsync(1, request, CancellationToken.None);
+        var second = await service.PublishAsync(1, request, CancellationToken.None);
+        var current = await service.GetCurrentAsync(1, request.RefId, CancellationToken.None);
 
         Assert.Equal(1, first.Version);
         Assert.Equal(2, second.Version);

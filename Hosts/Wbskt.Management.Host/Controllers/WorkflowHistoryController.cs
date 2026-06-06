@@ -1,26 +1,31 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
-using Wbskt.Primitives.Exceptions;
+using Wbskt.Primitives.Constants;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/runs/{runRefId:guid}/history")]
+[Route("api/workspaces/{workspaceRef:guid}/runs/{runRefId:guid}/history")]
 [ApiController]
-public sealed class WorkflowHistoryController(IRunProvider runProvider, IHistoryEventProvider historyProvider) : ControllerBase
+[Authorize]
+public sealed class WorkflowHistoryController(
+    IWorkflowRunQueryService runQueryService,
+    IHistoryEventProvider historyProvider,
+    IAuthServiceClient authClient) : ControllerBase
 {
     [HttpGet]
-    public async Task<HistoryListResponse> List(Guid runRefId, [FromQuery] long fromEventId = 0, [FromQuery] int top = 200, CancellationToken ct = default)
+    public async Task<HistoryListResponse> List(Guid workspaceRef, Guid runRefId, [FromQuery] long fromEventId = 0, [FromQuery] int top = 200, CancellationToken ct = default)
     {
-        int? runId = await runProvider.FindByRefIdAsync(runRefId, ct);
-        if (!runId.HasValue)
-        {
-            throw new NotFoundException($"Run '{runRefId}' was not found.");
-        }
+        int workspaceId = await authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+        int runId = await runQueryService.EnsureRunInWorkspaceAsync(workspaceId, runRefId, ct);
 
-        IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.HistoryEventRow> rows = await historyProvider.GetByRunIdAsync(runId.Value, fromEventId, top + 1, ct);
+        IReadOnlyCollection<HistoryEventRow> rows = await historyProvider.GetByRunIdAsync(runId, fromEventId, top + 1, ct);
         bool hasMore = rows.Count > top;
-        IReadOnlyList<Wbskt.Workflow.Abstraction.Entities.HistoryEventRow> page = rows.Take(top).ToList();
+        IReadOnlyList<HistoryEventRow> page = rows.Take(top).ToList();
         long? nextCursor = hasMore ? page.Last().HistoryEventId : null;
         return new HistoryListResponse(page.Select(row => new HistoryEventDto(row.HistoryEventId, row.Timestamp, row.EventKind, row.Severity, row.BranchRefId, row.NodeId, row.PayloadJson)).ToList(), nextCursor);
     }

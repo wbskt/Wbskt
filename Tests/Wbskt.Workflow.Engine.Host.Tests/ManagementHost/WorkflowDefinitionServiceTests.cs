@@ -13,6 +13,9 @@ namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
 public sealed class WorkflowDefinitionServiceTests
 {
+    // Matches the WorkspaceId stamped on rows by CreateWorkflowRow / the fixture.
+    private const int WorkspaceId = 1;
+
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
@@ -28,13 +31,33 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 11 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        var response = await service.PublishAsync(request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
 
         Assert.Equal(1, response.Version);
         Assert.Equal("Published", response.Status);
         triggerService.Verify(x => x.OnPublishedAsync(11, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         cache.Verify(x => x.Invalidate(11), Times.Once);
+    }
+
+    [Fact]
+    public async Task Publish_stamps_resolved_workspace_id_on_inserted_row()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var request = CreatePublishRequest();
+        WorkflowDefinitionRow? inserted = null;
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NotFoundException("missing"));
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { inserted = row; return row with { Id = 21 }; });
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
+
+        await service.PublishAsync(42, request, CancellationToken.None);
+
+        Assert.NotNull(inserted);
+        Assert.Equal(42, inserted!.WorkspaceId);
     }
 
     [Fact]
@@ -50,7 +73,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        var response = await service.PublishAsync(request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
 
         Assert.Equal(2, response.Version);
         workflowProvider.Verify(x => x.DeprecateAsync(5, It.IsAny<CancellationToken>()), Times.Once);
@@ -61,22 +84,18 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
-    public async Task Publish_invokes_trigger_registration_hooks()
+    public async Task Publish_new_version_over_other_workspace_throws_security()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
         var triggerService = new Mock<ITriggerRegistrationService>();
         var cache = new Mock<IWorkflowDefinitionCache>();
         var request = CreatePublishRequest();
-        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new NotFoundException("missing"));
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 17 });
+        var existing = CreateWorkflowRow(5, request.RefId, 1, true);
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        await service.PublishAsync(request, CancellationToken.None);
-
-        triggerService.Verify(x => x.OnPublishedAsync(17, It.IsAny<CancellationToken>()), Times.Once);
-        cache.Verify(x => x.Invalidate(17), Times.Once);
+        await Assert.ThrowsAsync<SecurityException>(() => service.PublishAsync(WorkspaceId + 99, request, CancellationToken.None));
+        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -90,12 +109,26 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        var dto = await service.GetCurrentAsync(refId, CancellationToken.None);
+        var dto = await service.GetCurrentAsync(WorkspaceId, refId, CancellationToken.None);
 
         Assert.Equal(refId, dto.RefId);
         Assert.Equal(4, dto.Version);
         Assert.Equal("Published", dto.Status);
         Assert.Equal("Vent control + escalation", dto.Name);
+    }
+
+    [Fact]
+    public async Task GetCurrent_in_other_workspace_throws_security()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
+
+        await Assert.ThrowsAsync<SecurityException>(() => service.GetCurrentAsync(WorkspaceId + 1, refId, CancellationToken.None));
     }
 
     [Fact]
@@ -109,7 +142,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync(CreateWorkflowRow(13, refId, 2, false));
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        var dto = await service.GetVersionAsync(refId, 2, CancellationToken.None);
+        var dto = await service.GetVersionAsync(WorkspaceId, refId, 2, CancellationToken.None);
 
         Assert.Equal(refId, dto.RefId);
         Assert.Equal(2, dto.Version);
@@ -127,7 +160,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync(CreateWorkflowRow(14, refId, 6, true));
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        await service.DeprecateAsync(refId, CancellationToken.None);
+        await service.DeprecateAsync(WorkspaceId, refId, CancellationToken.None);
 
         workflowProvider.Verify(x => x.DeprecateAsync(14, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(14, It.IsAny<CancellationToken>()), Times.Once);
@@ -135,21 +168,22 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
-    public async Task Publish_unknown_refId_returns_not_found_when_getting_current_after_deprecate()
+    public async Task Publish_invokes_trigger_registration_hooks()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
         var triggerService = new Mock<ITriggerRegistrationService>();
         var cache = new Mock<IWorkflowDefinitionCache>();
         var request = CreatePublishRequest();
-        workflowProvider.SetupSequence(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new NotFoundException("missing"))
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new NotFoundException("missing"));
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 15 });
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 17 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        await service.PublishAsync(request, CancellationToken.None);
-        await Assert.ThrowsAsync<NotFoundException>(() => service.GetCurrentAsync(request.RefId, CancellationToken.None));
+        await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+
+        triggerService.Verify(x => x.OnPublishedAsync(17, It.IsAny<CancellationToken>()), Times.Once);
+        cache.Verify(x => x.Invalidate(17), Times.Once);
     }
 
     [Fact]
@@ -174,7 +208,7 @@ public sealed class WorkflowDefinitionServiceTests
         }, SerializerOptions));
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
-        await Assert.ThrowsAsync<ValidationException>(() => service.PublishAsync(request, CancellationToken.None));
+        await Assert.ThrowsAsync<ValidationException>(() => service.PublishAsync(WorkspaceId, request, CancellationToken.None));
 
         workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -200,7 +234,7 @@ public sealed class WorkflowDefinitionServiceTests
             Id = id,
             RefId = refId,
             Version = version,
-            WorkspaceId = 1,
+            WorkspaceId = WorkspaceId,
             Name = "Vent control + escalation",
             Description = null,
             IsEnabled = isEnabled,

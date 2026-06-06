@@ -31,7 +31,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         _validator = validator;
     }
 
-    public async Task<WorkflowPublishResponse> PublishAsync(WorkflowPublishRequest request, CancellationToken ct)
+    public async Task<WorkflowPublishResponse> PublishAsync(int workspaceId, WorkflowPublishRequest request, CancellationToken ct)
     {
         WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(request.Definition.GetRawText(), SerializerOptions)
             ?? throw new ValidationException("Workflow definition could not be deserialized.");
@@ -59,12 +59,20 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         }
 
         int nextVersion = existing?.Version + 1 ?? 1;
+
+        // A workflow RefId is owned by the workspace that first published it; a different
+        // workspace cannot publish a new version over it.
+        if (existing is not null && existing.WorkspaceId != workspaceId)
+        {
+            throw new SecurityException($"Workflow '{request.RefId}' does not belong to the workspace.");
+        }
+
         WorkflowDefinitionRow inserted = await _workflowDefinitionProvider.InsertAsync(new WorkflowDefinitionRow
         {
             Id = 0,
             RefId = request.RefId,
             Version = nextVersion,
-            WorkspaceId = definition.WorkspaceId,
+            WorkspaceId = workspaceId,
             Name = request.Name,
             Description = request.Description,
             IsEnabled = true,
@@ -85,24 +93,37 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         return new WorkflowPublishResponse(inserted.RefId, inserted.Version, "Published");
     }
 
-    public async Task<WorkflowDefinitionDto> GetCurrentAsync(Guid refId, CancellationToken ct)
+    public async Task<WorkflowDefinitionDto> GetCurrentAsync(int workspaceId, Guid refId, CancellationToken ct)
     {
         WorkflowDefinitionRow row = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(refId, ct);
+        EnsureWorkspace(row, workspaceId, refId);
         return Map(row);
     }
 
-    public async Task<WorkflowDefinitionDto> GetVersionAsync(Guid refId, int version, CancellationToken ct)
+    public async Task<WorkflowDefinitionDto> GetVersionAsync(int workspaceId, Guid refId, int version, CancellationToken ct)
     {
         WorkflowDefinitionRow row = await _workflowDefinitionProvider.GetByRefIdVersionAsync(refId, version, ct);
+        EnsureWorkspace(row, workspaceId, refId);
         return Map(row);
     }
 
-    public async Task DeprecateAsync(Guid refId, CancellationToken ct)
+    public async Task DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct)
     {
         WorkflowDefinitionRow row = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(refId, ct);
+        EnsureWorkspace(row, workspaceId, refId);
         await _workflowDefinitionProvider.DeprecateAsync(row.Id, ct);
         await _triggerRegistrationService.OnDeprecatedAsync(row.Id, ct);
         _cache.Invalidate(row.Id);
+    }
+
+    private static void EnsureWorkspace(WorkflowDefinitionRow row, int workspaceId, Guid refId)
+    {
+        // Failed ownership is reported as a security error (403), never NotFound, to avoid
+        // letting callers enumerate workflows in other workspaces.
+        if (row.WorkspaceId != workspaceId)
+        {
+            throw new SecurityException($"Workflow '{refId}' does not belong to the workspace.");
+        }
     }
 
     private static WorkflowDefinitionDto Map(WorkflowDefinitionRow row)
