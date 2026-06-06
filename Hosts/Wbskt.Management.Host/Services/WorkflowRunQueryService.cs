@@ -80,6 +80,6 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
     private static BranchSummaryDto MapBranch(BranchRow row)
     {
-        return new BranchSummaryDto(row.RefId, row.Status, row.NodeId, row.CreatedAt, row.UpdatedAt);
+        return new BranchSummaryDto(row.RefId, row.Status, row.NodeId, row.CreatedAt, row.UpdatedAt, row.LocalJson);
     }
 }

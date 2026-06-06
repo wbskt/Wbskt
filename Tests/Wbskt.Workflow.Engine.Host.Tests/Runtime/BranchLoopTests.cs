@@ -303,7 +303,56 @@ public sealed class BranchLoopTests
         // Assert
         Assert.True(branchProvider.SetFailedCalled);
         Assert.Equal([-1], counters.DecrementCalls);
-        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "NodeFailed");
+        HistoryEventRow failedEvent = Assert.Single(historyProvider.Events, evt => evt.EventKind == "NodeFailed");
+        Assert.NotNull(failedEvent.PayloadJson);
+        using JsonDocument failedPayload = JsonDocument.Parse(failedEvent.PayloadJson!);
+        Assert.Equal("E_FAIL", failedPayload.RootElement.GetProperty("errorCode").GetString());
+        Assert.Equal("boom", failedPayload.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task NodeCompleted_history_event_records_port_payload()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "complete",
+            null,
+            true,
+            [new TestNode(nodeId, "noop", "test")],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var counters = new StubRunCountersProvider();
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        HistoryEventRow completedEvent = Assert.Single(historyProvider.Events, evt => evt.EventKind == "NodeCompleted");
+        Assert.NotNull(completedEvent.PayloadJson);
+        using JsonDocument completedPayload = JsonDocument.Parse(completedEvent.PayloadJson!);
+        Assert.Equal("default", completedPayload.RootElement.GetProperty("port").GetString());
     }
 
     [Fact]
