@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Moq;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.NodeExecutors.Actions;
 
@@ -128,20 +130,66 @@ public sealed class CommandNodeExecutorTests
         Assert.Same(exception, fail.Cause);
     }
 
-    private static NodeContext BuildContext(string command, JsonElement? payload)
+    [Fact]
+    public async Task ExecuteAsync_marks_idempotency_succeeded_after_publish()
+    {
+        var publisher = new Mock<IDeviceCommandPublisher>();
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var idempotency = FreshClaim();
+        var executor = new CommandNodeExecutor(publisher.Object);
+        NodeContext ctx = BuildContext("OpenVent", null, idempotency.Object);
+
+        await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), "OpenVent", "{}", It.IsAny<CancellationToken>()), Times.Once);
+        idempotency.Verify(p => p.MarkSucceededAsync(It.Is<string>(k => k == "action:command:42:11111111-1111-1111-1111-111111111111"), "{}", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_skips_publish_when_already_succeeded()
+    {
+        var publisher = new Mock<IDeviceCommandPublisher>();
+        var executor = new CommandNodeExecutor(publisher.Object);
+        NodeContext ctx = BuildContext("OpenVent", null, AlreadySucceeded().Object);
+
+        NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.IsType<NodeExecutionResult.Continue>(result);
+        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_marks_idempotency_failed_when_publisher_throws()
+    {
+        var publisher = new Mock<IDeviceCommandPublisher>();
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broker down"));
+        var idempotency = FreshClaim();
+        var executor = new CommandNodeExecutor(publisher.Object);
+        NodeContext ctx = BuildContext("OpenVent", null, idempotency.Object);
+
+        await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        idempotency.Verify(p => p.MarkFailedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        idempotency.Verify(p => p.MarkSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static NodeContext BuildContext(string command, JsonElement? payload, IIdempotencyKeyProvider? idempotency = null)
     {
         return BuildContextWithPayload(new Dictionary<string, JsonElement>
         {
             ["clientRefId"] = JsonSerializer.SerializeToElement(ClientRefId),
             ["clientId"] = JsonSerializer.SerializeToElement(ClientId),
             ["workspaceId"] = JsonSerializer.SerializeToElement(WorkspaceId)
-        }, command, payload);
+        }, command, payload, idempotency);
     }
 
     private static NodeContext BuildContextWithPayload(
         Dictionary<string, JsonElement> triggerPayload,
         string command,
-        JsonElement? nodePayload)
+        JsonElement? nodePayload,
+        IIdempotencyKeyProvider? idempotency = null)
     {
         var branch = new BranchContext(
             42,
@@ -162,14 +210,59 @@ public sealed class CommandNodeExecutorTests
             [],
             new SendCommandConfig("device-1", command, nodePayload));
 
+        var providers = new Mock<IProviderComposite>();
+        providers.SetupGet(p => p.IdempotencyKey).Returns(idempotency ?? FreshClaim().Object);
+
         return new NodeContext
         {
             Branch = branch,
             Node = node,
-            Providers = Mock.Of<IProviderComposite>(),
+            Providers = providers.Object,
             Tick = 1,
             ParentResults = null,
             CancellationToken = CancellationToken.None
+        };
+    }
+
+    // Default: every UpsertPending wins its own claim (echoes the claim token), so the
+    // command is treated as a first execution and published.
+    private static Mock<IIdempotencyKeyProvider> FreshClaim()
+    {
+        var mock = new Mock<IIdempotencyKeyProvider>();
+        mock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => Row(key, runId, claimToken, nodeId, "Pending"));
+        mock.Setup(p => p.MarkSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, string result, CancellationToken _) => Row(key, 42, Guid.NewGuid(), Guid.Empty, "Succeeded"));
+        mock.Setup(p => p.MarkFailedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, string error, CancellationToken _) => Row(key, 42, Guid.NewGuid(), Guid.Empty, "Failed"));
+        return mock;
+    }
+
+    // A prior execution already succeeded: UpsertPending returns a Succeeded row owned by a
+    // different claim token, so the executor must skip the publish.
+    private static Mock<IIdempotencyKeyProvider> AlreadySucceeded()
+    {
+        var mock = new Mock<IIdempotencyKeyProvider>();
+        mock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => Row(key, runId, Guid.NewGuid(), nodeId, "Succeeded"));
+        return mock;
+    }
+
+    private static IdempotencyKeyRow Row(string key, int runId, Guid branchRefId, Guid nodeId, string status)
+    {
+        return new IdempotencyKeyRow
+        {
+            Id = 1,
+            KeyValue = key,
+            RunId = runId,
+            BranchRefId = branchRefId,
+            NodeId = nodeId,
+            Attempt = 1,
+            Status = status,
+            ResultJson = status == "Succeeded" ? "{}" : null,
+            ErrorJson = null,
+            CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            CompletedAt = status == "Pending" ? null : new DateTime(2026, 5, 26, 12, 0, 1, DateTimeKind.Utc)
         };
     }
 }
