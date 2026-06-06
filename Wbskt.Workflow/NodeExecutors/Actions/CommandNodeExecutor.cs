@@ -38,7 +38,9 @@ public sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : INo
         string payload = node.Config.Payload?.GetRawText() ?? "{}";
 
         // Reserve an idempotency key for this logical action before the side effect.
-        string idempotencyKey = $"action:command:{ctx.Branch.RunId}:{node.NodeId}";
+        // Includes BranchId so fan-out siblings (e.g. ForEach) each deliver their own command,
+        // while a re-execution of the SAME branch (crash recovery) is deduped.
+        string idempotencyKey = $"action:command:{ctx.Branch.RunId}:{ctx.Branch.BranchId}:{node.NodeId}";
         Guid claimToken = Guid.NewGuid();
         IdempotencyKeyRow claim = await ctx.Providers.IdempotencyKey.UpsertPendingAsync(
             idempotencyKey, (int)ctx.Branch.RunId, claimToken, node.NodeId, ctx.Branch.Attempt, ct);

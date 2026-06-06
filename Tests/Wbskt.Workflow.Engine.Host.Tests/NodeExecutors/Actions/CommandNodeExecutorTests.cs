@@ -143,7 +143,7 @@ public sealed class CommandNodeExecutorTests
         await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), "OpenVent", "{}", It.IsAny<CancellationToken>()), Times.Once);
-        idempotency.Verify(p => p.MarkSucceededAsync(It.Is<string>(k => k == "action:command:42:11111111-1111-1111-1111-111111111111"), "{}", It.IsAny<CancellationToken>()), Times.Once);
+        idempotency.Verify(p => p.MarkSucceededAsync(It.Is<string>(k => k == "action:command:42:1001:11111111-1111-1111-1111-111111111111"), "{}", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
