@@ -51,6 +51,7 @@ public sealed class BaseNodeJsonConverter : JsonConverter<BaseNode>
         NodeKind.ControlWaitForHttp => typeof(WaitForHttpNode),
         NodeKind.ControlAwaitSignal => typeof(AwaitSignalNode),
         NodeKind.ControlFailRun => typeof(FailRunNode),
+        NodeKind.ControlEnd => typeof(EndNode),
         NodeKind.TriggerDevice => typeof(DeviceTriggerNode),
         NodeKind.TriggerSchedule => typeof(ScheduleTriggerNode),
         NodeKind.TriggerWebhook => typeof(WebhookTriggerNode),
