@@ -116,6 +116,12 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         _cache.Invalidate(row.Id);
     }
 
+    public async Task EnsureWorkflowInWorkspaceAsync(int workspaceId, Guid workflowRefId, CancellationToken ct)
+    {
+        WorkflowDefinitionRow row = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(workflowRefId, ct);
+        EnsureWorkspace(row, workspaceId, workflowRefId);
+    }
+
     private static void EnsureWorkspace(WorkflowDefinitionRow row, int workspaceId, Guid refId)
     {
         // Failed ownership is reported as a security error (403), never NotFound, to avoid

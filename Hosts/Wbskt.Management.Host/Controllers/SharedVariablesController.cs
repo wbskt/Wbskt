@@ -1,24 +1,38 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/workflows/{workflowRefId:guid}/variables")]
+[Route("api/workspaces/{workspaceRef:guid}/workflows/{workflowRefId:guid}/variables")]
 [ApiController]
-public sealed class SharedVariablesController(ISharedVariableProvider variableProvider) : ControllerBase
+[Authorize]
+public sealed class SharedVariablesController(
+    ISharedVariableProvider variableProvider,
+    IWorkflowDefinitionService workflowService,
+    IAuthServiceClient authClient) : ControllerBase
 {
     [HttpGet("{name}")]
-    public async Task<SharedVariableDto> Get(Guid workflowRefId, string name, CancellationToken ct)
+    public async Task<SharedVariableDto> Get(Guid workspaceRef, Guid workflowRefId, string name, CancellationToken ct)
     {
+        int workspaceId = await authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+        await workflowService.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
+
         SharedVariableRow row = await variableProvider.GetByWorkflowRefIdNameAsync(workflowRefId, name, ct);
         return Map(row);
     }
 
     [HttpPut("{name}")]
-    public async Task<SharedVariableDto> Set(Guid workflowRefId, string name, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
+    public async Task<SharedVariableDto> Set(Guid workspaceRef, Guid workflowRefId, string name, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
     {
+        int workspaceId = await authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsUpdate, ct);
+        await workflowService.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
+
         SharedVariableRow row = await variableProvider.SetAsync(workflowRefId, name, request.ValueJson, ct);
         return Map(row);
     }
