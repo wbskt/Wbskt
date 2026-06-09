@@ -65,9 +65,10 @@ public static class Program
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         builder.Services.AddHttpClient<IWorkflowEngineClient, WorkflowEngineClient>(client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"]
-                ?? throw new ArgumentNullException("Services:WorkflowEngine", "Services:WorkflowEngine configuration is missing."));
+            client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"] 
+                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:WorkflowEngine configuration is missing."));
         });
+        // TODO: auth header for requests for WEH. WEH currently do not have authentication.
         
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
         builder.Services.AddWorkflowManagementServices(builder.Configuration);
