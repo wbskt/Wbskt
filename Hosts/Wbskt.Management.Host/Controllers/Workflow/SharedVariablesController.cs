@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 
-namespace Wbskt.Management.Host.Controllers;
+namespace Wbskt.Management.Host.Controllers.Workflow;
 
 [Route("api/workspaces/{workspaceRef:guid}/workflows/{workflowRefId:guid}/variables")]
 [ApiController]

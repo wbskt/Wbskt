@@ -1,6 +1,6 @@
 using Wbskt.Management.Models.Workflow;
 
-namespace Wbskt.Management.Host.Services;
+namespace Wbskt.Management.Host.Services.Workflow;
 
 public interface IWorkflowDefinitionService
 {

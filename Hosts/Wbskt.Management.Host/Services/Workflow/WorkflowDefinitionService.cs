@@ -2,13 +2,13 @@ using System.Text.Json;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Validation;
-using Wbskt.Workflow.Abstraction.Enums;
 
-namespace Wbskt.Management.Host.Services;
+namespace Wbskt.Management.Host.Services.Workflow;
 
 public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 {

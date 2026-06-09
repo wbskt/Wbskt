@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
-namespace Wbskt.Management.Host.Services;
+namespace Wbskt.Management.Host.Services.Workflow;
 
 public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 {
