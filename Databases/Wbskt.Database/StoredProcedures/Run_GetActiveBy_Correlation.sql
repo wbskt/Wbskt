@@ -1,6 +1,7 @@
 CREATE PROCEDURE dbo.Run_GetActiveBy_Correlation
-    @WorkflowDefinitionId INT,
-    @CorrelationKey       NVARCHAR(400)
+    @WorkflowRefId  UNIQUEIDENTIFIER,
+    @TriggerNodeId  UNIQUEIDENTIFIER,
+    @CorrelationKey NVARCHAR(400)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -21,7 +22,8 @@ BEGIN
         CreditBudget,
         CreatedAt
     FROM dbo.Runs
-    WHERE WorkflowDefinitionId = @WorkflowDefinitionId
+    WHERE WorkflowRefId = @WorkflowRefId
+      AND TriggerNodeId = @TriggerNodeId
       AND CorrelationKey = @CorrelationKey
       AND Status IN (N'Running', N'Cancelling', N'Failing');
 END;

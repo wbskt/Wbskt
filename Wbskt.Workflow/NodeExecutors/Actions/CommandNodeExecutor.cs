@@ -12,7 +12,7 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// (e.g. crash recovery or a branch re-dispatch). The claim-token CAS distinguishes the
 /// first execution from a replay: if a prior execution already succeeded, the publish is skipped.
 /// </summary>
-public sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : INodeExecutor
+internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : INodeExecutor
 {
     private const string SucceededStatus = "Succeeded";
 

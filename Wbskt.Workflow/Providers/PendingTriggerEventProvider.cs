@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class PendingTriggerEventProvider : BaseSqlProvider, IPendingTriggerEventProvider
+internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTriggerEventProvider
 {
     private readonly string _connectionString;
 

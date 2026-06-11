@@ -57,7 +57,7 @@ public sealed class RunFinalizerTests
 
         await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
 
-        Assert.Equal([(9, "corr-42")], harness.Drainer.Requests);
+        Assert.Equal([(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Guid.Parse("11111111-1111-1111-1111-111111111111"), "corr-42")], harness.Drainer.Requests);
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class RunFinalizerTests
         public Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
@@ -210,11 +210,11 @@ public sealed class RunFinalizerTests
 
     private sealed class RecordingPendingTriggerEventDrainer : IPendingTriggerEventDrainer
     {
-        public List<(int WorkflowDefinitionId, string CorrelationKey)> Requests { get; } = [];
+        public List<(Guid WorkflowRefId, Guid TriggerNodeId, string CorrelationKey)> Requests { get; } = [];
 
-        public Task DrainAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
+        public Task DrainAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
         {
-            Requests.Add((workflowDefinitionId, correlationKey));
+            Requests.Add((workflowRefId, triggerNodeId, correlationKey));
             return Task.CompletedTask;
         }
     }

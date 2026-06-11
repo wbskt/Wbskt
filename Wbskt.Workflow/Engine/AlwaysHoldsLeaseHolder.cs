@@ -2,7 +2,7 @@ using Wbskt.Workflow.Abstraction.Engine;
 
 namespace Wbskt.Workflow.Engine;
 
-public sealed class AlwaysHoldsLeaseHolder : ILeaseHolder
+internal sealed class AlwaysHoldsLeaseHolder : ILeaseHolder
 {
     public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct)
     {

@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class RunCountersProvider : BaseSqlProvider, IRunCountersProvider
+internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvider
 {
     private readonly string _connectionString;
 

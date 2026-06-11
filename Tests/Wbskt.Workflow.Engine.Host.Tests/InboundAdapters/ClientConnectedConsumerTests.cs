@@ -25,7 +25,7 @@ public sealed class ClientConnectedConsumerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "client-connected"
-                && e.CorrelationKey == $"client:{evt.ClientRefId}"
+                && e.MatchKeys.Contains($"client:{evt.ClientRefId}")
                 && e.InboundEventId.StartsWith($"client-connected:{evt.ClientRefId}:", StringComparison.Ordinal)
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
                 && e.Payload["clientId"].GetInt32() == evt.ClientId
@@ -48,7 +48,7 @@ public sealed class ClientConnectedConsumerTests
         await consumer.Consume(context.Object);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.CorrelationKey == "client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            It.Is<InboundEvent>(e => e.MatchKeys.Contains("client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
             CancellationToken.None), Times.Once);
     }
 }

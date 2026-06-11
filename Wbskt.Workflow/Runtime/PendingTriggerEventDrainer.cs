@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
+internal sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
 {
     private readonly IPendingTriggerEventProvider _pendingTriggerEventProvider;
     private readonly IInboundHub _inboundHub;
@@ -15,11 +15,11 @@ public sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
         _inboundHub = inboundHub;
     }
 
-    public async Task DrainAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
+    public async Task DrainAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         while (true)
         {
-            var row = await _pendingTriggerEventProvider.DequeueNextAsync(workflowDefinitionId, correlationKey, ct);
+            var row = await _pendingTriggerEventProvider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, ct);
             if (row is null)
             {
                 return;

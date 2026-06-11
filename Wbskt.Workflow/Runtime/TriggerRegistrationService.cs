@@ -10,7 +10,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class TriggerRegistrationService : ITriggerRegistrationService
+internal sealed class TriggerRegistrationService : ITriggerRegistrationService
 {
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
@@ -39,9 +39,9 @@ public sealed class TriggerRegistrationService : ITriggerRegistrationService
         {
             TriggerRegistrationRow? registration = node switch
             {
-                DeviceTriggerNode deviceTrigger => CreateRegistration(definitionRow, deviceTrigger.NodeId, "device", $"device:{deviceTrigger.Config.DeviceRef}:{deviceTrigger.Config.Event}", deviceTrigger.Config.ConcurrencyPolicy.ToString()),
-                WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString()),
-                ManualTriggerNode manualTrigger => CreateRegistration(definitionRow, manualTrigger.NodeId, "manual", $"manual:{definitionRow.RefId}", WorkflowConcurrencyPolicy.AllowParallel.ToString()),
+                DeviceTriggerNode deviceTrigger => CreateRegistration(definitionRow, deviceTrigger.NodeId, "device", $"device:{deviceTrigger.Config.DeviceRef}:{deviceTrigger.Config.Event}", deviceTrigger.Config.ConcurrencyPolicy.ToString(), deviceTrigger.Config.CorrelationKey),
+                WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey),
+                ManualTriggerNode manualTrigger => CreateRegistration(definitionRow, manualTrigger.NodeId, "manual", $"manual:{definitionRow.RefId}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null),
                 ScheduleTriggerNode scheduleTrigger => await CreateScheduleRegistrationAsync(definitionRow, scheduleTrigger, ct),
                 _ => null
             };
@@ -66,10 +66,10 @@ public sealed class TriggerRegistrationService : ITriggerRegistrationService
             ?? throw new InvalidOperationException($"Schedule trigger '{scheduleTrigger.NodeId}' did not produce a next fire time.");
         ScheduledFireRow scheduledFire = await _scheduledFireProvider.InsertAsync(scheduleTrigger.NodeId, definitionRow.Id, definitionRow.RefId, scheduleTrigger.Config.Cron, nextFireAt, ct);
 
-        return CreateRegistration(definitionRow, scheduleTrigger.NodeId, "schedule", $"schedule:{scheduledFire.Id}", WorkflowConcurrencyPolicy.AllowParallel.ToString());
+        return CreateRegistration(definitionRow, scheduleTrigger.NodeId, "schedule", $"schedule:{scheduledFire.Id}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null);
     }
 
-    private static TriggerRegistrationRow CreateRegistration(WorkflowDefinitionRow definitionRow, Guid triggerNodeId, string triggerKind, string triggerKey, string concurrencyPolicy)
+    private static TriggerRegistrationRow CreateRegistration(WorkflowDefinitionRow definitionRow, Guid triggerNodeId, string triggerKind, string triggerKey, string concurrencyPolicy, string? correlationExpression)
     {
         return new TriggerRegistrationRow
         {
@@ -80,7 +80,7 @@ public sealed class TriggerRegistrationService : ITriggerRegistrationService
             TriggerNodeId = triggerNodeId,
             TriggerKind = triggerKind,
             TriggerKey = triggerKey,
-            CorrelationExpression = null,
+            CorrelationExpression = correlationExpression,
             ConcurrencyPolicy = concurrencyPolicy,
             FilterExpression = null,
             CreatedAt = definitionRow.CreatedAt

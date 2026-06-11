@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class BranchProvider : BaseSqlProvider, IBranchProvider
+internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 {
     private readonly string _connectionString;
 

@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class CorrelationKeyResolver : ICorrelationKeyResolver
+internal sealed class CorrelationKeyResolver : ICorrelationKeyResolver
 {
     public string Resolve(InboundEvent evt)
     {
@@ -21,7 +21,7 @@ public sealed class CorrelationKeyResolver : ICorrelationKeyResolver
             // type (e.g. client-connected, client-registered). Fall back to the
             // correlation key supplied by the inbound adapter so dispatch resolves to
             // NoRegistration gracefully instead of faulting the message.
-            _ => evt.CorrelationKey
+            _ => evt.CorrelationKey ?? string.Empty
         };
     }
 

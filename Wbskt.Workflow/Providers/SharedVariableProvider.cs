@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class SharedVariableProvider : BaseSqlProvider, ISharedVariableProvider
+internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableProvider
 {
     private readonly string _connectionString;
 

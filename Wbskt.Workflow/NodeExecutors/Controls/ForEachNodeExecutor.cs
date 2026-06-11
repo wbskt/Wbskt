@@ -6,7 +6,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
-public sealed class ForEachNodeExecutor : INodeExecutor
+internal sealed class ForEachNodeExecutor : INodeExecutor
 {
     private readonly IExpressionEvaluator _expressionEvaluator;
 

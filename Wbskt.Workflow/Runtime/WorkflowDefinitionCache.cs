@@ -6,7 +6,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class WorkflowDefinitionCache : IWorkflowDefinitionCache
+internal sealed class WorkflowDefinitionCache : IWorkflowDefinitionCache
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan SlidingExpiration = TimeSpan.FromMinutes(10);

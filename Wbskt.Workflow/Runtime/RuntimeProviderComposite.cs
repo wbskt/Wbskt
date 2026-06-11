@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class RuntimeProviderComposite : IProviderComposite
+internal sealed class RuntimeProviderComposite : IProviderComposite
 {
     public RuntimeProviderComposite(
         IWorkflowDefinitionProvider workflowDefinition,

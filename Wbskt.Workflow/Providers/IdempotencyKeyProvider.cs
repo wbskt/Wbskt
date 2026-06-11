@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyProvider
+internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyProvider
 {
     private readonly string _connectionString;
 

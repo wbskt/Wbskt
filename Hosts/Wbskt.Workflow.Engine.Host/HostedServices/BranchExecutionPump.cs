@@ -5,7 +5,7 @@ using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
-public sealed class BranchExecutionPump : BackgroundService
+internal sealed class BranchExecutionPump : BackgroundService
 {
     private readonly ChannelRunDispatcher _dispatcher;
     private readonly IServiceScopeFactory _scopeFactory;

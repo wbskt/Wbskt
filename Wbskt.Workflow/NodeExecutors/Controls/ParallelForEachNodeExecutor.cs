@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
-public sealed class ParallelForEachNodeExecutor : INodeExecutor
+internal sealed class ParallelForEachNodeExecutor : INodeExecutor
 {
     private readonly IExpressionEvaluator _expressionEvaluator;
     private readonly IJoinAggregatorProvider _aggregators;

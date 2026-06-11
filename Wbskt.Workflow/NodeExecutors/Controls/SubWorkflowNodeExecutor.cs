@@ -17,7 +17,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// the child finalizes, RunFinalizer's SubWorkflowCompletionHook emits a "child-completed:{childRunRefId}"
 /// event that matches this bookmark and resumes the parent; the child's result is promoted to "childResult".
 /// </summary>
-public sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, IClock clock) : INodeExecutor
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, IClock clock) : INodeExecutor
 {
     internal const string ParkedKey = "__subworkflow";
     internal const string WakeKey = "__wake";
@@ -45,7 +45,7 @@ public sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runPro
         Guid childRefId = config.WorkflowRefId;
         InboundEvent evt = new(
             "manual",
-            $"manual:{childRefId}",
+            [$"manual:{childRefId}"],
             $"manual:{childRefId}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {

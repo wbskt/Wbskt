@@ -12,7 +12,7 @@ public sealed class ClientConnectedConsumer(IInboundHub hub) : IConsumer<ClientC
         ClientConnectedEvent evt = context.Message;
         InboundEvent inboundEvent = new(
             "client-connected",
-            $"client:{evt.ClientRefId}",
+            [$"client:{evt.ClientRefId}"],
             $"client-connected:{evt.ClientRefId}:{InboundMessageId.Stable(context)}",
             new Dictionary<string, JsonElement>
             {

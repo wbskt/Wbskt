@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Linq;
 using Moq;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Controllers;
@@ -21,7 +22,7 @@ public sealed class InboundWebhookControllerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "alerts"
-                && e.CorrelationKey == "webhook:alerts"
+                && e.MatchKeys.Contains("webhook:alerts")
                 && e.InboundEventId.StartsWith("webhook:alerts:", StringComparison.Ordinal)
                 && e.Payload["body"].GetProperty("value").GetInt32() == 1),
             CancellationToken.None), Times.Once);

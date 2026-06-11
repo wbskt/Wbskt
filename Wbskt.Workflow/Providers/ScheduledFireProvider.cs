@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class ScheduledFireProvider : BaseSqlProvider, IScheduledFireProvider
+internal sealed class ScheduledFireProvider : BaseSqlProvider, IScheduledFireProvider
 {
     private readonly string _connectionString;
 

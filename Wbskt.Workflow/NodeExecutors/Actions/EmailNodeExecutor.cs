@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
-public sealed class EmailNodeExecutor : INodeExecutor
+internal sealed class EmailNodeExecutor : INodeExecutor
 {
     public string Kind => NodeKind.ActionEmail;
 

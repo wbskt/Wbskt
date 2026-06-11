@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public sealed class JoinAggregatorProvider : BaseSqlProvider, IJoinAggregatorProvider
+internal sealed class JoinAggregatorProvider : BaseSqlProvider, IJoinAggregatorProvider
 {
     private readonly string _connectionString;
 

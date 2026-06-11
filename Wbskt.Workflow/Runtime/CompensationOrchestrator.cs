@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class CompensationOrchestrator : ICompensationOrchestrator
+internal sealed class CompensationOrchestrator : ICompensationOrchestrator
 {
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;

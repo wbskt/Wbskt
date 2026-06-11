@@ -47,17 +47,29 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
                 ? messageNode.GetRawText() 
                 : Encoding.UTF8.GetString(bodyBytes);
 
+            JsonElement targetNode = doc.RootElement.TryGetProperty("message", out var msgNode) 
+                ? msgNode 
+                : doc.RootElement;
+
+            int? workspaceId = (@event as IWorkspaceContext)?.WorkspaceId ?? GetIntProperty(targetNode, "workspaceId");
+            int? policyId = (@event as IPolicyContext)?.PolicyId ?? GetIntProperty(targetNode, "policyId");
+            Guid? policyRefId = (@event as IPolicyContext)?.PolicyRefId ?? GetGuidProperty(targetNode, "policyRefId");
+            int? clientId = (@event as IClientContext)?.ClientId ?? GetIntProperty(targetNode, "clientId");
+            Guid? clientRefId = (@event as IClientContext)?.ClientRefId ?? GetGuidProperty(targetNode, "clientRefId");
+            int? workflowId = (@event as IWorkflowContext)?.WorkflowId ?? GetIntProperty(targetNode, "workflowId");
+            Guid? workflowRefId = (@event as IWorkflowContext)?.WorkflowRefId ?? GetGuidProperty(targetNode, "workflowRefId");
+
             var entry = new EventLogEntry(
                 eventId, 
                 eventData, 
                 @event.CreatedAtUtc, 
-                WorkspaceId: (@event as IWorkspaceContext)?.WorkspaceId,
-                PolicyId: (@event as IPolicyContext)?.PolicyId,
-                PolicyRefId: (@event as IPolicyContext)?.PolicyRefId,
-                ClientId: (@event as IClientContext)?.ClientId,
-                ClientRefId: (@event as IClientContext)?.ClientRefId,
-                WorkflowId: (@event as IWorkflowContext)?.WorkflowId,
-                WorkflowRefId: (@event as IWorkflowContext)?.WorkflowRefId
+                WorkspaceId: workspaceId,
+                PolicyId: policyId,
+                PolicyRefId: policyRefId,
+                ClientId: clientId,
+                ClientRefId: clientRefId,
+                WorkflowId: workflowId,
+                WorkflowRefId: workflowRefId
             );
 
             await _buffer.WriteAsync(entry, context.CancellationToken);
@@ -66,5 +78,37 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
         {
             _logger.LogWarning(ex, "Failed to write event to buffer.");
         }
+    }
+
+    private static int? GetIntProperty(JsonElement element, string name)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            string capitalized = char.ToUpperInvariant(name[0]) + name.Substring(1);
+            if (element.TryGetProperty(name, out var prop) || element.TryGetProperty(capitalized, out prop))
+            {
+                if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var val))
+                {
+                    return val;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Guid? GetGuidProperty(JsonElement element, string name)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            string capitalized = char.ToUpperInvariant(name[0]) + name.Substring(1);
+            if (element.TryGetProperty(name, out var prop) || element.TryGetProperty(capitalized, out prop))
+            {
+                if (prop.ValueKind == JsonValueKind.String && prop.TryGetGuid(out var val))
+                {
+                    return val;
+                }
+            }
+        }
+        return null;
     }
 }

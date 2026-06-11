@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class InboundHub : IInboundHub
+internal sealed class InboundHub : IInboundHub
 {
     private readonly ITriggerDispatcher _triggerDispatcher;
     private readonly IClock _clock;

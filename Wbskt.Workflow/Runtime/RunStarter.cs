@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class RunStarter : IRunStarter
+internal sealed class RunStarter : IRunStarter
 {
     private readonly IRunProvider _runProvider;
     private readonly IRunCountersProvider _runCountersProvider;
@@ -43,7 +43,7 @@ public sealed class RunStarter : IRunStarter
     {
         WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
         DateTime nowUtc = _clock.UtcNow;
-        string correlationKey = _correlationKeyResolver.Resolve(triggerEvent);
+        string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent);
 
         RunRow createdRun = await _runProvider.CreateAsync(new RunRow
         {

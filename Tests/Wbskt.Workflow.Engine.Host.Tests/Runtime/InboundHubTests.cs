@@ -12,7 +12,7 @@ public sealed class InboundHubTests
         // Arrange
         var dispatcher = new RecordingTriggerDispatcher();
         var hub = new InboundHub(dispatcher, new FixedClock(), new RecordingLogger());
-        InboundEvent evt = new("device", string.Empty, "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), default);
+        InboundEvent evt = new("device", [], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), default);
 
         // Act
         await hub.HandleAsync(evt, CancellationToken.None);
@@ -27,7 +27,7 @@ public sealed class InboundHubTests
         // Arrange
         var dispatcher = new RecordingTriggerDispatcher();
         var hub = new InboundHub(dispatcher, new FixedClock(), new RecordingLogger());
-        InboundEvent evt = new("device", "key-1", "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow);
+        InboundEvent evt = new("device", ["key-1"], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow);
 
         // Act
         await hub.HandleAsync(evt, CancellationToken.None);
@@ -45,7 +45,7 @@ public sealed class InboundHubTests
         var hub = new InboundHub(new RecordingTriggerDispatcher(expected), new FixedClock(), new RecordingLogger());
 
         // Act
-        TriggerDispatchResult actual = await hub.HandleAsync(new InboundEvent("device", string.Empty, "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None);
+        TriggerDispatchResult actual = await hub.HandleAsync(new InboundEvent("device", [], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, actual);
@@ -59,7 +59,7 @@ public sealed class InboundHubTests
         var hub = new InboundHub(new ThrowingTriggerDispatcher(), new FixedClock(), logger);
 
         // Act
-        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(() => hub.HandleAsync(new InboundEvent("device", string.Empty, "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None));
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(() => hub.HandleAsync(new InboundEvent("device", [], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None));
 
         // Assert
         Assert.Equal("boom", ex.Message);

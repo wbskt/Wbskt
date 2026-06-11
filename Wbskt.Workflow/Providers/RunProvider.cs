@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class RunProvider : BaseSqlProvider, IRunProvider
+internal sealed class RunProvider : BaseSqlProvider, IRunProvider
 {
     private readonly string _connectionString;
 
@@ -164,13 +164,14 @@ public class RunProvider : BaseSqlProvider, IRunProvider
         return results.AsReadOnly();
     }
 
-    public async Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
+    public async Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
         await using var command = new SqlCommand("dbo.Run_GetActiveBy_Correlation", connection);
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
+        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
+        command.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
         command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
 
         await connection.OpenAsync(ct);

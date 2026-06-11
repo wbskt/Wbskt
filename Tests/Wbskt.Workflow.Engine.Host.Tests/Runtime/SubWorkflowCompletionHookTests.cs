@@ -1,3 +1,4 @@
+using System.Linq;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -22,7 +23,7 @@ public sealed class SubWorkflowCompletionHookTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "child-completed"
-                && e.CorrelationKey == $"child-completed:{runRefId}"
+                && e.MatchKeys.Contains($"child-completed:{runRefId}")
                 && e.InboundEventId == $"child-completed:{runRefId}:11111111-1111-1111-1111-111111111111"
                 && e.Payload["childRunRefId"].GetGuid() == runRefId
                 && e.Payload["status"].GetString() == "Succeeded"),
@@ -41,7 +42,7 @@ public sealed class SubWorkflowCompletionHookTests
         await hook.OnRunCompletedAsync(runRefId, "Failed", CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.CorrelationKey == "child-completed:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            It.Is<InboundEvent>(e => e.MatchKeys.Contains("child-completed:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
             CancellationToken.None), Times.Once);
     }
 
@@ -117,7 +118,7 @@ public sealed class SubWorkflowCompletionHookTests
         public Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();

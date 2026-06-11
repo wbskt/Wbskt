@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class NullRunCompletedPublisher : IRunCompletedPublisher
+internal sealed class NullRunCompletedPublisher : IRunCompletedPublisher
 {
     public Task PublishAsync(RunRow run, string terminalStatus, CancellationToken ct)
     {

@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
+internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
 {
     private readonly string _connectionString;
 
@@ -90,6 +90,50 @@ public class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.AddWithValue("@MatchKey", matchKey);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new List<BookmarkRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(Map(reader));
+        }
+
+        return results.AsReadOnly();
+    }
+
+    public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
+    {
+        if (matchKeys == null || matchKeys.Count == 0)
+        {
+            return Array.Empty<BookmarkRow>();
+        }
+
+        await using var connection = new SqlConnection(_connectionString);
+        var parameters = matchKeys.Select((key, index) => new SqlParameter($"@Key{index}", key)).ToArray();
+        var parameterNames = string.Join(", ", parameters.Select(p => p.ParameterName));
+
+        await using var command = new SqlCommand(
+            $"""
+            SELECT
+                Id,
+                RefId,
+                RunId,
+                BranchRefId,
+                NodeId,
+                WakeConditionKind,
+                MatchKey,
+                WakeConditionJson,
+                ExpiresAt,
+                TtlPort,
+                CreatedAt
+            FROM dbo.Bookmarks
+            WHERE MatchKey IN ({parameterNames});
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+        command.Parameters.AddRange(parameters);
 
         await connection.OpenAsync(ct);
         await using var reader = await command.ExecuteReaderAsync(ct);

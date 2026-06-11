@@ -23,7 +23,7 @@ public sealed class BookmarkResumerTests
         Assert.False(result.Matched);
         Assert.Null(result.BookmarkId);
         Assert.True(result.Idempotent);
-        Assert.Equal("mqtt:device-1:event-1", idempotency.LastKeyValue);
+        Assert.Equal("inbound-event:event-1", idempotency.LastKeyValue);
         Assert.Null(bookmarkProvider.LastMatchKey);
     }
 
@@ -95,7 +95,7 @@ public sealed class BookmarkResumerTests
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
         var dispatcher = new RecordingRunDispatcher();
         var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, dispatcher);
-        var evt = new InboundEvent("signal", "device-1", "event-1", new Dictionary<string, JsonElement>
+        var evt = new InboundEvent("signal", ["device-1"], "event-1", new Dictionary<string, JsonElement>
         {
             ["signalName"] = JsonSerializer.SerializeToElement("approve"),
             ["body"] = JsonSerializer.SerializeToElement(new { approvedBy = "ops" })
@@ -164,7 +164,7 @@ public sealed class BookmarkResumerTests
     {
         return new InboundEvent(
             "mqtt",
-            "device-1",
+            ["device-1"],
             "event-1",
             new Dictionary<string, JsonElement>(),
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
@@ -199,6 +199,12 @@ public sealed class BookmarkResumerTests
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct)
         {
             LastMatchKey = matchKey;
+            IReadOnlyCollection<BookmarkRow> matches = bookmark is null ? Array.Empty<BookmarkRow>() : [bookmark];
+            return Task.FromResult(matches);
+        }
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
+        {
+            LastMatchKey = matchKeys.FirstOrDefault();
             IReadOnlyCollection<BookmarkRow> matches = bookmark is null ? Array.Empty<BookmarkRow>() : [bookmark];
             return Task.FromResult(matches);
         }

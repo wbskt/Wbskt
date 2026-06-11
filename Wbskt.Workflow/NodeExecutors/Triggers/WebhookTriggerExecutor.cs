@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Triggers;
 
-public sealed class WebhookTriggerExecutor : INodeExecutor
+internal sealed class WebhookTriggerExecutor : INodeExecutor
 {
     private readonly IClock _clock;
 

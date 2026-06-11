@@ -1,3 +1,4 @@
+using System.Linq;
 using MassTransit;
 using Moq;
 using Wbskt.Events.Management;
@@ -31,7 +32,7 @@ public sealed class ClientRegistrationInitiatedConsumerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "client-registered"
-                && e.CorrelationKey == $"client:{evt.ClientRefId}"
+                && e.MatchKeys.Contains($"client:{evt.ClientRefId}")
                 && e.InboundEventId.StartsWith($"client-registered:{evt.ClientRefId}:", StringComparison.Ordinal)
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
                 && e.Payload["policyRefId"].GetGuid() == evt.PolicyRefId
@@ -60,7 +61,7 @@ public sealed class ClientRegistrationInitiatedConsumerTests
         await consumer.Consume(context.Object);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.CorrelationKey == "client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            It.Is<InboundEvent>(e => e.MatchKeys.Contains("client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
             CancellationToken.None), Times.Once);
     }
 }

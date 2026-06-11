@@ -4,7 +4,10 @@ namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public sealed record InboundEvent(
     string ChannelKind,
-    string CorrelationKey,
+    IReadOnlyCollection<string> MatchKeys,
     string InboundEventId,
     IReadOnlyDictionary<string, JsonElement> Payload,
-    DateTime ReceivedAt);
+    DateTime ReceivedAt)
+{
+    public string? CorrelationKey { get; init; }
+}

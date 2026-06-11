@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -22,7 +23,7 @@ public sealed class InboundSignalControllerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "signal"
-                && e.CorrelationKey == $"signal:approve:{scopeRunRefId}"
+                && e.MatchKeys.Contains($"signal:approve:{scopeRunRefId}")
                 && e.Payload["signalName"].GetString() == "approve"
                 && e.Payload["scopeRunRefId"].GetString() == scopeRunRefId.ToString()
                 && e.Payload["body"].GetProperty("value").GetInt32() == 1),

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Linq;
 using MassTransit;
 using Moq;
 using Wbskt.Events.Client;
@@ -26,7 +27,7 @@ public sealed class InboundAdaptersE2ETests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "device"
-                && e.CorrelationKey == $"device:{evt.ClientRefId}:{evt.MessageType}"),
+                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.MessageType}")),
             CancellationToken.None), Times.Once);
     }
 
@@ -53,7 +54,7 @@ public sealed class InboundAdaptersE2ETests
         await controller.Post(scopeRunRefId, "approve", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.ChannelKind == "signal" && e.CorrelationKey == $"signal:approve:{scopeRunRefId}"),
+            It.Is<InboundEvent>(e => e.ChannelKind == "signal" && e.MatchKeys.Contains($"signal:approve:{scopeRunRefId}")),
             CancellationToken.None), Times.Once);
     }
 
@@ -69,7 +70,7 @@ public sealed class InboundAdaptersE2ETests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "child-completed"
-                && e.CorrelationKey == $"child-completed:{runRefId}"),
+                && e.MatchKeys.Contains($"child-completed:{runRefId}")),
             CancellationToken.None), Times.Once);
     }
 

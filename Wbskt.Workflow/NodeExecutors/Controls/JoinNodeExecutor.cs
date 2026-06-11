@@ -6,7 +6,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
-public sealed class JoinNodeExecutor : INodeExecutor
+internal sealed class JoinNodeExecutor : INodeExecutor
 {
     private readonly IJoinAggregatorProvider _aggregators;
 

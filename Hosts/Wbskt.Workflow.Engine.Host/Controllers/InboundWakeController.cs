@@ -15,7 +15,7 @@ public sealed class InboundWakeController(IInboundHub hub) : ControllerBase
         // must match the bookmark minted by WaitForHttpNodeExecutor for this run/token.
         InboundEvent inboundEvent = new(
             "http-wake",
-            $"http-wake:{token}",
+            [$"http-wake:{token}"],
             $"http-wake:{token}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {

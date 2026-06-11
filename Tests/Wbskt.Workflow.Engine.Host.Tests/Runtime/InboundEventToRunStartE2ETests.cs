@@ -52,7 +52,7 @@ public sealed class InboundEventToRunStartE2ETests
             new CompletingRunFinalizer(providers));
         InboundEvent evt = new(
             "device",
-            string.Empty,
+            ["device:device-serial-1:telemetry"],
             "evt-1",
             new Dictionary<string, JsonElement>
             {
@@ -207,7 +207,7 @@ public sealed class InboundEventToRunStartE2ETests
         Task<RunRow> IRunProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Runs.Values.Single(run => run.RefId == refId));
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<RunRow>>(Runs.Values.Where(run => run.WorkflowRefId == workflowRefId && run.CorrelationKey == correlationKey && run.Status == "Running").ToArray());
-        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<RunRow>>(Runs.Values.Where(run => run.WorkflowDefinitionId == workflowDefinitionId && run.CorrelationKey == correlationKey && (run.Status == "Running" || run.Status == "Cancelling" || run.Status == "Failing")).ToArray());
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<RunRow>>(Runs.Values.Where(run => run.WorkflowRefId == workflowRefId && run.TriggerNodeId == triggerNodeId && run.CorrelationKey == correlationKey && (run.Status == "Running" || run.Status == "Cancelling" || run.Status == "Failing")).ToArray());
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
             RunRow run = Runs.Values.Single(candidate => candidate.RefId == refId);
@@ -303,6 +303,7 @@ public sealed class InboundEventToRunStartE2ETests
         Task<BookmarkRow> IBookmarkProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         Task<BookmarkRow?> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult<BookmarkRow?>(Bookmarks.SingleOrDefault(bookmark => bookmark.Id == bookmarkId));
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.MatchKey == matchKey).ToArray());
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => matchKeys.Contains(bookmark.MatchKey)).ToArray());
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.RunId == runId).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Array.Empty<BookmarkRow>());
         public Task DeleteAsync(Guid refId, CancellationToken ct)
@@ -337,9 +338,9 @@ public sealed class InboundEventToRunStartE2ETests
 
         public Task<TriggerRegistrationRow> InsertAsync(TriggerRegistrationRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetByTriggerKeyAsync(string triggerKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelAsync(string channelKind, string channelKey, CancellationToken ct)
+        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
         {
-            if (channelKind == "device" && channelKey == "device:device-serial-1:telemetry")
+            if (channelKind == "device" && channelKeys.Contains("device:device-serial-1:telemetry"))
             {
                 return Task.FromResult<IReadOnlyCollection<TriggerRegistrationRow>>([
                     new TriggerRegistrationRow
@@ -350,7 +351,7 @@ public sealed class InboundEventToRunStartE2ETests
                         WorkflowVersion = _definition.Version,
                         TriggerNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
                         TriggerKind = "device",
-                        TriggerKey = channelKey,
+                        TriggerKey = "device:device-serial-1:telemetry",
                         CorrelationExpression = null,
                         ConcurrencyPolicy = "AllowParallel",
                         FilterExpression = null,

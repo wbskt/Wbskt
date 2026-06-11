@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Linq;
 using Moq;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Controllers;
@@ -21,7 +22,7 @@ public sealed class InboundWakeControllerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "http-wake"
-                && e.CorrelationKey == "http-wake:dddddddd-dddd-dddd-dddd-dddddddddddd"
+                && e.MatchKeys.Contains("http-wake:dddddddd-dddd-dddd-dddd-dddddddddddd")
                 && e.Payload["wakeToken"].GetString() == "dddddddd-dddd-dddd-dddd-dddddddddddd"
                 && e.Payload["body"].GetProperty("approved").GetBoolean()),
             CancellationToken.None), Times.Once);

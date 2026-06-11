@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class BookmarkResumer : IBookmarkResumer
+internal sealed class BookmarkResumer : IBookmarkResumer
 {
     private readonly IBookmarkProvider _bookmarkProvider;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
@@ -26,7 +26,7 @@ public sealed class BookmarkResumer : IBookmarkResumer
 
     public async Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, CancellationToken ct)
     {
-        string idempotencyKey = $"{evt.ChannelKind}:{evt.CorrelationKey}:{evt.InboundEventId}";
+        string idempotencyKey = $"inbound-event:{evt.InboundEventId}";
         Guid claimToken = Guid.NewGuid();
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
@@ -34,10 +34,7 @@ public sealed class BookmarkResumer : IBookmarkResumer
             return new BookmarkMatchResult(false, null, true);
         }
 
-        // The resolved correlation key is already channel-namespaced (e.g. "signal:approve:{run}")
-        // and is the canonical bookmark match key. Do NOT prefix the channel again.
-        string matchKey = evt.CorrelationKey;
-        BookmarkRow? bookmark = (await _bookmarkProvider.GetAllByMatchKeyAsync(matchKey, ct)).FirstOrDefault();
+        BookmarkRow? bookmark = (await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct)).FirstOrDefault();
         if (bookmark is null)
         {
             return new BookmarkMatchResult(false, null, false);

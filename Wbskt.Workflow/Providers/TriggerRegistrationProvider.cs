@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class TriggerRegistrationProvider : BaseSqlProvider, ITriggerRegistrationProvider
+internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerRegistrationProvider
 {
     private readonly string _connectionString;
 
@@ -65,11 +65,22 @@ public class TriggerRegistrationProvider : BaseSqlProvider, ITriggerRegistration
         return results.AsReadOnly();
     }
 
-    public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelAsync(string channelKind, string channelKey, CancellationToken ct)
+    public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
     {
+        if (channelKeys == null || channelKeys.Count == 0)
+        {
+            return Array.Empty<TriggerRegistrationRow>();
+        }
+
         await using var connection = new SqlConnection(_connectionString);
+        var parameters = channelKeys.Select((key, index) => new SqlParameter($"@Key{index}", key)).ToList();
+        var parameterNames = string.Join(", ", parameters.Select(p => p.ParameterName));
+
+        var kindParam = new SqlParameter("@TriggerKind", channelKind);
+        parameters.Add(kindParam);
+
         await using var command = new SqlCommand(
-            """
+            $"""
             SELECT
                 Id,
                 WorkflowDefinitionId,
@@ -84,13 +95,11 @@ public class TriggerRegistrationProvider : BaseSqlProvider, ITriggerRegistration
                 CreatedAt
             FROM dbo.TriggerRegistrations
             WHERE TriggerKind = @TriggerKind
-              AND TriggerKey = @TriggerKey;
+              AND TriggerKey IN ({parameterNames});
             """,
             connection);
         command.CommandType = CommandType.Text;
-
-        command.Parameters.AddWithValue("@TriggerKind", channelKind);
-        command.Parameters.AddWithValue("@TriggerKey", channelKey);
+        command.Parameters.AddRange(parameters.ToArray());
 
         await connection.OpenAsync(ct);
         await using var reader = await command.ExecuteReaderAsync(ct);

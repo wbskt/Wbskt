@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class RunFinalizer : IRunFinalizer
+internal sealed class RunFinalizer : IRunFinalizer
 {
     private readonly IRunProvider _runProvider;
     private readonly IRunCountersProvider _runCountersProvider;
@@ -63,7 +63,7 @@ public sealed class RunFinalizer : IRunFinalizer
                 Timestamp = completedAt
             }
         ], ct);
-        await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowDefinitionId, updatedRun.CorrelationKey ?? string.Empty, ct);
+        await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowRefId, updatedRun.TriggerNodeId, updatedRun.CorrelationKey ?? string.Empty, ct);
         await _runCompletedPublisher.PublishAsync(updatedRun, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);

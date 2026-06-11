@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class ExpressionEvaluator : IExpressionEvaluator
+internal sealed class ExpressionEvaluator : IExpressionEvaluator
 {
     public Task<JsonElement> EvaluateAsync(WorkflowExpression expr, BranchContext context, CancellationToken ct)
     {

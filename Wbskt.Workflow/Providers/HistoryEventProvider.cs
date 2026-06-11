@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvider
+internal sealed class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvider
 {
     private readonly string _connectionString;
 

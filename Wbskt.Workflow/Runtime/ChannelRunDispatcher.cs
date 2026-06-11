@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class ChannelRunDispatcher : IRunDispatcher
+internal sealed class ChannelRunDispatcher : IRunDispatcher
 {
     private readonly Channel<BranchExecutionRequest> _channel;
 

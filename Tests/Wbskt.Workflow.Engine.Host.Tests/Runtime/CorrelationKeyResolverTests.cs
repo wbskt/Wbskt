@@ -34,7 +34,7 @@ public sealed class CorrelationKeyResolverTests
             payload[field2] = JsonSerializer.SerializeToElement(value2);
         }
 
-        var evt = new InboundEvent(channelKind, string.Empty, "evt-1", payload, DateTime.UtcNow);
+        var evt = new InboundEvent(channelKind, [], "evt-1", payload, DateTime.UtcNow);
 
         // Act
         string actual = resolver.Resolve(evt);
@@ -48,7 +48,7 @@ public sealed class CorrelationKeyResolverTests
     {
         // Arrange
         var resolver = new CorrelationKeyResolver();
-        var evt = new InboundEvent("device", string.Empty, "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
+        var evt = new InboundEvent("device", [], "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
 
         // Act
         InvalidOperationException ex = Assert.Throws<InvalidOperationException>(new Action(() => resolver.Resolve(evt)));
@@ -68,7 +68,7 @@ public sealed class CorrelationKeyResolverTests
     {
         // Arrange
         var resolver = new CorrelationKeyResolver();
-        var evt = new InboundEvent(channelKind, suppliedCorrelationKey, "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
+        var evt = new InboundEvent(channelKind, [], "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow) { CorrelationKey = suppliedCorrelationKey };
 
         // Act
         string actual = resolver.Resolve(evt);

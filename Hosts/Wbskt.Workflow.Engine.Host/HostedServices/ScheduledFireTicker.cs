@@ -101,7 +101,7 @@ public sealed class ScheduledFireTicker : BackgroundService
             };
             var inboundEvent = new InboundEvent(
                 "schedule",
-                $"schedule:{fire.Id}",
+                [$"schedule:{fire.Id}"],
                 Guid.NewGuid().ToString(),
                 payload,
                 now);

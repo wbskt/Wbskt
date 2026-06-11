@@ -12,7 +12,7 @@ public sealed class ClientRegistrationInitiatedConsumer(IInboundHub hub) : ICons
         ClientRegistrationInitiatedEvent evt = context.Message;
         InboundEvent inboundEvent = new(
             "client-registered",
-            $"client:{evt.ClientRefId}",
+            [$"client:{evt.ClientRefId}"],
             $"client-registered:{evt.ClientRefId}:{InboundMessageId.Stable(context)}",
             new Dictionary<string, JsonElement>
             {

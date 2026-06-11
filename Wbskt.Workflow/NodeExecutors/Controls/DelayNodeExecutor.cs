@@ -13,7 +13,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// resume visit it continues. First-visit vs resume is distinguished by a local-state marker,
 /// because the engine re-executes the same node when a bookmark fires.
 /// </summary>
-public sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
+internal sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
 {
     internal const string DelayUntilKey = "__delay_until";
 

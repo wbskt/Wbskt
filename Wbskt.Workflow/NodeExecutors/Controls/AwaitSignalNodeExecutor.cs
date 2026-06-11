@@ -15,7 +15,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// First-visit vs resume is distinguished by a local-state marker (the engine re-executes
 /// the same node on resume); on a TTL resume it leaves via the timeout port.
 /// </summary>
-public sealed class AwaitSignalNodeExecutor(IClock clock) : INodeExecutor
+internal sealed class AwaitSignalNodeExecutor(IClock clock) : INodeExecutor
 {
     internal const string ParkedKey = "__await_signal";
     internal const string DeadlineKey = "__await_signal_until";

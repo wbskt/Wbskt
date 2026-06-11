@@ -162,7 +162,7 @@ public sealed class TriggerDispatcherTests
     {
         return new InboundEvent(
             "device",
-            string.Empty,
+            ["device:serial-1:telemetry"],
             "evt-1",
             new Dictionary<string, JsonElement>
             {
@@ -213,9 +213,9 @@ public sealed class TriggerDispatcherTests
         public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelAsync(string channelKind, string channelKey, CancellationToken ct)
+        public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
         {
-            IReadOnlyCollection<TriggerRegistrationRow> matches = rows.Where(row => row.TriggerKind == channelKind && row.TriggerKey == channelKey).ToArray();
+            IReadOnlyCollection<TriggerRegistrationRow> matches = rows.Where(row => row.TriggerKind == channelKind && channelKeys.Contains(row.TriggerKey)).ToArray();
             return Task.FromResult(matches);
         }
     }

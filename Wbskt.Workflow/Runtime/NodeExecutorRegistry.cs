@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class NodeExecutorRegistry : INodeExecutorRegistry
+internal sealed class NodeExecutorRegistry : INodeExecutorRegistry
 {
     private readonly FrozenDictionary<string, INodeExecutor> _executors;
 

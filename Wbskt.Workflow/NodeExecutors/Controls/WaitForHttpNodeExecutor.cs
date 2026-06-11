@@ -15,7 +15,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// it in an outbound callback URL. First-visit vs resume is distinguished by a local-state marker;
 /// a TTL resume leaves via the timeout port.
 /// </summary>
-public sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
+internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
 {
     internal const string ParkedKey = "__http_wait";
     internal const string DeadlineKey = "__http_deadline";

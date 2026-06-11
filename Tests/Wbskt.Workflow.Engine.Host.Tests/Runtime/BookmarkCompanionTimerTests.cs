@@ -59,7 +59,7 @@ public sealed class BookmarkCompanionTimerTests
             new RecordingRunDispatcher());
 
         // Act
-        await resumer.MatchInboundAsync(new InboundEvent("mqtt", "device-1", "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
+        await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["device-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
 
         // Assert
         Assert.Empty(bookmarkProvider.Bookmarks);
@@ -234,7 +234,7 @@ public sealed class BookmarkCompanionTimerTests
         public Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
@@ -279,6 +279,7 @@ public sealed class BookmarkCompanionTimerTests
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_bookmarks.Single(row => row.RefId == refId));
         public Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(_bookmarks.SingleOrDefault(row => row.Id == bookmarkId));
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.MatchKey == matchKey).ToArray());
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => matchKeys.Contains(row.MatchKey)).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.RunId == runId).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => Task.FromResult(DueBookmarks);
         public Task DeleteAsync(Guid refId, CancellationToken ct)

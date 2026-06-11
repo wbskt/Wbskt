@@ -100,13 +100,16 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
 
         var triggerEvent = new InboundEvent(
             ChannelKind: "manual",
-            CorrelationKey: "e2e-smoke",
+            MatchKeys: [$"manual:{wd.RefId}"],
             InboundEventId: Guid.NewGuid().ToString(),
             Payload: new Dictionary<string, JsonElement>
             {
                 ["test"] = JsonSerializer.SerializeToElement("e2e")
             },
-            ReceivedAt: DateTime.UtcNow);
+            ReceivedAt: DateTime.UtcNow)
+        {
+            CorrelationKey = "e2e-smoke"
+        };
 
         (long runId, long branchId) = await runStarter.StartAsync(
             wd.Id,
@@ -180,10 +183,13 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
             TriggerNodeId.ToString(),
             new InboundEvent(
                 ChannelKind: "manual",
-                CorrelationKey: "hist-test",
+                MatchKeys: [$"manual:{workflowRefId}"],
                 InboundEventId: Guid.NewGuid().ToString(),
                 Payload: new Dictionary<string, JsonElement>(),
-                ReceivedAt: DateTime.UtcNow),
+                ReceivedAt: DateTime.UtcNow)
+            {
+                CorrelationKey = "hist-test"
+            },
             CancellationToken.None);
 
         var countersProvider = scope.ServiceProvider.GetRequiredService<IRunCountersProvider>();

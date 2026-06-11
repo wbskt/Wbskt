@@ -1,3 +1,4 @@
+using System.Linq;
 using MassTransit;
 using Moq;
 using Wbskt.Events.Client;
@@ -28,7 +29,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "device"
-                && e.CorrelationKey == $"device:{evt.ClientRefId}:{evt.MessageType}"
+                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.MessageType}")
                 && e.InboundEventId.StartsWith($"client-payload:{evt.ClientRefId}:", StringComparison.Ordinal)
                 && e.Payload["deviceSerial"].GetString() == evt.ClientRefId.ToString()
                 && e.Payload["payloadType"].GetString() == evt.MessageType
@@ -59,7 +60,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "device"
-                && e.CorrelationKey == "device:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:temperature"),
+                && e.MatchKeys.Contains("device:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:temperature")),
             CancellationToken.None), Times.Once);
     }
 

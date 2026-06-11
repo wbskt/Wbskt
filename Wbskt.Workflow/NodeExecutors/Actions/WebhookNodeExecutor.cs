@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
-public sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory) : INodeExecutor
+internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory) : INodeExecutor
 {
     public string Kind => NodeKind.ActionWebhook;
 

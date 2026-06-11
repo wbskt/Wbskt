@@ -6,7 +6,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class RunCancellationService : IRunCancellationService
+internal sealed class RunCancellationService : IRunCancellationService
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
     private readonly IRunProvider _runProvider;
@@ -26,6 +26,8 @@ public sealed class RunCancellationService : IRunCancellationService
         _clock = clock;
     }
 
+    // TODO: cancel internally uses a cache but it lives in WMH and WEH separately.
+    // TODO: cancellation must be passed to WEH from WMH through events
     public async Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
     {
         bool transitioned = await _runProvider.TransitionStatusAsync(runId, "Running", "Cancelling", ct);

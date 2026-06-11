@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -68,7 +69,7 @@ public sealed class InboundManualControllerTests
         await controller.Post(workflowRefId, payload, null, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.CorrelationKey == $"manual:{workflowRefId}"),
+            It.Is<InboundEvent>(e => e.MatchKeys.Contains($"manual:{workflowRefId}")),
             CancellationToken.None), Times.Once);
     }
 

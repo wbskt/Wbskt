@@ -21,7 +21,7 @@ public sealed class InboundManualController(IInboundHub hub, IRunProvider runPro
 
         InboundEvent evt = new(
             "manual",
-            $"manual:{workflowRefId}",
+            [$"manual:{workflowRefId}"],
             inboundEventId,
             new Dictionary<string, JsonElement>
             {

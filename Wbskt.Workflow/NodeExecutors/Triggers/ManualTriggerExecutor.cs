@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Triggers;
 
-public sealed class ManualTriggerExecutor : INodeExecutor
+internal sealed class ManualTriggerExecutor : INodeExecutor
 {
     private readonly IClock _clock;
 

@@ -9,7 +9,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// the run to Failing (cancelling the remaining branches); otherwise the run aggregates to Failed
 /// or PartiallyFailed at finalization.
 /// </summary>
-public sealed class FailRunNodeExecutor : INodeExecutor
+internal sealed class FailRunNodeExecutor : INodeExecutor
 {
     public string Kind => NodeKind.ControlFailRun;
 

@@ -2,7 +2,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class NoOpRunCancellationService : IRunCancellationService
+internal sealed class NoOpRunCancellationService : IRunCancellationService
 {
     public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
     {

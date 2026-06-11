@@ -7,7 +7,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 /// Convenience factory: builds provider instances pointed at the integration-test database.
 /// Each method <c>new</c>s the provider with an in-memory <see cref="IConfiguration"/>.
 /// </summary>
-public static class ProviderFactory
+internal static class ProviderFactory
 {
     public static IConfiguration BuildConfiguration(string connectionString)
     {

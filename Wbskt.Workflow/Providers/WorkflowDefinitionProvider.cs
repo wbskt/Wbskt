@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
-public class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDefinitionProvider
+internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDefinitionProvider
 {
     private readonly string _connectionString;
 

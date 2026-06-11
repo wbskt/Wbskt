@@ -21,7 +21,7 @@ public sealed class PendingTriggerEventDrainerTests
                 CorrelationKey = "device:serial-1:telemetry",
                 InboundEventJson = JsonSerializer.Serialize(new InboundEvent(
                     "device",
-                    "device:serial-1:telemetry",
+                    ["device:serial-1:telemetry"],
                     "evt-1",
                     new Dictionary<string, JsonElement>
                     {
@@ -37,7 +37,7 @@ public sealed class PendingTriggerEventDrainerTests
         var drainer = new PendingTriggerEventDrainer(provider, inboundHub);
 
         // Act
-        await drainer.DrainAsync(42, "device:serial-1:telemetry", CancellationToken.None);
+        await drainer.DrainAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "device:serial-1:telemetry", CancellationToken.None);
 
         // Assert
         Assert.Single(inboundHub.Events);
@@ -50,16 +50,16 @@ public sealed class PendingTriggerEventDrainerTests
         public int DequeueCalls { get; private set; }
 
         public Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
-        public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> CountAllAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-
-        public Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
+        public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
         {
             DequeueCalls++;
             return Task.FromResult(rows.Count > 0 ? rows.Dequeue() : null);
         }
+        public Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> CountAllAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingInboundHub : IInboundHub

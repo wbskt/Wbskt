@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
-public sealed class VariableNodeExecutor : INodeExecutor
+internal sealed class VariableNodeExecutor : INodeExecutor
 {
     private const int MaxCompareAndSetAttempts = 3;
     private readonly ISharedVariableProvider _sharedVariableProvider;

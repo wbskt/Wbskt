@@ -3,7 +3,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
-public sealed class TelegramNodeExecutor : INodeExecutor
+internal sealed class TelegramNodeExecutor : INodeExecutor
 {
     public string Kind => NodeKind.ActionTelegram;
 

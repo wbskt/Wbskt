@@ -13,7 +13,7 @@ public sealed class InboundWebhookController(IInboundHub hub) : ControllerBase
     {
         InboundEvent inboundEvent = new(
             channelKind,
-            $"webhook:{channelKind}",
+            [$"webhook:{channelKind}"],
             $"webhook:{channelKind}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {

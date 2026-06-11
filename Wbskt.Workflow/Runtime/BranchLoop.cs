@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-public sealed class BranchLoop : IBranchLoop
+internal sealed class BranchLoop : IBranchLoop
 {
     private const string ActiveStatus = "Active";
     private const string CompletedStatus = "Completed";

@@ -15,7 +15,7 @@ public sealed class InboundSignalController(IInboundHub hub) : ControllerBase
         // which must match the bookmark minted by AwaitSignalNodeExecutor for this run.
         InboundEvent inboundEvent = new(
             "signal",
-            $"signal:{signalName}:{scopeRunRefId}",
+            [$"signal:{signalName}:{scopeRunRefId}"],
             $"signal:{scopeRunRefId}:{signalName}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {
