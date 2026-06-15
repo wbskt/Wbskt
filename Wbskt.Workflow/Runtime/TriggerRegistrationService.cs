@@ -82,6 +82,12 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
             TriggerKey = triggerKey,
             CorrelationExpression = correlationExpression,
             ConcurrencyPolicy = concurrencyPolicy,
+            
+            // The field is designed as a pre-filtering mechanism for event-driven triggers (such as Webhooks or Device Telemetry):
+            //
+            // • Event Filtering: It holds a path expression or query (e.g. $.status = ='active' or $.value > 50  in JSONPath) that must be evaluated against the incoming trigger event payload.
+            // • Avoid unnecessary runs: By checking this expression at the  TriggerDispatcher  layer, the system can determine whether to start a workflow run. If the incoming event payload does not satisfy the  FilterExpression , the event is discarded before a
+            // run is initialized, saving compute resource costs.
             FilterExpression = null,
             CreatedAt = definitionRow.CreatedAt
         };

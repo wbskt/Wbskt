@@ -68,6 +68,8 @@ public sealed class RunRecoveryService : IHostedService, IEngineStartupTracker
 
                 foreach (var branch in group)
                 {
+                    // From the workflow engine's runtime perspective,
+                    // restoring an interrupted branch from its persisted database state to continue execution is conceptually identical to resuming a bookmark.
                     await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
                 }
             }
