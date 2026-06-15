@@ -61,6 +61,17 @@ public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started a run that parks on the signal");
 
+        // Wait until the run's branch transitions to "Waiting" status (bookmark registered).
+        var isParked = await ServicesFixture.PollAsync(
+            async () =>
+            {
+                var detail = await fixture.GetRunDetailAsync(token, workspaceRef, runRefId);
+                return detail.Branches.Any(b => b.Status == "Waiting");
+            },
+            timeout: TimeSpan.FromSeconds(30),
+            interval: TimeSpan.FromSeconds(1));
+        isParked.Should().BeTrue("the run must reach a parked/Waiting status before signaling");
+
         // The branch must still be parked (not terminal) before the signal arrives.
         var detailBefore = await fixture.GetRunDetailAsync(token, workspaceRef, runRefId);
         ServicesFixture.IsTerminalStatus(detailBefore.Summary.Status).Should().BeFalse(
