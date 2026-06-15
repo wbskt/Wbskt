@@ -169,7 +169,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
     public async Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_GetRunning", connection);
+        await using var command = new SqlCommand("dbo.Branch_GetAllActive", connection);
         command.CommandType = CommandType.StoredProcedure;
 
         await connection.OpenAsync(ct);

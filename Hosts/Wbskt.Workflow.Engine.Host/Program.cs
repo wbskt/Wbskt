@@ -34,13 +34,13 @@ public static class Program
 
         builder.Host.UseSerilog(builder.CreateSerilog());
 
-        builder.Services.AddRabbitMqEventBus(builder.Configuration);
         builder.Services.AddHttpClient();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration);
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
         builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
+        builder.Services.AddHostedService<RunRecoveryService>();
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddHostedService<ScheduledFireTicker>();
@@ -48,8 +48,8 @@ public static class Program
         builder.Services.AddHostedService<HistoryRetentionGc>();
         builder.Services.AddHostedService<IdempotencyKeyGc>();
         builder.Services.AddHostedService<PendingTriggerEventBacklogReaper>();
-        builder.Services.AddHostedService<RunRecoveryService>();
         builder.Services.AddHostedService<MetricsExporter>();
+        builder.Services.AddRabbitMqEventBus(builder.Configuration);
         builder.Services.AddAuthorization();
         builder.Services.AddCors(options =>
         {

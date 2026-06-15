@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -24,8 +26,10 @@ public sealed class RunRecoveryService : IHostedService
     internal RunRecoveryService(
         IBranchProvider branchProvider,
         IRunDispatcher runDispatcher,
-        ILogger<RunRecoveryService> logger)
-        : this(new StaticScopeFactory(branchProvider), runDispatcher, logger)
+        ILogger<RunRecoveryService> logger,
+        IRunProvider? runProvider = null,
+        IRunCancellationService? runCancellationService = null)
+        : this(new StaticScopeFactory(branchProvider, runProvider, runCancellationService), runDispatcher, logger)
     {
     }
 
@@ -33,10 +37,37 @@ public sealed class RunRecoveryService : IHostedService
     {
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
-        IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
-        foreach (Wbskt.Workflow.Abstraction.Entities.BranchRow branch in branches)
+        var runProvider = scope.ServiceProvider.GetService<IRunProvider>();
+        var runCancellationService = scope.ServiceProvider.GetService<IRunCancellationService>();
+
+        IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
+        
+        var runGroups = branches.GroupBy(b => b.RunId);
+
+        foreach (var group in runGroups)
         {
-            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
+            long runId = group.Key;
+            
+            if (runProvider is not null && runCancellationService is not null)
+            {
+                try
+                {
+                    RunRow run = await runProvider.GetByIdAsync(runId, ct);
+                    if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal) || string.Equals(run.Status, "Failing", StringComparison.Ordinal))
+                    {
+                        runCancellationService.CancelCts(runId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to inspect run {RunId} during startup recovery.", runId);
+                }
+            }
+
+            foreach (var branch in group)
+            {
+                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
+            }
         }
 
         _logger.LogInformation("Recovered {Count} running branches.", branches.Count);
@@ -47,17 +78,23 @@ public sealed class RunRecoveryService : IHostedService
         return Task.CompletedTask;
     }
 
-    private sealed class StaticScopeFactory(IBranchProvider branchProvider) : IServiceScopeFactory
+    private sealed class StaticScopeFactory(
+        IBranchProvider branchProvider,
+        IRunProvider? runProvider,
+        IRunCancellationService? runCancellationService) : IServiceScopeFactory
     {
         public IServiceScope CreateScope()
         {
-            return new StaticServiceScope(branchProvider);
+            return new StaticServiceScope(branchProvider, runProvider, runCancellationService);
         }
     }
 
-    private sealed class StaticServiceScope(IBranchProvider branchProvider) : IServiceScope, IAsyncDisposable
+    private sealed class StaticServiceScope(
+        IBranchProvider branchProvider,
+        IRunProvider? runProvider,
+        IRunCancellationService? runCancellationService) : IServiceScope, IAsyncDisposable
     {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(branchProvider);
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(branchProvider, runProvider, runCancellationService);
 
         public void Dispose()
         {
@@ -69,11 +106,26 @@ public sealed class RunRecoveryService : IHostedService
         }
     }
 
-    private sealed class StaticServiceProvider(IBranchProvider branchProvider) : IServiceProvider
+    private sealed class StaticServiceProvider(
+        IBranchProvider branchProvider,
+        IRunProvider? runProvider,
+        IRunCancellationService? runCancellationService) : IServiceProvider
     {
         public object? GetService(Type serviceType)
         {
-            return serviceType == typeof(IBranchProvider) ? branchProvider : null;
+            if (serviceType == typeof(IBranchProvider))
+            {
+                return branchProvider;
+            }
+            if (serviceType == typeof(IRunProvider))
+            {
+                return runProvider;
+            }
+            if (serviceType == typeof(IRunCancellationService))
+            {
+                return runCancellationService;
+            }
+            return null;
         }
     }
 }

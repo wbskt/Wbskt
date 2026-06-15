@@ -55,6 +55,25 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
     }
 
+    public void CancelCts(long runId)
+    {
+        var cts = _ctsRegistry.GetOrAdd(runId, _ => {
+            var newCts = new CancellationTokenSource();
+            newCts.Cancel();
+            return newCts;
+        });
+        if (!cts.IsCancellationRequested)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
     // TODO: cancel internally uses a cache but it lives in WMH and WEH separately.
     // TODO: cancellation must be passed to WEH from WMH through events
     public async Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
@@ -83,21 +102,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         ], ct);
 
         // Cancel CTS
-        var cts = _ctsRegistry.GetOrAdd(runId, _ => {
-            var newCts = new CancellationTokenSource();
-            newCts.Cancel();
-            return newCts;
-        });
-        if (!cts.IsCancellationRequested)
-        {
-            try
-            {
-                cts.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
+        CancelCts(runId);
 
         // Mass-delete bookmarks for this run
         if (_bookmarkProvider is not null)
