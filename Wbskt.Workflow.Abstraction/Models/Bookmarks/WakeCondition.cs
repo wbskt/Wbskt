@@ -13,4 +13,7 @@ public abstract record WakeCondition
 {
     [JsonPropertyName("ttl")]
     public TimeSpan? Ttl { get; init; }
+
+    [JsonPropertyName("ttlPort")]
+    public string? TtlPort { get; init; }
 }

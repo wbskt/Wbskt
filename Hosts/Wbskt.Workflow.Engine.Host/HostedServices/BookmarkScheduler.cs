@@ -99,6 +99,11 @@ public sealed class BookmarkScheduler : BackgroundService
         foreach (var bookmark in leasedBookmarks)
         {
             var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+            if (!string.IsNullOrEmpty(bookmark.TtlPort))
+            {
+                branch = branch with { PendingTakePort = bookmark.TtlPort };
+                await branchProvider.UpsertAsync(branch, ct);
+            }
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
             await bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
             await bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);

@@ -210,6 +210,7 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
                 Status = @Status,
                 LocalJson = COALESCE(@LocalJson, LocalJson),
                 LastOutputJson = @LastOutputJson,
+                PendingTakePort = NULL,
                 UpdatedAt = SYSUTCDATETIME()
             WHERE Id = @Id;
 
@@ -248,6 +249,23 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         }
 
         throw new KeyNotFoundException($"Branch with Id={branchId} not found.");
+    }
+
+    public async Task<int> CancelWaitingBranchesAsync(int runId, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            """
+            UPDATE dbo.Branches
+            SET Status = 'Cancelled', UpdatedAt = SYSUTCDATETIME()
+            WHERE RunId = @RunId AND Status IN ('Waiting', 'WaitingAtJoin');
+            """,
+            connection);
+        command.CommandType = CommandType.Text;
+        command.Parameters.AddWithValue("@RunId", runId);
+
+        await connection.OpenAsync(ct);
+        return await command.ExecuteNonQueryAsync(ct);
     }
 
     internal static BranchRow Map(DbDataReader reader)

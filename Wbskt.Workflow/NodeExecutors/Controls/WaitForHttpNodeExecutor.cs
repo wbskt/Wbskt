@@ -33,6 +33,8 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
         WaitForHttpConfig config = node.Config
             ?? throw new InvalidOperationException($"WaitForHttp node {node.NodeId} is missing config.");
 
+        string timeoutPort = string.IsNullOrWhiteSpace(config.OnTimeout) ? DefaultTimeoutPort : config.OnTimeout;
+
         // Resume visit.
         if (ctx.Branch.LocalState.ContainsKey(ParkedKey))
         {
@@ -49,7 +51,6 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
                 && DateTime.TryParse(deadlineElement.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime deadline)
                 && clock.UtcNow >= deadline)
             {
-                string timeoutPort = string.IsNullOrWhiteSpace(config.OnTimeout) ? DefaultTimeoutPort : config.OnTimeout;
                 return Continue(timeoutPort);
             }
 
@@ -58,7 +59,11 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
 
         // First visit: park on an http-wake callback scoped to this run.
         string token = ctx.Branch.RunRefId.ToString();
-        var condition = new HttpWakeCondition(token) { Ttl = config.Ttl };
+        var condition = new HttpWakeCondition(token)
+        {
+            Ttl = config.Ttl,
+            TtlPort = timeoutPort
+        };
 
         var patch = new Dictionary<string, JsonElement>
         {

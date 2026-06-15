@@ -68,6 +68,10 @@ internal sealed class BranchLoop : IBranchLoop
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
     {
+        CancellationToken runToken = _runCancellationService.GetToken(runId);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, runToken);
+        CancellationToken linkedToken = linkedCts.Token;
+
         BranchRow branchRow = await _branchProvider.GetByIdAsync(branchId, ct);
         RunRow runRow = await _runProvider.GetByIdAsync(runId, ct);
         WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(runRow.WorkflowDefinitionId, ct);
@@ -103,43 +107,58 @@ internal sealed class BranchLoop : IBranchLoop
                 return;
             }
 
-            await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "NodeStarted", ct);
-
             BranchContext branchContext = BuildBranchContext(branchRow, runRow);
-            INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
-            NodeExecutionResult result;
-            try
-            {
-                result = await RetryExecutor.RunWithRetryAsync(
-                    node,
-                    branchContext,
-                    executor,
-                    new NodeExecutionServices(_providerComposite),
-                    _clock,
-                    ct,
-                    _runProvider,
-                    _runCountersProvider,
-                    _creditCostCalculator);
-            }
-            catch (EngineFaultException ex)
-            {
-                await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", ct);
-                string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
-            }
 
-            string? eventPayload = result switch
+            NodeExecutionResult result;
+            if (!string.IsNullOrEmpty(branchRow.PendingTakePort))
             {
-                NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                _ => null
-            };
-            await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
+                result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>());
+            }
+            else
+            {
+                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "NodeStarted", ct);
+
+                INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
+                try
+                {
+                    result = await RetryExecutor.RunWithRetryAsync(
+                        node,
+                        branchContext,
+                        executor,
+                        new NodeExecutionServices(_providerComposite),
+                        _clock,
+                        linkedToken,
+                        _runProvider,
+                        _runCountersProvider,
+                        _creditCostCalculator);
+                }
+                catch (EngineFaultException ex)
+                {
+                    await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", ct);
+                    string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    if (ex is OperationCanceledException && await _runCancellationService.IsCancellationRequestedAsync(runId, CancellationToken.None))
+                    {
+                        result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
+                    }
+                    else
+                    {
+                        result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
+                    }
+                }
+
+                string? eventPayload = result switch
+                {
+                    NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    _ => null
+                };
+                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
+            }
 
             switch (result)
             {
@@ -218,8 +237,12 @@ internal sealed class BranchLoop : IBranchLoop
 
                     if (wait.Condition.Ttl is TimeSpan ttl)
                     {
+                        var companionCondition = new TimerWakeCondition(nowUtc + ttl)
+                        {
+                            TtlPort = wait.Condition.TtlPort
+                        };
                         await _bookmarkProvider.CreateAsync(
-                            CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, new TimerWakeCondition(nowUtc + ttl), nowUtc),
+                            CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, companionCondition, nowUtc),
                             ct);
                     }
 
@@ -410,7 +433,7 @@ internal sealed class BranchLoop : IBranchLoop
             MatchKey = GetWakeConditionMatchKey(condition),
             WakeConditionJson = JsonSerializer.Serialize(condition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
             ExpiresAt = GetWakeConditionExpiresAt(condition),
-            TtlPort = null,
+            TtlPort = condition.TtlPort,
             CreatedAt = createdAt
         };
     }

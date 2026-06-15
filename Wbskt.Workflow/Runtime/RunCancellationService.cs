@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.Extensions.Caching.Memory;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -13,17 +15,44 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IHistoryEventProvider _historyEventProvider;
     private readonly IMemoryCache _memoryCache;
     private readonly IClock _clock;
+    private readonly IBranchProvider? _branchProvider;
+    private readonly IBookmarkProvider? _bookmarkProvider;
+    private readonly ConcurrentDictionary<long, CancellationTokenSource> _ctsRegistry = new();
 
     public RunCancellationService(
         IRunProvider runProvider,
         IHistoryEventProvider historyEventProvider,
         IMemoryCache memoryCache,
-        IClock clock)
+        IClock clock,
+        IBranchProvider? branchProvider = null,
+        IBookmarkProvider? bookmarkProvider = null)
     {
         _runProvider = runProvider;
         _historyEventProvider = historyEventProvider;
         _memoryCache = memoryCache;
         _clock = clock;
+        _branchProvider = branchProvider;
+        _bookmarkProvider = bookmarkProvider;
+    }
+
+    public CancellationToken GetToken(long runId)
+    {
+        var cts = _ctsRegistry.GetOrAdd(runId, _ => { return new CancellationTokenSource(); });
+        return cts.Token;
+    }
+
+    public void RemoveCts(long runId)
+    {
+        if (_ctsRegistry.TryRemove(runId, out var cts))
+        {
+            try
+            {
+                cts.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
     }
 
     // TODO: cancel internally uses a cache but it lives in WMH and WEH separately.
@@ -52,6 +81,35 @@ internal sealed class RunCancellationService : IRunCancellationService
                 Timestamp = _clock.UtcNow
             }
         ], ct);
+
+        // Cancel CTS
+        var cts = _ctsRegistry.GetOrAdd(runId, _ => {
+            var newCts = new CancellationTokenSource();
+            newCts.Cancel();
+            return newCts;
+        });
+        if (!cts.IsCancellationRequested)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        // Mass-delete bookmarks for this run
+        if (_bookmarkProvider is not null)
+        {
+            await _bookmarkProvider.DeleteAllByRunIdAsync(checked((int)runId), ct);
+        }
+
+        // Cancel waiting branches
+        if (_branchProvider is not null)
+        {
+            await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
+        }
 
         _memoryCache.Set(CreateCacheKey(runId), true, CacheTtl);
         return true;

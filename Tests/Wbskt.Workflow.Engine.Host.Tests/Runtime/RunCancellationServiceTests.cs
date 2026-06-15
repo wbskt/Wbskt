@@ -49,6 +49,27 @@ public sealed class RunCancellationServiceTests
     }
 
     [Fact]
+    public async Task RequestCancellation_deletes_bookmarks_and_cancels_waiting_branches()
+    {
+        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var branchProvider = new CancellationTestBranchProvider();
+        var bookmarkProvider = new CancellationTestBookmarkProvider();
+        var service = new RunCancellationService(
+            runProvider,
+            historyProvider,
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            branchProvider,
+            bookmarkProvider);
+
+        await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.Equal(42, branchProvider.CancelledRunId);
+        Assert.Equal(42, bookmarkProvider.DeletedRunId);
+    }
+
+    [Fact]
     public async Task BranchLoop_short_circuits_to_cancelled_when_cancellation_requested()
     {
         var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -336,6 +357,50 @@ public sealed class RunCancellationServiceTests
     private sealed class SequentialIdGenerator : IIdGenerator
     {
         public Guid NewId() => Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+    }
+
+    private sealed class CancellationTestBranchProvider : IBranchProvider
+    {
+        public int CancelledRunId { get; private set; }
+        public Task<int> CancelWaitingBranchesAsync(int runId, CancellationToken ct)
+        {
+            CancelledRunId = runId;
+            return Task.FromResult(1);
+        }
+
+        public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotImplementedException();
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    private sealed class CancellationTestBookmarkProvider : IBookmarkProvider
+    {
+        public int DeletedRunId { get; private set; }
+        public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct)
+        {
+            DeletedRunId = runId;
+            return Task.CompletedTask;
+        }
+
+        public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotImplementedException();
+        public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
+        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<long> CountAsync(CancellationToken ct) => throw new NotImplementedException();
+        public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotImplementedException();
     }
 }
 

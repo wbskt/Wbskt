@@ -16,6 +16,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly IBookmarkProvider _bookmarkProvider;
     private readonly ISubWorkflowCompletionHook _completionHook;
     private readonly IClock _clock;
+    private readonly IRunCancellationService? _runCancellationService;
 
     public RunFinalizer(
         IRunProvider runProvider,
@@ -26,7 +27,8 @@ internal sealed class RunFinalizer : IRunFinalizer
         IRunCompletedPublisher runCompletedPublisher,
         IBookmarkProvider bookmarkProvider,
         ISubWorkflowCompletionHook completionHook,
-        IClock clock)
+        IClock clock,
+        IRunCancellationService? runCancellationService = null)
     {
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
@@ -37,6 +39,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         _bookmarkProvider = bookmarkProvider;
         _completionHook = completionHook;
         _clock = clock;
+        _runCancellationService = runCancellationService;
     }
 
     public async Task FinalizeAsync(long runId, CancellationToken ct)
@@ -67,6 +70,10 @@ internal sealed class RunFinalizer : IRunFinalizer
         await _runCompletedPublisher.PublishAsync(updatedRun, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);
+        if (_runCancellationService is not null)
+        {
+            _runCancellationService.RemoveCts(updatedRun.Id);
+        }
     }
 
     private static string DetermineTerminalStatus(string currentStatus, IReadOnlyCollection<BranchRow> branches)

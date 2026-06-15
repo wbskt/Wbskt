@@ -33,6 +33,8 @@ internal sealed class AwaitSignalNodeExecutor(IClock clock) : INodeExecutor
         AwaitSignalConfig config = node.Config
             ?? throw new InvalidOperationException($"AwaitSignal node {node.NodeId} is missing config.");
 
+        string timeoutPort = string.IsNullOrWhiteSpace(config.OnTimeout) ? DefaultTimeoutPort : config.OnTimeout;
+
         // Resume visit: the marker from the first visit is present.
         if (ctx.Branch.LocalState.ContainsKey(ParkedKey))
         {
@@ -49,7 +51,6 @@ internal sealed class AwaitSignalNodeExecutor(IClock clock) : INodeExecutor
                 && DateTime.TryParse(deadlineElement.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime deadline)
                 && clock.UtcNow >= deadline)
             {
-                string timeoutPort = string.IsNullOrWhiteSpace(config.OnTimeout) ? DefaultTimeoutPort : config.OnTimeout;
                 return Continue(timeoutPort);
             }
 
@@ -58,7 +59,11 @@ internal sealed class AwaitSignalNodeExecutor(IClock clock) : INodeExecutor
 
         // First visit: park on a signal scoped to this run (or an explicit correlation).
         string scope = string.IsNullOrWhiteSpace(config.Correlation) ? ctx.Branch.RunRefId.ToString() : config.Correlation;
-        var condition = new SignalWakeCondition(config.SignalName, scope) { Ttl = config.Ttl };
+        var condition = new SignalWakeCondition(config.SignalName, scope)
+        {
+            Ttl = config.Ttl,
+            TtlPort = timeoutPort
+        };
 
         var patch = new Dictionary<string, JsonElement>
         {
