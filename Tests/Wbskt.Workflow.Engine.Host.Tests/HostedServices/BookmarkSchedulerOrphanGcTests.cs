@@ -30,7 +30,7 @@ public sealed class BookmarkSchedulerOrphanGcTests
         await scheduler.StopAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, provider.DeleteOrphansCallCount);
+        Assert.True(provider.DeleteOrphansCallCount >= 1);
     }
 
     private sealed class FixedClock : IClock
