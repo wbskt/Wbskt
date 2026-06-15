@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -17,6 +18,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly ISubWorkflowCompletionHook _completionHook;
     private readonly IClock _clock;
     private readonly IRunCancellationService? _runCancellationService;
+    private readonly WorkflowMetrics? _workflowMetrics;
 
     public RunFinalizer(
         IRunProvider runProvider,
@@ -28,7 +30,8 @@ internal sealed class RunFinalizer : IRunFinalizer
         IBookmarkProvider bookmarkProvider,
         ISubWorkflowCompletionHook completionHook,
         IClock clock,
-        IRunCancellationService? runCancellationService = null)
+        IRunCancellationService? runCancellationService = null,
+        WorkflowMetrics? workflowMetrics = null)
     {
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
@@ -39,6 +42,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         _bookmarkProvider = bookmarkProvider;
         _completionHook = completionHook;
         _clock = clock;
+        _workflowMetrics = workflowMetrics;
         _runCancellationService = runCancellationService;
     }
 
@@ -52,6 +56,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         DateTime completedAt = _clock.UtcNow;
 
         RunRow updatedRun = await _runProvider.SetTerminalAsync(runId, terminalStatus, completedAt, ct);
+        _workflowMetrics?.RecordRunCompleted(updatedRun.WorkflowRefId.ToString(), terminalStatus);
         await _historyEventProvider.InsertBatchAsync(
         [
             new HistoryEventRow

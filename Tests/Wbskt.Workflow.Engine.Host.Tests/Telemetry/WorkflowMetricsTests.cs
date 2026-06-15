@@ -19,22 +19,22 @@ public sealed class WorkflowMetricsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, currentListener) =>
         {
-            if (instrument.Meter.Name == WorkflowMetrics.MeterName && instrument.Name == "workflow.completed_runs")
+            if (instrument.Meter.Name == WorkflowMetrics.MeterName && instrument.Name == "wbskt_workflow_runs_completed_total")
             {
                 currentListener.EnableMeasurementEvents(instrument);
             }
         };
         listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
         {
-            if (instrument.Name == "workflow.completed_runs")
+            if (instrument.Name == "wbskt_workflow_runs_completed_total")
             {
                 total += measurement;
             }
         });
         listener.Start();
 
-        metrics.CompletedRunsCounter.Add(1);
-        metrics.CompletedRunsCounter.Add(2);
+        metrics.RunsCompleted.Add(1);
+        metrics.RunsCompleted.Add(2);
 
         Assert.Equal(3, total);
     }
@@ -47,23 +47,22 @@ public sealed class WorkflowMetricsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, currentListener) =>
         {
-            if (instrument.Meter.Name == WorkflowMetrics.MeterName && instrument.Name == "workflow.node.duration")
+            if (instrument.Meter.Name == WorkflowMetrics.MeterName && instrument.Name == "wbskt_workflow_node_duration_ms")
             {
                 currentListener.EnableMeasurementEvents(instrument);
             }
         };
         listener.SetMeasurementEventCallback<double>((instrument, measurement, tags, state) =>
         {
-            if (instrument.Name == "workflow.node.duration")
+            if (instrument.Name == "wbskt_workflow_node_duration_ms")
             {
                 recorded = measurement;
             }
         });
         listener.Start();
 
-        metrics.NodeDurationHistogram.Record(12.5d);
+        metrics.NodeDuration.Record(12.5d);
 
         Assert.Equal(12.5d, recorded);
     }
 }
-

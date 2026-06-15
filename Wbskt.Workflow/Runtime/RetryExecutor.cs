@@ -11,6 +11,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -27,7 +28,8 @@ internal static class RetryExecutor
         CancellationToken ct,
         IRunProvider? runProvider = null,
         IRunCountersProvider? runCountersProvider = null,
-        ICreditCostCalculator? creditCostCalculator = null)
+        ICreditCostCalculator? creditCostCalculator = null,
+        WorkflowMetrics? workflowMetrics = null)
     {
         _ = clock;
         RetryPolicy policy = GetPolicy(node);
@@ -174,6 +176,10 @@ internal static class RetryExecutor
 
                 // Charge the credit cost.
                 await runCountersProvider.AddCreditsConsumedAsync((int)context.RunId, cost, ct);
+                if (workflowMetrics != null)
+                {
+                    workflowMetrics.RecordCreditsConsumed(context.WorkflowDefinitionRefId.ToString(), (double)cost);
+                }
             }
 
             NodeContext nodeContext = new()

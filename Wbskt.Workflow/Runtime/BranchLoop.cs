@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -30,6 +31,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly IRunCancellationService _runCancellationService;
     private readonly ICompensationOrchestrator? _compensationOrchestrator;
     private readonly ICreditCostCalculator _creditCostCalculator;
+    private readonly WorkflowMetrics? _workflowMetrics;
     private readonly OnFailureHandler _onFailureHandler = new();
 
     public BranchLoop(
@@ -47,7 +49,8 @@ internal sealed class BranchLoop : IBranchLoop
         IRunFinalizer? runFinalizer = null,
         IRunCancellationService? runCancellationService = null,
         ICompensationOrchestrator? compensationOrchestrator = null,
-        ICreditCostCalculator? creditCostCalculator = null)
+        ICreditCostCalculator? creditCostCalculator = null,
+        WorkflowMetrics? workflowMetrics = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -60,6 +63,7 @@ internal sealed class BranchLoop : IBranchLoop
         _providerComposite = providerComposite;
         _clock = clock;
         _idGenerator = idGenerator;
+        _workflowMetrics = workflowMetrics;
         _runFinalizer = runFinalizer;
         _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
         _compensationOrchestrator = compensationOrchestrator;
@@ -109,7 +113,7 @@ internal sealed class BranchLoop : IBranchLoop
 
             BranchContext branchContext = BuildBranchContext(branchRow, runRow);
 
-            NodeExecutionResult result;
+            NodeExecutionResult? result = null;
             if (!string.IsNullOrEmpty(branchRow.PendingTakePort))
             {
                 result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>());
@@ -119,6 +123,8 @@ internal sealed class BranchLoop : IBranchLoop
                 await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "NodeStarted", ct);
 
                 INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
+                System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                string outcome = "Succeeded";
                 try
                 {
                     result = await RetryExecutor.RunWithRetryAsync(
@@ -130,10 +136,12 @@ internal sealed class BranchLoop : IBranchLoop
                         linkedToken,
                         _runProvider,
                         _runCountersProvider,
-                        _creditCostCalculator);
+                        _creditCostCalculator,
+                        workflowMetrics: _workflowMetrics);
                 }
                 catch (EngineFaultException ex)
                 {
+                    outcome = "Failed";
                     await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", ct);
                     string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);
@@ -143,12 +151,23 @@ internal sealed class BranchLoop : IBranchLoop
                 {
                     if (ex is OperationCanceledException && await _runCancellationService.IsCancellationRequestedAsync(runId, CancellationToken.None))
                     {
+                        outcome = "Cancelled";
                         result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
                     }
                     else
                     {
+                        outcome = "Failed";
                         result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
                     }
+                }
+                finally
+                {
+                    stopwatch.Stop();
+                    if (outcome == "Succeeded" && result is NodeExecutionResult.Fail)
+                    {
+                        outcome = "Failed";
+                    }
+                    _workflowMetrics?.RecordNodeDuration(node.Kind, outcome, stopwatch.Elapsed.TotalMilliseconds);
                 }
 
                 string? eventPayload = result switch

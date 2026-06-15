@@ -1,16 +1,19 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
-public sealed class MetricsExporter : BackgroundService
+internal sealed class MetricsExporter : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly WorkflowMetrics _workflowMetrics;
+    private readonly ChannelRunDispatcher _dispatcher;
     private readonly ILogger<MetricsExporter> _logger;
     private readonly TimeSpan _pollInterval;
 
@@ -18,9 +21,10 @@ public sealed class MetricsExporter : BackgroundService
     public MetricsExporter(
         IServiceScopeFactory scopeFactory,
         WorkflowMetrics workflowMetrics,
+        ChannelRunDispatcher dispatcher,
         ILogger<MetricsExporter> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(scopeFactory, workflowMetrics, logger, options.Value.MetricsExportInterval)
+        : this(scopeFactory, workflowMetrics, dispatcher, logger, options.Value.MetricsExportInterval)
     {
     }
 
@@ -30,20 +34,23 @@ public sealed class MetricsExporter : BackgroundService
         IBookmarkProvider bookmarkProvider,
         IPendingTriggerEventProvider pendingTriggerEventProvider,
         WorkflowMetrics workflowMetrics,
+        ChannelRunDispatcher dispatcher,
         ILogger<MetricsExporter> logger,
         TimeSpan? pollInterval = null)
-        : this(new StaticScopeFactory(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider), workflowMetrics, logger, pollInterval)
+        : this(new StaticScopeFactory(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider), workflowMetrics, dispatcher, logger, pollInterval)
     {
     }
 
     private MetricsExporter(
         IServiceScopeFactory scopeFactory,
         WorkflowMetrics workflowMetrics,
+        ChannelRunDispatcher dispatcher,
         ILogger<MetricsExporter> logger,
         TimeSpan? pollInterval)
     {
         _scopeFactory = scopeFactory;
         _workflowMetrics = workflowMetrics;
+        _dispatcher = dispatcher;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromSeconds(15);
     }
@@ -51,23 +58,23 @@ public sealed class MetricsExporter : BackgroundService
     public async Task ProcessMetricsAsync(CancellationToken ct)
     {
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var runProvider = scope.ServiceProvider.GetRequiredService<IRunProvider>();
         var runCountersProvider = scope.ServiceProvider.GetRequiredService<IRunCountersProvider>();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
         var pendingTriggerEventProvider = scope.ServiceProvider.GetRequiredService<IPendingTriggerEventProvider>();
-        long activeRuns = await runProvider.CountByStatusAsync("Running", ct);
+        
         long activeBranches = await runCountersProvider.SumActiveBranchesAsync(ct);
-        long parkedBookmarks = await bookmarkProvider.CountAsync(ct);
         long pendingTriggerDepth = await pendingTriggerEventProvider.CountAllAsync(ct);
+        long queueDepth = _dispatcher.Count;
+        IReadOnlyDictionary<string, long> bookmarksByWakeKind = await bookmarkProvider.CountGroupedByWakeKindAsync(ct);
 
-        _workflowMetrics.UpdateSnapshot(activeRuns, activeBranches, parkedBookmarks, pendingTriggerDepth);
+        _workflowMetrics.UpdateSnapshot(activeBranches, queueDepth, pendingTriggerDepth, bookmarksByWakeKind);
 
         _logger.LogInformation(
-            "Workflow metrics exported: ActiveRuns={ActiveRuns}, ActiveBranches={ActiveBranches}, ParkedBookmarks={ParkedBookmarks}, PendingTriggerDepth={PendingTriggerDepth}",
-            activeRuns,
+            "Workflow metrics exported: ActiveBranches={ActiveBranches}, DispatcherQueueDepth={QueueDepth}, PendingTriggerDepth={PendingTriggerDepth}, BookmarksCount={BookmarksCount}",
             activeBranches,
-            parkedBookmarks,
-            pendingTriggerDepth);
+            queueDepth,
+            pendingTriggerDepth,
+            bookmarksByWakeKind.Values.Sum());
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -18,6 +18,21 @@ internal sealed class ChannelRunDispatcher : IRunDispatcher
 
     public ChannelReader<BranchExecutionRequest> Reader => _channel.Reader;
 
+    public int Count
+    {
+        get
+        {
+            try
+            {
+                return Reader.Count;
+            }
+            catch (System.NotSupportedException)
+            {
+                return 0;
+            }
+        }
+    }
+
     public ValueTask DispatchAsync(BranchExecutionRequest request, CancellationToken ct)
     {
         return _channel.Writer.WriteAsync(request, ct);

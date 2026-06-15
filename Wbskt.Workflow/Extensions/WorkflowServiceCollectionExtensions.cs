@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
@@ -113,6 +114,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<ISubWorkflowCompletionHook, SubWorkflowCompletionHook>();
         services.AddScoped<IPendingTriggerEventDrainer, PendingTriggerEventDrainer>();
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
+        services.TryAddSingleton<IEngineStartupTracker, CompletedEngineStartupTracker>();
 
         return services;
     }

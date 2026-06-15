@@ -7,17 +7,25 @@ internal sealed class InboundHub : IInboundHub
 {
     private readonly ITriggerDispatcher _triggerDispatcher;
     private readonly IClock _clock;
+    private readonly IEngineStartupTracker _startupTracker;
     private readonly ILogger<InboundHub> _logger;
 
-    public InboundHub(ITriggerDispatcher triggerDispatcher, IClock clock, ILogger<InboundHub> logger)
+    public InboundHub(
+        ITriggerDispatcher triggerDispatcher,
+        IClock clock,
+        ILogger<InboundHub>? logger = null,
+        IEngineStartupTracker? startupTracker = null)
     {
         _triggerDispatcher = triggerDispatcher;
         _clock = clock;
-        _logger = logger;
+        _startupTracker = startupTracker ?? new CompletedEngineStartupTracker();
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<InboundHub>.Instance;
     }
 
     public async Task<TriggerDispatchResult> HandleAsync(InboundEvent evt, CancellationToken ct)
     {
+        await _startupTracker.Ready;
+
         InboundEvent normalizedEvent = evt;
         if (normalizedEvent.ReceivedAt == default)
         {

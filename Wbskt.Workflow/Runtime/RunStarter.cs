@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -16,6 +17,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IRunStartedPublisher _runStartedPublisher;
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
+    private readonly WorkflowMetrics? _workflowMetrics;
 
     public RunStarter(
         IRunProvider runProvider,
@@ -26,7 +28,8 @@ internal sealed class RunStarter : IRunStarter
         ICorrelationKeyResolver correlationKeyResolver,
         IRunStartedPublisher runStartedPublisher,
         IClock clock,
-        IIdGenerator idGenerator)
+        IIdGenerator idGenerator,
+        WorkflowMetrics? workflowMetrics = null)
     {
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
@@ -37,11 +40,13 @@ internal sealed class RunStarter : IRunStarter
         _runStartedPublisher = runStartedPublisher;
         _clock = clock;
         _idGenerator = idGenerator;
+        _workflowMetrics = workflowMetrics;
     }
 
     public async Task<(long RunId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
     {
         WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
+        _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind);
         DateTime nowUtc = _clock.UtcNow;
         string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent);
 

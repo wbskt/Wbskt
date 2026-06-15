@@ -7,11 +7,14 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
-public sealed class RunRecoveryService : IHostedService
+public sealed class RunRecoveryService : IHostedService, IEngineStartupTracker
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<RunRecoveryService> _logger;
+    private readonly TaskCompletionSource _readyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task Ready => _readyTcs.Task;
 
     public RunRecoveryService(
         IServiceScopeFactory scopeFactory,
@@ -35,42 +38,51 @@ public sealed class RunRecoveryService : IHostedService
 
     public async Task StartAsync(CancellationToken ct)
     {
-        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
-        var runProvider = scope.ServiceProvider.GetService<IRunProvider>();
-        var runCancellationService = scope.ServiceProvider.GetService<IRunCancellationService>();
-
-        IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
-        
-        var runGroups = branches.GroupBy(b => b.RunId);
-
-        foreach (var group in runGroups)
+        try
         {
-            long runId = group.Key;
+            await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+            var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
+            var runProvider = scope.ServiceProvider.GetService<IRunProvider>();
+            var runCancellationService = scope.ServiceProvider.GetService<IRunCancellationService>();
+
+            IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
             
-            if (runProvider is not null && runCancellationService is not null)
+            var runGroups = branches.GroupBy(b => b.RunId);
+
+            foreach (var group in runGroups)
             {
-                try
+                long runId = group.Key;
+                
+                if (runProvider is not null && runCancellationService is not null)
                 {
-                    RunRow run = await runProvider.GetByIdAsync(runId, ct);
-                    if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal) || string.Equals(run.Status, "Failing", StringComparison.Ordinal))
+                    try
                     {
-                        runCancellationService.CancelCts(runId);
+                        RunRow run = await runProvider.GetByIdAsync(runId, ct);
+                        if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal) || string.Equals(run.Status, "Failing", StringComparison.Ordinal))
+                        {
+                            runCancellationService.CancelCts(runId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to inspect run {RunId} during startup recovery.", runId);
                     }
                 }
-                catch (Exception ex)
+
+                foreach (var branch in group)
                 {
-                    _logger.LogWarning(ex, "Failed to inspect run {RunId} during startup recovery.", runId);
+                    await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
                 }
             }
 
-            foreach (var branch in group)
-            {
-                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(branch.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-            }
+            _logger.LogInformation("Recovered {Count} running branches.", branches.Count);
+            _readyTcs.TrySetResult();
         }
-
-        _logger.LogInformation("Recovered {Count} running branches.", branches.Count);
+        catch (Exception ex)
+        {
+            _readyTcs.TrySetException(ex);
+            throw;
+        }
     }
 
     public Task StopAsync(CancellationToken ct)

@@ -17,4 +17,6 @@ public interface IBookmarkProvider
     Task<long> CountAsync(CancellationToken ct);
     Task<int> DeleteOrphansAsync(CancellationToken ct);
     Task DeleteAllByRunIdAsync(int runId, CancellationToken ct);
+    Task<System.Collections.Generic.IReadOnlyDictionary<string, long>> CountGroupedByWakeKindAsync(CancellationToken ct)
+        => Task.FromResult<System.Collections.Generic.IReadOnlyDictionary<string, long>>(new System.Collections.Generic.Dictionary<string, long>());
 }

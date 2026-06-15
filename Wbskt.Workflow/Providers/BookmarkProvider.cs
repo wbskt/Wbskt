@@ -247,6 +247,29 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<IReadOnlyDictionary<string, long>> CountGroupedByWakeKindAsync(CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(
+            "SELECT WakeConditionKind, COUNT(*) AS [Count] FROM dbo.Bookmarks GROUP BY WakeConditionKind;",
+            connection);
+        command.CommandType = CommandType.Text;
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        var results = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        while (await reader.ReadAsync(ct))
+        {
+            string kind = reader.GetString(reader.GetOrdinal("WakeConditionKind"));
+            object val = reader.GetValue(reader.GetOrdinal("Count"));
+            long count = val is int i ? i : Convert.ToInt64(val);
+            results[kind] = count;
+        }
+
+        return results;
+    }
+
     internal static BookmarkRow Map(DbDataReader reader)
     {
         return new BookmarkRow

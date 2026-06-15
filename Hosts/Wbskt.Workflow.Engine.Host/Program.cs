@@ -40,7 +40,9 @@ public static class Program
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
         builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
-        builder.Services.AddHostedService<RunRecoveryService>();
+        builder.Services.AddSingleton<RunRecoveryService>();
+        builder.Services.AddHostedService<RunRecoveryService>(sp => sp.GetRequiredService<RunRecoveryService>());
+        builder.Services.AddSingleton<IEngineStartupTracker>(sp => sp.GetRequiredService<RunRecoveryService>());
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddHostedService<ScheduledFireTicker>();
