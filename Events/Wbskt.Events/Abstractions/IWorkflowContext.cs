@@ -1,5 +1,3 @@
-using Wbskt.EventBus.Abstractions;
-
 namespace Wbskt.Events.Abstractions;
 
 public interface IWorkflowContext : IWorkspaceContext

@@ -1,5 +1,3 @@
-using System;
-
 namespace Wbskt.Workflow.Abstraction.Exceptions;
 
 public class TransientNodeException : Exception

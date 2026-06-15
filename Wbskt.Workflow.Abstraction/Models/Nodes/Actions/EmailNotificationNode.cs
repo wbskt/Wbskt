@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
-using Wbskt.Workflow.Abstraction.Models;
-using Wbskt.Workflow.Abstraction.Models.Nodes;
+
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 public sealed record EmailNotificationNode(
     Guid NodeId, string Name, IReadOnlyCollection<PortDefinition> Ports,

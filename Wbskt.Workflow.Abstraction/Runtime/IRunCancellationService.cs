@@ -1,5 +1,3 @@
-using System.Threading;
-
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public interface IRunCancellationService

@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
