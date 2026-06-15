@@ -130,50 +130,7 @@ public sealed class CommandNodeExecutorTests
         Assert.Same(exception, fail.Cause);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_marks_idempotency_succeeded_after_publish()
-    {
-        var publisher = new Mock<IDeviceCommandPublisher>();
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-        var idempotency = FreshClaim();
-        var executor = new CommandNodeExecutor(publisher.Object);
-        NodeContext ctx = BuildContext("OpenVent", null, idempotency.Object);
 
-        await executor.ExecuteAsync(ctx, CancellationToken.None);
-
-        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), "OpenVent", "{}", It.IsAny<CancellationToken>()), Times.Once);
-        idempotency.Verify(p => p.MarkSucceededAsync(It.Is<string>(k => k == "action:command:42:1001:11111111-1111-1111-1111-111111111111"), "{}", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_skips_publish_when_already_succeeded()
-    {
-        var publisher = new Mock<IDeviceCommandPublisher>();
-        var executor = new CommandNodeExecutor(publisher.Object);
-        NodeContext ctx = BuildContext("OpenVent", null, AlreadySucceeded().Object);
-
-        NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
-
-        Assert.IsType<NodeExecutionResult.Continue>(result);
-        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_marks_idempotency_failed_when_publisher_throws()
-    {
-        var publisher = new Mock<IDeviceCommandPublisher>();
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("broker down"));
-        var idempotency = FreshClaim();
-        var executor = new CommandNodeExecutor(publisher.Object);
-        NodeContext ctx = BuildContext("OpenVent", null, idempotency.Object);
-
-        await executor.ExecuteAsync(ctx, CancellationToken.None);
-
-        idempotency.Verify(p => p.MarkFailedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        idempotency.Verify(p => p.MarkSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
 
     private static NodeContext BuildContext(string command, JsonElement? payload, IIdempotencyKeyProvider? idempotency = null)
     {

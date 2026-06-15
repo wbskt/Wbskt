@@ -17,6 +17,8 @@ internal sealed class JoinNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlJoin;
 
+    public bool IsSideEffectFree => true;
+
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         if (ctx.Node is not JoinNode node || node.Config is null)

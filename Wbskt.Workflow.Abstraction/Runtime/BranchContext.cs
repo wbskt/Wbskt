@@ -21,4 +21,9 @@ public sealed record BranchContext(
     /// need to scope external interactions (e.g. AwaitSignal keys its bookmark by run RefId).
     /// </summary>
     public Guid RunRefId { get; init; }
+
+    /// <summary>
+    /// The public reference id of the branch.
+    /// </summary>
+    public Guid BranchRefId { get; init; }
 }

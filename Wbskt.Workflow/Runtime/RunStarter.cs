@@ -59,7 +59,7 @@ internal sealed class RunStarter : IRunStarter
             CompletedAt = null,
             CancellationRequestedAt = null,
             CancellationReason = null,
-            CreditBudget = 0m,
+            CreditBudget = 100m,
             CreatedAt = nowUtc
         }, ct);
 

@@ -18,7 +18,8 @@ internal sealed class OnFailureHandler
 
         return outcome switch
         {
-            ErrorOutcome.ContinueOnError or ErrorOutcome.ContinueAsSucceeded => new NodeExecutionResult.Continue("default", patch),
+            ErrorOutcome.ContinueOnError => new NodeExecutionResult.Continue("error", patch),
+            ErrorOutcome.ContinueAsSucceeded => new NodeExecutionResult.Continue("default", patch),
             ErrorOutcome.JumpToNode when config?.TargetNodeId is Guid targetNodeId => NodeExecutionResult.JumpTo(targetNodeId, patch),
             _ => fail
         };

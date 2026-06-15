@@ -83,7 +83,11 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 ParseLocalState(historyEvent.PayloadJson),
                 new Dictionary<string, JsonElement>(),
                 run.CorrelationKey ?? string.Empty,
-                run.StartedAt),
+                run.StartedAt)
+            {
+                RunRefId = run.RefId,
+                BranchRefId = branch.RefId
+            },
             Node = compensationNode,
             Providers = _providerComposite,
             Tick = 1,

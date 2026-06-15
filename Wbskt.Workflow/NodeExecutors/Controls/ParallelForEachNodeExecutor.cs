@@ -20,6 +20,8 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlParallelForEach;
 
+    public bool IsSideEffectFree => true;
+
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         if (ctx.Node is not ParallelForEachNode node || node.Config is null || string.IsNullOrWhiteSpace(node.Config.Collection))

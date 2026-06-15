@@ -1,26 +1,181 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
 internal static class RetryExecutor
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     public static async Task<NodeExecutionResult> RunWithRetryAsync(
         BaseNode node,
         BranchContext context,
         INodeExecutor executor,
         INodeExecutionServices services,
         IClock clock,
-        CancellationToken ct)
+        CancellationToken ct,
+        IRunProvider? runProvider = null,
+        IRunCountersProvider? runCountersProvider = null,
+        ICreditCostCalculator? creditCostCalculator = null)
     {
         _ = clock;
         RetryPolicy policy = GetPolicy(node);
+        bool isSideEffectFree = executor.IsSideEffectFree;
+
+        IIdempotencyKeyProvider? idempotencyKeyProvider = null;
+        try
+        {
+            idempotencyKeyProvider = services.Providers.IdempotencyKey;
+        }
+        catch (NotSupportedException)
+        {
+            // Fallback for test stubs
+        }
 
         for (int attempt = 1; attempt <= policy.MaxAttempts; attempt++)
         {
+            string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{attempt}";
+            IdempotencyKeyRow? existingRow = null;
+
+            if (idempotencyKeyProvider != null)
+            {
+                try
+                {
+                    existingRow = await idempotencyKeyProvider.GetByKeyAsync(keyValue, ct);
+                }
+                catch (KeyNotFoundException)
+                {
+                    // Key does not exist yet; normal flow.
+                }
+                catch (NotSupportedException)
+                {
+                    idempotencyKeyProvider = null;
+                }
+
+                if (idempotencyKeyProvider != null && existingRow != null)
+                {
+                    if (string.Equals(existingRow.Status, "Succeeded", StringComparison.Ordinal))
+                    {
+                        if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
+                        {
+                            var cachedResult = JsonSerializer.Deserialize<NodeExecutionResult>(existingRow.ResultJson, JsonOptions);
+                            if (cachedResult != null)
+                            {
+                                return cachedResult;
+                            }
+                        }
+                    }
+                    else if (string.Equals(existingRow.Status, "Failed", StringComparison.Ordinal))
+                    {
+                        if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
+                        {
+                            var cachedFail = JsonSerializer.Deserialize<NodeExecutionResult.Fail>(existingRow.ErrorJson, JsonOptions);
+                            if (cachedFail != null)
+                            {
+                                return cachedFail;
+                            }
+                        }
+                    }
+                    // If the status is "Pending", it means a prior run crashed mid-execution, so we must re-execute.
+                }
+            }
+
+            Guid claimToken = Guid.NewGuid();
+            if (!isSideEffectFree && idempotencyKeyProvider != null)
+            {
+                if (existingRow == null)
+                {
+                    try
+                    {
+                        existingRow = await idempotencyKeyProvider.UpsertPendingAsync(
+                            keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
+
+                        if (existingRow.BranchRefId != claimToken)
+                        {
+                            if (string.Equals(existingRow.Status, "Succeeded", StringComparison.Ordinal))
+                            {
+                                if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
+                                {
+                                    var cachedResult = JsonSerializer.Deserialize<NodeExecutionResult>(existingRow.ResultJson, JsonOptions);
+                                    if (cachedResult != null)
+                                    {
+                                        return cachedResult;
+                                    }
+                                }
+                            }
+                            else if (string.Equals(existingRow.Status, "Failed", StringComparison.Ordinal))
+                            {
+                                if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
+                                {
+                                    var cachedFail = JsonSerializer.Deserialize<NodeExecutionResult.Fail>(existingRow.ErrorJson, JsonOptions);
+                                    if (cachedFail != null)
+                                    {
+                                        return cachedFail;
+                                    }
+                                }
+                            }
+                            // If it was Pending, we continue to run the executor.
+                        }
+                    }
+                    catch (NotSupportedException)
+                    {
+                        idempotencyKeyProvider = null;
+                    }
+                }
+            }
+
+            if (runProvider != null && runCountersProvider != null)
+            {
+                var calc = creditCostCalculator ?? new DefaultCreditCostCalculator();
+                // Perform credit budget check and increment credit counters.
+                RunRow run = await runProvider.GetByIdAsync(context.RunId, ct);
+                RunCountersRow counters = await runCountersProvider.GetByRunIdAsync((int)context.RunId, ct);
+                decimal cost = calc.Calculate(node, null!);
+
+                if (counters.CreditsConsumed + cost > run.CreditBudget)
+                {
+                    var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
+                    string errorJson = JsonSerializer.Serialize(outOfCreditsResult, JsonOptions);
+
+                    if (idempotencyKeyProvider != null)
+                    {
+                        try
+                        {
+                            if (!isSideEffectFree)
+                            {
+                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                            }
+                            else
+                            {
+                                await idempotencyKeyProvider.UpsertPendingAsync(
+                                    keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
+                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                            }
+                        }
+                        catch (NotSupportedException)
+                        {
+                            idempotencyKeyProvider = null;
+                        }
+                    }
+
+                    return outOfCreditsResult;
+                }
+
+                // Charge the credit cost.
+                await runCountersProvider.AddCreditsConsumedAsync((int)context.RunId, cost, ct);
+            }
+
             NodeContext nodeContext = new()
             {
                 Branch = context with { Attempt = attempt },
@@ -31,21 +186,172 @@ internal static class RetryExecutor
                 CancellationToken = ct
             };
 
-            NodeExecutionResult result = await executor.ExecuteAsync(nodeContext, ct);
-            if (result is not NodeExecutionResult.Fail fail)
+            try
             {
+                NodeExecutionResult result = await executor.ExecuteAsync(nodeContext, ct);
+
+                if (result is NodeExecutionResult.Fail fail)
+                {
+                    string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+                    if (idempotencyKeyProvider != null)
+                    {
+                        try
+                        {
+                            if (!isSideEffectFree)
+                            {
+                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                            }
+                            else
+                            {
+                                await idempotencyKeyProvider.UpsertPendingAsync(
+                                    keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
+                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                            }
+                        }
+                        catch (NotSupportedException)
+                        {
+                            idempotencyKeyProvider = null;
+                        }
+                    }
+
+                    if (!fail.Retryable || attempt >= policy.MaxAttempts)
+                    {
+                        return fail;
+                    }
+
+                    TimeSpan delay = GetDelay(policy, attempt);
+                    if (delay > TimeSpan.Zero)
+                    {
+                        await Task.Delay(delay, ct);
+                    }
+                    continue;
+                }
+
+                if (result is NodeExecutionResult.WaitForBookmark)
+                {
+                    return result;
+                }
+
+                string resultJson = JsonSerializer.Serialize(result, JsonOptions);
+                if (idempotencyKeyProvider != null)
+                {
+                    try
+                    {
+                        if (!isSideEffectFree)
+                        {
+                            await idempotencyKeyProvider.MarkSucceededAsync(keyValue, resultJson, ct);
+                        }
+                        else
+                        {
+                            await idempotencyKeyProvider.UpsertPendingAsync(
+                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
+                            await idempotencyKeyProvider.MarkSucceededAsync(keyValue, resultJson, ct);
+                        }
+                    }
+                    catch (NotSupportedException)
+                    {
+                        idempotencyKeyProvider = null;
+                    }
+                }
+
                 return result;
             }
-
-            if (!fail.Retryable || attempt >= policy.MaxAttempts)
+            catch (TransientNodeException ex)
             {
+                var fail = new NodeExecutionResult.Fail("TRANSIENT_ERROR", ex.Message, true, ex);
+                string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+
+                if (idempotencyKeyProvider != null)
+                {
+                    try
+                    {
+                        if (!isSideEffectFree)
+                        {
+                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                        }
+                        else
+                        {
+                            await idempotencyKeyProvider.UpsertPendingAsync(
+                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
+                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                        }
+                    }
+                    catch (NotSupportedException)
+                    {
+                        idempotencyKeyProvider = null;
+                    }
+                }
+
+                if (attempt >= policy.MaxAttempts)
+                {
+                    return fail;
+                }
+
+                TimeSpan delay = GetDelay(policy, attempt);
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, ct);
+                }
+            }
+            catch (PermanentNodeException ex)
+            {
+                var fail = new NodeExecutionResult.Fail("PERMANENT_ERROR", ex.Message, false, ex);
+                string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+
+                if (idempotencyKeyProvider != null)
+                {
+                    try
+                    {
+                        if (!isSideEffectFree)
+                        {
+                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                        }
+                        else
+                        {
+                            await idempotencyKeyProvider.UpsertPendingAsync(
+                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
+                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                        }
+                    }
+                    catch (NotSupportedException)
+                    {
+                        idempotencyKeyProvider = null;
+                    }
+                }
+
                 return fail;
             }
-
-            TimeSpan delay = GetDelay(policy, attempt);
-            if (delay > TimeSpan.Zero)
+            catch (EngineFaultException)
             {
-                await Task.Delay(delay, ct);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
+                string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+
+                if (idempotencyKeyProvider != null)
+                {
+                    try
+                    {
+                        if (!isSideEffectFree)
+                        {
+                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                        }
+                        else
+                        {
+                            await idempotencyKeyProvider.UpsertPendingAsync(
+                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
+                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
+                        }
+                    }
+                    catch (NotSupportedException)
+                    {
+                        idempotencyKeyProvider = null;
+                    }
+                }
+
+                return fail;
             }
         }
 
@@ -54,19 +360,30 @@ internal static class RetryExecutor
 
     private static RetryPolicy GetPolicy(BaseNode node)
     {
-        return node is BaseActionNode actionNode && actionNode.Retry is not null
-            ? actionNode.Retry
-            : new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []);
+        if (node is BaseActionNode actionNode && actionNode.Retry is not null)
+        {
+            return actionNode.Retry;
+        }
+        return new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []);
     }
 
     private static TimeSpan GetDelay(RetryPolicy policy, int attempt)
     {
-        return policy.Strategy switch
+        double baseMs = policy.Strategy switch
         {
-            RetryStrategy.Constant or RetryStrategy.None => policy.InitialDelay,
-            RetryStrategy.Linear => TimeSpan.FromMilliseconds(policy.InitialDelay.TotalMilliseconds * attempt),
-            RetryStrategy.Exponential => TimeSpan.FromMilliseconds(policy.InitialDelay.TotalMilliseconds * Math.Pow(2, attempt - 1)),
-            _ => policy.InitialDelay
+            RetryStrategy.Constant or RetryStrategy.None => policy.InitialDelay.TotalMilliseconds,
+            RetryStrategy.Linear => policy.InitialDelay.TotalMilliseconds * attempt,
+            RetryStrategy.Exponential => policy.InitialDelay.TotalMilliseconds * Math.Pow(2, attempt - 1),
+            _ => policy.InitialDelay.TotalMilliseconds
         };
+
+        if (policy.JitterPct > 0)
+        {
+            var random = new Random();
+            double pct = random.Next(-policy.JitterPct, policy.JitterPct + 1) / 100.0;
+            baseMs += baseMs * pct;
+        }
+
+        return TimeSpan.FromMilliseconds(Math.Max(0, baseMs));
     }
 }

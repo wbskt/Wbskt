@@ -20,6 +20,8 @@ internal sealed class VariableNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlVariable;
 
+    public bool IsSideEffectFree => true;
+
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         if (ctx.Node is not VariableNode node || node.Config is null)

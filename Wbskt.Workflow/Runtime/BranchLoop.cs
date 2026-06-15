@@ -1,8 +1,11 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -26,6 +29,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly IRunFinalizer? _runFinalizer;
     private readonly IRunCancellationService _runCancellationService;
     private readonly ICompensationOrchestrator? _compensationOrchestrator;
+    private readonly ICreditCostCalculator _creditCostCalculator;
     private readonly OnFailureHandler _onFailureHandler = new();
 
     public BranchLoop(
@@ -42,7 +46,8 @@ internal sealed class BranchLoop : IBranchLoop
         IIdGenerator idGenerator,
         IRunFinalizer? runFinalizer = null,
         IRunCancellationService? runCancellationService = null,
-        ICompensationOrchestrator? compensationOrchestrator = null)
+        ICompensationOrchestrator? compensationOrchestrator = null,
+        ICreditCostCalculator? creditCostCalculator = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -58,6 +63,7 @@ internal sealed class BranchLoop : IBranchLoop
         _runFinalizer = runFinalizer;
         _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
         _compensationOrchestrator = compensationOrchestrator;
+        _creditCostCalculator = creditCostCalculator ?? new DefaultCreditCostCalculator();
     }
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
@@ -110,7 +116,17 @@ internal sealed class BranchLoop : IBranchLoop
                     executor,
                     new NodeExecutionServices(_providerComposite),
                     _clock,
-                    ct);
+                    ct,
+                    _runProvider,
+                    _runCountersProvider,
+                    _creditCostCalculator);
+            }
+            catch (EngineFaultException ex)
+            {
+                await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", ct);
+                string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);
+                throw;
             }
             catch (Exception ex)
             {
@@ -228,15 +244,32 @@ internal sealed class BranchLoop : IBranchLoop
                     }
 
                     string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                    await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
-                    if (definition.FailFast)
-                    {
-                        await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", ct);
-                    }
+                    OnFailureConfig? config = (node as BaseActionNode)?.OnFailure;
+                    ErrorOutcome outcome = config?.Outcome ?? ErrorOutcome.FailBranch;
+                    bool shouldCompensate = (outcome == ErrorOutcome.Compensate) || (definition.RunCompensationOnFailure);
 
-                    if (definition.RunCompensationOnFailure && _compensationOrchestrator is not null)
+                    if (outcome == ErrorOutcome.FailRun)
                     {
-                        await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
+                        await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
+                        await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", ct);
+                        await _runCancellationService.RequestCancellationAsync(runRow.Id, $"FailRun cascade triggered by node {node.NodeId}", ct);
+                    }
+                    else if (shouldCompensate)
+                    {
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, node.NodeId, "Compensating", branchRow.LocalJson, branchRow.LastOutputJson, ct);
+                        if (_compensationOrchestrator is not null)
+                        {
+                            await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
+                        }
+                        await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
+                    }
+                    else
+                    {
+                        await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
+                        if (definition.FailFast)
+                        {
+                            await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", ct);
+                        }
                     }
 
                     int postDecrementCount = await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
@@ -337,7 +370,8 @@ internal sealed class BranchLoop : IBranchLoop
             runRow.CorrelationKey ?? string.Empty,
             runRow.StartedAt)
         {
-            RunRefId = runRow.RefId
+            RunRefId = runRow.RefId,
+            BranchRefId = branchRow.RefId
         };
     }
 

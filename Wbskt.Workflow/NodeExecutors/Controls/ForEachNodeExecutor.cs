@@ -17,6 +17,8 @@ internal sealed class ForEachNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlForEach;
 
+    public bool IsSideEffectFree => true;
+
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         if (ctx.Node is not ForEachNode node || node.Config is null || string.IsNullOrWhiteSpace(node.Config.Collection))

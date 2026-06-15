@@ -17,6 +17,8 @@ internal sealed class LogicNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlLogic;
 
+    public bool IsSideEffectFree => true;
+
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         if (ctx.Node is not LogicGateNode node || node.Config is null || string.IsNullOrWhiteSpace(node.Config.Condition))
