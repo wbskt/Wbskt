@@ -41,6 +41,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         string defaultCorrelation = _correlationKeyResolver.Resolve(evt);
         // [RJ]: at this time this is basically the trigger key since we don't have the trigger yet.
         // [RJ]: this key is basically for trigger row lookup. also for the idempotency and bookmarking. which in am pretty sure is messed up.
+        // [RJ]: EDIT: idempotency and bookmarking is not messed up :) explained in comments in the BookmarkResumer.
         InboundEvent resolvedEvent = evt with { CorrelationKey = defaultCorrelation }; 
 
         BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, ct);

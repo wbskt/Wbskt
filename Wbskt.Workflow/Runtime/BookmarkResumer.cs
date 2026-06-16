@@ -28,6 +28,38 @@ internal sealed class BookmarkResumer : IBookmarkResumer
     {
         string idempotencyKey = $"inbound-event:{evt.InboundEventId}";
         Guid claimToken = Guid.NewGuid();
+        
+        /* [RJ] For my information. (yes this is AI explanation. but this is correct)
+        Deciphering Inbound Idempotency
+          
+          I've realized the random GUID is a lock or claim token for inbound events, used before knowing the target branch(es). The `IdempotencyKeys` table's `branchRefId` column, originally for outbound executions, is repurposed here. Since inbound events may
+          resume multiple branches or spawn new runs via `TriggerDispatcher`, a random GUID acts as a placeholder for concurrency control. This allows for deduplication without prior branch knowledge.
+          No, it's not a typo—it's actually a clever (though slightly hacky) way to use that column as a distributed lock token!
+
+          Here's why it does that:
+
+          The  IdempotencyKeys  table was originally designed to deduplicate outbound side-effects (e.g., executing a  SendEmail  node). In those cases, the engine knows exactly which  RunId ,  BranchRefId , and  NodeId  is executing, so it fills those
+          columns out accurately.
+
+          However, for inbound events, the engine needs to deduplicate the event before it even knows what it's going to do. At the moment  MatchInboundAsync  runs:
+
+          • We don't know if the event will resume a bookmark.
+          • We don't know if it will resume multiple bookmarks.
+          • We don't know if it will start a brand new run via the  TriggerDispatcher .
+
+          Because there is no "real" branch yet, the code mints a  Guid.NewGuid()  and passes it into the  branchRefId  parameter. It acts purely as a claim token for a race condition:
+
+          1. Server A and Server B both receive the exact same webhook delivery at the same millisecond.
+          2. Server A mints  Guid-A  and calls  UpsertPendingAsync .
+          3. Server B mints  Guid-B  and calls  UpsertPendingAsync .
+          4. The database enforces a  HOLDLOCK  in the stored procedure. Server A's insert succeeds, storing  Guid-A  in the  BranchRefId  column.
+          5. Server B's insert is blocked, and then it simply reads the existing row.
+          6. The database returns the row to both servers.
+          7. Server A checks  if (claim.BranchRefId != claimToken) . It matches  Guid-A , so Server A proceeds to process the event.
+          8. Server B checks  if (claim.BranchRefId != claimToken) . It sees  Guid-A  instead of its own  Guid-B , knows it lost the race, and safely drops the event ( Idempotent = true ).
+
+          So while the parameter is named  branchRefId , in the context of inbound events it is just being used as a unique lock identifier for the current thread/process!
+        */
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {
@@ -64,6 +96,24 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         return new BookmarkMatchResult(true, bookmarks.First().Id, false);
     }
 
+    
+    // [RJ]: TODO: remove this. remnant of old plan
+    /*
+     * Here is why:
+
+       If you look at the V3 Design Document (Section 3.4.2), there is a pseudo-code function defined as  function ResumeViaBookmark(bookmark, payload, takingPort) . The idea was to have a single, unified method that would do the actual database work of
+       deleting the bookmark, updating the branch state, and dispatching the run to the  IRunDispatcher .
+
+       However, during implementation, the workflow engine ended up with two distinct "resume" paths that required slightly different behavior, and the resume logic got inlined into both of them rather than calling a shared method:
+
+       1. Signal-driven resumes ( BookmarkResumer.MatchInboundAsync ): When an HTTP or MQTT event wakes a bookmark, it needs to merge the  evt.Payload  into the branch's local state so the workflow has access to the event data. It handles all the DB
+       operations and dispatching directly.
+       2. Timer-driven resumes ( BookmarkScheduler.ProcessDueBookmarksAsync ): When a TTL/companion timer expires, a background service leases the due bookmark from the database. It needs to set the  PendingTakePort  to the  TtlPort  (so the workflow skips
+       execution and jumps straight to the timeout edge), and it also does all the DB deletion and dispatching inline.
+
+       Because both paths had specialized logic (Payload merging vs. TTL port overriding), the developers just inlined the core "delete bookmark -> update branch -> dispatch" operations into those two methods.  ResumeViaBookmarkAsync  was left behind in
+       the interface (and is only used in a couple of unit tests that invoke it manually) but it serves no purpose in the actual engine anymore.
+     */
     public async Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct)
     {
         BookmarkRow? bookmark = await _bookmarkProvider.GetByIdAsync(bookmarkId, ct);
