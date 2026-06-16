@@ -87,6 +87,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutor, VariableNodeExecutor>();
         services.AddScoped<INodeExecutor, ForEachNodeExecutor>();
         services.AddScoped<INodeExecutor, ParallelForEachNodeExecutor>();
+        services.AddScoped<INodeExecutor, ForkNodeExecutor>();
         services.AddScoped<INodeExecutor, DelayNodeExecutor>();
         services.AddScoped<INodeExecutor, WaitForHttpNodeExecutor>();
         services.AddScoped<INodeExecutor, AwaitSignalNodeExecutor>();

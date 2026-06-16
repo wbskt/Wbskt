@@ -10,6 +10,7 @@ public static class NodeKind
     public const string ControlForEach = "control:foreach";
     public const string ControlParallelForEach = "control:parallelForEach";
     public const string ControlJoin = "control:join";
+    public const string ControlFork = "control:fork";
     public const string ControlDelay = "control:delay";
     public const string ControlVariable = "control:variable";
     public const string ControlSubWorkflow = "control:subWorkflow";

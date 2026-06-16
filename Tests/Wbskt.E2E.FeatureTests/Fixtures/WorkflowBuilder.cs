@@ -16,6 +16,7 @@ public sealed class WorkflowBuilder
     private readonly List<BaseNode> _nodes = [];
     private readonly List<Edge> _edges = [];
     private (Guid NodeId, string PortId)? _head;
+    private bool _runCompensationOnFailure;
 
     public WorkflowBuilder(string name, Guid? workflowRefId = null)
     {
@@ -24,6 +25,12 @@ public sealed class WorkflowBuilder
     }
 
     public Guid WorkflowRefId => _workflowRefId;
+
+    public WorkflowBuilder EnableCompensationOnFailure(bool enable = true)
+    {
+        _runCompensationOnFailure = enable;
+        return this;
+    }
 
     public WorkflowDefinition Build()
     {
@@ -38,7 +45,8 @@ public sealed class WorkflowBuilder
             Edges: _edges,
             SharedVariableSchema: [],
             CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1);
+            PublishedBy: 1,
+            RunCompensationOnFailure: _runCompensationOnFailure);
     }
 
     public WorkflowBuilder SetHead(Guid nodeId, string portId)
@@ -53,9 +61,10 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName = "telemetry", WorkflowConcurrencyPolicy concurrencyPolicy = WorkflowConcurrencyPolicy.AllowParallel)
+    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
     {
         var id = Guid.NewGuid();
+        nodeId = id;
         _nodes.Add(new DeviceTriggerNode(
             NodeId: id,
             Name: "Device Trigger",
@@ -63,6 +72,16 @@ public sealed class WorkflowBuilder
             Config: new DeviceTriggerConfig(deviceRef, eventName, null, concurrencyPolicy)));
         _head = (id, "default");
         return this;
+    }
+
+    public WorkflowBuilder AddDeviceTrigger(string deviceRef, out Guid nodeId)
+    {
+        return AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out nodeId);
+    }
+    
+    public WorkflowBuilder AddDeviceTrigger(string deviceRef)
+    {
+        return AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
     }
 
     public WorkflowBuilder AddManualTrigger(out Guid nodeId)
@@ -92,14 +111,17 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddSendCommand(string deviceRef, string command, string? name = null)
+    public WorkflowBuilder AddSendCommand(string deviceRef, string command, string? name = null, CompensationDeclaration? compensation = null)
     {
         var id = Guid.NewGuid();
         _nodes.Add(new SendCommandActionNode(
             NodeId: id,
             Name: name ?? command,
             Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new SendCommandConfig(deviceRef, command, null)));
+            Config: new SendCommandConfig(deviceRef, command, null),
+            Retry: null,
+            OnFailure: null,
+            Compensation: compensation));
             
         ConnectToHead(id, "in");
         _head = (id, "default");
@@ -133,6 +155,53 @@ public sealed class WorkflowBuilder
             
         ConnectToHead(id, "in");
         _head = (id, "default");
+        return this;
+    }
+
+    public WorkflowBuilder AddDelay(TimeSpan duration)
+    {
+        var id = Guid.NewGuid();
+        _nodes.Add(new DelayNode(
+            NodeId: id,
+            Name: "Delay",
+            Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("default", PortDirection.Output, "Out")],
+            Config: new DelayConfig(duration)));
+            
+        ConnectToHead(id, "in");
+        _head = (id, "default");
+        return this;
+    }
+
+    public WorkflowBuilder AddFork(string[] branches, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        
+        var ports = branches.Select(b => new PortDefinition(b, PortDirection.Output, b)).ToList();
+        ports.Insert(0, new PortDefinition("in", PortDirection.Input, "In"));
+        
+        _nodes.Add(new ForkNode(
+            NodeId: id,
+            Name: "Fork",
+            Ports: ports,
+            Config: new ForkConfig(branches)));
+            
+        ConnectToHead(id, "in");
+        _head = null;
+        return this;
+    }
+
+    public WorkflowBuilder AddFailRun(string reason)
+    {
+        var id = Guid.NewGuid();
+        _nodes.Add(new FailRunNode(
+            NodeId: id,
+            Name: "Fail Run",
+            Ports: [new PortDefinition("in", PortDirection.Input, "In")],
+            Config: new FailRunConfig(reason)));
+            
+        ConnectToHead(id, "in");
+        _head = null;
         return this;
     }
 

@@ -46,6 +46,7 @@ public sealed class BaseNodeJsonConverter : JsonConverter<BaseNode>
         NodeKind.ControlForEach => typeof(ForEachNode),
         NodeKind.ControlParallelForEach => typeof(ParallelForEachNode),
         NodeKind.ControlJoin => typeof(JoinNode),
+        NodeKind.ControlFork => typeof(ForkNode),
         NodeKind.ControlVariable => typeof(VariableNode),
         NodeKind.ControlSubWorkflow => typeof(SubWorkflowNode),
         NodeKind.ControlWaitForHttp => typeof(WaitForHttpNode),

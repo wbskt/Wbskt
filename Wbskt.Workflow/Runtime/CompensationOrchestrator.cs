@@ -70,8 +70,32 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     private async Task ExecuteCompensationAsync(RunRow run, BranchRow branch, BaseActionNode node, HistoryEventRow historyEvent, CancellationToken ct)
     {
         CompensationDeclaration compensation = node.Compensation!;
-        CompensationNode compensationNode = new(node.NodeId, compensation.Kind, compensation.Config);
+        
+        string json = JsonSerializer.Serialize(new
+        {
+            nodeId = node.NodeId,
+            name = $"Compensation for {node.Name}",
+            ports = Array.Empty<PortDefinition>(),
+            kind = compensation.Kind,
+            config = compensation.Config
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        
+        BaseNode compensationNode = JsonSerializer.Deserialize<BaseNode>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
         INodeExecutor executor = _nodeExecutorRegistry.For(compensation.Kind);
+        IReadOnlyDictionary<string, JsonElement> triggerPayload;
+        IReadOnlyDictionary<string, JsonElement> branchLocalState = ParseLocalState(branch.LocalJson);
+        if (branchLocalState.TryGetValue("trigger", out JsonElement triggerElement)
+            && triggerElement.ValueKind == JsonValueKind.Object)
+        {
+            triggerPayload = triggerElement.EnumerateObject()
+                .ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal);
+        }
+        else
+        {
+            triggerPayload = new Dictionary<string, JsonElement>();
+        }
+
         NodeContext context = new()
         {
             Branch = new BranchContext(
@@ -83,7 +107,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 node.NodeId.ToString(),
                 1,
                 ParseLocalState(historyEvent.PayloadJson),
-                new Dictionary<string, JsonElement>(),
+                triggerPayload,
                 run.CorrelationKey ?? string.Empty,
                 run.StartedAt)
             {
@@ -140,10 +164,5 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         }
 
         return new Dictionary<string, JsonElement>();
-    }
-
-    private sealed record CompensationNode(Guid NodeId, string KindValue, JsonElement? Config) : BaseNode(NodeId, $"compensation:{KindValue}", Array.Empty<PortDefinition>())
-    {
-        public override string Kind => KindValue;
     }
 }
