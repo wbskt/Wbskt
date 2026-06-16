@@ -34,7 +34,7 @@ public sealed class ErrorModelE2ETests
                     "compensable",
                     [new PortDefinition("next", PortDirection.Output, "Next")],
                     new SendCommandConfig("device-1", "DoThing"),
-                    Compensation: new CompensationDeclaration(Guid.Empty, "test:compensate", null)),
+                    Compensation: new CompensationDeclaration(Guid.Empty, "action:email", null)),
                 new TestNode(fatalNodeId, "fatal", "test:fail"),
                 new TestNode(successNodeId, "success", "test:success")
             ],
@@ -132,12 +132,13 @@ public sealed class ErrorModelE2ETests
 
     private sealed class RecordingCompensationExecutor : INodeExecutor
     {
-        public string Kind => "test:compensate";
-        public List<Guid> Calls { get; } = [];
+        public string Kind => "action:email";
+
+        public List<NodeContext> Calls { get; } = [];
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
-            Calls.Add(ctx.Node.NodeId);
+            Calls.Add(ctx);
             return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         }
     }

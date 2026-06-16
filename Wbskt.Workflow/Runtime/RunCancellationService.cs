@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -16,6 +17,9 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IClock _clock;
     private readonly IBranchProvider? _branchProvider;
     private readonly IBookmarkProvider? _bookmarkProvider;
+    private readonly IRunCountersProvider? _runCountersProvider;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IEventBus? _eventBus;
     private readonly ConcurrentDictionary<long, CancellationTokenSource> _ctsRegistry = new();
 
     public RunCancellationService(
@@ -23,8 +27,11 @@ internal sealed class RunCancellationService : IRunCancellationService
         IHistoryEventProvider historyEventProvider,
         IMemoryCache memoryCache,
         IClock clock,
+        IServiceProvider serviceProvider,
         IBranchProvider? branchProvider = null,
-        IBookmarkProvider? bookmarkProvider = null)
+        IBookmarkProvider? bookmarkProvider = null,
+        IRunCountersProvider? runCountersProvider = null,
+        IEventBus? eventBus = null)
     {
         _runProvider = runProvider;
         _historyEventProvider = historyEventProvider;
@@ -32,6 +39,9 @@ internal sealed class RunCancellationService : IRunCancellationService
         _clock = clock;
         _branchProvider = branchProvider;
         _bookmarkProvider = bookmarkProvider;
+        _runCountersProvider = runCountersProvider;
+        _serviceProvider = serviceProvider;
+        _eventBus = eventBus;
     }
 
     public CancellationToken GetToken(long runId)
@@ -117,7 +127,28 @@ internal sealed class RunCancellationService : IRunCancellationService
         // Cancel waiting branches
         if (_branchProvider is not null)
         {
-            await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
+            int cancelledBranches = await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
+            if (cancelledBranches > 0 && _runCountersProvider is not null)
+            {
+                int newActiveCount = await _runCountersProvider.IncrementActiveBranchesAsync(checked((int)runId), -cancelledBranches, ct);
+                if (newActiveCount == 0)
+                {
+                    var runFinalizer = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IRunFinalizer>(_serviceProvider);
+                    if (runFinalizer is not null)
+                    {
+                        await runFinalizer.FinalizeAsync(runId, ct);
+                    }
+                    else
+                    {
+                        await _runProvider.SetTerminalAsync(runId, "Cancelled", _clock.UtcNow, ct);
+                    }
+                }
+            }
+        }
+
+        if (_eventBus is not null)
+        {
+            await _eventBus.PublishAsync(new Events.Workflow.WorkflowRunCancellationRequestedEvent(runId, reason), ct);
         }
 
         // [RJ]: the memory cache stores if the run is canceled or not for the past 10 seconds

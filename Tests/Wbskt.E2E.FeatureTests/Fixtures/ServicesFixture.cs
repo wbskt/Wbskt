@@ -339,6 +339,19 @@ public sealed class ServicesFixture : IDisposable
             ?? throw new InvalidOperationException("Run detail returned empty response.");
     }
 
+    /// <summary>Cancels a specific run by RefId.</summary>
+    public async Task CancelRunAsync(string token, Guid workspaceRef, Guid runRefId)
+    {
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/cancel");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        req.Content = JsonContent.Create(new CancelRunRequest("test cancellation"), options: JsonOptions);
+
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+    }
+
     /// <summary>Fetches the ordered history events for a run (each carrying NodeCompleted/NodeFailed PayloadJson).</summary>
     public async Task<IReadOnlyList<HistoryEventDto>> GetHistoryAsync(string token, Guid workspaceRef, Guid runRefId, int top = 200)
     {

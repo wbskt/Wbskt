@@ -61,7 +61,7 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
+    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -69,9 +69,14 @@ public sealed class WorkflowBuilder
             NodeId: id,
             Name: "Device Trigger",
             Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new DeviceTriggerConfig(deviceRef, eventName, null, concurrencyPolicy)));
+            Config: new DeviceTriggerConfig(deviceRef, eventName, correlationExpression, concurrencyPolicy)));
         _head = (id, "default");
         return this;
+    }
+
+    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
+    {
+        return AddDeviceTrigger(deviceRef, eventName, concurrencyPolicy, null, out nodeId);
     }
 
     public WorkflowBuilder AddDeviceTrigger(string deviceRef, out Guid nodeId)

@@ -21,7 +21,7 @@ public sealed class CompensationOrchestratorTests
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Equal(["action:notify", "action:refund"], harness.Executor.ExecutedKinds);
+        Assert.Equal(["action:email", "action:command"], harness.Executor.ExecutedKinds);
         Assert.Equal([2, 1], harness.Executor.LocalStateValues);
         Assert.Equal(2, harness.InsertedCompensationEvents.Count(evt => evt.EventKind == "CompensationExecuted"));
     }
@@ -32,12 +32,12 @@ public sealed class CompensationOrchestratorTests
         var harness = new CompensationHarness(
             CreateDefinition(),
             [CreateHistoryEvent(1, Guid.Parse("11111111-1111-1111-1111-111111111111"), 1), CreateHistoryEvent(2, Guid.Parse("22222222-2222-2222-2222-222222222222"), 2)],
-            new RecordingExecutor(throwOnKinds: ["action:refund"]));
+            new RecordingExecutor(throwOnKinds: ["action:command"]));
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Contains("action:refund", harness.Executor.ExecutedKinds);
-        Assert.Contains("action:notify", harness.Executor.ExecutedKinds);
+        Assert.Contains("action:command", harness.Executor.ExecutedKinds);
+        Assert.Contains("action:email", harness.Executor.ExecutedKinds);
         Assert.Single(harness.InsertedCompensationEvents, evt => evt.EventKind == "CompensationExecuted");
     }
 
@@ -51,7 +51,7 @@ public sealed class CompensationOrchestratorTests
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Equal(["action:refund"], harness.Executor.ExecutedKinds);
+        Assert.Equal(["action:command"], harness.Executor.ExecutedKinds);
         Assert.Equal([42], harness.Executor.LocalStateValues);
     }
 
@@ -66,7 +66,7 @@ public sealed class CompensationOrchestratorTests
             null,
             true,
             [
-                new SendCommandActionNode(Guid.Parse("11111111-1111-1111-1111-111111111111"), "first", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:refund", null)),
+                new SendCommandActionNode(Guid.Parse("11111111-1111-1111-1111-111111111111"), "first", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:command", null)),
                 new SendCommandActionNode(Guid.Parse("22222222-2222-2222-2222-222222222222"), "second", [], new SendCommandConfig("device-1", "DoThing"))
             ],
             [],
@@ -81,7 +81,7 @@ public sealed class CompensationOrchestratorTests
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
         Assert.Single(harness.Executor.ExecutedKinds);
-        Assert.Equal("action:refund", harness.Executor.ExecutedKinds.Single());
+        Assert.Equal("action:command", harness.Executor.ExecutedKinds.Single());
     }
 
     private static WorkflowDefinition CreateDefinition()
@@ -94,8 +94,8 @@ public sealed class CompensationOrchestratorTests
             null,
             true,
             [
-                new SendCommandActionNode(Guid.Parse("11111111-1111-1111-1111-111111111111"), "first", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:refund", null)),
-                new SendCommandActionNode(Guid.Parse("22222222-2222-2222-2222-222222222222"), "second", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:notify", null))
+                new SendCommandActionNode(Guid.Parse("11111111-1111-1111-1111-111111111111"), "first", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:command", null)),
+                new SendCommandActionNode(Guid.Parse("22222222-2222-2222-2222-222222222222"), "second", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:email", null))
             ],
             [],
             [],

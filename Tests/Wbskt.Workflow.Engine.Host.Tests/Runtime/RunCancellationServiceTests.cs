@@ -15,7 +15,7 @@ public sealed class RunCancellationServiceTests
     {
         var runProvider = new RecordingRunProvider("Running", transitionResult: true);
         var historyProvider = new RecordingHistoryEventProvider();
-        var service = new RunCancellationService(runProvider, historyProvider, new MemoryCache(new MemoryCacheOptions()), new FixedClock());
+        var service = new RunCancellationService(runProvider, historyProvider, new MemoryCache(new MemoryCacheOptions()), new FixedClock(), new DummyServiceProvider());
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
@@ -30,7 +30,7 @@ public sealed class RunCancellationServiceTests
     {
         var runProvider = new RecordingRunProvider("Succeeded", transitionResult: false);
         var historyProvider = new RecordingHistoryEventProvider();
-        var service = new RunCancellationService(runProvider, historyProvider, new MemoryCache(new MemoryCacheOptions()), new FixedClock());
+        var service = new RunCancellationService(runProvider, historyProvider, new MemoryCache(new MemoryCacheOptions()), new FixedClock(), new DummyServiceProvider());
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
@@ -41,7 +41,7 @@ public sealed class RunCancellationServiceTests
     [Fact]
     public async Task IsCancellationRequested_returns_true_for_cancelling()
     {
-        var service = new RunCancellationService(new RecordingRunProvider("Cancelling", transitionResult: false), new RecordingHistoryEventProvider(), new MemoryCache(new MemoryCacheOptions()), new FixedClock());
+        var service = new RunCancellationService(new RecordingRunProvider("Cancelling", transitionResult: false), new RecordingHistoryEventProvider(), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), new DummyServiceProvider());
 
         bool cancelled = await service.IsCancellationRequestedAsync(42, CancellationToken.None);
 
@@ -60,6 +60,7 @@ public sealed class RunCancellationServiceTests
             historyProvider,
             new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
+            new DummyServiceProvider(),
             branchProvider,
             bookmarkProvider);
 
@@ -401,6 +402,11 @@ public sealed class RunCancellationServiceTests
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotImplementedException();
         public Task<long> CountAsync(CancellationToken ct) => throw new NotImplementedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    private sealed class DummyServiceProvider : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => null;
     }
 }
 
