@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Validation;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
 /// <summary>
 /// Inbound idempotency — proves that re-POSTing a manual run-start with the same idempotency

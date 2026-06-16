@@ -10,7 +10,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Validation;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 
 /// <summary>
 /// Task 3 — Full telemetry → workflow → command round-trip.

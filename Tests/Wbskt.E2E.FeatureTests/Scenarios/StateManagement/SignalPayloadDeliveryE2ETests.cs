@@ -10,7 +10,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Validation;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.StateManagement;
 
 /// <summary>
 /// Signal payload delivery — proves the inbound-wake path not only resumes the parked branch but

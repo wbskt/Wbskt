@@ -12,7 +12,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Validation;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 
 /// <summary>
 /// Complex multi-feature flow — chains a conditional gate, a durable timer, an action and an

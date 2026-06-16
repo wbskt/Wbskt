@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
 /// <summary>
 /// Task 2 — Auth, registration-policy, and client-registration happy path.

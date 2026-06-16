@@ -11,7 +11,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Validation;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 
 /// <summary>
 /// ParallelForEach + Join — proves a fan-out/fan-in barrier: N parallel body branches converge

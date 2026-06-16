@@ -10,7 +10,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Validation;
 
-namespace Wbskt.E2E.FeatureTests;
+namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
 /// <summary>
 /// History → Events Log bridge — proves run lifecycle milestones published by the Engine Host are
