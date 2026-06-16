@@ -12,7 +12,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class CompensationOrchestratorTests
 {
     [Fact]
-    public async Task Run_invokes_compensations_in_original_order()
+    public async Task Run_schedules_compensations_in_reverse_order()
     {
         var harness = new CompensationHarness(
             CreateDefinition(),
@@ -21,8 +21,8 @@ public sealed class CompensationOrchestratorTests
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Equal(["action:refund", "action:notify"], harness.Executor.ExecutedKinds);
-        Assert.Equal([1, 2], harness.Executor.LocalStateValues);
+        Assert.Equal(["action:notify", "action:refund"], harness.Executor.ExecutedKinds);
+        Assert.Equal([2, 1], harness.Executor.LocalStateValues);
         Assert.Equal(2, harness.InsertedCompensationEvents.Count(evt => evt.EventKind == "CompensationExecuted"));
     }
 
@@ -36,8 +36,23 @@ public sealed class CompensationOrchestratorTests
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Equal(["action:refund", "action:notify"], harness.Executor.ExecutedKinds);
+        Assert.Contains("action:refund", harness.Executor.ExecutedKinds);
+        Assert.Contains("action:notify", harness.Executor.ExecutedKinds);
         Assert.Single(harness.InsertedCompensationEvents, evt => evt.EventKind == "CompensationExecuted");
+    }
+
+    [Fact]
+    public async Task Run_restores_state_from_output_property()
+    {
+        var harness = new CompensationHarness(
+            CreateDefinition(),
+            [CreateHistoryEventWithOutput(1, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42)],
+            new RecordingExecutor());
+
+        await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
+
+        Assert.Equal(["action:refund"], harness.Executor.ExecutedKinds);
+        Assert.Equal([42], harness.Executor.LocalStateValues);
     }
 
     [Fact]
@@ -99,6 +114,21 @@ public sealed class CompensationOrchestratorTests
             EventKind = "NodeCompleted",
             Severity = "Info",
             PayloadJson = JsonSerializer.Serialize(new { localState = new Dictionary<string, JsonElement> { ["value"] = JsonSerializer.SerializeToElement(localValue) } }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            Timestamp = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
+        };
+    }
+
+    private static HistoryEventRow CreateHistoryEventWithOutput(long id, Guid nodeId, int localValue)
+    {
+        return new HistoryEventRow
+        {
+            HistoryEventId = id,
+            RunId = 42,
+            BranchRefId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            NodeId = nodeId,
+            EventKind = "NodeCompleted",
+            Severity = "Info",
+            PayloadJson = JsonSerializer.Serialize(new { output = new Dictionary<string, JsonElement> { ["value"] = JsonSerializer.SerializeToElement(localValue) } }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
             Timestamp = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
         };
     }

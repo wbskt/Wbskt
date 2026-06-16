@@ -49,10 +49,10 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 && evt.NodeId is not null)
             .Select(evt => new { Event = evt, Node = definition.Nodes.OfType<BaseActionNode>().SingleOrDefault(node => node.NodeId == evt.NodeId && node.Compensation is not null) })
             .Where(item => item.Node is not null)
-            .OrderBy(item => item.Event.HistoryEventId)
+            .OrderByDescending(item => item.Event.HistoryEventId)
             .ToArray();
 
-        foreach (var item in compensationTargets)
+        var tasks = compensationTargets.Select(async item =>
         {
             try
             {
@@ -61,8 +61,10 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
             }
             catch
             {
+                // Spec: success-or-failure of compensation steps does not block
             }
-        }
+        });
+        await Task.WhenAll(tasks);
     }
 
     private async Task ExecuteCompensationAsync(RunRow run, BranchRow branch, BaseActionNode node, HistoryEventRow historyEvent, CancellationToken ct)
@@ -124,13 +126,19 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         }
 
         using JsonDocument document = JsonDocument.Parse(payloadJson);
-        if (!document.RootElement.TryGetProperty("localState", out JsonElement localState))
+        if (document.RootElement.TryGetProperty("output", out JsonElement output))
         {
-            return new Dictionary<string, JsonElement>();
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(output.GetRawText(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                ?? new Dictionary<string, JsonElement>();
         }
 
-        return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localState.GetRawText(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
-            ?? new Dictionary<string, JsonElement>();
+        if (document.RootElement.TryGetProperty("localState", out JsonElement localState))
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localState.GetRawText(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                ?? new Dictionary<string, JsonElement>();
+        }
+
+        return new Dictionary<string, JsonElement>();
     }
 
     private sealed record CompensationNode(Guid NodeId, string KindValue, JsonElement? Config) : BaseNode(NodeId, $"compensation:{KindValue}", Array.Empty<PortDefinition>())

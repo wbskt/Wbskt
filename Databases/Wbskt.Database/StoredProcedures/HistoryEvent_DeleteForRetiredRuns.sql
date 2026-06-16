@@ -18,6 +18,7 @@ BEGIN
         INNER JOIN dbo.Runs r ON r.Id = h.RunId
         WHERE r.CompletedAt IS NOT NULL
           AND r.CompletedAt < @CutoffUtc
+          AND h.Severity NOT IN ('Warn', 'Error')
         ORDER BY h.HistoryEventId
     )
     DELETE FROM dbo.HistoryEvents
