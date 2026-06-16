@@ -114,6 +114,8 @@ internal sealed class BranchLoop : IBranchLoop
             BranchContext branchContext = BuildBranchContext(branchRow, runRow);
 
             NodeExecutionResult? result = null;
+            
+            // [RJ]: what is PendingTakePort?
             if (!string.IsNullOrEmpty(branchRow.PendingTakePort))
             {
                 result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>());
@@ -142,6 +144,8 @@ internal sealed class BranchLoop : IBranchLoop
                 catch (EngineFaultException ex)
                 {
                     outcome = "Failed";
+                    // [RJ]: TODO: "Faulted" is not a valid status as per the table definition "dbo.Run"
+                    // [RJ]: EDIT: it was just the valued to be indexed. not the actual allowed statuses
                     await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", ct);
                     string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);

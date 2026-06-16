@@ -15,6 +15,7 @@ internal sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
         _inboundHub = inboundHub;
     }
 
+    // [RJ]: TODO: investigate what this does
     public async Task DrainAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         while (true)

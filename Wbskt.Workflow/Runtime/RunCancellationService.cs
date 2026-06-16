@@ -36,7 +36,7 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     public CancellationToken GetToken(long runId)
     {
-        var cts = _ctsRegistry.GetOrAdd(runId, _ => { return new CancellationTokenSource(); });
+        var cts = _ctsRegistry.GetOrAdd(runId, _ => new CancellationTokenSource());
         return cts.Token;
     }
 
@@ -54,6 +54,8 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
     }
 
+    // [RJ]: TODO: why this needs to be also called from RunRecoveryService?
+    // [RJ]: if we can avoid that call, we can make this private.
     public void CancelCts(long runId)
     {
         var cts = _ctsRegistry.GetOrAdd(runId, _ => {
@@ -73,10 +75,11 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
     }
 
-    // TODO: cancel internally uses a cache but it lives in WMH and WEH separately.
-    // TODO: cancellation must be passed to WEH from WMH through events
+    // [RJ]: TODO: cancel internally uses a cache but it lives in WMH and WEH separately.
+    // [RJ]: TODO: cancellation must be passed to WEH from WMH through events
     public async Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
     {
+        // [RJ]: this will transition only if the run currently is in "Running" what about requesting cancellation for runs that are waiting/bookmarked.
         bool transitioned = await _runProvider.TransitionStatusAsync(runId, "Running", "Cancelling", ct);
         if (!transitioned)
         {
@@ -104,6 +107,8 @@ internal sealed class RunCancellationService : IRunCancellationService
         CancelCts(runId);
 
         // Mass-delete bookmarks for this run
+        // [RJ]: TODO: what about the cancellation from the RunRecoveryService? dont we need to delete bookmarks of those runs too?
+        // [RJ]: since we are calling "CancelCts" from the RunRecoveryService.
         if (_bookmarkProvider is not null)
         {
             await _bookmarkProvider.DeleteAllByRunIdAsync(checked((int)runId), ct);
@@ -115,6 +120,8 @@ internal sealed class RunCancellationService : IRunCancellationService
             await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
         }
 
+        // [RJ]: the memory cache stores if the run is canceled or not for the past 10 seconds
+        // [RJ]: IsCancellationRequestedAsync re-caches it from the DB if it's a cache miss
         _memoryCache.Set(CreateCacheKey(runId), true, CacheTtl);
         return true;
     }

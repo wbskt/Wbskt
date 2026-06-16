@@ -71,7 +71,11 @@ internal sealed class RunFinalizer : IRunFinalizer
                 Timestamp = completedAt
             }
         ], ct);
+        
+        // [RJ]: TODO: investigate what this does
         await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowRefId, updatedRun.TriggerNodeId, updatedRun.CorrelationKey ?? string.Empty, ct);
+        
+        // [RJ]: TODO: make this simpler? do we need a wrapper to fire event through the e-bus?
         await _runCompletedPublisher.PublishAsync(updatedRun, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);

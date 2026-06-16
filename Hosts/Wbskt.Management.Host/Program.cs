@@ -69,7 +69,7 @@ public static class Program
             client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"] 
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:WorkflowEngine configuration is missing."));
         });
-        // TODO: auth header for requests for WEH. WEH currently do not have authentication.
+        // [RJ]: TODO: auth header for requests for WEH. WEH currently do not have authentication.
         
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
         builder.Services.AddWorkflowManagementServices(builder.Configuration);
