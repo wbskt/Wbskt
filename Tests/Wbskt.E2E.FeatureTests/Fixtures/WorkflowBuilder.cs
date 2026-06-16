@@ -172,6 +172,33 @@ public sealed class WorkflowBuilder
         return this;
     }
 
+    public WorkflowBuilder AddAwaitSignal(string signalName, TimeSpan? ttl, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        
+        var ports = new List<PortDefinition>
+        {
+            new("in", PortDirection.Input, "In"),
+            new("default", PortDirection.Output, "Out")
+        };
+
+        if (ttl.HasValue)
+        {
+            ports.Add(new("timeout", PortDirection.Output, "Timeout"));
+        }
+
+        _nodes.Add(new AwaitSignalNode(
+            NodeId: id,
+            Name: $"Wait {signalName}",
+            Ports: ports,
+            Config: new AwaitSignalConfig(signalName, null, ttl, ttl.HasValue ? "timeout" : null)));
+            
+        ConnectToHead(id, "in");
+        _head = (id, "default");
+        return this;
+    }
+
     public WorkflowBuilder AddFork(string[] branches, out Guid nodeId)
     {
         var id = Guid.NewGuid();
