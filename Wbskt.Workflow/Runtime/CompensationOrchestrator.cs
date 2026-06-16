@@ -84,7 +84,10 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
 
         INodeExecutor executor = _nodeExecutorRegistry.For(compensation.Kind);
         IReadOnlyDictionary<string, JsonElement> triggerPayload;
-        IReadOnlyDictionary<string, JsonElement> branchLocalState = ParseLocalState(branch.LocalJson);
+        IReadOnlyDictionary<string, JsonElement> branchLocalState = string.IsNullOrWhiteSpace(branch.LocalJson) 
+            ? new Dictionary<string, JsonElement>()
+            : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(branch.LocalJson, new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new Dictionary<string, JsonElement>();
+
         if (branchLocalState.TryGetValue("trigger", out JsonElement triggerElement)
             && triggerElement.ValueKind == JsonValueKind.Object)
         {
@@ -122,7 +125,11 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
             IdempotencyKey = $"compensation:{run.Id}:{branch.RefId:N}:{node.NodeId:N}"
         };
 
-        await executor.ExecuteAsync(context, ct);
+        NodeExecutionResult result = await executor.ExecuteAsync(context, ct);
+        if (result is NodeExecutionResult.Fail fail)
+        {
+            throw new InvalidOperationException($"Compensation failed: {fail.ErrorCode} - {fail.Message}");
+        }
     }
 
     private async Task AppendCompensationEventAsync(int runId, Guid branchRefId, Guid? nodeId, CompensationDeclaration compensation, CancellationToken ct)
