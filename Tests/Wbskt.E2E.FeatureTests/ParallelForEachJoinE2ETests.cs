@@ -114,82 +114,12 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildParallelForEachDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var variableNodeId = Guid.NewGuid();
-        var pfeNodeId = Guid.NewGuid();
-        var joinNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
-
-        var triggerNode = new DeviceTriggerNode(
-            NodeId: triggerNodeId,
-            Name: "Device Trigger",
-            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new DeviceTriggerConfig(
-                DeviceRef: deviceRef,
-                Event: "telemetry",
-                CorrelationKey: null,
-                ConcurrencyPolicy: WorkflowConcurrencyPolicy.AllowParallel));
-
-        var itemsValue = JsonSerializer.SerializeToElement(Items);
-        var variableNode = new VariableNode(
-            NodeId: variableNodeId,
-            Name: "Set Items",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new VariableConfig(VariableScope.Local, VariableOperation.Set, "items", itemsValue));
-
-        var pfeNode = new ParallelForEachNode(
-            NodeId: pfeNodeId,
-            Name: "Parallel For Each",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("body", PortDirection.Output, "Body")
-            ],
-            Config: new ParallelForEachConfig("items"));
-
-        var joinNode = new JoinNode(
-            NodeId: joinNodeId,
-            Name: "Join All",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new JoinConfig(JoinMode.All));
-
-        var actionNode = new SendCommandActionNode(
-            NodeId: actionNodeId,
-            Name: "OpenVent",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new SendCommandConfig(DeviceRef: deviceRef, Command: "OpenVent", Payload: null));
-
-        var edges = new[]
-        {
-            new Edge(From: (triggerNodeId, "default"), To: (variableNodeId, "in")),
-            new Edge(From: (variableNodeId, "default"), To: (pfeNodeId, "in")),
-            new Edge(From: (pfeNodeId, "body"), To: (joinNodeId, "in")),
-            new Edge(From: (joinNodeId, "default"), To: (actionNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            WorkflowRefId: workflowRefId,
-            Version: 1,
-            WorkspaceId: 1,
-            Name: $"E2E-PFE-{workflowRefId:N}",
-            Description: null,
-            IsEnabled: true,
-            Nodes: [triggerNode, variableNode, pfeNode, joinNode, actionNode],
-            Edges: edges,
-            SharedVariableSchema: [],
-            CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1);
+        return new WorkflowBuilder($"E2E-PFE-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef)
+            .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(Items))
+            .AddParallelForEach("items", out Guid pfeNodeId)
+            .AddJoin(JoinMode.All, out _)
+            .AddSendCommand(deviceRef, "OpenVent")
+            .Build();
     }
 }
