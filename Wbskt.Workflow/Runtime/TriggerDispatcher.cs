@@ -36,7 +36,9 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
     {
         string defaultCorrelation = _correlationKeyResolver.Resolve(evt);
-        InboundEvent resolvedEvent = evt with { CorrelationKey = defaultCorrelation };
+        // [RJ]: at this time this is basically the trigger key since we don't have the trigger yet.
+        // [RJ]: this key is basically for trigger row lookup. also for the idempotency and bookmarking. which in am pretty sure is messed up.
+        InboundEvent resolvedEvent = evt with { CorrelationKey = defaultCorrelation }; 
 
         BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, ct);
         if (bookmarkMatch.Matched)
@@ -61,6 +63,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
         foreach (TriggerRegistrationRow registration in registrations)
         {
+            // [RJ]: this is where the co-relation key for co-relating existing runs are evaluated. I still wonder how bookmarks above plays a role.
             string? correlationValue = EvaluateCorrelationExpression(registration.CorrelationExpression, resolvedEvent)
                 ?? defaultCorrelation;
             InboundEvent normalizedEvent = resolvedEvent with { CorrelationKey = correlationValue };
@@ -92,7 +95,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
             
+            // [RJ]: re-think aggregation. this is wrong/meaningless aggregation data.
             aggregateOutcome = TriggerDispatchOutcome.StartedRun;
+            
+            // [RJ]: TODO: properly output aggregated results. currently, this only returns run id of the first started run.
             if (firstStartedRunId == null)
             {
                 firstStartedRunId = runId;
@@ -103,6 +109,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         return new TriggerDispatchResult(aggregateOutcome, firstStartedRunId, null, finalReason);
     }
 
+    // [RJ]: I'm gonna trust this for now. will review later.
     private static string? EvaluateCorrelationExpression(string? expression, InboundEvent evt)
     {
         if (string.IsNullOrWhiteSpace(expression))

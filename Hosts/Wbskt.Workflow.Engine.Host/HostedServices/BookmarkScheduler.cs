@@ -91,7 +91,7 @@ public sealed class BookmarkScheduler : BackgroundService
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
-        IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.BookmarkRow> leasedBookmarks =
+        IReadOnlyCollection<Abstraction.Entities.BookmarkRow> leasedBookmarks =
             await bookmarkProvider.LeaseDueAsync(_clock.UtcNow, _batchSize, _hostIdentity.HostId, _leaseDuration, ct);
 
         foreach (var bookmark in leasedBookmarks)

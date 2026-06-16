@@ -26,7 +26,7 @@ internal sealed class ChannelRunDispatcher : IRunDispatcher
             {
                 return Reader.Count;
             }
-            catch (System.NotSupportedException)
+            catch (NotSupportedException)
             {
                 return 0;
             }

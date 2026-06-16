@@ -9,7 +9,7 @@ public interface IBookmarkProvider
     Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct);
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct);
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
-        => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(System.Array.Empty<BookmarkRow>());
+        => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Array.Empty<BookmarkRow>());
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);
     Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct);
     Task DeleteAsync(Guid refId, CancellationToken ct);
@@ -17,6 +17,6 @@ public interface IBookmarkProvider
     Task<long> CountAsync(CancellationToken ct);
     Task<int> DeleteOrphansAsync(CancellationToken ct);
     Task DeleteAllByRunIdAsync(int runId, CancellationToken ct);
-    Task<System.Collections.Generic.IReadOnlyDictionary<string, long>> CountGroupedByWakeKindAsync(CancellationToken ct)
-        => Task.FromResult<System.Collections.Generic.IReadOnlyDictionary<string, long>>(new System.Collections.Generic.Dictionary<string, long>());
+    Task<IReadOnlyDictionary<string, long>> CountGroupedByWakeKindAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<string, long>>(new Dictionary<string, long>());
 }

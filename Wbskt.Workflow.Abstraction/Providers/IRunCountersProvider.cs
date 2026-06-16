@@ -1,6 +1,6 @@
 namespace Wbskt.Workflow.Abstraction.Providers;
 
-using Wbskt.Workflow.Abstraction.Entities;
+using Entities;
 
 public interface IRunCountersProvider
 {

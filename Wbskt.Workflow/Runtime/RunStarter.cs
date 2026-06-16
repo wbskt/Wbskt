@@ -48,12 +48,12 @@ internal sealed class RunStarter : IRunStarter
         WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
         _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind);
         DateTime nowUtc = _clock.UtcNow;
-        string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent);
+        string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent); // [RJ]: we actually will always have c-key in the trigger event at this point. don't need to use resolver.
 
         RunRow createdRun = await _runProvider.CreateAsync(new RunRow
         {
             Id = 0,
-            RefId = _idGenerator.NewId(),
+            RefId = _idGenerator.NewId(), // [RJ]: using external for easier testing
             WorkflowDefinitionId = workflowDefinitionId,
             WorkflowRefId = definition.RefId,
             WorkflowVersion = definition.Version,
@@ -71,7 +71,10 @@ internal sealed class RunStarter : IRunStarter
         // Account for the initial branch in the run's active-branch counter so the
         // run can finalize when this branch completes (mirrors the Fork path, which
         // counts the child branches it creates). Run_Create seeds the counter at 0.
-        await _runCountersProvider.IncrementActiveBranchesAsync(createdRun.Id, 1, ct);
+        
+        // [RJ]: TODO: is this working? i dont think so. since its matching by id. at this time there are no entries in the table with this id.
+        // [RJ]: EDIT: dbo.Run_Create in CreateAsync ensures the dbo.RunCounters has entry. so we good.
+        await _runCountersProvider.IncrementActiveBranchesAsync(createdRun.Id, 1, ct); 
 
         string localJson = JsonSerializer.Serialize(
             new Dictionary<string, JsonElement>
@@ -95,7 +98,7 @@ internal sealed class RunStarter : IRunStarter
             CompensationStackJson = null,
             CreatedAt = nowUtc,
             UpdatedAt = nowUtc,
-            RowVersion = Array.Empty<byte>()
+            RowVersion = Array.Empty<byte>() // [RJ]: TODO: bytes? also not used anywhere.
         }, ct);
 
         await _historyEventProvider.InsertBatchAsync([
@@ -107,11 +110,13 @@ internal sealed class RunStarter : IRunStarter
                 NodeId = Guid.Parse(triggerNodeId),
                 EventKind = "RunStarted",
                 Severity = "Info",
+                // [RJ]: TODO: dont we need the actual payload here?
                 PayloadJson = JsonSerializer.Serialize(new { triggerEvent.InboundEventId, CorrelationKey = correlationKey }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 Timestamp = nowUtc
             }
         ], ct);
 
+        // [RJ]: TODO: just fire the freaking event through the e-bus here. why wrap it in another service?
         await _runStartedPublisher.PublishAsync(createdRun, ct);
 
         return (createdRun.Id, createdBranch.Id);

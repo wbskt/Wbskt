@@ -24,6 +24,7 @@ internal sealed class BranchExecutionPump : BackgroundService
             {
                 try
                 {
+                    // [RJ]: TODO: understand AsyncServiceScope
                     await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
                     IBranchLoop loop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
                     await loop.RunAsync(request.RunId, request.BranchId, request.Reason, stoppingToken);
