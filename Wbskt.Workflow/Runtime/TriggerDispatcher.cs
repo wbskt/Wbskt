@@ -14,6 +14,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly IRunCancellationService _runCancellationService;
     private readonly IRunStarter _runStarter;
     private readonly IRunDispatcher _runDispatcher;
+    private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
 
     public TriggerDispatcher(
         ICorrelationKeyResolver correlationKeyResolver,
@@ -22,7 +23,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         ITriggerConcurrencyEnforcer triggerConcurrencyEnforcer,
         IRunCancellationService runCancellationService,
         IRunStarter runStarter,
-        IRunDispatcher runDispatcher)
+        IRunDispatcher runDispatcher,
+        IIdempotencyKeyProvider idempotencyKeyProvider)
     {
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
@@ -31,6 +33,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         _runCancellationService = runCancellationService;
         _runStarter = runStarter;
         _runDispatcher = runDispatcher;
+        _idempotencyKeyProvider = idempotencyKeyProvider;
     }
 
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
@@ -104,6 +107,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 firstStartedRunId = runId;
                 finalReason = correlationValue;
             }
+        }
+
+        if (bookmarkMatch.ClaimKey != null)
+        {
+            await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
         }
 
         return new TriggerDispatchResult(aggregateOutcome, firstStartedRunId, null, finalReason);

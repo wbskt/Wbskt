@@ -8,4 +8,4 @@ public interface IBookmarkResumer
     Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct);
 }
 
-public sealed record BookmarkMatchResult(bool Matched, long? BookmarkId, bool Idempotent);
+public sealed record BookmarkMatchResult(bool Matched, long? BookmarkId, bool Idempotent, string? ClaimKey = null);

@@ -32,7 +32,8 @@ public sealed class InboundEventToRunStartE2ETests
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
             new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator()),
-            runDispatcher);
+            runDispatcher,
+            providers);
         var inboundHub = new InboundHub(triggerDispatcher, new FixedClock(), new TestLogger<InboundHub>());
         var branchLoop = new BranchLoop(
             providers,
@@ -383,7 +384,7 @@ public sealed class InboundEventToRunStartE2ETests
             });
         }
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
