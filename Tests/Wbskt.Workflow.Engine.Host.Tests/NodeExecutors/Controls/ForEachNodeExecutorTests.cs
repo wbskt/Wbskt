@@ -56,7 +56,7 @@ public sealed class ForEachNodeExecutorTests
             Providers = new StubProviderComposite(),
             Tick = 1,
             ParentResults = null,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }
 

@@ -16,4 +16,6 @@ public sealed record NodeContext
     public required IReadOnlyDictionary<string, JsonElement>? ParentResults { get; init; }
 
     public required CancellationToken CancellationToken { get; init; }
+
+    public required string IdempotencyKey { get; init; }
 }

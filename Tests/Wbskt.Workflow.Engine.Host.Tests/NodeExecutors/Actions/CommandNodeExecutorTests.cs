@@ -177,7 +177,7 @@ public sealed class CommandNodeExecutorTests
             Providers = providers.Object,
             Tick = 1,
             ParentResults = null,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }
 

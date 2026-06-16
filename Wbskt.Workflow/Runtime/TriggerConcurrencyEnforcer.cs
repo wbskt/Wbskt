@@ -17,7 +17,12 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
 
     public async Task<TriggerConcurrencyDecision> EvaluateAsync(Abstraction.Entities.TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
     {
-        IReadOnlyCollection<Abstraction.Entities.RunRow> activeRuns = await _runProvider.GetActiveByCorrelationAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey ?? string.Empty, ct);
+        if (string.IsNullOrEmpty(evt.CorrelationKey))
+        {
+            return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, null);
+        }
+
+        IReadOnlyCollection<Abstraction.Entities.RunRow> activeRuns = await _runProvider.GetActiveByCorrelationAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey, ct);
         if (activeRuns.Count == 0)
         {
             return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, null);

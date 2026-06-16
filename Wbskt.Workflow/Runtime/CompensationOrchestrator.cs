@@ -94,7 +94,8 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
             Providers = _providerComposite,
             Tick = 1,
             ParentResults = null,
-            CancellationToken = ct
+            CancellationToken = ct,
+            IdempotencyKey = $"compensation:{run.Id}:{branch.RefId:N}:{node.NodeId:N}"
         };
 
         await executor.ExecuteAsync(context, ct);

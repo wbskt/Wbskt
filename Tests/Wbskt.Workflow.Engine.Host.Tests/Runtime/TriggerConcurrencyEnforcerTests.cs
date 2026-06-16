@@ -56,6 +56,22 @@ public sealed class TriggerConcurrencyEnforcerTests
     }
 
     [Fact]
+    public async Task Evaluate_returns_Proceed_when_correlation_key_is_null_or_empty()
+    {
+        // Arrange
+        var registration = CreateRegistration("DropIfRunning"); // A policy that would normally drop
+        var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)]);
+        var evt = CreateInboundEvent() with { CorrelationKey = null };
+
+        // Act
+        TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, evt, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
+        Assert.Null(decision.RunIdToCancel);
+    }
+
+    [Fact]
     public async Task Evaluate_returns_Proceed_when_no_active_run_exists()
     {
         // Arrange
@@ -129,7 +145,10 @@ public sealed class TriggerConcurrencyEnforcerTests
                 ["deviceSerial"] = JsonSerializer.SerializeToElement("serial-1"),
                 ["payloadType"] = JsonSerializer.SerializeToElement("telemetry")
             },
-            DateTime.UtcNow);
+            DateTime.UtcNow)
+        {
+            CorrelationKey = "device:serial-1:telemetry"
+        };
     }
 
     private sealed class RecordingRunProvider(IReadOnlyCollection<RunRow> activeRuns) : IRunProvider

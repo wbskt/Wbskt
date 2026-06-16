@@ -185,7 +185,8 @@ internal static class RetryExecutor
                 Providers = services.Providers,
                 Tick = services.Tick,
                 ParentResults = services.ParentResults,
-                CancellationToken = ct
+                CancellationToken = ct,
+                IdempotencyKey = keyValue
             };
 
             try

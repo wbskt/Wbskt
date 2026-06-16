@@ -46,7 +46,8 @@ public sealed class NodeContextTests
             Providers = providers,
             Tick = 1,
             ParentResults = null,
-            CancellationToken = cts.Token
+            CancellationToken = cts.Token,
+                IdempotencyKey = "test-key"
         };
 
         // Assert - verify init-only properties compile and are set
@@ -86,7 +87,7 @@ public sealed class NodeContextTests
             Providers = providers,
             Tick = 2,
             ParentResults = parentResults,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None, IdempotencyKey = "test-key",
         };
 
         // Assert

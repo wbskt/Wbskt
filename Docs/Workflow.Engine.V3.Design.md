@@ -1,6 +1,6 @@
 # Wbskt Workflow Engine V3 — Design
 
-**Status:** Draft, in progress (Sections 1 and 2 complete; Sections 3–7 outlined only)
+**Status:** Finalized (Sections 1-7 complete)
 **Date:** 2026-05-23
 **Namespace:** `Wbskt.Workflow.Engine.Host.V3` (fresh; no carry-over from V1/V2)
 
@@ -1774,7 +1774,8 @@ Key properties:
 - **Compensation has access to the forward output** (`$output.*`) and run
   scope (`$shared.*`, `$run.*`, `$trigger.*`). The engine snapshots node
   outputs into history events so we can replay them into the compensation
-  expression at undo time.
+  expression at undo time. The V1 implementation dynamically reconstructs the
+  compensation stack by querying these history events.
 
 #### Why flat (locked, Q10)
 
@@ -2114,11 +2115,9 @@ Design points:
 - **Severity is on the event**, not derived from `EventKind`. Lets us filter
   `WHERE Severity IN ('Warn', 'Error')` at the SQL layer without enumerating
   kinds.
-- **NO transactional binding to the snapshot write.** History events are
-  emitted via a fire-and-forget channel (Section 7). If the engine crashes
-  between a snapshot and a history event, the snapshot wins; history might
-  be missing the last "BranchCompleted" record. The finalizer reconstructs
-  it from the snapshot. **Events are observability, not correctness.**
+- **History events are written synchronously** to SQL during execution (in V1). 
+  While this ensures no events are lost on crash, it adds DB round-trips to the execution latency. 
+  A fire-and-forget channel and background flusher may be introduced in the future to optimize performance.
 
 ### 6.4 Idempotency keys for action invocations
 
@@ -2158,10 +2157,11 @@ IdempotencyKey {
 Flow:
 
 ```text
-1. Engine generates IdempotencyKeyId = G
-2. INSERT IdempotencyKey { Id = G, Status = Pending, RequestPayload = input }
+1. Engine generates IdempotencyKey = action:{RunId}:{BranchRefId}:{NodeId}:{Attempt}
+2. INSERT IdempotencyKey { KeyValue = G, Status = Pending }
    (unique constraint catches race)
-3. Engine calls executor.ExecuteAsync(input, idempotencyKey = G)
+3. Engine calls executor.ExecuteAsync(context)
+   - context has IdempotencyKey = G
    - Executor includes G in its outbound HTTP call (provider dedups on it)
    - Or uses G as part of its own write key
 4. Executor returns success/failure
@@ -2453,18 +2453,15 @@ public interface IRunDispatcher
 {
     // Schedule a branch to be advanced (resumed or freshly started).
     // Returns when the work is durably scheduled (NOT when execution completes).
-    ValueTask DispatchAsync(BranchPointer pointer, CancellationToken ct);
-
-    // Back-pressure signal for callers that want to know "is the queue saturated?"
-    int ApproximateQueueDepth { get; }
+    ValueTask DispatchAsync(BranchExecutionRequest pointer, CancellationToken ct);
 }
 
-public sealed record BranchPointer(Guid RunId, Guid BranchId, Guid NodeId);
+public sealed record BranchExecutionRequest(long RunId, long BranchId, BranchExecutionReason Reason);
 ```
 
 #### Implementation A — `ChannelRunDispatcher` (v1, single-host)
 
-- `System.Threading.Channels.Channel<BranchPointer>`, bounded capacity.
+- `System.Threading.Channels.Channel<BranchExecutionRequest>`, unbounded capacity in v1.
 - Worker pool (default = `Environment.ProcessorCount`; configurable) reads
   pointers and runs the Branch Loop.
 - Inline-first fan-out (Section 2): edge 0 runs inline, edges 1..N-1 go to
