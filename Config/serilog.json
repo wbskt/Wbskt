@@ -3,8 +3,10 @@
     "MinimumLevel": {
       "Default": "Debug",
       "Override": {
+        "System": "Warning",
+        "Microsoft": "Warning",
         "Microsoft.AspNetCore": "Warning",
-        "Microsoft": "Warning"
+        "MassTransit": "Warning"
       }
     },
     "WriteTo": [
