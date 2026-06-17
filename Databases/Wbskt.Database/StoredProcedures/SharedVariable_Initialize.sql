@@ -14,7 +14,7 @@ BEGIN
     SELECT @WorkflowRefId, @VarName, @VarType, @ValueJson
      WHERE NOT EXISTS (
          SELECT 1
-           FROM dbo.SharedVariables WITH (HOLDLOCK)
+           FROM dbo.SharedVariables WITH (UPDLOCK, HOLDLOCK)
           WHERE WorkflowRefId = @WorkflowRefId AND VarName = @VarName
      );
 

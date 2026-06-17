@@ -15,7 +15,7 @@ BEGIN
     SELECT @KeyValue, @RunId, @BranchRefId, @NodeId, @Attempt, N'Pending'
     WHERE NOT EXISTS (
         SELECT 1
-          FROM dbo.IdempotencyKeys WITH (HOLDLOCK)
+          FROM dbo.IdempotencyKeys WITH (UPDLOCK, HOLDLOCK)
          WHERE KeyValue = @KeyValue
     );
 
