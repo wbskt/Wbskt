@@ -180,7 +180,13 @@ public sealed class WorkflowBuilder
 
     public WorkflowBuilder AddDelay(TimeSpan duration)
     {
+        return AddDelay(duration, out _);
+    }
+
+    public WorkflowBuilder AddDelay(TimeSpan duration, out Guid nodeId)
+    {
         var id = Guid.NewGuid();
+        nodeId = id;
         _nodes.Add(new DelayNode(
             NodeId: id,
             Name: "Delay",
@@ -249,6 +255,63 @@ public sealed class WorkflowBuilder
             
         ConnectToHead(id, "in");
         _head = null;
+        return this;
+    }
+
+    public WorkflowBuilder AddSubWorkflow(Guid targetWorkflowRefId, string? correlationKey = null)
+    {
+        var id = Guid.NewGuid();
+        _nodes.Add(new SubWorkflowNode(
+            NodeId: id,
+            Name: "SubWorkflow",
+            Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("default", PortDirection.Output, "Out")],
+            Config: new SubWorkflowConfig(targetWorkflowRefId, correlationKey)));
+            
+        ConnectToHead(id, "in");
+        _head = (id, "default");
+        return this;
+    }
+
+    public WorkflowBuilder AddLogicGate(string condition, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        _nodes.Add(new LogicGateNode(
+            NodeId: id,
+            Name: "Logic Gate",
+            Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")],
+            Config: new LogicGateConfig(condition)));
+            
+        ConnectToHead(id, "in");
+        _head = null;
+        return this;
+    }
+
+    public WorkflowBuilder AddWebhookTrigger(string path, string method, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        _nodes.Add(new WebhookTriggerNode(
+            NodeId: id,
+            Name: "Webhook Trigger",
+            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
+            Config: new WebhookTriggerConfig(path, method, null, concurrencyPolicy)));
+            
+        _head = (id, "default");
+        return this;
+    }
+
+    public WorkflowBuilder AddScheduleTrigger(string cron, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        _nodes.Add(new ScheduleTriggerNode(
+            NodeId: id,
+            Name: "Schedule Trigger",
+            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
+            Config: new ScheduleTriggerConfig(cron, null)));
+            
+        _head = (id, "default");
         return this;
     }
 

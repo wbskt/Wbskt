@@ -7,12 +7,11 @@ using Wbskt.Management.Models;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Enums;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
 [Collection(E2ECollection.Name)]
-public class TriggerConcurrencyE2ETests(ServicesFixture fixture, ITestOutputHelper output)
+public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
