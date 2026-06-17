@@ -54,12 +54,12 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
             var resp = await http.PostAsJsonAsync($"{E2EConfig.WorkflowBaseUrl}/api/inbound/webhook/{path}", new { test = "payload" });
             resp.EnsureSuccessStatusCode();
             webhookResp = await resp.Content.ReadFromJsonAsync<InboundWebhookResponse>(JsonOpts);
-            return webhookResp?.Outcome == "Created";
+            return webhookResp?.Outcome == "StartedRun";
         }, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1));
         
         // 4. Assert the run succeeds
         webhookResp.Should().NotBeNull();
-        webhookResp!.Outcome.Should().Be("Created");
+        webhookResp!.Outcome.Should().Be("StartedRun");
         webhookResp.RunId.Should().NotBeNull();
         
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, webhookResp.RunId!.Value, TimeSpan.FromSeconds(30));

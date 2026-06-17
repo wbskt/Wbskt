@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -11,17 +12,20 @@ internal sealed class BookmarkResumer : IBookmarkResumer
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IRunDispatcher _runDispatcher;
+    private readonly ILogger<BookmarkResumer>? _logger;
 
     public BookmarkResumer(
         IBookmarkProvider bookmarkProvider,
         IIdempotencyKeyProvider idempotencyKeyProvider,
         IBranchProvider branchProvider,
-        IRunDispatcher runDispatcher)
+        IRunDispatcher runDispatcher,
+        ILogger<BookmarkResumer>? logger = null)
     {
         _bookmarkProvider = bookmarkProvider;
         _idempotencyKeyProvider = idempotencyKeyProvider;
         _branchProvider = branchProvider;
         _runDispatcher = runDispatcher;
+        _logger = logger;
     }
 
     public async Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, CancellationToken ct)
@@ -63,31 +67,46 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {
+            _logger?.LogInformation("Event {EventId} dropped as idempotent (lost idempotency claim race)", evt.InboundEventId);
             return new BookmarkMatchResult(false, null, true);
         }
+
+        _logger?.LogDebug("Event {EventId} acquired idempotency claim", evt.InboundEventId);
 
         var bookmarks = await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct);
         if (bookmarks.Count == 0)
         {
+            _logger?.LogDebug("No matching bookmark found for event {EventId} using match keys", evt.InboundEventId);
             return new BookmarkMatchResult(false, null, false, claim.KeyValue);
         }
 
         foreach (var bookmark in bookmarks)
         {
-            await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
-            var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
-
-            // Deliver the wake payload to the resumed branch under the reserved "__wake" key so the
-            // parked node (and downstream nodes) can read what woke them. The branch keeps its pointer
-            // and Waiting status; the re-executed node flips it to Active when it continues.
-            if (evt.Payload.Count > 0)
+            try
             {
-                string mergedLocalJson = MergeWakePayload(branch.LocalJson, evt.Payload);
-                await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
-            }
+                _logger?.LogInformation("Event {EventId} matched bookmark {BookmarkId} for run {RunId}", evt.InboundEventId, bookmark.Id, bookmark.RunId);
 
-            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-            await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
+                await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
+                var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+
+                // Deliver the wake payload to the resumed branch under the reserved "__wake" key so the
+                // parked node (and downstream nodes) can read what woke them. The branch keeps its pointer
+                // and Waiting status; the re-executed node flips it to Active when it continues.
+                if (evt.Payload.Count > 0)
+                {
+                    _logger?.LogDebug("Merging wake payload into branch {BranchId} local state", branch.Id);
+                    string mergedLocalJson = MergeWakePayload(branch.LocalJson, evt.Payload);
+                    await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
+                }
+
+                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
+                await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to resume bookmark for event {EventId}", evt.InboundEventId);
+                throw;
+            }
         }
 
         // We mark the idempotency key as succeeded now that all resumes have been dispatched

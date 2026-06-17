@@ -9,6 +9,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Telemetry;
+using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -32,6 +33,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly ICompensationOrchestrator? _compensationOrchestrator;
     private readonly ICreditCostCalculator _creditCostCalculator;
     private readonly WorkflowMetrics? _workflowMetrics;
+    private readonly ILogger<BranchLoop>? _logger;
     private readonly OnFailureHandler _onFailureHandler = new();
 
     public BranchLoop(
@@ -50,7 +52,8 @@ internal sealed class BranchLoop : IBranchLoop
         IRunCancellationService? runCancellationService = null,
         ICompensationOrchestrator? compensationOrchestrator = null,
         ICreditCostCalculator? creditCostCalculator = null,
-        WorkflowMetrics? workflowMetrics = null)
+        WorkflowMetrics? workflowMetrics = null,
+        ILogger<BranchLoop>? logger = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -68,6 +71,8 @@ internal sealed class BranchLoop : IBranchLoop
         _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
         _compensationOrchestrator = compensationOrchestrator;
         _creditCostCalculator = creditCostCalculator ?? new DefaultCreditCostCalculator();
+        _workflowMetrics = workflowMetrics;
+        _logger = logger;
     }
 
     public async Task RunAsync(long runId, long branchId, BranchExecutionReason reason, CancellationToken ct)
@@ -81,6 +86,7 @@ internal sealed class BranchLoop : IBranchLoop
         WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(runRow.WorkflowDefinitionId, ct);
 
         await AppendEventAsync(runRow.Id, branchRow.RefId, null, "BranchStarted", ct);
+        _logger?.LogInformation("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
         // Spec §2.10 Branch Loop (pseudocode)
         // loop:
@@ -123,6 +129,7 @@ internal sealed class BranchLoop : IBranchLoop
             else
             {
                 await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "NodeStarted", ct);
+                _logger?.LogInformation("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
 
                 INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
                 System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -143,6 +150,7 @@ internal sealed class BranchLoop : IBranchLoop
                 }
                 catch (EngineFaultException ex)
                 {
+                    _logger?.LogError(ex, "Engine fault occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
                     outcome = "Failed";
                     // [RJ]: TODO: "Faulted" is not a valid status as per the table definition "dbo.Run"
                     // [RJ]: EDIT: it was just the valued to be indexed. not the actual allowed statuses
@@ -155,11 +163,13 @@ internal sealed class BranchLoop : IBranchLoop
                 {
                     if (ex is OperationCanceledException && await _runCancellationService.IsCancellationRequestedAsync(runId, CancellationToken.None))
                     {
+                        _logger?.LogInformation("Execution cancelled for node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
                         outcome = "Cancelled";
                         result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
                     }
                     else
                     {
+                        _logger?.LogError(ex, "Exception occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
                         outcome = "Failed";
                         result = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
                     }
@@ -180,6 +190,8 @@ internal sealed class BranchLoop : IBranchLoop
                     NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                     _ => null
                 };
+                
+                _logger?.LogInformation("Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);
                 await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
             }
 

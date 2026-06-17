@@ -3,6 +3,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Telemetry;
+using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -18,6 +19,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly WorkflowMetrics? _workflowMetrics;
+    private readonly ILogger<RunStarter>? _logger;
 
     public RunStarter(
         IRunProvider runProvider,
@@ -29,7 +31,8 @@ internal sealed class RunStarter : IRunStarter
         IRunStartedPublisher runStartedPublisher,
         IClock clock,
         IIdGenerator idGenerator,
-        WorkflowMetrics? workflowMetrics = null)
+        WorkflowMetrics? workflowMetrics = null,
+        ILogger<RunStarter>? logger = null)
     {
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
@@ -41,13 +44,16 @@ internal sealed class RunStarter : IRunStarter
         _clock = clock;
         _idGenerator = idGenerator;
         _workflowMetrics = workflowMetrics;
+        _logger = logger;
     }
 
     public async Task<(long RunId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
     {
-        WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
-        _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind);
-        DateTime nowUtc = _clock.UtcNow;
+        try
+        {
+            WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
+            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind);
+            DateTime nowUtc = _clock.UtcNow;
         string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent); // [RJ]: we actually will always have c-key in the trigger event at this point. don't need to use resolver.
 
         RunRow createdRun = await _runProvider.CreateAsync(new RunRow
@@ -116,9 +122,15 @@ internal sealed class RunStarter : IRunStarter
             }
         ], ct);
 
-        // [RJ]: TODO: just fire the freaking event through the e-bus here. why wrap it in another service?
-        await _runStartedPublisher.PublishAsync(createdRun, ct);
+            // [RJ]: TODO: just fire the freaking event through the e-bus here. why wrap it in another service?
+            await _runStartedPublisher.PublishAsync(createdRun, ct);
 
-        return (createdRun.Id, createdBranch.Id);
+            return (createdRun.Id, createdBranch.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
+            throw;
+        }
     }
 }

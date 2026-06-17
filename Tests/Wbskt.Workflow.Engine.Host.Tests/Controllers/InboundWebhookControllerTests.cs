@@ -2,7 +2,10 @@ using System.Text.Json;
 using System.Linq;
 using Moq;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Engine.Host.Controllers;
+using Wbskt.Workflow.Abstraction.Entities;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Controllers;
 
@@ -12,9 +15,12 @@ public sealed class InboundWebhookControllerTests
     public async Task Post_webhook_routes_to_hub_with_correct_channel_kind()
     {
         var hub = new Mock<IInboundHub>();
+        var runProvider = new Mock<IRunProvider>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 42, null, "ok"));
-        var controller = new InboundWebhookController(hub.Object);
+        runProvider.Setup(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RunRow { Id = 42, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
+        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
         await controller.Post("alerts", payload, CancellationToken.None);
@@ -32,14 +38,18 @@ public sealed class InboundWebhookControllerTests
     public async Task Post_webhook_returns_dispatch_outcome()
     {
         var hub = new Mock<IInboundHub>();
+        var runProvider = new Mock<IRunProvider>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 42, null, "ok"));
-        var controller = new InboundWebhookController(hub.Object);
+        var testRef = Guid.NewGuid();
+        runProvider.Setup(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RunRow { Id = 42, RefId = testRef, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
+        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
         InboundWebhookResponse response = await controller.Post("alerts", payload, CancellationToken.None);
 
         Assert.Equal("StartedRun", response.Outcome);
-        Assert.Equal(42, response.RunId);
+        Assert.Equal(testRef, response.RunId);
     }
 }

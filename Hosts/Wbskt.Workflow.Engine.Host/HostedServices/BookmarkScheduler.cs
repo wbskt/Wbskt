@@ -94,17 +94,30 @@ public sealed class BookmarkScheduler : BackgroundService
         IReadOnlyCollection<Abstraction.Entities.BookmarkRow> leasedBookmarks =
             await bookmarkProvider.LeaseDueAsync(_clock.UtcNow, _batchSize, _hostIdentity.HostId, _leaseDuration, ct);
 
+        if (leasedBookmarks.Count > 0)
+        {
+            _logger.LogInformation("Leased {Count} due bookmarks for processing", leasedBookmarks.Count);
+        }
+
         foreach (var bookmark in leasedBookmarks)
         {
-            var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
-            if (!string.IsNullOrEmpty(bookmark.TtlPort))
+            try
             {
-                branch = branch with { PendingTakePort = bookmark.TtlPort };
-                await branchProvider.UpsertAsync(branch, ct);
+                var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
+                if (!string.IsNullOrEmpty(bookmark.TtlPort))
+                {
+                    branch = branch with { PendingTakePort = bookmark.TtlPort };
+                    await branchProvider.UpsertAsync(branch, ct);
+                }
+                _logger.LogInformation("Resuming bookmark {BookmarkId} (Timer Due) for run {RunId} on branch {BranchId}", bookmark.Id, bookmark.RunId, branch.Id);
+                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
+                await bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
+                await bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
             }
-            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-            await bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
-            await bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process leased bookmark {BookmarkId} for run {RunId}", bookmark.Id, bookmark.RunId);
+            }
         }
     }
 
@@ -112,11 +125,16 @@ public sealed class BookmarkScheduler : BackgroundService
     {
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
-        await bookmarkProvider.DeleteOrphansAsync(ct);
+        int deletedCount = await bookmarkProvider.DeleteOrphansAsync(ct);
+        if (deletedCount > 0)
+        {
+            _logger.LogInformation("Orphan GC removed {Count} orphaned bookmarks", deletedCount);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Bookmark scheduler is starting.");
         await ExecuteGuardedAsync(ProcessDueBookmarksAsync, "Bookmark scheduler tick failed.", stoppingToken);
 
         using var pollTimer = new PeriodicTimer(_pollInterval);
@@ -135,6 +153,7 @@ public sealed class BookmarkScheduler : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
+                _logger.LogInformation("Bookmark scheduler is stopping.");
                 return;
             }
 
@@ -142,6 +161,7 @@ public sealed class BookmarkScheduler : BackgroundService
             {
                 if (!await nextPoll)
                 {
+                    _logger.LogInformation("Bookmark scheduler poll timer stopped.");
                     return;
                 }
 
@@ -152,6 +172,7 @@ public sealed class BookmarkScheduler : BackgroundService
 
             if (!await nextOrphanGc)
             {
+                _logger.LogInformation("Bookmark scheduler orphan GC timer stopped.");
                 return;
             }
 

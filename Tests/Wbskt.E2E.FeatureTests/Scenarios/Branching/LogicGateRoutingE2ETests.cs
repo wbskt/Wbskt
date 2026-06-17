@@ -76,13 +76,13 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
     private static WorkflowDefinition BuildLogicGateDefinition(Guid workflowRefId, string deviceRef)
     {
         // Topology:
-        // DeviceTrigger -> LogicGate ("payload.data.value")
+        // DeviceTrigger -> LogicGate ("trigger.payload.data.value")
         //                 --true--> SendCommand("AlertHigh")
         //                 --false-> SendCommand("AlertLow")
 
         var builder = new WorkflowBuilder($"E2E-Gate-{workflowRefId:N}", workflowRefId)
             .AddDeviceTrigger(deviceRef)
-            .AddLogicGate("payload.data.value", out Guid gateNodeId);
+            .AddLogicGate("trigger.payload.data.value", out Guid gateNodeId);
 
         builder.SetHead(gateNodeId, "true")
             .AddSendCommand(deviceRef, "AlertHigh");

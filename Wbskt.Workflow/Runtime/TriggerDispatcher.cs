@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -15,6 +16,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly IRunStarter _runStarter;
     private readonly IRunDispatcher _runDispatcher;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
+    private readonly ILogger<TriggerDispatcher>? _logger;
 
     public TriggerDispatcher(
         ICorrelationKeyResolver correlationKeyResolver,
@@ -24,7 +26,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         IRunCancellationService runCancellationService,
         IRunStarter runStarter,
         IRunDispatcher runDispatcher,
-        IIdempotencyKeyProvider idempotencyKeyProvider)
+        IIdempotencyKeyProvider idempotencyKeyProvider,
+        ILogger<TriggerDispatcher>? logger = null)
     {
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
@@ -34,6 +37,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         _runStarter = runStarter;
         _runDispatcher = runDispatcher;
         _idempotencyKeyProvider = idempotencyKeyProvider;
+        _logger = logger;
     }
 
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
@@ -47,17 +51,21 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, ct);
         if (bookmarkMatch.Matched)
         {
+            _logger?.LogDebug("Event {EventId} resumed bookmark {BookmarkId}", evt.InboundEventId, bookmarkMatch.BookmarkId);
             return new TriggerDispatchResult(TriggerDispatchOutcome.ResumedBookmark, null, bookmarkMatch.BookmarkId, defaultCorrelation);
         }
 
         if (bookmarkMatch.Idempotent)
         {
+            _logger?.LogInformation("Event {EventId} was dropped due to idempotency duplicate", evt.InboundEventId);
             return new TriggerDispatchResult(TriggerDispatchOutcome.Idempotent, null, null, defaultCorrelation);
         }
 
         IReadOnlyCollection<TriggerRegistrationRow> registrations = await _triggerRegistrationProvider.GetActiveByChannelKeysAsync(resolvedEvent.ChannelKind, resolvedEvent.MatchKeys, ct);
+        _logger?.LogInformation("Found {Count} active trigger registrations for channel {ChannelKind} and keys {MatchKeys}", registrations.Count, resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
         if (registrations.Count == 0)
         {
+            _logger?.LogWarning("No active trigger registrations found for channel {ChannelKind} and keys {MatchKeys}", resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
             return new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, defaultCorrelation);
         }
 
@@ -70,9 +78,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             // [RJ]: this is where the co-relation key for co-relating existing runs are evaluated. I still wonder how bookmarks above plays a role.
             string? correlationValue = EvaluateCorrelationExpression(registration.CorrelationExpression, resolvedEvent)
                 ?? defaultCorrelation;
+            _logger?.LogDebug("Evaluated correlation expression for registration {RegistrationId} to {CorrelationValue}", registration.Id, correlationValue);
             InboundEvent normalizedEvent = resolvedEvent with { CorrelationKey = correlationValue };
 
             TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
+            _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdToCancel: {RunIdToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdToCancel);
             switch (concurrencyDecision.Outcome)
             {
                 case TriggerConcurrencyOutcome.Dropped:
@@ -97,6 +107,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             }
 
             (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
+            _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
             
             // [RJ]: re-think aggregation. this is wrong/meaningless aggregation data.
@@ -112,6 +123,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
         if (bookmarkMatch.ClaimKey != null)
         {
+            _logger?.LogDebug("Marking idempotency claim key {ClaimKey} as succeeded", bookmarkMatch.ClaimKey);
             await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
         }
 

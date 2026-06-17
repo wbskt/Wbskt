@@ -34,8 +34,11 @@ internal sealed class InboundHub : IInboundHub
 
         try
         {
+            _logger.LogDebug("Handling inbound event {InboundEventId} on channel {ChannelKind}", normalizedEvent.InboundEventId, normalizedEvent.ChannelKind);
             // TODO: Append engine-host inbound history entry per Workflow.Engine.V3.Design.md §4.3/§6.1 when Phase 8 history wiring lands.
-            return await _triggerDispatcher.DispatchAsync(normalizedEvent, ct);
+            var result = await _triggerDispatcher.DispatchAsync(normalizedEvent, ct);
+            _logger.LogInformation("Successfully dispatched inbound event {InboundEventId} with outcome {Outcome}", normalizedEvent.InboundEventId, result.Outcome);
+            return result;
         }
         catch (Exception ex)
         {

@@ -87,44 +87,67 @@ public sealed class ScheduledFireTicker : BackgroundService
         var scheduledFireProvider = scope.ServiceProvider.GetRequiredService<IScheduledFireProvider>();
         var inboundHub = scope.ServiceProvider.GetRequiredService<IInboundHub>();
         IReadOnlyCollection<ScheduledFireRow> fires = await scheduledFireProvider.LeaseDueAsync(_leaseSeconds, _batchSize, ct);
+        if (fires.Count > 0)
+        {
+            _logger.LogInformation("Leased {Count} scheduled fires for dispatch", fires.Count);
+        }
         DateTime now = _clock.UtcNow;
 
         foreach (ScheduledFireRow fire in fires)
         {
-            var payload = new Dictionary<string, JsonElement>
+            try
             {
-                ["scheduledFireId"] = JsonSerializer.SerializeToElement(fire.Id),
-                ["definitionRefId"] = JsonSerializer.SerializeToElement(fire.WorkflowRefId),
-                ["fireAt"] = JsonSerializer.SerializeToElement(fire.NextFireAt)
-            };
-            var inboundEvent = new InboundEvent(
-                "schedule",
-                [$"schedule:{fire.Id}"],
-                Guid.NewGuid().ToString(),
-                payload,
-                now);
+                var payload = new Dictionary<string, JsonElement>
+                {
+                    ["scheduledFireId"] = JsonSerializer.SerializeToElement(fire.Id),
+                    ["definitionRefId"] = JsonSerializer.SerializeToElement(fire.WorkflowRefId),
+                    ["fireAt"] = JsonSerializer.SerializeToElement(fire.NextFireAt)
+                };
+                var inboundEvent = new InboundEvent(
+                    "schedule",
+                    [$"schedule:{fire.Id}"],
+                    Guid.NewGuid().ToString(),
+                    payload,
+                    now);
 
-            await inboundHub.HandleAsync(inboundEvent, ct);
+                _logger.LogInformation("Dispatching scheduled fire {FireId} for workflow {WorkflowRefId}", fire.Id, fire.WorkflowRefId);
+                await inboundHub.HandleAsync(inboundEvent, ct);
 
-            DateTime? nextOccurrence = ComputeNextOccurrence(fire);
-            if (nextOccurrence.HasValue)
-            {
-                await scheduledFireProvider.AdvanceNextAsync(fire.Id, nextOccurrence.Value, ct);
-                continue;
+                DateTime? nextOccurrence = ComputeNextOccurrence(fire);
+                if (nextOccurrence.HasValue)
+                {
+                    _logger.LogDebug("Advancing scheduled fire {FireId} to {NextOccurrence}", fire.Id, nextOccurrence.Value);
+                    await scheduledFireProvider.AdvanceNextAsync(fire.Id, nextOccurrence.Value, ct);
+                    continue;
+                }
+
+                _logger.LogDebug("Deleting one-time scheduled fire {FireId}", fire.Id);
+                await scheduledFireProvider.DeleteByIdAsync(fire.Id, ct);
             }
-
-            await scheduledFireProvider.DeleteByIdAsync(fire.Id, ct);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process scheduled fire {FireId}", fire.Id);
+            }
         }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Scheduled fire ticker is starting.");
         await ExecuteGuardedAsync(stoppingToken);
 
         using var timer = new PeriodicTimer(_pollInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            await ExecuteGuardedAsync(stoppingToken);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
+                await ExecuteGuardedAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Scheduled fire ticker is stopping.");
+            throw;
         }
     }
 

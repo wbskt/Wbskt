@@ -1,16 +1,18 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
 [ApiController]
 [Route("api/inbound/webhook")]
-public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abstraction.Providers.IRunProvider runProvider) : ControllerBase
+public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abstraction.Providers.IRunProvider runProvider, ILogger<InboundWebhookController>? logger = null) : ControllerBase
 {
     [HttpPost("{channelKind}")]
     public async Task<InboundWebhookResponse> Post(string channelKind, [FromBody] JsonElement payload, CancellationToken ct)
     {
+        logger?.LogInformation("Received webhook request for channel {ChannelKind}", channelKind);
         InboundEvent inboundEvent = new(
             "webhook",
             [$"webhook:{channelKind}"],
@@ -31,6 +33,7 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
             runRefId = run.RefId;
         }
         
+        logger?.LogInformation("Webhook request for channel {ChannelKind} resulted in outcome {Outcome} with RunRefId {RunRefId}", channelKind, result.Outcome, runRefId);
         return new InboundWebhookResponse(result.Outcome.ToString(), runRefId);
     }
 }

@@ -5,6 +5,8 @@ using Moq;
 using Wbskt.Events.Client;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Controllers;
+using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
 using Wbskt.Workflow.Runtime;
 
@@ -35,7 +37,10 @@ public sealed class InboundAdaptersE2ETests
     public async Task WebhookController_routes_to_hub()
     {
         var hub = CreateHub();
-        var controller = new InboundWebhookController(hub.Object);
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RunRow { Id = 1, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
+        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
 
         await controller.Post("alerts", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
 

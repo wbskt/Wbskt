@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Wbskt.Infrastructure;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -11,11 +12,13 @@ namespace Wbskt.Workflow.Providers;
 internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
 {
     private readonly string _connectionString;
+    private readonly ILogger<BookmarkProvider>? _logger;
 
-    public BookmarkProvider(IConfiguration configuration) : base(configuration)
+    public BookmarkProvider(IConfiguration configuration, ILogger<BookmarkProvider>? logger = null) : base(configuration)
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
+        _logger = logger;
     }
 
     public async Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
@@ -39,9 +42,12 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
 
         if (await reader.ReadAsync(ct))
         {
-            return Map(reader);
+            var result = Map(reader);
+            _logger?.LogDebug("Created bookmark {BookmarkId} for run {RunId} on branch {BranchRefId} with match key {MatchKey}", result.Id, result.RunId, result.BranchRefId, result.MatchKey);
+            return result;
         }
 
+        _logger?.LogError("Failed to create bookmark for run {RunId} on branch {BranchRefId}", row.RunId, row.BranchRefId);
         throw new InvalidOperationException("Bookmark_Create did not return a row.");
     }
 
