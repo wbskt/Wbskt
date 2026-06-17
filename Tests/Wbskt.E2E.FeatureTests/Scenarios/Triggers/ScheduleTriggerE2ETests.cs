@@ -27,10 +27,7 @@ public sealed class ScheduleTriggerE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         
         // * * * * * = every minute. It will fire at the top of the next minute.
-        var definition = new WorkflowBuilder($"E2E-Schedule-{workflowRefId:N}", workflowRefId)
-            .AddScheduleTrigger("* * * * *", out _)
-            .AddSendCommand(clientRefId.ToString(), "ScheduleFired")
-            .Build();
+        var definition = BuildScheduleDefinition(workflowRefId, clientRefId.ToString());
 
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, $"E2E-Schedule-{workflowRefId:N}",
