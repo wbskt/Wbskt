@@ -32,13 +32,16 @@ internal static class RetryExecutor
         bool isSideEffectFree = executor.IsSideEffectFree;
 
         IIdempotencyKeyProvider? idempotencyKeyProvider = null;
-        try
+        if (!isSideEffectFree)
         {
-            idempotencyKeyProvider = services.Providers.IdempotencyKey;
-        }
-        catch (NotSupportedException)
-        {
-            // Fallback for test stubs
+            try
+            {
+                idempotencyKeyProvider = services.Providers.IdempotencyKey;
+            }
+            catch (NotSupportedException)
+            {
+                // Fallback for test stubs
+            }
         }
 
         for (int attempt = 1; attempt <= policy.MaxAttempts; attempt++)

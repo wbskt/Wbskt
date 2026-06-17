@@ -18,6 +18,8 @@ BEGIN
           WHERE WorkflowRefId = @WorkflowRefId AND VarName = @VarName
      );
 
+    COMMIT TRAN;
+
     SELECT
         Id,
         WorkflowRefId,
@@ -29,7 +31,5 @@ BEGIN
       FROM dbo.SharedVariables
      WHERE WorkflowRefId = @WorkflowRefId
        AND VarName = @VarName;
-
-    COMMIT TRAN;
 END;
 GO

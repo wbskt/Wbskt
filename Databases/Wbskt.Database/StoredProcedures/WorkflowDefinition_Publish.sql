@@ -21,6 +21,8 @@ BEGIN
     INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, IsEnabled, DefinitionJson, PublishedBy)
     VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @IsEnabled, @DefinitionJson, @PublishedBy);
 
+    COMMIT TRAN;
+
     SELECT
         Id,
         RefId,
@@ -34,7 +36,5 @@ BEGIN
         CreatedAt
       FROM dbo.WorkflowDefinitions
      WHERE RefId = @RefId AND Version = @NextVersion;
-
-    COMMIT TRAN;
 END;
 GO

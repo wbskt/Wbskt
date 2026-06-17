@@ -19,6 +19,8 @@ BEGIN
          WHERE KeyValue = @KeyValue
     );
 
+    COMMIT TRAN;
+
     SELECT
         Id,
         KeyValue,
@@ -33,7 +35,5 @@ BEGIN
         CompletedAt
       FROM dbo.IdempotencyKeys
      WHERE KeyValue = @KeyValue;
-
-    COMMIT TRAN;
 END;
 GO
