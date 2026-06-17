@@ -148,6 +148,21 @@ public sealed class WorkflowBuilder
         return this;
     }
 
+    public WorkflowBuilder AddForEach(string collectionKey, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        _nodes.Add(new ForEachNode(
+            NodeId: id,
+            Name: "For Each",
+            Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("body", PortDirection.Output, "Body"), new PortDefinition("done", PortDirection.Output, "Done")],
+            Config: new ForEachConfig(collectionKey)));
+            
+        ConnectToHead(id, "in");
+        _head = (id, "body");
+        return this;
+    }
+
     public WorkflowBuilder AddJoin(JoinMode mode, out Guid nodeId)
     {
         var id = Guid.NewGuid();
