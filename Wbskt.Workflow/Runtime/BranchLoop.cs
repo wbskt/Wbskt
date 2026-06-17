@@ -195,6 +195,12 @@ internal sealed class BranchLoop : IBranchLoop
                 await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
             }
 
+            if (linkedToken.IsCancellationRequested && result is not NodeExecutionResult.Terminal)
+            {
+                _logger?.LogInformation("Execution cancelled for node {NodeId} in branch {BranchId} for run {RunId} after executor returned", branchRow.NodeId, branchId, runId);
+                result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
+            }
+
             switch (result)
             {
                 case NodeExecutionResult.Continue @continue:

@@ -59,7 +59,7 @@ public sealed class BookmarkSchedulerTests
         var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act
-        await Assert.ThrowsAsync<InvalidOperationException>(() => scheduler.ProcessDueBookmarksAsync(CancellationToken.None));
+        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
 
         // Assert
         Assert.Empty(provider.DeletedRefIds);

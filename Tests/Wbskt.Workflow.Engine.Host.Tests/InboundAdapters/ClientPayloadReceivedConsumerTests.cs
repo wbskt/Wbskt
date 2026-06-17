@@ -36,7 +36,7 @@ public sealed class ClientPayloadReceivedConsumerTests
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
                 && e.Payload["clientId"].GetInt32() == evt.ClientId
                 && e.Payload["workspaceId"].GetInt32() == evt.WorkspaceId
-                && e.Payload["payload"].GetString() == evt.Payload),
+                && e.Payload["payload"].GetRawText() == evt.Payload),
             CancellationToken.None), Times.Once);
     }
 

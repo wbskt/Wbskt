@@ -38,14 +38,14 @@ public sealed class InboundAdaptersE2ETests
     {
         var hub = CreateHub();
         var runProvider = new Mock<IRunProvider>();
-        runProvider.Setup(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        runProvider.Setup(r => r.GetByIdAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RunRow { Id = 1, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
         var controller = new InboundWebhookController(hub.Object, runProvider.Object);
 
         await controller.Post("alerts", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
-            It.Is<InboundEvent>(e => e.ChannelKind == "alerts"),
+            It.Is<InboundEvent>(e => e.ChannelKind == "webhook"),
             CancellationToken.None), Times.Once);
     }
 

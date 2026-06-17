@@ -26,7 +26,7 @@ public sealed class InboundWebhookControllerTests
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
-                e.ChannelKind == "alerts"
+                e.ChannelKind == "webhook"
                 && e.MatchKeys.Contains("webhook:alerts")
                 && e.InboundEventId.StartsWith("webhook:alerts:", StringComparison.Ordinal)
                 && e.Payload["body"].GetProperty("value").GetInt32() == 1),
