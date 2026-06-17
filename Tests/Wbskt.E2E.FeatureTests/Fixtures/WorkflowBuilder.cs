@@ -198,6 +198,26 @@ public sealed class WorkflowBuilder
         return this;
     }
 
+    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, out Guid nodeId)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        _nodes.Add(new WebhookNotificationNode(
+            NodeId: id,
+            Name: "Webhook",
+            Ports: [
+                new PortDefinition("in", PortDirection.Input, "In"), 
+                new PortDefinition("default", PortDirection.Output, "Out"),
+                new PortDefinition("error", PortDirection.Output, "Error")
+            ],
+            Config: new WebhookNotificationConfig(url, method, body),
+            Retry: new RetryPolicy(RetryStrategy.Exponential, TimeSpan.FromMilliseconds(500), null, null, 5, 0, [])));
+            
+        ConnectToHead(id, "in");
+        _head = (id, "default");
+        return this;
+    }
+
     public WorkflowBuilder AddAwaitSignal(string signalName, TimeSpan? ttl, out Guid nodeId)
     {
         var id = Guid.NewGuid();
