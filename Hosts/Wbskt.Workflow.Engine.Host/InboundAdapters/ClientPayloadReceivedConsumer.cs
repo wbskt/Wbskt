@@ -21,10 +21,22 @@ public sealed class ClientPayloadReceivedConsumer(IInboundHub hub) : IConsumer<C
                 ["clientRefId"] = JsonSerializer.SerializeToElement(evt.ClientRefId),
                 ["clientId"] = JsonSerializer.SerializeToElement(evt.ClientId),
                 ["workspaceId"] = JsonSerializer.SerializeToElement(evt.WorkspaceId),
-                ["payload"] = JsonSerializer.SerializeToElement(evt.Payload)
+                ["payload"] = GetPayloadElement(evt.Payload)
             },
             default);
 
         return hub.HandleAsync(inboundEvent, context.CancellationToken);
+    }
+
+    private static JsonElement GetPayloadElement(string payload)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(payload);
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.SerializeToElement(payload);
+        }
     }
 }

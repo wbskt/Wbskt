@@ -70,10 +70,11 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
     private static WorkflowDefinition BuildWebhookDefinition(Guid workflowRefId, string path)
     {
         var builder = new WorkflowBuilder($"E2E-Webhook-{workflowRefId:N}", workflowRefId)
-            .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out Guid triggerNodeId);
+            .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out Guid triggerNodeId)
+            .AddDelay(TimeSpan.FromMilliseconds(10), out Guid delayId);
 
         // We only assert the run terminal state. Sending a command would fail because webhooks don't have a targeted deviceRef payload.
-        builder.SetHead(triggerNodeId, "default");
+        builder.SetHead(delayId, "default");
 
         return builder.Build();
     }

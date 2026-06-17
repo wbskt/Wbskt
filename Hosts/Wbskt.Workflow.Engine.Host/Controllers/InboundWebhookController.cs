@@ -17,6 +17,7 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
             $"webhook:{channelKind}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {
+                ["webhookPath"] = JsonSerializer.SerializeToElement(channelKind),
                 ["body"] = payload
             },
             default);
