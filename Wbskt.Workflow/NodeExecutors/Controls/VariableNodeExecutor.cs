@@ -12,10 +12,12 @@ internal sealed class VariableNodeExecutor : INodeExecutor
 {
     private const int MaxCompareAndSetAttempts = 3;
     private readonly ISharedVariableProvider _sharedVariableProvider;
+    private readonly IExpressionEvaluator _expressionEvaluator;
 
-    public VariableNodeExecutor(ISharedVariableProvider sharedVariableProvider)
+    public VariableNodeExecutor(ISharedVariableProvider sharedVariableProvider, IExpressionEvaluator expressionEvaluator)
     {
         _sharedVariableProvider = sharedVariableProvider;
+        _expressionEvaluator = expressionEvaluator;
     }
 
     public string Kind => NodeKind.ControlVariable;
@@ -35,15 +37,26 @@ internal sealed class VariableNodeExecutor : INodeExecutor
         }
 
         JsonElement value = node.Config.Value?.Clone() ?? JsonSerializer.SerializeToElement((string?)null);
+
+        if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("kind", out JsonElement typeProp) && typeProp.ValueKind == JsonValueKind.String)
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var expr = JsonSerializer.Deserialize<Wbskt.Workflow.Abstraction.Models.Expressions.WorkflowExpression>(value.GetRawText(), options);
+            if (expr != null)
+            {
+                value = await _expressionEvaluator.EvaluateAsync(expr, ctx.Branch, ct);
+            }
+        }
+
         if (node.Config.Scope == VariableScope.Local)
         {
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
             {
-                [node.Config.Var] = value.Clone()
+                [node.Config.Var] = value.ValueKind == JsonValueKind.Undefined ? JsonSerializer.SerializeToElement((string?)null) : value.Clone()
             });
         }
 
-        return await SetSharedAsync(ctx.Branch.WorkflowDefinitionRefId, node.Config.Var, value, ct);
+        return await SetSharedAsync(ctx.Branch.WorkflowDefinitionRefId, node.Config.Var, value.ValueKind == JsonValueKind.Undefined ? JsonSerializer.SerializeToElement((string?)null) : value, ct);
     }
 
     private async Task<NodeExecutionResult> SetSharedAsync(Guid workflowRefId, string varName, JsonElement value, CancellationToken ct)

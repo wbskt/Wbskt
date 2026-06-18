@@ -63,7 +63,7 @@ public sealed class NodeExecutorsE2ETests
             new NodeExecutorRegistry([
                 new ManualTriggerExecutor(new FixedClock()),
                 new LogicNodeExecutor(new ExpressionEvaluator()),
-                new VariableNodeExecutor(new NoOpSharedVariableProvider()),
+                new VariableNodeExecutor(new NoOpSharedVariableProvider(), new ExpressionEvaluator()),
                 new ForEachNodeExecutor(new ExpressionEvaluator())
             ]),
             dispatcher,

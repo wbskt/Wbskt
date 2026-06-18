@@ -15,7 +15,8 @@ public sealed class VariableNodeExecutorTests
     public async Task ExecuteAsync_local_scope_patches_local_state()
     {
         var provider = new RecordingSharedVariableProvider();
-        var executor = new VariableNodeExecutor(provider);
+        var evaluator = new MockExpressionEvaluator();
+        var executor = new VariableNodeExecutor(provider, evaluator);
         NodeContext context = CreateContext(new VariableNode(Guid.NewGuid(), "set-local", CreatePorts(), new VariableConfig(VariableScope.Local, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("auto"))));
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -30,7 +31,8 @@ public sealed class VariableNodeExecutorTests
     public async Task ExecuteAsync_shared_scope_sets_shared_variable()
     {
         var provider = new RecordingSharedVariableProvider([1]);
-        var executor = new VariableNodeExecutor(provider);
+        var evaluator = new MockExpressionEvaluator();
+        var executor = new VariableNodeExecutor(provider, evaluator);
         NodeContext context = CreateContext(new VariableNode(Guid.NewGuid(), "set-shared", CreatePorts(), new VariableConfig(VariableScope.Shared, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("cool"))));
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -45,7 +47,8 @@ public sealed class VariableNodeExecutorTests
     public async Task ExecuteAsync_shared_scope_retries_on_compare_and_set_conflict()
     {
         var provider = new RecordingSharedVariableProvider([0, 0, 1]);
-        var executor = new VariableNodeExecutor(provider);
+        var evaluator = new MockExpressionEvaluator();
+        var executor = new VariableNodeExecutor(provider, evaluator);
         NodeContext context = CreateContext(new VariableNode(Guid.NewGuid(), "set-shared", CreatePorts(), new VariableConfig(VariableScope.Shared, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("heat"))));
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -59,7 +62,8 @@ public sealed class VariableNodeExecutorTests
     public async Task ExecuteAsync_shared_scope_fails_after_three_conflicts()
     {
         var provider = new RecordingSharedVariableProvider([0, 0, 0]);
-        var executor = new VariableNodeExecutor(provider);
+        var evaluator = new MockExpressionEvaluator();
+        var executor = new VariableNodeExecutor(provider, evaluator);
         NodeContext context = CreateContext(new VariableNode(Guid.NewGuid(), "set-shared", CreatePorts(), new VariableConfig(VariableScope.Shared, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("heat"))));
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -146,5 +150,13 @@ public sealed class VariableNodeExecutorTests
         public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
         public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
         public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
+    }
+
+    private sealed class MockExpressionEvaluator : IExpressionEvaluator
+    {
+        public Task<JsonElement> EvaluateAsync(Wbskt.Workflow.Abstraction.Models.Expressions.WorkflowExpression expr, BranchContext context, CancellationToken ct)
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement("evaluated"));
+        }
     }
 }
