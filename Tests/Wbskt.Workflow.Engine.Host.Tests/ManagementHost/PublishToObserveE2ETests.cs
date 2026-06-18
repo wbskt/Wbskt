@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -56,12 +57,15 @@ public sealed class PublishToObserveE2ETests
         var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "Abstraction", "Fixtures", "greenhouse-workflow.json")));
         var refId = document.RootElement.GetProperty("workflowRefId").GetGuid();
-        return new WorkflowPublishRequest(refId, "Vent control + escalation", null, document.RootElement.Clone());
+        var def = document.Deserialize<Wbskt.Workflow.Abstraction.Models.WorkflowDefinition>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return new WorkflowPublishRequest(refId, "Vent control + escalation", null, def!);
     }
 
     private sealed class InMemoryWorkflowDefinitionProvider : IWorkflowDefinitionProvider
     {
-        private readonly Dictionary<Guid, List<WorkflowDefinitionRow>> _rows = [];
+        private readonly Dictionary<Guid, List<WorkflowDefinitionRow>> _rows = new();
+
+        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
         private int _nextId;
 
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)

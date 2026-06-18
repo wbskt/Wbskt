@@ -246,7 +246,9 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Publishes a workflow definition JSON and returns the workflow RefId.</summary>
     public async Task<Guid> PublishWorkflowAsync(string token, Guid workspaceRef, Guid workflowRefId, string name, JsonElement definitionElement)
     {
-        var request = new WorkflowPublishRequest(workflowRefId, name, null, definitionElement);
+        var definition = definitionElement.Deserialize<Wbskt.Workflow.Abstraction.Models.WorkflowDefinition>(JsonOptions)
+            ?? throw new InvalidOperationException("Could not deserialize workflow definition in test.");
+        var request = new WorkflowPublishRequest(workflowRefId, name, null, definition);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

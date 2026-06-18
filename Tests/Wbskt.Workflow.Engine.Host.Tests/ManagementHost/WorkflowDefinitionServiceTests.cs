@@ -193,20 +193,7 @@ public sealed class WorkflowDefinitionServiceTests
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
         var triggerService = new Mock<ITriggerRegistrationService>();
         var cache = new Mock<IWorkflowDefinitionCache>();
-        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, JsonSerializer.SerializeToElement(new
-        {
-            workflowRefId = Guid.Empty,
-            version = 0,
-            workspaceId = 1,
-            name = "Invalid",
-            description = (string?)null,
-            isEnabled = true,
-            nodes = Array.Empty<object>(),
-            edges = Array.Empty<object>(),
-            sharedVariableSchema = Array.Empty<object>(),
-            createdAt = DateTime.UtcNow,
-            publishedBy = 1
-        }, SerializerOptions));
+        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, null!);
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator());
 
         await Assert.ThrowsAsync<ValidationException>(() => service.PublishAsync(WorkspaceId, request, CancellationToken.None));
@@ -219,7 +206,8 @@ public sealed class WorkflowDefinitionServiceTests
         var json = LoadFixture();
         using var document = JsonDocument.Parse(json);
         var refId = document.RootElement.GetProperty("workflowRefId").GetGuid();
-        return new WorkflowPublishRequest(refId, "Vent control + escalation", null, document.RootElement.Clone());
+        var def = document.Deserialize<Wbskt.Workflow.Abstraction.Models.WorkflowDefinition>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return new WorkflowPublishRequest(refId, "Vent control + escalation", null, def!);
     }
 
     private static string LoadFixture()

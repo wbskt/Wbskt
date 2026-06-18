@@ -30,7 +30,7 @@ public sealed class WorkflowsControllerTests
         var service = new Mock<IWorkflowDefinitionService>();
         var engineClient = new Mock<IWorkflowEngineClient>();
         var authClient = AuthClientFor(Permissions.WorkflowsCreate);
-        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", JsonSerializer.SerializeToElement(new { version = 1 }));
+        var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!);
         var expected = new WorkflowPublishResponse(request.RefId, 1, "Published");
         service.Setup(x => x.PublishAsync(WorkspaceId, request, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
         var controller = new WorkflowsController(service.Object, engineClient.Object, authClient.Object);
@@ -49,7 +49,7 @@ public sealed class WorkflowsControllerTests
         var engineClient = new Mock<IWorkflowEngineClient>();
         var authClient = AuthClientFor(Permissions.WorkflowsRead);
         var refId = Guid.NewGuid();
-        var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", JsonSerializer.SerializeToElement(new { version = 2 }), DateTime.UtcNow);
+        var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", null!, DateTime.UtcNow);
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
         var controller = new WorkflowsController(service.Object, engineClient.Object, authClient.Object);
 
@@ -67,7 +67,7 @@ public sealed class WorkflowsControllerTests
         var engineClient = new Mock<IWorkflowEngineClient>();
         var authClient = AuthClientFor(Permissions.WorkflowsRead);
         var refId = Guid.NewGuid();
-        var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, JsonSerializer.SerializeToElement(new { version = 3 }), DateTime.UtcNow);
+        var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, null!, DateTime.UtcNow);
         service.Setup(x => x.GetVersionAsync(WorkspaceId, refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
         var controller = new WorkflowsController(service.Object, engineClient.Object, authClient.Object);
 
@@ -101,7 +101,7 @@ public sealed class WorkflowsControllerTests
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, JsonSerializer.SerializeToElement(new { version = 1 }), DateTime.UtcNow));
+            .ReturnsAsync(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, null!, DateTime.UtcNow));
         var expected = new StartRunResponse(runRefId, 88);
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);

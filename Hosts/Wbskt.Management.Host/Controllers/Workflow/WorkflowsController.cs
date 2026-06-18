@@ -30,6 +30,25 @@ public sealed class WorkflowsController : ControllerBase
         return await _service.PublishAsync(workspaceId, request, ct);
     }
 
+    [HttpGet]
+    public async Task<Wbskt.Models.ListResponse<WorkflowSummaryDto>> GetAll(
+        Guid workspaceRef,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 100,
+        CancellationToken ct = default)
+    {
+        int workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+
+        var pagedData = await _service.GetAllSummariesAsync(workspaceId, skip, take, ct);
+
+        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
+
+        return new Wbskt.Models.ListResponse<WorkflowSummaryDto>
+        {
+            Items = pagedData
+        };
+    }
+
     [HttpGet("{refId:guid}")]
     public async Task<WorkflowDefinitionDto> GetCurrent(Guid workspaceRef, Guid refId, CancellationToken ct)
     {

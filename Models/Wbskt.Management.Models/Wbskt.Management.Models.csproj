@@ -8,6 +8,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Wbskt.Models\Wbskt.Models.csproj" />
+      <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
     </ItemGroup>
 
 </Project>

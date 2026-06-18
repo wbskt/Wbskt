@@ -139,6 +139,7 @@ public sealed class RunStarterTests
 
     private sealed class RecordingWorkflowDefinitionProvider : IWorkflowDefinitionProvider
     {
+        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)

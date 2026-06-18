@@ -15,7 +15,7 @@ public class PayloadManipulationE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    [Fact]
+    [SkippableFact]
     public async Task StateManipulation_JsonPathAndVariables_IsIsolatedPerBranch()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");

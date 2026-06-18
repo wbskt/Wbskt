@@ -33,7 +33,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
     public async Task<WorkflowPublishResponse> PublishAsync(int workspaceId, WorkflowPublishRequest request, CancellationToken ct)
     {
-        WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(request.Definition.GetRawText(), SerializerOptions)
+        WorkflowDefinition definition = request.Definition
             ?? throw new ValidationException("Workflow definition could not be deserialized.");
         ValidationResult validation = _validator.Validate(definition);
         if (!validation.IsValid)
@@ -76,7 +76,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             Name = request.Name,
             Description = request.Description,
             IsEnabled = true,
-            DefinitionJson = request.Definition.GetRawText(),
+            DefinitionJson = JsonSerializer.Serialize(request.Definition, SerializerOptions),
             PublishedBy = definition.PublishedBy,
             CreatedAt = definition.CreatedAt
         }, ct);
@@ -116,6 +116,22 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         _cache.Invalidate(row.Id);
     }
 
+    public async Task<Wbskt.Models.IPagedList<WorkflowSummaryDto>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct)
+    {
+        var result = await _workflowDefinitionProvider.GetAllSummariesAsync(workspaceId, skip, take, ct);
+
+        var dtos = result.Items.Select(row => new WorkflowSummaryDto(
+            row.RefId,
+            row.Version,
+            row.IsEnabled ? "Published" : "Deprecated",
+            row.Name,
+            row.Description,
+            row.CreatedAt
+        )).ToList();
+
+        return new Wbskt.Models.PagedList<WorkflowSummaryDto>(dtos, result.TotalCount);
+    }
+
     public async Task EnsureWorkflowInWorkspaceAsync(int workspaceId, Guid workflowRefId, CancellationToken ct)
     {
         WorkflowDefinitionRow row = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(workflowRefId, ct);
@@ -134,7 +150,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
     private static WorkflowDefinitionDto Map(WorkflowDefinitionRow row)
     {
-        JsonElement definition = JsonSerializer.Deserialize<JsonElement>(row.DefinitionJson, SerializerOptions);
+        WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions)
+            ?? throw new InvalidOperationException($"Could not deserialize workflow definition for '{row.RefId}'");
         return new WorkflowDefinitionDto(
             row.RefId,
             row.Version,

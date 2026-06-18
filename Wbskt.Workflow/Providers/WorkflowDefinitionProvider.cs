@@ -121,6 +121,36 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
         throw new InvalidOperationException("WorkflowDefinition_Publish did not return a row.");
     }
 
+    public async Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.WorkflowDefinition_GetAll_Summaries_By_WorkspaceId", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+        command.Parameters.AddWithValue("@Skip", skip);
+        command.Parameters.AddWithValue("@Take", take);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        int totalCount = 0;
+        if (await reader.ReadAsync(ct))
+        {
+            totalCount = reader.GetInt32(0);
+        }
+
+        await reader.NextResultAsync(ct);
+
+        var items = new List<WorkflowDefinitionRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            items.Add(Map(reader));
+        }
+
+        return (totalCount, items);
+    }
+
     public async Task DeprecateAsync(int id, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_connectionString);

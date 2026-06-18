@@ -171,6 +171,7 @@ public sealed class InboundEventToRunStartE2ETests
         private int _nextRunId = 100;
         private int _nextBranchId = 1000;
         private readonly Dictionary<long, int> _activeBranches = [];
+        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
 
         public InMemoryRuntime(WorkflowDefinition definition)
         {
