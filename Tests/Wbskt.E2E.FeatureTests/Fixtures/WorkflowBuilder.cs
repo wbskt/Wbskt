@@ -55,6 +55,12 @@ public sealed class WorkflowBuilder
         return this;
     }
 
+    public WorkflowBuilder ClearHead()
+    {
+        _head = null;
+        return this;
+    }
+
     public WorkflowBuilder Connect(Guid sourceNodeId, string sourcePortId, Guid targetNodeId, string targetPortId)
     {
         _edges.Add(new Edge((sourceNodeId, sourcePortId), (targetNodeId, targetPortId)));
@@ -332,6 +338,12 @@ public sealed class WorkflowBuilder
             Config: new ScheduleTriggerConfig(cron, null)));
             
         _head = (id, "default");
+        return this;
+    }
+
+    public WorkflowBuilder AddEdge(Guid sourceNodeId, string sourcePort, Guid targetNodeId, string targetPort = "in")
+    {
+        _edges.Add(new Edge((sourceNodeId, sourcePort), (targetNodeId, targetPort)));
         return this;
     }
 

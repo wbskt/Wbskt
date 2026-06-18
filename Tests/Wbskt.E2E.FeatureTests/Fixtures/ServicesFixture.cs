@@ -262,11 +262,11 @@ public sealed class ServicesFixture : IDisposable
     }
 
     /// <summary>Lists runs for a workflow definition.</summary>
-    public async Task<IReadOnlyList<RunSummaryDto>> ListRunsAsync(string token, Guid workspaceRef, Guid workflowRefId)
+    public async Task<IReadOnlyList<RunSummaryDto>> ListRunsAsync(string token, Guid workspaceRef, Guid workflowRefId, int top = 50)
     {
         using var req = new HttpRequestMessage(
             HttpMethod.Get,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs");
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs?top={top}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var resp = await _http.SendAsync(req);

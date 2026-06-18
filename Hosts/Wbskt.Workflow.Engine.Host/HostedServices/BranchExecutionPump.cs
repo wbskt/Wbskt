@@ -18,25 +18,34 @@ internal sealed class BranchExecutionPump : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        using SemaphoreSlim concurrencyLimiter = new(50, 50);
+
         while (await _dispatcher.Reader.WaitToReadAsync(stoppingToken))
         {
             while (_dispatcher.Reader.TryRead(out BranchExecutionRequest? request))
             {
-                try
+                await concurrencyLimiter.WaitAsync(stoppingToken);
+
+                _ = Task.Run(async () =>
                 {
-                    // [RJ]: TODO: understand AsyncServiceScope
-                    await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-                    IBranchLoop loop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
-                    await loop.RunAsync(request.RunId, request.BranchId, request.Reason, stoppingToken);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Branch execution failed for RunId {RunId} BranchId {BranchId}.", request.RunId, request.BranchId);
-                }
+                    try
+                    {
+                        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+                        IBranchLoop loop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
+                        await loop.RunAsync(request.RunId, request.BranchId, request.Reason, stoppingToken);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Branch execution failed for RunId {RunId} BranchId {BranchId}.", request.RunId, request.BranchId);
+                    }
+                    finally
+                    {
+                        concurrencyLimiter.Release();
+                    }
+                }, stoppingToken);
             }
         }
     }

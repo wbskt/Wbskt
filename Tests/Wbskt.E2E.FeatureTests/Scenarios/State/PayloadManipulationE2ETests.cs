@@ -7,12 +7,11 @@ using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.State;
 
 [Collection(E2ECollection.Name)]
-public class PayloadManipulationE2ETests(ServicesFixture fixture, ITestOutputHelper output)
+public class PayloadManipulationE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
