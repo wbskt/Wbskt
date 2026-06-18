@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes;
 
+// [RJ]: TODO: move to polymorphic
 [JsonConverter(typeof(BaseNodeJsonConverter))]
 public abstract record BaseNode(
     [property: JsonPropertyName("nodeId")] Guid NodeId,
