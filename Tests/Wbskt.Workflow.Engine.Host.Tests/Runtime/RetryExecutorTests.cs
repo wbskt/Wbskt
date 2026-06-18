@@ -278,7 +278,7 @@ public sealed class RetryExecutorTests
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         
         executorMock.Verify(e => e.ExecuteAsync(It.IsAny<NodeContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        idempotencyMock.Verify(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+        idempotencyMock.Verify(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private sealed class TestNodeExecutionServices(IIdempotencyKeyProvider? idempotencyKey = null) : INodeExecutionServices

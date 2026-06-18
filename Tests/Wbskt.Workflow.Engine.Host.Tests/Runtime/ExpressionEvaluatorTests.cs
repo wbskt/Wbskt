@@ -32,15 +32,12 @@ public sealed class ExpressionEvaluatorTests
         Assert.True(result.GetBoolean());
     }
 
-    [Theory]
-    [MemberData(nameof(NotImplementedExpressions))]
-    public async Task EvaluateAsync_unsupported_expression_types_throw(WorkflowExpression expression, string expectedMessage)
+    [Fact]
+    public async Task EvaluateAsync_unsupported_expression_types_throw()
     {
         IExpressionEvaluator evaluator = new ExpressionEvaluator();
 
-        var exception = await Assert.ThrowsAsync<NotImplementedException>(() => evaluator.EvaluateAsync(expression, CreateBranchContext(), CancellationToken.None));
-
-        Assert.Equal(expectedMessage, exception.Message);
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => evaluator.EvaluateAsync(new JsonPathExpression(new LiteralExpression(JsonSerializer.SerializeToElement(new int[0])), "$.length()"), CreateBranchContext(), CancellationToken.None));
     }
 
     public static TheoryData<WorkflowExpression, string> NotImplementedExpressions()

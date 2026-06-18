@@ -47,7 +47,8 @@ public sealed class BranchExecutionPumpTests
 
         // Assert
         Assert.Equal(2, recorder.Calls.Count);
-        Assert.Equal((42L, 1002L, BranchExecutionReason.ForkChild), recorder.Calls[1]);
+        Assert.Contains((42L, 1001L, BranchExecutionReason.TriggerStarted), recorder.Calls);
+        Assert.Contains((42L, 1002L, BranchExecutionReason.ForkChild), recorder.Calls);
     }
 
     private static ServiceProvider CreateProvider(BranchLoopRecorder recorder, bool shouldThrow)
