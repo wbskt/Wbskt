@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\Clients\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
     <ProjectReference Include="..\..\Models\Wbskt.Management.Models\Wbskt.Management.Models.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
+    <ProjectReference Include="..\..\Wbskt.Workflow.Builder\Wbskt.Workflow.Builder.csproj" />
   </ItemGroup>
 
   <ItemGroup>

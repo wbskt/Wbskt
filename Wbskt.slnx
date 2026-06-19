@@ -54,8 +54,12 @@
     <Project Path="Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj" />
     <Project Path="Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj" />
   </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="Tools/Wbskt.Workflow.Exporter/Wbskt.Workflow.Exporter.csproj" />
+  </Folder>
   <Project Path="Wbskt.Infrastructure/Wbskt.Infrastructure.csproj" />
   <Project Path="Wbskt.Primitives/Wbskt.Primitives.csproj" />
   <Project Path="Wbskt.Workflow.Abstraction/Wbskt.Workflow.Abstraction.csproj" />
+  <Project Path="Wbskt.Workflow.Builder/Wbskt.Workflow.Builder.csproj" />
   <Project Path="Wbskt.Workflow/Wbskt.Workflow.csproj" />
 </Solution>

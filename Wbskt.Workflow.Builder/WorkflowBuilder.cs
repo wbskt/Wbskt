@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 
-namespace Wbskt.E2E.FeatureTests.Fixtures;
+namespace Wbskt.Workflow.Builder;
 
 public sealed class WorkflowBuilder
 {
@@ -353,5 +353,111 @@ public sealed class WorkflowBuilder
         {
             _edges.Add(new Edge(_head.Value, (targetNodeId, targetPortId)));
         }
+    }
+
+    // --- FLUENT EXTENSIONS ---
+
+    public (Guid NodeId, string PortId)? CurrentHead => _head;
+
+    public WorkflowBuilder AddLogicGate(string condition, Action<LogicGateScope> branches)
+    {
+        AddLogicGate(condition, out var gateId);
+        
+        var scope = new LogicGateScope(this, gateId);
+        branches(scope);
+        
+        // After branching, the active head is ambiguous unless merged by a join.
+        _head = null; 
+        return this;
+    }
+
+    public WorkflowBuilder AddFork(string[] branchNames, Action<ForkScope> branches)
+    {
+        var id = Guid.NewGuid();
+        var ports = new List<PortDefinition> { new PortDefinition(PortNames.In, PortDirection.Input, "In") };
+        foreach (var b in branchNames)
+        {
+            ports.Add(new PortDefinition(b, PortDirection.Output, b));
+        }
+
+        _nodes.Add(new ForkNode(
+            NodeId: id,
+            Name: "Fork",
+            Ports: ports,
+            Config: new ForkConfig(branchNames)));
+
+        ConnectToHead(id, PortNames.In);
+        
+        var scope = new ForkScope(this, id);
+        branches(scope);
+        
+        _head = null;
+        return this;
+    }
+
+    public WorkflowBuilder AddParallelForEach(string collectionKey, Action<ForEachScope> loopBody)
+    {
+        AddParallelForEach(collectionKey, out var pfeId);
+        
+        var scope = new ForEachScope(this, pfeId);
+        loopBody(scope);
+        
+        _head = (pfeId, PortNames.Empty);
+        return this;
+    }
+
+    public WorkflowBuilder AddJoin(JoinMode mode, params (Guid NodeId, string PortId)[] branchEnds)
+    {
+        AddJoin(mode, out var joinId);
+        foreach (var end in branchEnds)
+        {
+            _edges.Add(new Edge(end, (joinId, PortNames.In)));
+        }
+        return this;
+    }
+
+    public WorkflowDefinition BuildAndValidate()
+    {
+        var def = Build();
+        var validator = new Wbskt.Workflow.Abstraction.Validation.WorkflowValidator();
+        var result = validator.Validate(def);
+        if (!result.IsValid)
+        {
+            throw new InvalidOperationException($"Workflow definition is invalid: {string.Join("; ", result.Issues)}");
+        }
+        return def;
+    }
+}
+
+public sealed class LogicGateScope(WorkflowBuilder builder, Guid gateId)
+{
+    public void OnTrue(Action<WorkflowBuilder> branch)
+    {
+        builder.SetHead(gateId, PortNames.True);
+        branch(builder);
+    }
+
+    public void OnFalse(Action<WorkflowBuilder> branch)
+    {
+        builder.SetHead(gateId, PortNames.False);
+        branch(builder);
+    }
+}
+
+public sealed class ForkScope(WorkflowBuilder builder, Guid forkId)
+{
+    public void Branch(string branchName, Action<WorkflowBuilder> branch)
+    {
+        builder.SetHead(forkId, branchName);
+        branch(builder);
+    }
+}
+
+public sealed class ForEachScope(WorkflowBuilder builder, Guid loopId)
+{
+    public void OnBody(Action<WorkflowBuilder> body)
+    {
+        builder.SetHead(loopId, PortNames.Body);
+        body(builder);
     }
 }
