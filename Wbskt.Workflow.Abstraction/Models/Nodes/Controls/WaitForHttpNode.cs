@@ -1,9 +1,12 @@
 using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-public sealed record WaitForHttpNode(Guid NodeId, string Name, IReadOnlyCollection<PortDefinition> Ports,
-    [property: JsonPropertyName("config")] WaitForHttpConfig? Config) : BaseNode(NodeId, Name, Ports)
+public sealed record WaitForHttpNode : BaseNode
 {
+    [JsonPropertyName("config")]
+    public WaitForHttpConfig? Config { get; init; }
+
+
     [JsonIgnore]
     public override string Kind => NodeKind.ControlWaitForHttp;
 }

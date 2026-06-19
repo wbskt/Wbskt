@@ -14,7 +14,7 @@ public sealed class EndAndFailRunNodeExecutorTests
     public async Task End_completes_the_branch()
     {
         var executor = new EndNodeExecutor();
-        var node = new EndNode(Guid.NewGuid(), "end", []);
+        var node = new EndNode { NodeId = Guid.NewGuid(), Name = "end", Ports = [] };
         NodeContext ctx = Context(node);
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -27,7 +27,7 @@ public sealed class EndAndFailRunNodeExecutorTests
     public async Task FailRun_fails_branch_with_configured_reason_non_retryable()
     {
         var executor = new FailRunNodeExecutor();
-        var node = new FailRunNode(Guid.NewGuid(), "fail", [], new FailRunConfig("temperature too high"));
+        var node = new FailRunNode { NodeId = Guid.NewGuid(), Name = "fail", Ports = [], Config = new FailRunConfig("temperature too high") };
         NodeContext ctx = Context(node);
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -42,7 +42,7 @@ public sealed class EndAndFailRunNodeExecutorTests
     public async Task FailRun_uses_default_reason_when_config_missing()
     {
         var executor = new FailRunNodeExecutor();
-        var node = new FailRunNode(Guid.NewGuid(), "fail", [], null);
+        var node = new FailRunNode { NodeId = Guid.NewGuid(), Name = "fail", Ports = [], Config = null };
         NodeContext ctx = Context(node);
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));

@@ -81,7 +81,7 @@ public sealed class RunCancellationServiceTests
             "cancelled-loop",
             null,
             true,
-            [new TestNode(nodeId, "start", "test")],
+            [new TestNode { NodeId = nodeId, Name = "start", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -230,10 +230,7 @@ public sealed class RunCancellationServiceTests
         public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed record TestNode(Guid NodeId, string Name, string KindValue) : BaseNode(NodeId, Name, Array.Empty<PortDefinition>())
-    {
-        public override string Kind => KindValue;
-    }
+    private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
 
     private sealed class RecordingBranchProvider : IBranchProvider
     {

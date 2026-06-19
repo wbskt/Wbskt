@@ -4,12 +4,17 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes;
 
 // [RJ]: TODO: move to polymorphic
 [JsonConverter(typeof(BaseNodeJsonConverter))]
-public abstract record BaseNode(
-    [property: JsonPropertyName("nodeId")] Guid NodeId,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("ports")] IReadOnlyCollection<PortDefinition> Ports
-)
+public abstract record BaseNode
 {
     [JsonIgnore]
     public abstract string Kind { get; }
+
+    [JsonPropertyName("nodeId")]
+    public Guid NodeId { get; init; }
+    
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+    
+    [JsonPropertyName("ports")]
+    public required IReadOnlyCollection<PortDefinition> Ports { get; init; }
 }

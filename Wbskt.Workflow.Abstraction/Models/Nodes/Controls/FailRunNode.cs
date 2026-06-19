@@ -1,9 +1,12 @@
 using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-public sealed record FailRunNode(Guid NodeId, string Name, IReadOnlyCollection<PortDefinition> Ports,
-    [property: JsonPropertyName("config")] FailRunConfig? Config) : BaseNode(NodeId, Name, Ports)
+public sealed record FailRunNode : BaseNode
 {
+    [JsonPropertyName("config")]
+    public FailRunConfig? Config { get; init; }
+
+
     [JsonIgnore]
     public override string Kind => NodeKind.ControlFailRun;
 }

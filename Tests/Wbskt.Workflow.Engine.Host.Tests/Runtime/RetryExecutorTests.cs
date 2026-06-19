@@ -103,13 +103,7 @@ public sealed class RetryExecutorTests
 
     private static SendCommandActionNode CreateNode(RetryPolicy? retry)
     {
-        return new SendCommandActionNode(
-            Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            "command",
-            [new PortDefinition("default", PortDirection.Output, "Default")],
-            new SendCommandConfig("device-1", "DoThing"),
-            retry,
-            null);
+        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), Retry = retry };
     }
 
     private static BranchContext CreateContext()

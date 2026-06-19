@@ -38,9 +38,7 @@ public class BaseNodeTests
     [Fact]
     public void LogicGateNode_roundtrips_json()
     {
-        var node = new LogicGateNode(new Guid("22222222-2222-2222-2222-222222222222"), "Gate 1",
-            [new("in", Wbskt.Workflow.Abstraction.Enums.PortDirection.Input, "In")],
-            null);
+        var node = new LogicGateNode { NodeId = new Guid("22222222-2222-2222-2222-222222222222"), Name = "Gate 1", Ports = [new("in", Wbskt.Workflow.Abstraction.Enums.PortDirection.Input, "In")], Config = null };
         var json = JsonSerializer.Serialize<BaseNode>(node, Options);
         var back = JsonSerializer.Deserialize<BaseNode>(json, Options);
         Assert.IsType<LogicGateNode>(back);

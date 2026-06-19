@@ -15,28 +15,28 @@ public sealed class TriggerExecutorTests
     [Fact]
     public async Task DeviceTriggerExecutor_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new DeviceTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new DeviceTriggerNode(Guid.NewGuid(), "device", CreatePorts(), new DeviceTriggerConfig("device-1", "telemetry"))), CancellationToken.None);
+        NodeExecutionResult result = await new DeviceTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new DeviceTriggerNode { NodeId = Guid.NewGuid(), Name = "device", Ports = CreatePorts(), Config = new DeviceTriggerConfig("device-1", "telemetry") }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
     [Fact]
     public async Task ScheduleTriggerExecutor_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new ScheduleTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ScheduleTriggerNode(Guid.NewGuid(), "schedule", CreatePorts(), new ScheduleTriggerConfig("* * * * *"))), CancellationToken.None);
+        NodeExecutionResult result = await new ScheduleTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ScheduleTriggerNode { NodeId = Guid.NewGuid(), Name = "schedule", Ports = CreatePorts(), Config = new ScheduleTriggerConfig("* * * * *") }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
     [Fact]
     public async Task WebhookTriggerExecutor_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new WebhookTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new WebhookTriggerNode(Guid.NewGuid(), "webhook", CreatePorts(), new WebhookTriggerConfig("/hook", "POST"))), CancellationToken.None);
+        NodeExecutionResult result = await new WebhookTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "webhook", Ports = CreatePorts(), Config = new WebhookTriggerConfig("/hook", "POST") }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
     [Fact]
     public async Task ManualTriggerExecutor_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new ManualTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ManualTriggerNode(Guid.NewGuid(), "manual", CreatePorts(), new ManualTriggerConfig("start"))), CancellationToken.None);
+        NodeExecutionResult result = await new ManualTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "manual", Ports = CreatePorts(), Config = new ManualTriggerConfig("start") }), CancellationToken.None);
         AssertContinueResult(result);
     }
 

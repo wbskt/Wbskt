@@ -91,9 +91,9 @@ public sealed class InboundEventToRunStartE2ETests
             null,
             true,
             [
-                new DeviceTriggerNode(triggerNodeId, "device", [new PortDefinition("default", PortDirection.Output, "Default")], new DeviceTriggerConfig("device-serial-1", "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel)),
-                new LogicGateNode(logicNodeId, "logic", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], new LogicGateConfig("true")),
-                new LogicGateNode(terminalNodeId, "terminal", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], new LogicGateConfig("true"))
+                new DeviceTriggerNode { NodeId = triggerNodeId, Name = "device", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new DeviceTriggerConfig("device-serial-1", "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel) },
+                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], Config = new LogicGateConfig("true") },
+                new LogicGateNode { NodeId = terminalNodeId, Name = "terminal", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], Config = new LogicGateConfig("true") }
             ],
             [new Edge((triggerNodeId, "default"), (logicNodeId, "in")), new Edge((logicNodeId, "next"), (terminalNodeId, "in"))],
             Array.Empty<SharedVariableDeclaration>(),

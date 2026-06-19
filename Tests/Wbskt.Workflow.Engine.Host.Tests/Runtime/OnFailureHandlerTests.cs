@@ -66,12 +66,6 @@ public sealed class OnFailureHandlerTests
 
     private static SendCommandActionNode CreateNode(OnFailureConfig onFailure)
     {
-        return new SendCommandActionNode(
-            Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            "command",
-            [new PortDefinition("default", PortDirection.Output, "Default")],
-            new SendCommandConfig("device-1", "DoThing"),
-            null,
-            onFailure);
+        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), OnFailure = onFailure };
     }
 }

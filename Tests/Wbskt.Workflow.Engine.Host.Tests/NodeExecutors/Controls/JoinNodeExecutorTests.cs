@@ -17,7 +17,7 @@ public sealed class JoinNodeExecutorTests
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new JoinNode(Guid.NewGuid(), "join", CreatePorts(), null),
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = null },
             new Dictionary<string, JsonElement>());
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -32,7 +32,7 @@ public sealed class JoinNodeExecutorTests
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new JoinNode(Guid.NewGuid(), "join", CreatePorts(), new JoinConfig(JoinMode.All)),
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig(JoinMode.All) },
             new Dictionary<string, JsonElement>());
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -53,7 +53,7 @@ public sealed class JoinNodeExecutorTests
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new JoinNode(Guid.NewGuid(), "join", CreatePorts(), new JoinConfig(JoinMode.All)),
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig(JoinMode.All) },
             new Dictionary<string, JsonElement>
             {
                 ["__join_token"] = JsonSerializer.SerializeToElement(joinToken.ToString())
@@ -79,7 +79,7 @@ public sealed class JoinNodeExecutorTests
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new JoinNode(Guid.NewGuid(), "join", CreatePorts(), new JoinConfig(JoinMode.All)),
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig(JoinMode.All) },
             new Dictionary<string, JsonElement>
             {
                 ["__join_token"] = JsonSerializer.SerializeToElement(joinToken.ToString())
@@ -102,7 +102,7 @@ public sealed class JoinNodeExecutorTests
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new JoinNode(Guid.NewGuid(), "join", CreatePorts(), new JoinConfig(JoinMode.Any)),
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig(JoinMode.Any) },
             new Dictionary<string, JsonElement>
             {
                 ["__join_token"] = JsonSerializer.SerializeToElement(joinToken.ToString())
@@ -126,7 +126,7 @@ public sealed class JoinNodeExecutorTests
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new JoinNode(Guid.NewGuid(), "join", CreatePorts(), new JoinConfig(JoinMode.Quorum, 3)),
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig(JoinMode.Quorum, 3) },
             new Dictionary<string, JsonElement>
             {
                 ["__join_token"] = JsonSerializer.SerializeToElement(joinToken.ToString())

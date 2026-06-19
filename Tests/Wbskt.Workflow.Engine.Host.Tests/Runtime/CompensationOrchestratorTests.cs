@@ -66,8 +66,8 @@ public sealed class CompensationOrchestratorTests
             null,
             true,
             [
-                new SendCommandActionNode(Guid.Parse("11111111-1111-1111-1111-111111111111"), "first", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:command", null)),
-                new SendCommandActionNode(Guid.Parse("22222222-2222-2222-2222-222222222222"), "second", [], new SendCommandConfig("device-1", "DoThing"))
+                new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "first", Ports = [], Config = new SendCommandConfig("device-1", "DoThing"), Compensation = new CompensationDeclaration(Guid.Empty, "action:command", null) },
+                new SendCommandActionNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "second", Ports = [], Config = new SendCommandConfig("device-1", "DoThing") }
             ],
             [],
             [],
@@ -94,8 +94,8 @@ public sealed class CompensationOrchestratorTests
             null,
             true,
             [
-                new SendCommandActionNode(Guid.Parse("11111111-1111-1111-1111-111111111111"), "first", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:command", null)),
-                new SendCommandActionNode(Guid.Parse("22222222-2222-2222-2222-222222222222"), "second", [], new SendCommandConfig("device-1", "DoThing"), Compensation: new CompensationDeclaration(Guid.Empty, "action:email", null))
+                new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "first", Ports = [], Config = new SendCommandConfig("device-1", "DoThing"), Compensation = new CompensationDeclaration(Guid.Empty, "action:command", null) },
+                new SendCommandActionNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "second", Ports = [], Config = new SendCommandConfig("device-1", "DoThing"), Compensation = new CompensationDeclaration(Guid.Empty, "action:email", null) }
             ],
             [],
             [],

@@ -23,7 +23,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             "bookmark-e2e",
             null,
             true,
-            [new TestNode(nodeId, "wait", "test")],
+            [new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -58,10 +58,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         Assert.Contains(dispatcher.Requests, request => request.Reason == BranchExecutionReason.BookmarkResumed);
     }
 
-    private sealed record TestNode(Guid NodeId, string Name, string KindValue) : BaseNode(NodeId, Name, Array.Empty<PortDefinition>())
-    {
-        public override string Kind => KindValue;
-    }
+    private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
 
     private sealed class WaitThenCompleteExecutor : INodeExecutor
     {

@@ -28,15 +28,10 @@ public sealed class ErrorModelE2ETests
             null,
             true,
             [
-                new TestNode(rootNodeId, "root", "test:fork"),
-                new SendCommandActionNode(
-                    compensableNodeId,
-                    "compensable",
-                    [new PortDefinition("next", PortDirection.Output, "Next")],
-                    new SendCommandConfig("device-1", "DoThing"),
-                    Compensation: new CompensationDeclaration(Guid.Empty, "action:email", null)),
-                new TestNode(fatalNodeId, "fatal", "test:fail"),
-                new TestNode(successNodeId, "success", "test:success")
+                new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fork" },
+                new SendCommandActionNode { NodeId = compensableNodeId, Name = "compensable", Ports = [new PortDefinition("next", PortDirection.Output, "Next")], Config = new SendCommandConfig("device-1", "DoThing"), Compensation = new CompensationDeclaration(Guid.Empty, "action:email", null) },
+                new TestNode { NodeId = fatalNodeId, Name = "fatal", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fail" },
+                new TestNode { NodeId = successNodeId, Name = "success", Ports = Array.Empty<PortDefinition>(), KindValue = "test:success" }
             ],
             [new Edge((compensableNodeId, "next"), (fatalNodeId, "in"))],
             Array.Empty<SharedVariableDeclaration>(),
@@ -81,10 +76,7 @@ public sealed class ErrorModelE2ETests
         Assert.Contains(state.HistoryEvents, evt => evt.EventKind == "CompensationExecuted");
     }
 
-    private sealed record TestNode(Guid NodeId, string Name, string KindValue) : BaseNode(NodeId, Name, Array.Empty<PortDefinition>())
-    {
-        public override string Kind => KindValue;
-    }
+    private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
 
     private sealed class ForkExecutor(Guid failingNodeId, Guid successNodeId) : INodeExecutor
     {

@@ -9,14 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
 public sealed class NodeContextTests
 {
-    private sealed record TestNode(
-        Guid NodeId,
-        string Name,
-        IReadOnlyCollection<PortDefinition> Ports
-    ) : BaseNode(NodeId, Name, Ports)
-    {
-        public override string Kind => "test";
-    }
+    private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
 
     [Fact]
     public void NodeContext_IsImmutable()
@@ -34,7 +27,7 @@ public sealed class NodeContextTests
             new Dictionary<string, JsonElement>(),
             "corr-1",
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var node = new TestNode(Guid.NewGuid(), "test", Array.Empty<PortDefinition>());
+        var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
         var providers = new Mock<IProviderComposite>().Object;
         var cts = new CancellationTokenSource();
 
@@ -75,7 +68,7 @@ public sealed class NodeContextTests
             new Dictionary<string, JsonElement>(),
             "corr-1",
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var node = new TestNode(Guid.NewGuid(), "test", Array.Empty<PortDefinition>());
+        var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
         var providers = new Mock<IProviderComposite>().Object;
         var parentResults = new Dictionary<string, JsonElement>();
 

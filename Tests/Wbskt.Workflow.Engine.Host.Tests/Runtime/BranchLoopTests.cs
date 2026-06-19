@@ -21,9 +21,9 @@ public sealed class BranchLoopTests
         var secondNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var thirdNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var definition = TestWorkflowDefinition.Create(
-            new TestNode(firstNodeId, "start", "test"),
-            new TestNode(secondNodeId, "middle", "test"),
-            new TestNode(thirdNodeId, "end", "test"),
+            new TestNode { NodeId = firstNodeId, Name = "start", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new TestNode { NodeId = secondNodeId, Name = "middle", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new TestNode { NodeId = thirdNodeId, Name = "end", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
             new Edge((firstNodeId, "next"), (secondNodeId, "in")),
             new Edge((secondNodeId, "next"), (thirdNodeId, "in")));
         var branchProvider = new RecordingBranchProvider(firstNodeId);
@@ -71,7 +71,7 @@ public sealed class BranchLoopTests
             "fork-inline",
             null,
             true,
-            [new TestNode(rootNodeId, "root", "test"), new TestNode(childNodeId, "child", "test")],
+            [new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }, new TestNode { NodeId = childNodeId, Name = "child", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -121,10 +121,10 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new TestNode(rootNodeId, "root", "test"),
-                new TestNode(childOneId, "one", "test"),
-                new TestNode(childTwoId, "two", "test"),
-                new TestNode(childThreeId, "three", "test")
+                new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+                new TestNode { NodeId = childOneId, Name = "one", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+                new TestNode { NodeId = childTwoId, Name = "two", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+                new TestNode { NodeId = childThreeId, Name = "three", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }
             ],
             [],
             [],
@@ -180,7 +180,7 @@ public sealed class BranchLoopTests
             "fork-order",
             null,
             true,
-            [new TestNode(rootNodeId, "root", "test"), new TestNode(childOneId, "one", "test"), new TestNode(childTwoId, "two", "test")],
+            [new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }, new TestNode { NodeId = childOneId, Name = "one", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }, new TestNode { NodeId = childTwoId, Name = "two", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -227,7 +227,7 @@ public sealed class BranchLoopTests
             "wait",
             null,
             true,
-            [new TestNode(nodeId, "wait", "test")],
+            [new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -274,7 +274,7 @@ public sealed class BranchLoopTests
             "fail",
             null,
             true,
-            [new TestNode(nodeId, "fail", "test")],
+            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -322,7 +322,7 @@ public sealed class BranchLoopTests
             "complete",
             null,
             true,
-            [new TestNode(nodeId, "noop", "test")],
+            [new TestNode { NodeId = nodeId, Name = "noop", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -368,13 +368,7 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new SendCommandActionNode(
-                    nodeId,
-                    "fail",
-                    [new PortDefinition("default", PortDirection.Output, "Default")],
-                    new SendCommandConfig("device-1", "DoThing"),
-                    new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 2, 0, []),
-                    null)
+                new SendCommandActionNode { NodeId = nodeId, Name = "fail", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), Retry = new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 2, 0, []) }
             ],
             [],
             [],
@@ -419,7 +413,7 @@ public sealed class BranchLoopTests
             "branch-loop-jump",
             null,
             true,
-            [new TestNode(startNodeId, "start", "test"), new TestNode(jumpedNodeId, "jumped", "test")],
+            [new TestNode { NodeId = startNodeId, Name = "start", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }, new TestNode { NodeId = jumpedNodeId, Name = "jumped", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -463,14 +457,8 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new SendCommandActionNode(
-                    startNodeId,
-                    "command",
-                    [new PortDefinition("default", PortDirection.Output, "Default")],
-                    new SendCommandConfig("device-1", "DoThing"),
-                    null,
-                    new OnFailureConfig(ErrorOutcome.ContinueAsSucceeded)),
-                new TestNode(nextNodeId, "next", "test")
+                new SendCommandActionNode { NodeId = startNodeId, Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), OnFailure = new OnFailureConfig(ErrorOutcome.ContinueAsSucceeded) },
+                new TestNode { NodeId = nextNodeId, Name = "next", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }
             ],
             [new Edge((startNodeId, "default"), (nextNodeId, "in"))],
             [],
@@ -517,15 +505,9 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new SendCommandActionNode(
-                    startNodeId,
-                    "command",
-                    [new PortDefinition("default", PortDirection.Output, "Default")],
-                    new SendCommandConfig("device-1", "DoThing"),
-                    null,
-                    new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: jumpNodeId)),
-                new TestNode(skippedNodeId, "skipped", "test"),
-                new TestNode(jumpNodeId, "jump", "test")
+                new SendCommandActionNode { NodeId = startNodeId, Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), OnFailure = new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: jumpNodeId) },
+                new TestNode { NodeId = skippedNodeId, Name = "skipped", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+                new TestNode { NodeId = jumpNodeId, Name = "jump", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }
             ],
             [new Edge((startNodeId, "default"), (skippedNodeId, "in"))],
             [],
@@ -570,7 +552,7 @@ public sealed class BranchLoopTests
             "compensation-opt-in",
             null,
             true,
-            [new TestNode(nodeId, "fail", "test")],
+            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -610,7 +592,7 @@ public sealed class BranchLoopTests
             "fail-fast",
             null,
             true,
-            [new TestNode(nodeId, "fail", "test")],
+            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -649,7 +631,7 @@ public sealed class BranchLoopTests
             "no-fail-fast",
             null,
             true,
-            [new TestNode(nodeId, "fail", "test")],
+            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -687,7 +669,7 @@ public sealed class BranchLoopTests
             "fail-fast-cancelling",
             null,
             true,
-            [new TestNode(nodeId, "fail", "test")],
+            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -727,7 +709,7 @@ public sealed class BranchLoopTests
             "executor-crash",
             null,
             true,
-            [new TestNode(nodeId, "crash", "test")],
+            [new TestNode { NodeId = nodeId, Name = "crash", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -766,7 +748,7 @@ public sealed class BranchLoopTests
             "terminal",
             null,
             true,
-            [new TestNode(nodeId, "terminal", "test")],
+            [new TestNode { NodeId = nodeId, Name = "terminal", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -806,7 +788,7 @@ public sealed class BranchLoopTests
             "terminal-finalize",
             null,
             true,
-            [new TestNode(nodeId, "terminal", "test")],
+            [new TestNode { NodeId = nodeId, Name = "terminal", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -845,7 +827,7 @@ public sealed class BranchLoopTests
             "terminal-not-finalize",
             null,
             true,
-            [new TestNode(nodeId, "terminal", "test")],
+            [new TestNode { NodeId = nodeId, Name = "terminal", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -884,7 +866,7 @@ public sealed class BranchLoopTests
             "trigger-payload-hydration",
             null,
             true,
-            [new TestNode(nodeId, "act", "test")],
+            [new TestNode { NodeId = nodeId, Name = "act", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -931,7 +913,7 @@ public sealed class BranchLoopTests
             "no-trigger-key",
             null,
             true,
-            [new TestNode(nodeId, "act", "test")],
+            [new TestNode { NodeId = nodeId, Name = "act", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
             [],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -979,10 +961,7 @@ public sealed class BranchLoopTests
         };
     }
 
-    private sealed record TestNode(Guid NodeId, string Name, string KindValue) : BaseNode(NodeId, Name, Array.Empty<PortDefinition>())
-    {
-        public override string Kind => KindValue;
-    }
+    private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
 
     private sealed class TestWorkflowDefinition
     {

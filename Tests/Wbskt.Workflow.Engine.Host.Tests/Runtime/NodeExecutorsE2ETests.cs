@@ -33,11 +33,11 @@ public sealed class NodeExecutorsE2ETests
             null,
             true,
             [
-                new ManualTriggerNode(triggerNodeId, "start", [new PortDefinition("default", PortDirection.Output, "Default")], new ManualTriggerConfig("start")),
-                new LogicGateNode(logicNodeId, "logic", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], new LogicGateConfig("gate")),
-                new VariableNode(variableNodeId, "variable", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("default", PortDirection.Output, "Default")], new VariableConfig(VariableScope.Local, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("auto"))),
-                new ForEachNode(forEachNodeId, "foreach", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("body", PortDirection.Output, "Body"), new PortDefinition("done", PortDirection.Output, "Done")], new ForEachConfig("items")),
-                new LogicGateNode(endNodeId, "end", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], new LogicGateConfig("true"))
+                new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new ManualTriggerConfig("start") },
+                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], Config = new LogicGateConfig("gate") },
+                new VariableNode { NodeId = variableNodeId, Name = "variable", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("default", PortDirection.Output, "Default")], Config = new VariableConfig(VariableScope.Local, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("auto")) },
+                new ForEachNode { NodeId = forEachNodeId, Name = "foreach", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("body", PortDirection.Output, "Body"), new PortDefinition("done", PortDirection.Output, "Done")], Config = new ForEachConfig("items") },
+                new LogicGateNode { NodeId = endNodeId, Name = "end", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], Config = new LogicGateConfig("true") }
             ],
             [
                 new Edge((triggerNodeId, "default"), (logicNodeId, "in")),

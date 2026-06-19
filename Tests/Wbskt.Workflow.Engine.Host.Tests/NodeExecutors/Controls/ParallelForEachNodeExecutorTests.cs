@@ -24,7 +24,7 @@ public sealed class ParallelForEachNodeExecutorTests
 
         var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new ParallelForEachNode(Guid.NewGuid(), "pfe", CreatePorts(), new ParallelForEachConfig("items")),
+            new ParallelForEachNode { NodeId = Guid.NewGuid(), Name = "pfe", Ports = CreatePorts(), Config = new ParallelForEachConfig("items") },
             new Dictionary<string, JsonElement>
             {
                 ["items"] = JsonSerializer.SerializeToElement(new[] { "x", "y", "z" })
@@ -63,7 +63,7 @@ public sealed class ParallelForEachNodeExecutorTests
 
         var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new ParallelForEachNode(Guid.NewGuid(), "pfe", CreatePorts(), new ParallelForEachConfig("items")),
+            new ParallelForEachNode { NodeId = Guid.NewGuid(), Name = "pfe", Ports = CreatePorts(), Config = new ParallelForEachConfig("items") },
             new Dictionary<string, JsonElement>
             {
                 ["items"] = JsonSerializer.SerializeToElement(new[] { "a", "b" })
@@ -82,7 +82,7 @@ public sealed class ParallelForEachNodeExecutorTests
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new ParallelForEachNode(Guid.NewGuid(), "pfe", CreatePorts(), new ParallelForEachConfig("items")),
+            new ParallelForEachNode { NodeId = Guid.NewGuid(), Name = "pfe", Ports = CreatePorts(), Config = new ParallelForEachConfig("items") },
             new Dictionary<string, JsonElement>
             {
                 ["items"] = JsonSerializer.SerializeToElement(Array.Empty<string>())
@@ -104,7 +104,7 @@ public sealed class ParallelForEachNodeExecutorTests
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new ParallelForEachNode(Guid.NewGuid(), "pfe", CreatePorts(), null),
+            new ParallelForEachNode { NodeId = Guid.NewGuid(), Name = "pfe", Ports = CreatePorts(), Config = null },
             new Dictionary<string, JsonElement>());
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -119,7 +119,7 @@ public sealed class ParallelForEachNodeExecutorTests
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object);
         NodeContext ctx = CreateContext(
-            new ParallelForEachNode(Guid.NewGuid(), "pfe", CreatePorts(), new ParallelForEachConfig("items")),
+            new ParallelForEachNode { NodeId = Guid.NewGuid(), Name = "pfe", Ports = CreatePorts(), Config = new ParallelForEachConfig("items") },
             new Dictionary<string, JsonElement>
             {
                 ["items"] = JsonSerializer.SerializeToElement("not-an-array")

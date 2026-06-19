@@ -1,9 +1,12 @@
 using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-public sealed record ForEachNode(Guid NodeId, string Name, IReadOnlyCollection<PortDefinition> Ports,
-    [property: JsonPropertyName("config")] ForEachConfig? Config) : BaseNode(NodeId, Name, Ports)
+public sealed record ForEachNode : BaseNode
 {
+    [JsonPropertyName("config")]
+    public ForEachConfig? Config { get; init; }
+
+
     [JsonIgnore]
     public override string Kind => NodeKind.ControlForEach;
 }
