@@ -74,7 +74,7 @@ public class WorkflowValidatorTests
     [Fact]
     public void Validate_returns_warning_when_no_trigger_nodes()
     {
-        var logicNode = new LogicGateNode(new Guid("aaaaaaaa-0000-0000-0000-000000000004"), "Logic", [new PortDefinition("out", PortDirection.Output, "Out")], new LogicGateConfig("true"));
+        var logicNode = new LogicGateNode(new Guid("aaaaaaaa-0000-0000-0000-000000000004"), "Logic", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], new LogicGateConfig("true"));
         var defNoTriggers = ValidWorkflowBuilder.Build() with { Nodes = [logicNode], Edges = [] };
         var result = Validator.Validate(defNoTriggers);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "NO_TRIGGERS");
@@ -86,7 +86,7 @@ public class WorkflowValidatorTests
     {
         var def = ValidWorkflowBuilder.Build();
         var orphanId = new Guid("aaaaaaaa-0000-0000-0000-000000000003");
-        var orphan = new LogicGateNode(orphanId, "Orphan", [], new LogicGateConfig("true"));
+        var orphan = new LogicGateNode(orphanId, "Orphan", [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], new LogicGateConfig("true"));
         var defWithOrphan = def with { Nodes = [..def.Nodes, orphan] };
         var result = Validator.Validate(defWithOrphan);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "ORPHAN_NODE" && i.NodeId == orphanId);
@@ -102,7 +102,7 @@ public static class ValidWorkflowBuilder
     {
         var trigger = new DeviceTriggerNode(
             Trigger1Id, "Trigger",
-            [new PortDefinition("out", PortDirection.Output, "Out")],
+            [new PortDefinition("default", PortDirection.Output, "Out")],
             new Wbskt.Workflow.Abstraction.Models.Triggers.DeviceTriggerConfig("dev-1", "telemetry"));
 
         var logic = new LogicGateNode(

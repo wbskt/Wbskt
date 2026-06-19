@@ -12,6 +12,7 @@ public sealed class WorkflowValidator
         ValidateShape(definition, issues);
         ValidateDuplicateNodeIds(definition, issues);
         ValidateEdges(definition, issues);
+        ValidatePorts(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
         return new ValidationResult(issues);
@@ -103,6 +104,102 @@ public sealed class WorkflowValidator
             {
                 issues.Add(new ValidationIssue(ValidationSeverity.Warning, "ORPHAN_NODE", $"Node '{node.NodeId}' ('{node.Name}') has no inbound or outbound edges.", node.NodeId));
             }
+        }
+    }
+
+    private static void ValidatePorts(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            var expectedPorts = GetExpectedPorts(node);
+            
+            // Check for missing ports
+            foreach (var expected in expectedPorts)
+            {
+                if (!node.Ports.Any(p => p.PortId == expected.PortId && p.Direction == expected.Direction))
+                {
+                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "MISSING_PORT", $"Node '{node.NodeId}' of kind '{node.Kind}' is missing expected {expected.Direction} port '{expected.PortId}'."));
+                }
+            }
+
+            // Check for extra ports
+            foreach (var actual in node.Ports)
+            {
+                if (!expectedPorts.Any(p => p.PortId == actual.PortId && p.Direction == actual.Direction))
+                {
+                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "EXTRA_PORT", $"Node '{node.NodeId}' of kind '{node.Kind}' defines an unexpected {actual.Direction} port '{actual.PortId}'."));
+                }
+            }
+        }
+    }
+
+    private static IReadOnlyCollection<PortDefinition> GetExpectedPorts(Wbskt.Workflow.Abstraction.Models.Nodes.BaseNode node)
+    {
+        var inputIn = new PortDefinition("in", PortDirection.Input, "In");
+        var outputDefault = new PortDefinition("default", PortDirection.Output, "Default");
+        var outputTrue = new PortDefinition("true", PortDirection.Output, "True");
+        var outputFalse = new PortDefinition("false", PortDirection.Output, "False");
+        var outputBody = new PortDefinition("body", PortDirection.Output, "Body");
+        var outputDone = new PortDefinition("done", PortDirection.Output, "Done");
+        var outputEmpty = new PortDefinition("empty", PortDirection.Output, "Empty");
+
+        if (node.Kind.StartsWith("trigger:"))
+        {
+            return new[] { outputDefault };
+        }
+        
+        if (node.Kind.StartsWith("action:"))
+        {
+            if (node.Kind == "action:webhook")
+            {
+                return new[] { inputIn, outputDefault, new PortDefinition("error", PortDirection.Output, "Error") };
+            }
+            return new[] { inputIn, outputDefault };
+        }
+
+        switch (node.Kind)
+        {
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlLogic:
+                return new[] { inputIn, outputTrue, outputFalse };
+            
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlForEach:
+                return new[] { inputIn, outputBody, outputDone };
+
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlParallelForEach:
+                return new[] { inputIn, outputBody, outputEmpty };
+            
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlFork:
+                var forkOutputs = new List<PortDefinition> { inputIn };
+                if (node is Wbskt.Workflow.Abstraction.Models.Nodes.Controls.ForkNode forkNode && forkNode.Config != null)
+                {
+                    foreach (var branch in forkNode.Config.Branches)
+                    {
+                        forkOutputs.Add(new PortDefinition(branch, PortDirection.Output, branch));
+                    }
+                }
+                return forkOutputs;
+                
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlAwaitSignal:
+                if (node is Wbskt.Workflow.Abstraction.Models.Nodes.Controls.AwaitSignalNode awaitNode && !string.IsNullOrWhiteSpace(awaitNode.Config?.OnTimeout))
+                {
+                    return new[] { inputIn, outputDefault, new PortDefinition(awaitNode.Config.OnTimeout, PortDirection.Output, "Timeout") };
+                }
+                return new[] { inputIn, outputDefault };
+
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlWaitForHttp:
+                if (node is Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpNode waitNode && !string.IsNullOrWhiteSpace(waitNode.Config?.OnTimeout))
+                {
+                    return new[] { inputIn, outputDefault, new PortDefinition(waitNode.Config.OnTimeout, PortDirection.Output, "Timeout") };
+                }
+                return new[] { inputIn, outputDefault };
+                
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlEnd:
+            case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlFailRun:
+                return new[] { inputIn };
+
+            default:
+                // Delay, Join, Variable, SubWorkflow
+                return new[] { inputIn, outputDefault };
         }
     }
 }

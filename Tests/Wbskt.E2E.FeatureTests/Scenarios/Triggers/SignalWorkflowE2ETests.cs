@@ -152,7 +152,7 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
             Ports:
             [
                 new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("out", PortDirection.Output, "Out")
+                new PortDefinition("default", PortDirection.Output, "Out")
             ],
             Config: new SendCommandConfig(DeviceRef: deviceRef, Command: "OpenVent", Payload: null));
 

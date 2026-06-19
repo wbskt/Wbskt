@@ -105,7 +105,7 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
             actionNodeId, "OpenVent",
             [
                 new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("out", PortDirection.Output, "Out")
+                new PortDefinition("default", PortDirection.Output, "Out")
             ],
             new SendCommandConfig(deviceRef, "OpenVent", null));
 

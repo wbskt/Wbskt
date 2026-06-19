@@ -19,7 +19,7 @@ public class ActionNodeTests
                 "nodeId": "33333333-3333-3333-3333-333333333333",
                 "kind": "action:command",
                 "name": "OpenVent",
-                "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
                 "config": { "deviceRef": "$trigger.deviceId", "command": "OpenVent" },
                 "retry": { "strategy": "Exponential", "initialDelay": "00:00:01", "factor": 2.0, "maxAttempts": 3, "jitterPct": 10, "retryOn": [] },
                 "onFailure": { "outcome": "FailBranch" }

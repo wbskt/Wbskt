@@ -11,24 +11,24 @@
     { "name": "smsToday", "type": "Counter", "default": 0, "resetPolicy": { "kind": "dailyAtUtc", "time": "02:00:00" } }
   ],
   "nodes": [
-    { "nodeId": "11111111-1111-1111-1111-111111111111", "kind": "trigger:device", "name": "Temp Trigger", "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }], "config": { "deviceRef": "sensor-A", "event": "telemetry", "correlationKey": "$trigger.deviceId", "concurrencyPolicy": "CancelExisting" } },
+    { "nodeId": "11111111-1111-1111-1111-111111111111", "kind": "trigger:device", "name": "Temp Trigger", "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }], "config": { "deviceRef": "sensor-A", "event": "telemetry", "correlationKey": "$trigger.deviceId", "concurrencyPolicy": "CancelExisting" } },
     { "nodeId": "22222222-2222-2222-2222-222222222222", "kind": "control:logic", "name": "Gate 1", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "true", "direction": "Output", "label": "True" }, { "portId": "false", "direction": "Output", "label": "False" }], "config": { "condition": "$trigger.temperature > 35" } },
-    { "nodeId": "33333333-3333-3333-3333-333333333333", "kind": "action:command", "name": "OpenVent", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "deviceRef": "$trigger.deviceId", "command": "OpenVent" } },
-    { "nodeId": "44444444-4444-4444-4444-444444444444", "kind": "control:delay", "name": "Delay 10m", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "duration": "00:10:00" } },
+    { "nodeId": "33333333-3333-3333-3333-333333333333", "kind": "action:command", "name": "OpenVent", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "default", "direction": "Output", "label": "Out" }], "config": { "deviceRef": "$trigger.deviceId", "command": "OpenVent" } },
+    { "nodeId": "44444444-4444-4444-4444-444444444444", "kind": "control:delay", "name": "Delay 10m", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "default", "direction": "Output", "label": "Out" }], "config": { "duration": "00:10:00" } },
     { "nodeId": "55555555-5555-5555-5555-555555555555", "kind": "control:logic", "name": "Gate 2", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "true", "direction": "Output", "label": "True" }, { "portId": "false", "direction": "Output", "label": "False" }], "config": { "condition": "$trigger.temperature > 35" } },
-    { "nodeId": "66666666-6666-6666-6666-666666666666", "kind": "action:email", "name": "Send SMS", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "to": "ops@x", "subject": "Alert", "body": "Vent didn't cool" } },
-    { "nodeId": "77777777-7777-7777-7777-777777777777", "kind": "control:variable", "name": "Increment smsToday", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "scope": "Shared", "op": "Increment", "var": "smsToday" } },
+    { "nodeId": "66666666-6666-6666-6666-666666666666", "kind": "action:email", "name": "Send SMS", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "default", "direction": "Output", "label": "Out" }], "config": { "to": "ops@x", "subject": "Alert", "body": "Vent didn't cool" } },
+    { "nodeId": "77777777-7777-7777-7777-777777777777", "kind": "control:variable", "name": "Increment smsToday", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "default", "direction": "Output", "label": "Out" }], "config": { "scope": "Shared", "op": "Increment", "var": "smsToday" } },
     { "nodeId": "88888888-8888-8888-8888-888888888888", "kind": "control:logic", "name": "Gate 3", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "true", "direction": "Output", "label": "True" }, { "portId": "false", "direction": "Output", "label": "False" }], "config": { "condition": "$shared.smsToday >= 2" } },
-    { "nodeId": "99999999-9999-9999-9999-999999999999", "kind": "action:email", "name": "Call ops", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "out", "direction": "Output", "label": "Out" }], "config": { "to": "ops@x", "subject": "URGENT", "body": "Call ops" } }
+    { "nodeId": "99999999-9999-9999-9999-999999999999", "kind": "action:email", "name": "Call ops", "ports": [{ "portId": "in", "direction": "Input", "label": "In" }, { "portId": "default", "direction": "Output", "label": "Out" }], "config": { "to": "ops@x", "subject": "URGENT", "body": "Call ops" } }
   ],
   "edges": [
-    { "from": ["11111111-1111-1111-1111-111111111111", "out"], "to": ["22222222-2222-2222-2222-222222222222", "in"] },
+    { "from": ["11111111-1111-1111-1111-111111111111", "default"], "to": ["22222222-2222-2222-2222-222222222222", "in"] },
     { "from": ["22222222-2222-2222-2222-222222222222", "true"], "to": ["33333333-3333-3333-3333-333333333333", "in"] },
-    { "from": ["33333333-3333-3333-3333-333333333333", "out"], "to": ["44444444-4444-4444-4444-444444444444", "in"] },
-    { "from": ["44444444-4444-4444-4444-444444444444", "out"], "to": ["55555555-5555-5555-5555-555555555555", "in"] },
+    { "from": ["33333333-3333-3333-3333-333333333333", "default"], "to": ["44444444-4444-4444-4444-444444444444", "in"] },
+    { "from": ["44444444-4444-4444-4444-444444444444", "default"], "to": ["55555555-5555-5555-5555-555555555555", "in"] },
     { "from": ["55555555-5555-5555-5555-555555555555", "true"], "to": ["66666666-6666-6666-6666-666666666666", "in"] },
-    { "from": ["66666666-6666-6666-6666-666666666666", "out"], "to": ["77777777-7777-7777-7777-777777777777", "in"] },
-    { "from": ["77777777-7777-7777-7777-777777777777", "out"], "to": ["88888888-8888-8888-8888-888888888888", "in"] },
+    { "from": ["66666666-6666-6666-6666-666666666666", "default"], "to": ["77777777-7777-7777-7777-777777777777", "in"] },
+    { "from": ["77777777-7777-7777-7777-777777777777", "default"], "to": ["88888888-8888-8888-8888-888888888888", "in"] },
     { "from": ["88888888-8888-8888-8888-888888888888", "true"], "to": ["99999999-9999-9999-9999-999999999999", "in"] }
   ]
 }

@@ -18,7 +18,7 @@ public class TriggerNodeTests
                 "nodeId": "11111111-1111-1111-1111-111111111111",
                 "kind": "trigger:device",
                 "name": "Temp Trigger",
-                "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
                 "config": {
                     "deviceRef": "sensor-A",
                     "event": "telemetry",
@@ -64,7 +64,7 @@ public class TriggerNodeTests
                 "nodeId": "00000000-0000-0000-0000-000000000001",
                 "kind": "trigger:schedule",
                 "name": "Cron Trigger",
-                "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
                 "config": { "cron": "0 6 * * *" }
             }
             """;
@@ -81,7 +81,7 @@ public class TriggerNodeTests
                 "nodeId": "00000000-0000-0000-0000-000000000002",
                 "kind": "trigger:webhook",
                 "name": "Webhook",
-                "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
                 "config": { "path": "/water-start", "method": "POST" }
             }
             """;
@@ -99,7 +99,7 @@ public class TriggerNodeTests
                 "nodeId": "00000000-0000-0000-0000-000000000003",
                 "kind": "trigger:manual",
                 "name": "Manual",
-                "ports": [{ "portId": "out", "direction": "Output", "label": "Out" }],
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
                 "config": { "description": "Start manually" }
             }
             """;

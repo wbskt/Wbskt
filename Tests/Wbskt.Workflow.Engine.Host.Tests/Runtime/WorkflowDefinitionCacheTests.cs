@@ -76,7 +76,7 @@ public sealed class WorkflowDefinitionCacheTests
                 new ManualTriggerNode(
                     Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                     "start",
-                    [new PortDefinition("out", PortDirection.Output, "Out")],
+                    [new PortDefinition("default", PortDirection.Output, "Out")],
                     new ManualTriggerConfig()),
                 new LogicGateNode(
                     Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),

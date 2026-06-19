@@ -184,7 +184,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
             Ports:
             [
                 new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("out", PortDirection.Output, "Out")
+                new PortDefinition("default", PortDirection.Output, "Out")
             ],
             Config: new SendCommandConfig(
                 DeviceRef: deviceRef,

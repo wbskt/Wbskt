@@ -146,7 +146,7 @@ public sealed class WorkflowBuilder
         _nodes.Add(new ParallelForEachNode(
             NodeId: id,
             Name: "Parallel For Each",
-            Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("body", PortDirection.Output, "Body")],
+            Ports: [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("body", PortDirection.Output, "Body"), new PortDefinition("empty", PortDirection.Output, "Empty")],
             Config: new ParallelForEachConfig(collectionKey)));
             
         ConnectToHead(id, "in");

@@ -32,7 +32,7 @@ public sealed class BranchLoopEndToEndTests
                 new ManualTriggerNode(
                     triggerNodeId,
                     "start",
-                    [new PortDefinition("out", PortDirection.Output, "Out")],
+                    [new PortDefinition("default", PortDirection.Output, "Out")],
                     new ManualTriggerConfig("manual start")),
                 new LogicGateNode(
                     logicNodeId,
@@ -40,7 +40,7 @@ public sealed class BranchLoopEndToEndTests
                     [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")],
                     new LogicGateConfig("true"))
             ],
-            [new Edge((triggerNodeId, "out"), (logicNodeId, "in"))],
+            [new Edge((triggerNodeId, "default"), (logicNodeId, "in"))],
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
@@ -80,7 +80,7 @@ public sealed class BranchLoopEndToEndTests
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
-            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("out", new Dictionary<string, JsonElement>()));
+            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()));
         }
     }
 

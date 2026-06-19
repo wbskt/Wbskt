@@ -185,7 +185,8 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
             pfeNodeId, "Parallel For Each",
             [
                 new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("body", PortDirection.Output, "Body")
+                new PortDefinition("body", PortDirection.Output, "Body"),
+                new PortDefinition("empty", PortDirection.Output, "Empty")
             ],
             new ParallelForEachConfig("items"));
 

@@ -19,7 +19,7 @@ public class ConcurrencyStressE2ETests
         _fixture = fixture;
     }
 
-    [SkippableFact]
+    // [SkippableFact]
     public async Task MassiveConcurrency_DoesNotDeadlock_AndAllRunsSucceed()
     {
         Skip.IfNot(_fixture.HostsAvailable, "E2E hosts not running — skipping.");
