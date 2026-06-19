@@ -97,56 +97,13 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildComplexDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var gateNodeId = Guid.NewGuid();
-        var delayNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
-        var endNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-Complex-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddLogicGate("true", gate =>
+            {
+                gate.OnTrue(b => b.AddDelay(Delay).AddSendCommand(deviceRef, "OpenVent").AddEnd());
+            });
 
-        var triggerNode = new DeviceTriggerNode(
-            triggerNodeId, "Device Trigger",
-            [new PortDefinition("default", PortDirection.Output, "Out")],
-            new DeviceTriggerConfig(deviceRef, "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel));
-
-        var gateNode = new LogicGateNode(
-            gateNodeId, "Always True",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("true", PortDirection.Output, "True"),
-                new PortDefinition("false", PortDirection.Output, "False")
-            ],
-            new LogicGateConfig("true"));
-
-        var delayNode = new DelayNode(
-            delayNodeId, "Hold",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            new DelayConfig(Delay));
-
-        var actionNode = new SendCommandActionNode(
-            actionNodeId, "OpenVent",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            new SendCommandConfig(deviceRef, "OpenVent", null));
-
-        var endNode = new EndNode(
-            endNodeId, "End",
-            [new PortDefinition("in", PortDirection.Input, "In")]);
-
-        var edges = new[]
-        {
-            new Edge((triggerNodeId, "default"), (gateNodeId, "in")),
-            new Edge((gateNodeId, "true"), (delayNodeId, "in")),
-            new Edge((delayNodeId, "default"), (actionNodeId, "in")),
-            new Edge((actionNodeId, "default"), (endNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            workflowRefId, 1, 1, $"E2E-Complex-{workflowRefId:N}", null, true,
-            [triggerNode, gateNode, delayNode, actionNode, endNode], edges, [], DateTime.UtcNow, 1);
+        return builder.BuildAndValidate();
     }
 }

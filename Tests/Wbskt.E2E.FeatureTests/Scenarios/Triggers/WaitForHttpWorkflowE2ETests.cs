@@ -84,39 +84,13 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildHttpWaitDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var waitNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-Http-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddWaitForHttp(TimeSpan.FromMinutes(15), timeout => 
+            {
+                timeout.OnSuccess(b => b.AddSendCommand(deviceRef, "OpenVent"));
+            });
 
-        var triggerNode = new DeviceTriggerNode(
-            triggerNodeId, "Device Trigger",
-            [new PortDefinition("default", PortDirection.Output, "Out")],
-            new DeviceTriggerConfig(deviceRef, "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel));
-
-        var waitNode = new WaitForHttpNode(
-            waitNodeId, "Wait For Callback",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Woke")
-            ],
-            new WaitForHttpConfig(TimeSpan.FromMinutes(15)));
-
-        var actionNode = new SendCommandActionNode(
-            actionNodeId, "OpenVent",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            new SendCommandConfig(deviceRef, "OpenVent", null));
-
-        var edges = new[]
-        {
-            new Edge((triggerNodeId, "default"), (waitNodeId, "in")),
-            new Edge((waitNodeId, "default"), (actionNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            workflowRefId, 1, 1, $"E2E-Http-{workflowRefId:N}", null, true,
-            [triggerNode, waitNode, actionNode], edges, [], DateTime.UtcNow, 1);
+        return builder.BuildAndValidate();
     }
 }

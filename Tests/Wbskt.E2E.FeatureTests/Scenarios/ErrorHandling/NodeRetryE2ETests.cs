@@ -81,19 +81,14 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-Retry-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddWebhook("POST", url, null, webhook => 
+            {
+                webhook.OnSuccess(b => b.AddSendCommand(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded", null));
+                webhook.OnError(b => b.AddFailRun("Webhook failed permanently"));
+            });
 
-        // Add webhook node that points to our local listener
-        builder.SetHead(triggerNodeId, "default")
-            .AddWebhook("POST", url, null, out var webhookNodeId);
-
-        builder.SetHead(webhookNodeId, "default")
-            .AddSendCommand(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded", null);
-
-        builder.SetHead(webhookNodeId, "error")
-            .AddFailRun("Webhook failed permanently");
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));

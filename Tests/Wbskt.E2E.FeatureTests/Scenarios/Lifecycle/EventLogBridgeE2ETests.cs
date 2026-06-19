@@ -87,25 +87,10 @@ public sealed class EventLogBridgeE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildTrivialDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var endNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-EventLog-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddEnd();
 
-        var triggerNode = new DeviceTriggerNode(
-            triggerNodeId, "Device Trigger",
-            [new PortDefinition("default", PortDirection.Output, "Out")],
-            new DeviceTriggerConfig(deviceRef, "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel));
-
-        var endNode = new EndNode(
-            endNodeId, "End",
-            [new PortDefinition("in", PortDirection.Input, "In")]);
-
-        var edges = new[]
-        {
-            new Edge((triggerNodeId, "default"), (endNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            workflowRefId, 1, 1, $"E2E-EventLog-{workflowRefId:N}", null, true,
-            [triggerNode, endNode], edges, [], DateTime.UtcNow, 1);
+        return builder.BuildAndValidate();
     }
 }

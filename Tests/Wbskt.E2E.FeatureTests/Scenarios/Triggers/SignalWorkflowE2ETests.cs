@@ -122,57 +122,13 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildSignalDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var awaitNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-Signal-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddAwaitSignal("approve", null, timeout => 
+            {
+                timeout.OnSuccess(b => b.AddSendCommand(deviceRef, "OpenVent"));
+            });
 
-        var triggerNode = new DeviceTriggerNode(
-            NodeId: triggerNodeId,
-            Name: "Device Trigger",
-            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new DeviceTriggerConfig(
-                DeviceRef: deviceRef,
-                Event: "telemetry",
-                CorrelationKey: null,
-                ConcurrencyPolicy: WorkflowConcurrencyPolicy.AllowParallel));
-
-        var awaitNode = new AwaitSignalNode(
-            NodeId: awaitNodeId,
-            Name: "Await Approval",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Signalled")
-            ],
-            Config: new AwaitSignalConfig("approve"));
-
-        var actionNode = new SendCommandActionNode(
-            NodeId: actionNodeId,
-            Name: "OpenVent",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new SendCommandConfig(DeviceRef: deviceRef, Command: "OpenVent", Payload: null));
-
-        var edges = new[]
-        {
-            new Edge(From: (triggerNodeId, "default"), To: (awaitNodeId, "in")),
-            new Edge(From: (awaitNodeId, "default"), To: (actionNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            WorkflowRefId: workflowRefId,
-            Version: 1,
-            WorkspaceId: 1,
-            Name: $"E2E-Signal-{workflowRefId:N}",
-            Description: null,
-            IsEnabled: true,
-            Nodes: [triggerNode, awaitNode, actionNode],
-            Edges: edges,
-            SharedVariableSchema: [],
-            CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1);
+        return builder.BuildAndValidate();
     }
 }

@@ -119,57 +119,11 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildDelayDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var delayNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-Delay-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddDelay(Delay)
+            .AddSendCommand(deviceRef, "OpenVent");
 
-        var triggerNode = new DeviceTriggerNode(
-            NodeId: triggerNodeId,
-            Name: "Device Trigger",
-            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new DeviceTriggerConfig(
-                DeviceRef: deviceRef,
-                Event: "telemetry",
-                CorrelationKey: null,
-                ConcurrencyPolicy: WorkflowConcurrencyPolicy.AllowParallel));
-
-        var delayNode = new DelayNode(
-            NodeId: delayNodeId,
-            Name: "Wait",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new DelayConfig(Delay));
-
-        var actionNode = new SendCommandActionNode(
-            NodeId: actionNodeId,
-            Name: "OpenVent",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new SendCommandConfig(DeviceRef: deviceRef, Command: "OpenVent", Payload: null));
-
-        var edges = new[]
-        {
-            new Edge(From: (triggerNodeId, "default"), To: (delayNodeId, "in")),
-            new Edge(From: (delayNodeId, "default"), To: (actionNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            WorkflowRefId: workflowRefId,
-            Version: 1,
-            WorkspaceId: 1,
-            Name: $"E2E-Delay-{workflowRefId:N}",
-            Description: null,
-            IsEnabled: true,
-            Nodes: [triggerNode, delayNode, actionNode],
-            Edges: edges,
-            SharedVariableSchema: [],
-            CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1);
+        return builder.BuildAndValidate();
     }
 }

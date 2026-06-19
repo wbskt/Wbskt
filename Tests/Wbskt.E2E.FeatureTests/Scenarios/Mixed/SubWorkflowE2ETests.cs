@@ -27,15 +27,13 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         // 1. Build and publish Child workflow
         var childWorkflowRefId = Guid.NewGuid();
         var childDefinition = new WorkflowBuilder($"E2E-Child-{childWorkflowRefId:N}", childWorkflowRefId)
-            .AddManualTrigger(out Guid triggerNodeId)
-            .AddDelay(TimeSpan.FromSeconds(2), out Guid delayId);
-            
-        childDefinition.SetHead(delayId, "default"); // No command
-        var builtChild = childDefinition.Build();
+            .AddManualTrigger()
+            .AddDelay(TimeSpan.FromSeconds(2))
+            .BuildAndValidate();
 
         await fixture.PublishWorkflowAsync(
             token, workspaceRef, childWorkflowRefId, $"E2E-Child-{childWorkflowRefId:N}",
-            JsonSerializer.SerializeToElement(builtChild, JsonOpts));
+            JsonSerializer.SerializeToElement(childDefinition, JsonOpts));
 
         // 2. Build and publish Parent workflow
         var parentWorkflowRefId = Guid.NewGuid();
@@ -43,7 +41,7 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
             .AddDeviceTrigger(clientRefId.ToString())
             .AddSubWorkflow(childWorkflowRefId)
             .AddSendCommand(clientRefId.ToString(), "ParentCommand")
-            .Build();
+            .BuildAndValidate();
 
         var parentPublishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, parentWorkflowRefId, $"E2E-Parent-{parentWorkflowRefId:N}",

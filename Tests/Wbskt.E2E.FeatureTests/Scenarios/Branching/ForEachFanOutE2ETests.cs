@@ -144,78 +144,15 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildForEachDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var variableNodeId = Guid.NewGuid();
-        var forEachNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
-        var endNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-ForEach-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef)
+            .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(Items))
+            .AddForEach("items", loop =>
+            {
+                loop.OnBody(b => b.AddSendCommand(deviceRef, "OpenVent"));
+                loop.OnDone(b => b.AddEnd());
+            });
 
-        var triggerNode = new DeviceTriggerNode(
-            NodeId: triggerNodeId,
-            Name: "Device Trigger",
-            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new DeviceTriggerConfig(
-                DeviceRef: deviceRef,
-                Event: "telemetry",
-                CorrelationKey: null,
-                ConcurrencyPolicy: WorkflowConcurrencyPolicy.AllowParallel));
-
-        var itemsValue = JsonSerializer.SerializeToElement(Items);
-        var variableNode = new VariableNode(
-            NodeId: variableNodeId,
-            Name: "Set Items",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new VariableConfig(VariableScope.Local, VariableOperation.Set, "items", itemsValue));
-
-        var forEachNode = new ForEachNode(
-            NodeId: forEachNodeId,
-            Name: "For Each Item",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("body", PortDirection.Output, "Body"),
-                new PortDefinition("done", PortDirection.Output, "Done")
-            ],
-            Config: new ForEachConfig("items"));
-
-        var actionNode = new SendCommandActionNode(
-            NodeId: actionNodeId,
-            Name: "OpenVent",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new SendCommandConfig(DeviceRef: deviceRef, Command: "OpenVent", Payload: null));
-
-        var endNode = new EndNode(
-            NodeId: endNodeId,
-            Name: "End",
-            Ports: [new PortDefinition("in", PortDirection.Input, "In")]);
-
-        var edges = new[]
-        {
-            new Edge(From: (triggerNodeId, "default"), To: (variableNodeId, "in")),
-            new Edge(From: (variableNodeId, "default"), To: (forEachNodeId, "in")),
-            new Edge(From: (forEachNodeId, "body"), To: (actionNodeId, "in")),
-            new Edge(From: (forEachNodeId, "done"), To: (endNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            WorkflowRefId: workflowRefId,
-            Version: 1,
-            WorkspaceId: 1,
-            Name: $"E2E-ForEach-{workflowRefId:N}",
-            Description: null,
-            IsEnabled: true,
-            Nodes: [triggerNode, variableNode, forEachNode, actionNode, endNode],
-            Edges: edges,
-            SharedVariableSchema: [],
-            CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1);
+        return builder.BuildAndValidate();
     }
 }

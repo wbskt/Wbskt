@@ -117,9 +117,14 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
         return new WorkflowBuilder($"E2E-PFE-{workflowRefId:N}", workflowRefId)
             .AddDeviceTrigger(deviceRef)
             .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(Items))
-            .AddParallelForEach("items", out Guid pfeNodeId)
-            .AddJoin(JoinMode.All, out _)
-            .AddSendCommand(deviceRef, "OpenVent")
-            .Build();
+            .AddParallelForEach("items", loop => 
+            {
+                loop.OnBody(b => 
+                {
+                    b.AddJoin(JoinMode.All, out _)
+                     .AddSendCommand(deviceRef, "OpenVent");
+                });
+            })
+            .BuildAndValidate();
     }
 }

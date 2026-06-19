@@ -82,24 +82,27 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         var builder = new WorkflowBuilder($"E2E-Nested-{workflowRefId:N}", workflowRefId)
             .AddDeviceTrigger(deviceRef)
             .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(new[] { "1", "2", "3" }))
-            .AddForEach("items", out Guid forEachId);
+            .AddForEach("items", forEach1 =>
+            {
+                forEach1.OnBody(b1 =>
+                {
+                    b1.AddVariable(VariableScope.Local, VariableOperation.Set, "subItems", JsonSerializer.SerializeToElement(new[] { "a", "b", "c", "d", "e" }))
+                      .AddParallelForEach("subItems", pfe =>
+                      {
+                          pfe.OnBody(b2 =>
+                          {
+                              b2.AddFork(["path1", "path2"], fork =>
+                              {
+                                  fork.Branch("path1", b3 => b3.AddSendCommand(deviceRef, "ReachEnd"));
+                                  fork.Branch("path2", b3 => b3.AddSendCommand(deviceRef, "ReachEnd"));
+                              });
+                          });
+                      });
+                });
+                
+                forEach1.OnDone(b1 => b1.AddSendCommand(deviceRef, "ReachEnd"));
+            });
 
-        // Body of ForEach
-        builder.AddVariable(VariableScope.Local, VariableOperation.Set, "subItems", JsonSerializer.SerializeToElement(new[] { "a", "b", "c", "d", "e" }))
-            .AddParallelForEach("subItems", out Guid pfeId);
-
-        // Body of ParallelForEach
-        builder.AddFork(["path1", "path2"], out Guid forkId);
-
-        builder.SetHead(forkId, "path1")
-            .AddSendCommand(deviceRef, "ReachEnd");
-
-        builder.SetHead(forkId, "path2")
-            .AddSendCommand(deviceRef, "ReachEnd");
-
-        builder.SetHead(forEachId, "done")
-            .AddSendCommand(deviceRef, "ReachEnd");
-
-        return builder.Build();
+        return builder.BuildAndValidate();
     }
 }

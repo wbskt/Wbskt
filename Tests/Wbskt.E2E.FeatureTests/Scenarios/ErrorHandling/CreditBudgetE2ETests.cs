@@ -32,20 +32,18 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-CreditBudget-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
-        // We want a tight loop. Let's use a LogicGate that always evaluates to true.
-        builder.SetHead(triggerNodeId, "default")
-            .AddLogicGate("true", out var logicGateNodeId);
+        builder.AddLogicGate("true", logic => 
+        {
+            // Loop the "true" port right back to the LogicGate!
+            builder.Connect(logic.GateId, PortNames.True, logic.GateId, PortNames.In);
+            
+            // We'll also wire "false" to a success node just in case (though it won't be hit)
+            logic.OnFalse(b => b.AddSendCommand(deviceRefStr, "Done", "Done", null));
+        });
 
-        // Loop the "true" port right back to the LogicGate!
-        builder.Connect(logicGateNodeId, "true", logicGateNodeId, "in");
-
-        // We'll also wire "false" to a success node just in case (though it won't be hit)
-        builder.SetHead(logicGateNodeId, "false")
-            .AddSendCommand(deviceRefStr, "Done", "Done", null);
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));

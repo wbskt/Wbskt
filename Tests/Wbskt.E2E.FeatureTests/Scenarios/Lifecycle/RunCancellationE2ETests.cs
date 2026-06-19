@@ -34,18 +34,14 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-RunCancel-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddAwaitSignal("continue", TimeSpan.FromSeconds(60), awaitSignal => 
+            {
+                awaitSignal.OnSuccess(b => b.AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
+            });
 
-        builder.SetHead(triggerNodeId, "default")
-            .AddAwaitSignal("continue", TimeSpan.FromSeconds(60), out var awaitNodeId);
-
-        builder.SetHead(awaitNodeId, "default")
-            .AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null);
-
-        builder.SetHead(awaitNodeId, "timeout")
-            .AddFailRun("Should not have timed out");
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));

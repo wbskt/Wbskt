@@ -160,56 +160,10 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
     /// </summary>
     private static WorkflowDefinition BuildMinimalDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-OpenVent-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef)
+            .AddSendCommand(deviceRef, "OpenVent");
 
-        var triggerNode = new DeviceTriggerNode(
-            NodeId: triggerNodeId,
-            Name: "Device Trigger",
-            Ports:
-            [
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new DeviceTriggerConfig(
-                DeviceRef: deviceRef,
-                Event: "telemetry",
-                CorrelationKey: null,
-                ConcurrencyPolicy: WorkflowConcurrencyPolicy.AllowParallel
-            )
-        );
-
-        var actionNode = new SendCommandActionNode(
-            NodeId: actionNodeId,
-            Name: "OpenVent",
-            Ports:
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            Config: new SendCommandConfig(
-                DeviceRef: deviceRef,
-                Command: "OpenVent",
-                Payload: null
-            )
-        );
-
-        var edge = new Edge(
-            From: (triggerNodeId, "default"),
-            To: (actionNodeId, "in")
-        );
-
-        return new WorkflowDefinition(
-            WorkflowRefId: workflowRefId,
-            Version: 1,
-            WorkspaceId: 1,
-            Name: $"E2E-OpenVent-{workflowRefId:N}",
-            Description: null,
-            IsEnabled: true,
-            Nodes: [triggerNode, actionNode],
-            Edges: [edge],
-            SharedVariableSchema: [],
-            CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1
-        );
+        return builder.BuildAndValidate();
     }
 }

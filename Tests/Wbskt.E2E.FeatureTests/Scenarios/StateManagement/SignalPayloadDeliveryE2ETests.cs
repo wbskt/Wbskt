@@ -98,35 +98,13 @@ public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildSignalDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var awaitNodeId = Guid.NewGuid();
-        var endNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-SigPayload-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddAwaitSignal("approve", null, timeout => 
+            {
+                timeout.OnSuccess(b => b.AddEnd());
+            });
 
-        var triggerNode = new DeviceTriggerNode(
-            triggerNodeId, "Device Trigger",
-            [new PortDefinition("default", PortDirection.Output, "Out")],
-            new DeviceTriggerConfig(deviceRef, "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel));
-
-        var awaitNode = new AwaitSignalNode(
-            awaitNodeId, "Await Approval",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Signalled")
-            ],
-            new AwaitSignalConfig("approve"));
-
-        var endNode = new EndNode(
-            endNodeId, "End",
-            [new PortDefinition("in", PortDirection.Input, "In")]);
-
-        var edges = new[]
-        {
-            new Edge((triggerNodeId, "default"), (awaitNodeId, "in")),
-            new Edge((awaitNodeId, "default"), (endNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            workflowRefId, 1, 1, $"E2E-SigPayload-{workflowRefId:N}", null, true,
-            [triggerNode, awaitNode, endNode], edges, [], DateTime.UtcNow, 1);
+        return builder.BuildAndValidate();
     }
 }

@@ -31,30 +31,25 @@ public class ConcurrencyStressE2ETests
         // Fork into 5 branches -> Delay 1s -> Join
         Guid workflowRefId = Guid.NewGuid();
         var builder = new WorkflowBuilder($"E2E-Stress-{workflowRefId:N}", workflowRefId)
-            .AddWebhookTrigger("stress", "POST", WorkflowConcurrencyPolicy.AllowParallel, out Guid triggerId);
+            .AddWebhookTrigger("stress", "POST", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
-        builder.AddFork(["b1", "b2", "b3", "b4", "b5"], out Guid forkId);
-
-        // 5 branches
-        Guid[] delayNodes = new Guid[5];
-        for (int i = 0; i < 5; i++)
+        var tails = new List<(Guid, string)>();
+        builder.AddFork(["b1", "b2", "b3", "b4", "b5"], fork =>
         {
-            builder.SetHead(forkId, $"b{i + 1}")
-                   .AddDelay(TimeSpan.FromSeconds(1), out Guid delayId);
-            delayNodes[i] = delayId;
-        }
+            for (int i = 0; i < 5; i++)
+            {
+                fork.Branch($"b{i + 1}", b => 
+                {
+                    b.AddDelay(TimeSpan.FromSeconds(1));
+                    if (b.CurrentHead.HasValue) tails.Add(b.CurrentHead.Value);
+                });
+            }
+        });
 
-        builder.ClearHead();
-        builder.AddJoin(JoinMode.All, out Guid joinId);
-
-        // Link all delays to the Join
-        foreach (var delayId in delayNodes)
-        {
-            builder.Connect(delayId, "default", joinId, "in");
-        }
+        builder.AddJoin(JoinMode.All, tails.ToArray());
 
         // 3. Publish
-        var definitionElement = JsonSerializer.SerializeToElement(builder.Build(), JsonOptions);
+        var definitionElement = JsonSerializer.SerializeToElement(builder.BuildAndValidate(), JsonOptions);
         await _fixture.PublishWorkflowAsync(token, workspaceRef, workflowRefId, "StressTest", definitionElement);
         await Task.Delay(1000); // Give TriggerDispatcher cache time to invalidate
 

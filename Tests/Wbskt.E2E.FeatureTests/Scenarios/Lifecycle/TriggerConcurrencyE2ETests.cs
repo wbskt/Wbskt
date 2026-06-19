@@ -35,19 +35,15 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-Concurrency-DropIfRunning-{workflowRefId:N}", workflowRefId)
             // Use DropIfRunning policy with correlation based on the device ref
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.DropIfRunning, "trigger.clientRefId", out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.DropIfRunning, "trigger.clientRefId", out var triggerNodeId)
+            // Add an AwaitSignal so the run stays Active. We don't care if it times out or signals.
+            .AddAwaitSignal("continue", TimeSpan.FromSeconds(5), awaitSignal => 
+            {
+                awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
+                awaitSignal.OnTimeout(b => b.AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+            });
 
-        // Add an AwaitSignal so the run stays Active. We don't care if it times out or signals.
-        builder.SetHead(triggerNodeId, "default")
-            .AddAwaitSignal("continue", TimeSpan.FromSeconds(5), out var awaitNodeId);
-
-        builder.SetHead(awaitNodeId, "default")
-            .AddFailRun("Should not have received signal");
-
-        builder.SetHead(awaitNodeId, "timeout")
-            .AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null);
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));

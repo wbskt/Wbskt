@@ -134,96 +134,31 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
 
     private static WorkflowDefinition BuildFailRunDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var failNodeId = Guid.NewGuid();
+        var builder = new WorkflowBuilder($"E2E-FailRun-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddFailRun("intentional E2E failure");
 
-        var triggerNode = new DeviceTriggerNode(
-            triggerNodeId, "Device Trigger",
-            [new PortDefinition("default", PortDirection.Output, "Out")],
-            new DeviceTriggerConfig(deviceRef, "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel));
-
-        var failNode = new FailRunNode(
-            failNodeId, "Fail The Run",
-            [new PortDefinition("in", PortDirection.Input, "In")],
-            new FailRunConfig("intentional E2E failure"));
-
-        var edges = new[]
-        {
-            new Edge((triggerNodeId, "default"), (failNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            workflowRefId, 1, 1, $"E2E-FailRun-{workflowRefId:N}", null, true,
-            [triggerNode, failNode], edges, [], DateTime.UtcNow, 1);
+        return builder.BuildAndValidate();
     }
 
     private static WorkflowDefinition BuildPartialFailureDefinition(Guid workflowRefId, string deviceRef)
     {
-        var triggerNodeId = Guid.NewGuid();
-        var variableNodeId = Guid.NewGuid();
-        var pfeNodeId = Guid.NewGuid();
-        var gateNodeId = Guid.NewGuid();
-        var actionNodeId = Guid.NewGuid();
-        var failNodeId = Guid.NewGuid();
-
-        var triggerNode = new DeviceTriggerNode(
-            triggerNodeId, "Device Trigger",
-            [new PortDefinition("default", PortDirection.Output, "Out")],
-            new DeviceTriggerConfig(deviceRef, "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel));
-
-        // Two parallel items — one truthy, one falsy — so the gate routes the siblings apart.
         var itemsValue = JsonSerializer.SerializeToElement(new[] { true, false });
-        var variableNode = new VariableNode(
-            variableNodeId, "Set Items",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            new VariableConfig(VariableScope.Local, VariableOperation.Set, "items", itemsValue));
+        var builder = new WorkflowBuilder($"E2E-Partial-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddVariable(VariableScope.Local, VariableOperation.Set, "items", itemsValue)
+            .AddParallelForEach("items", pfe =>
+            {
+                pfe.OnBody(b1 =>
+                {
+                    b1.AddLogicGate("item", gate =>
+                    {
+                        gate.OnTrue(b2 => b2.AddSendCommand(deviceRef, "OpenVent"));
+                        gate.OnFalse(b2 => b2.AddFailRun("intentional sibling failure"));
+                    });
+                });
+            });
 
-        var pfeNode = new ParallelForEachNode(
-            pfeNodeId, "Parallel For Each",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("body", PortDirection.Output, "Body"),
-                new PortDefinition("empty", PortDirection.Output, "Empty")
-            ],
-            new ParallelForEachConfig("items"));
-
-        // The gate reads the per-branch bound item (a bool) and routes true→command, false→FailRun.
-        var gateNode = new LogicGateNode(
-            gateNodeId, "Route By Item",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("true", PortDirection.Output, "True"),
-                new PortDefinition("false", PortDirection.Output, "False")
-            ],
-            new LogicGateConfig("item"));
-
-        var actionNode = new SendCommandActionNode(
-            actionNodeId, "OpenVent",
-            [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("default", PortDirection.Output, "Out")
-            ],
-            new SendCommandConfig(deviceRef, "OpenVent", null));
-
-        var failNode = new FailRunNode(
-            failNodeId, "Fail Branch",
-            [new PortDefinition("in", PortDirection.Input, "In")],
-            new FailRunConfig("intentional sibling failure"));
-
-        var edges = new[]
-        {
-            new Edge((triggerNodeId, "default"), (variableNodeId, "in")),
-            new Edge((variableNodeId, "default"), (pfeNodeId, "in")),
-            new Edge((pfeNodeId, "body"), (gateNodeId, "in")),
-            new Edge((gateNodeId, "true"), (actionNodeId, "in")),
-            new Edge((gateNodeId, "false"), (failNodeId, "in"))
-        };
-
-        return new WorkflowDefinition(
-            workflowRefId, 1, 1, $"E2E-Partial-{workflowRefId:N}", null, true,
-            [triggerNode, variableNode, pfeNode, gateNode, actionNode, failNode], edges, [], DateTime.UtcNow, 1);
+        return builder.BuildAndValidate();
     }
 }

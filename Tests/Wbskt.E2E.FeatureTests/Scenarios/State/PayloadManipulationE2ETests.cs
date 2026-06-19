@@ -33,36 +33,33 @@ public class PayloadManipulationE2ETests(ServicesFixture fixture)
             PolicyPin: null);
 
         var workflowRefId = Guid.NewGuid();
-        var builder = new WorkflowBuilder($"E2E-Payload-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(clientRefId.ToString(), "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
-
-        // Extract DocumentId using JsonPath
-        // Payload looks like: { "subType": "process-docs", "data": { "batchId": "b1", "docs": [ { "id": 1, "value": "A" }, { "id": 2, "value": "B" } ] } }
         var extractBatchId = new JsonPathExpression(new BranchStateRefExpression("trigger.payload"), "$.payload.data.batchId");
         
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        builder.SetHead(triggerNodeId, "default")
-            .AddVariable(VariableScope.Local, VariableOperation.Set, "batchId", JsonSerializer.SerializeToElement<WorkflowExpression>(extractBatchId, options));
 
         // Iterate over docs array
         var extractDocs = new JsonPathExpression(new BranchStateRefExpression("trigger.payload"), "$.payload.data.docs");
-        builder.AddVariable(VariableScope.Local, VariableOperation.Set, "docsArray", JsonSerializer.SerializeToElement<WorkflowExpression>(extractDocs, options));
-        
-        builder.AddParallelForEach("docsArray", out var pfeNodeId);
 
         // Inside Parallel For Each
         // We set itemData = item.value
         var extractItemValue = new JsonPathExpression(new BranchStateRefExpression("item"), "$.value");
-        builder.SetHead(pfeNodeId, "body")
-            .AddVariable(VariableScope.Local, VariableOperation.Set, "itemData", JsonSerializer.SerializeToElement<WorkflowExpression>(extractItemValue, options));
+        Guid joinNodeId = Guid.Empty;
 
-        // Wait a little to ensure parallelism and state isolation
-        builder.AddDelay(TimeSpan.FromSeconds(1));
+        var builder = new WorkflowBuilder($"E2E-Payload-{workflowRefId:N}", workflowRefId)
+            .AddDeviceTrigger(clientRefId.ToString(), "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddVariable(VariableScope.Local, VariableOperation.Set, "batchId", JsonSerializer.SerializeToElement<WorkflowExpression>(extractBatchId, options))
+            .AddVariable(VariableScope.Local, VariableOperation.Set, "docsArray", JsonSerializer.SerializeToElement<WorkflowExpression>(extractDocs, options))
+            .AddParallelForEach("docsArray", loop => 
+            {
+                loop.OnBody(b => 
+                {
+                    b.AddVariable(VariableScope.Local, VariableOperation.Set, "itemData", JsonSerializer.SerializeToElement<WorkflowExpression>(extractItemValue, options))
+                     .AddDelay(TimeSpan.FromSeconds(1))
+                     .AddJoin(JoinMode.All, out joinNodeId);
+                });
+            });
 
-        // Join
-        builder.AddJoin(JoinMode.All, out var joinNodeId);
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
 
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,

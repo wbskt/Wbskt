@@ -35,8 +35,7 @@ public sealed class IdempotentManualStartE2ETests(ServicesFixture fixture)
 
         // Publish a trivial manual workflow (trigger only → starts and completes).
         var workflowRefId = Guid.NewGuid();
-        var triggerNodeId = Guid.NewGuid();
-        var definition = BuildManualDefinition(workflowRefId, triggerNodeId);
+        var definition = BuildManualDefinition(workflowRefId, out var triggerNodeId);
 
         var validation = new WorkflowValidator().Validate(definition);
         validation.IsValid.Should().BeTrue(
@@ -59,25 +58,11 @@ public sealed class IdempotentManualStartE2ETests(ServicesFixture fixture)
             "the second start with the same idempotency key must be deduped — only one run may exist");
     }
 
-    private static WorkflowDefinition BuildManualDefinition(Guid workflowRefId, Guid triggerNodeId)
+    private static WorkflowDefinition BuildManualDefinition(Guid workflowRefId, out Guid triggerNodeId)
     {
-        var triggerNode = new ManualTriggerNode(
-            NodeId: triggerNodeId,
-            Name: "Manual Trigger",
-            Ports: [new PortDefinition("default", PortDirection.Output, "Out")],
-            Config: new ManualTriggerConfig("e2e idempotency"));
-
-        return new WorkflowDefinition(
-            WorkflowRefId: workflowRefId,
-            Version: 1,
-            WorkspaceId: 1,
-            Name: $"E2E-Idem-{workflowRefId:N}",
-            Description: null,
-            IsEnabled: true,
-            Nodes: [triggerNode],
-            Edges: [],
-            SharedVariableSchema: [],
-            CreatedAt: DateTime.UtcNow,
-            PublishedBy: 1);
+        var builder = new WorkflowBuilder($"E2E-Idem-{workflowRefId:N}", workflowRefId)
+            .AddManualTrigger(out triggerNodeId);
+        
+        return builder.BuildAndValidate();
     }
 }

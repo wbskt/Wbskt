@@ -34,18 +34,14 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Timeout-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddAwaitSignal("continue", TimeSpan.FromSeconds(2), awaitSignal => 
+            {
+                awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
+                awaitSignal.OnTimeout(b => b.AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+            });
 
-        builder.SetHead(triggerNodeId, "default")
-            .AddAwaitSignal("continue", TimeSpan.FromSeconds(2), out var awaitNodeId);
-
-        builder.SetHead(awaitNodeId, "default")
-            .AddFailRun("Should not have received signal");
-
-        builder.SetHead(awaitNodeId, "timeout")
-            .AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null);
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));
@@ -104,18 +100,14 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Signal-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddAwaitSignal("continue", TimeSpan.FromSeconds(10), awaitSignal => 
+            {
+                awaitSignal.OnSuccess(b => b.AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
+            });
 
-        builder.SetHead(triggerNodeId, "default")
-            .AddAwaitSignal("continue", TimeSpan.FromSeconds(10), out var awaitNodeId);
-
-        builder.SetHead(awaitNodeId, "default")
-            .AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null);
-
-        builder.SetHead(awaitNodeId, "timeout")
-            .AddFailRun("Should not have timed out");
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));
@@ -179,19 +171,14 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Race-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId);
+            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddAwaitSignal("continue", TimeSpan.FromSeconds(3), awaitSignal => 
+            {
+                awaitSignal.OnSuccess(b => b.AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnTimeout(b => b.AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+            });
 
-        // Very short TTL to force a race condition
-        builder.SetHead(triggerNodeId, "default")
-            .AddAwaitSignal("continue", TimeSpan.FromSeconds(3), out var awaitNodeId);
-
-        builder.SetHead(awaitNodeId, "default")
-            .AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null);
-
-        builder.SetHead(awaitNodeId, "timeout")
-            .AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null);
-
-        var definition = builder.Build();
+        var definition = builder.BuildAndValidate();
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));

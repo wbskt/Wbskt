@@ -52,12 +52,11 @@ public sealed class ScheduleTriggerE2ETests(ServicesFixture fixture)
     private static WorkflowDefinition BuildScheduleDefinition(Guid workflowRefId, string clientRefId)
     {
         var builder = new WorkflowBuilder($"E2E-Schedule-{workflowRefId:N}", workflowRefId)
-            .AddScheduleTrigger("* * * * *", out Guid triggerNodeId)
-            .AddDelay(TimeSpan.FromMilliseconds(10), out Guid delayId);
+            .AddScheduleTrigger("* * * * *", out _)
+            .AddDelay(TimeSpan.FromMilliseconds(10));
 
         // A SendCommand won't work easily here since Schedule Trigger events don't natively include the client context payload.
-        builder.SetHead(delayId, "default");
 
-        return builder.Build();
+        return builder.BuildAndValidate();
     }
 }
