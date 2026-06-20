@@ -49,7 +49,7 @@ public class WorkflowValidatorTests
     public void Validate_returns_error_when_node_ids_are_duplicated()
     {
         var def = ValidWorkflowBuilder.Build();
-        var duplicate = new LogicGateNode { NodeId = ValidWorkflowBuilder.Logic1Id, Name = "Duplicate", Ports = [], Config = new LogicGateConfig("true") };
+        var duplicate = new LogicGateNode { NodeId = ValidWorkflowBuilder.Logic1Id, Name = "Duplicate", Ports = [], Config = new LogicGateConfig { Condition = "true" } };
         var defWithDuplicate = def with { Nodes = [..def.Nodes, duplicate] };
         var result = Validator.Validate(defWithDuplicate);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "DUPLICATE_NODE_ID" && i.NodeId == ValidWorkflowBuilder.Logic1Id);
@@ -74,7 +74,7 @@ public class WorkflowValidatorTests
     [Fact]
     public void Validate_returns_warning_when_no_trigger_nodes()
     {
-        var logicNode = new LogicGateNode { NodeId = new Guid("aaaaaaaa-0000-0000-0000-000000000004"), Name = "Logic", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], Config = new LogicGateConfig("true") };
+        var logicNode = new LogicGateNode { NodeId = new Guid("aaaaaaaa-0000-0000-0000-000000000004"), Name = "Logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = "true" } };
         var defNoTriggers = ValidWorkflowBuilder.Build() with { Nodes = [logicNode], Edges = [] };
         var result = Validator.Validate(defNoTriggers);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "NO_TRIGGERS");
@@ -86,7 +86,7 @@ public class WorkflowValidatorTests
     {
         var def = ValidWorkflowBuilder.Build();
         var orphanId = new Guid("aaaaaaaa-0000-0000-0000-000000000003");
-        var orphan = new LogicGateNode { NodeId = orphanId, Name = "Orphan", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("true", PortDirection.Output, "True"), new PortDefinition("false", PortDirection.Output, "False")], Config = new LogicGateConfig("true") };
+        var orphan = new LogicGateNode { NodeId = orphanId, Name = "Orphan", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = "true" } };
         var defWithOrphan = def with { Nodes = [..def.Nodes, orphan] };
         var result = Validator.Validate(defWithOrphan);
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "ORPHAN_NODE" && i.NodeId == orphanId);
@@ -100,13 +100,13 @@ public static class ValidWorkflowBuilder
 
     public static WorkflowDefinition Build()
     {
-        var trigger = new DeviceTriggerNode { NodeId = Trigger1Id, Name = "Trigger", Ports = [new PortDefinition("default", PortDirection.Output, "Out")], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.DeviceTriggerConfig("dev-1", "telemetry") };
+        var trigger = new DeviceTriggerNode { NodeId = Trigger1Id, Name = "Trigger", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.DeviceTriggerConfig { DeviceRef = "dev-1", Event = "telemetry" } };
 
         var logic = new LogicGateNode { NodeId = Logic1Id, Name = "Gate", Ports = [
-                new PortDefinition("in", PortDirection.Input, "In"),
-                new PortDefinition("true", PortDirection.Output, "True"),
-                new PortDefinition("false", PortDirection.Output, "False")
-            ], Config = new LogicGateConfig("$trigger.temperature > 35") };
+                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" },
+                new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }
+            ], Config = new LogicGateConfig { Condition = "$trigger.temperature > 35" } };
 
         var edge = new Edge((Trigger1Id, "out"), (Logic1Id, "in"));
 

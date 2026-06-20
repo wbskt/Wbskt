@@ -161,7 +161,7 @@ public sealed class CommandNodeExecutorTests
             "corr-42",
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
-        var node = new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [], Config = new SendCommandConfig("device-1", command, nodePayload) };
+        var node = new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [], Config = new SendCommandConfig { DeviceRef = "device-1", Command = command, Payload = nodePayload } };
 
         var providers = new Mock<IProviderComposite>();
         providers.SetupGet(p => p.IdempotencyKey).Returns(idempotency ?? FreshClaim().Object);

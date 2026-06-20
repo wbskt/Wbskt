@@ -28,7 +28,7 @@ public sealed class OnFailureHandlerTests
     {
         var handler = new OnFailureHandler();
         var fail = new NodeExecutionResult.Fail("E_FAIL", "boom", false, null);
-        var node = CreateNode(new OnFailureConfig(ErrorOutcome.FailBranch));
+        var node = CreateNode(new OnFailureConfig { Outcome = ErrorOutcome.FailBranch });
 
         NodeExecutionResult result = handler.Apply(fail, node, Context);
 
@@ -40,7 +40,7 @@ public sealed class OnFailureHandlerTests
     {
         var handler = new OnFailureHandler();
         var fail = new NodeExecutionResult.Fail("E_FAIL", "boom", false, null);
-        var node = CreateNode(new OnFailureConfig(ErrorOutcome.ContinueAsSucceeded));
+        var node = CreateNode(new OnFailureConfig { Outcome = ErrorOutcome.ContinueAsSucceeded });
 
         NodeExecutionResult.Continue result = Assert.IsType<NodeExecutionResult.Continue>(handler.Apply(fail, node, Context));
 
@@ -56,7 +56,7 @@ public sealed class OnFailureHandlerTests
         var handler = new OnFailureHandler();
         var fail = new NodeExecutionResult.Fail("E_FAIL", "boom", false, null);
         Guid targetNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-        var node = CreateNode(new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: targetNodeId));
+        var node = CreateNode(new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = targetNodeId });
 
         NodeExecutionResult.Continue result = Assert.IsType<NodeExecutionResult.Continue>(handler.Apply(fail, node, Context));
 
@@ -66,6 +66,6 @@ public sealed class OnFailureHandlerTests
 
     private static SendCommandActionNode CreateNode(OnFailureConfig onFailure)
     {
-        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), OnFailure = onFailure };
+        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, OnFailure = onFailure };
     }
 }

@@ -370,7 +370,7 @@ internal static class RetryExecutor
         {
             return actionNode.Retry;
         }
-        return new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []);
+        return new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] };
     }
 
     private static TimeSpan GetDelay(RetryPolicy policy, int attempt)

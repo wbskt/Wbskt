@@ -29,8 +29,8 @@ public sealed class BranchLoopEndToEndTests
             null,
             true,
             [
-                new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition("default", PortDirection.Output, "Out")], Config = new ManualTriggerConfig("manual start") },
-                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], Config = new LogicGateConfig("true") }
+                new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new ManualTriggerConfig { Description = "manual start" } },
+                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } }
             ],
             [new Edge((triggerNodeId, "default"), (logicNodeId, "in"))],
             [],

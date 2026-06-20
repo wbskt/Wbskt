@@ -3,9 +3,20 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.Workflow.Abstraction.Models.Triggers;
 
-public sealed record DeviceTriggerConfig(
-    [property: JsonPropertyName("deviceRef")] string DeviceRef,
-    [property: JsonPropertyName("event")] string Event,
-    [property: JsonPropertyName("correlationKey")] string? CorrelationKey = null,
-    [property: JsonPropertyName("concurrencyPolicy")][property: JsonConverter(typeof(JsonStringEnumConverter))] WorkflowConcurrencyPolicy ConcurrencyPolicy = WorkflowConcurrencyPolicy.Queue
-);
+public sealed record DeviceTriggerConfig
+{
+    [JsonPropertyName("deviceRef")]
+    public required string DeviceRef { get; init; }
+
+    [JsonPropertyName("event")]
+    public required string Event { get; init; }
+
+    [JsonPropertyName("correlationKey")]
+    public string? CorrelationKey { get; init; } = null;
+
+    [JsonPropertyName("concurrencyPolicy")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public WorkflowConcurrencyPolicy ConcurrencyPolicy { get; init; } = WorkflowConcurrencyPolicy.Queue;
+
+}
+

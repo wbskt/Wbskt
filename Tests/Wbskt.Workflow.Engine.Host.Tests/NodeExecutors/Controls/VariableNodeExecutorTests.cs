@@ -17,7 +17,7 @@ public sealed class VariableNodeExecutorTests
         var provider = new RecordingSharedVariableProvider();
         var evaluator = new MockExpressionEvaluator();
         var executor = new VariableNodeExecutor(provider, evaluator);
-        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-local", Ports = CreatePorts(), Config = new VariableConfig(VariableScope.Local, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("auto")) });
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-local", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("auto") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
@@ -33,7 +33,7 @@ public sealed class VariableNodeExecutorTests
         var provider = new RecordingSharedVariableProvider([1]);
         var evaluator = new MockExpressionEvaluator();
         var executor = new VariableNodeExecutor(provider, evaluator);
-        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig(VariableScope.Shared, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("cool")) });
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("cool") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
@@ -49,7 +49,7 @@ public sealed class VariableNodeExecutorTests
         var provider = new RecordingSharedVariableProvider([0, 0, 1]);
         var evaluator = new MockExpressionEvaluator();
         var executor = new VariableNodeExecutor(provider, evaluator);
-        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig(VariableScope.Shared, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("heat")) });
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("heat") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
@@ -64,7 +64,7 @@ public sealed class VariableNodeExecutorTests
         var provider = new RecordingSharedVariableProvider([0, 0, 0]);
         var evaluator = new MockExpressionEvaluator();
         var executor = new VariableNodeExecutor(provider, evaluator);
-        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig(VariableScope.Shared, VariableOperation.Set, "mode", JsonSerializer.SerializeToElement("heat")) });
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("heat") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
@@ -88,7 +88,7 @@ public sealed class VariableNodeExecutorTests
 
     private static IReadOnlyCollection<PortDefinition> CreatePorts()
     {
-        return [new PortDefinition("default", PortDirection.Output, "Default")];
+        return [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }];
     }
 
     private sealed class RecordingSharedVariableProvider(IEnumerable<int>? compareAndSetResults = null) : ISharedVariableProvider

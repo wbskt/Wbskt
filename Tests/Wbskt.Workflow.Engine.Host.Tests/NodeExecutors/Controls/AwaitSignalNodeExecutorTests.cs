@@ -21,7 +21,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task First_visit_parks_with_signal_scoped_to_run()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve") };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve" } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>());
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
@@ -39,7 +39,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task First_visit_with_explicit_correlation_uses_it_as_scope()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve", Correlation: "order-42") };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Correlation = "order-42" } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>());
 
         var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
@@ -51,7 +51,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task First_visit_with_ttl_sets_deadline_and_condition_ttl()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve", Ttl: TimeSpan.FromMinutes(10)) };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>());
 
         var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
@@ -64,7 +64,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task Resume_by_signal_continues_default()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve") };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve" } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement("approve")
@@ -78,7 +78,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task Resume_after_deadline_continues_timeout_port()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(11)));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve", Ttl: TimeSpan.FromMinutes(10), OnTimeout: "expired") };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10), OnTimeout = "expired" } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement("approve"),
@@ -93,7 +93,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task Resume_before_deadline_continues_default()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(2)));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve", Ttl: TimeSpan.FromMinutes(10)) };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement("approve"),
@@ -108,7 +108,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task Resume_with_wake_payload_promotes_body_under_signalPayload()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve") };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve" } };
         var wake = JsonSerializer.SerializeToElement(new { signalName = "approve", body = new { approvedBy = "ops" } });
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
@@ -126,7 +126,7 @@ public sealed class AwaitSignalNodeExecutorTests
     {
         // A signal that arrives at/after the deadline still resumes via the signal path, not timeout.
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(20)));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig("approve", Ttl: TimeSpan.FromMinutes(10), OnTimeout: "expired") };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10), OnTimeout = "expired" } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement("approve"),
@@ -157,10 +157,10 @@ public sealed class AwaitSignalNodeExecutorTests
     private static IReadOnlyCollection<PortDefinition> Ports()
     {
         return [
-            new PortDefinition("in", PortDirection.Input, "In"),
-            new PortDefinition("default", PortDirection.Output, "Signal"),
-            new PortDefinition("timeout", PortDirection.Output, "Timeout"),
-            new PortDefinition("expired", PortDirection.Output, "Expired")
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Signal" },
+            new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" },
+            new PortDefinition { PortId = "expired", Direction = PortDirection.Output, Label = "Expired" }
         ];
     }
 

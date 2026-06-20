@@ -74,8 +74,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new DeviceTriggerNode {
             NodeId = id,
             Name = "Device Trigger",
-            Ports = [new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new DeviceTriggerConfig(deviceRef, eventName, correlationExpression, concurrencyPolicy) });
+            Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new DeviceTriggerConfig { DeviceRef = deviceRef, Event = eventName, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy } });
         _head = (id, PortNames.Default);
         return this;
     }
@@ -102,8 +102,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new ManualTriggerNode {
             NodeId = id,
             Name = "Manual Trigger",
-            Ports = [new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new ManualTriggerConfig(null) });
+            Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new ManualTriggerConfig { Description = null } });
         _head = (id, PortNames.Default);
         return this;
     }
@@ -119,8 +119,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new VariableNode {
             NodeId = id,
             Name = $"Var {operation} {key}",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new VariableConfig(scope, operation, key, value) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new VariableConfig { Scope = scope, Op = operation, Var = key, Value = value } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -133,8 +133,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new SendCommandActionNode {
             NodeId = id,
             Name = name ?? command,
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new SendCommandConfig(deviceRef, command, null),
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new SendCommandConfig { DeviceRef = deviceRef, Command = command, Payload = null },
             Retry = null,
             OnFailure = null,
             Compensation = compensation });
@@ -151,8 +151,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new ParallelForEachNode {
             NodeId = id,
             Name = "Parallel For Each",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Body, PortDirection.Output, "Body"), new PortDefinition(PortNames.Empty, PortDirection.Output, "Empty")],
-            Config = new ParallelForEachConfig(collectionKey) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Body, Direction = PortDirection.Output, Label = "Body" }, new PortDefinition { PortId = PortNames.Empty, Direction = PortDirection.Output, Label = "Empty" }],
+            Config = new ParallelForEachConfig { Collection = collectionKey } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Body);
@@ -166,8 +166,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new ForEachNode {
             NodeId = id,
             Name = "For Each",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Body, PortDirection.Output, "Body"), new PortDefinition(PortNames.Done, PortDirection.Output, "Done")],
-            Config = new ForEachConfig(collectionKey) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Body, Direction = PortDirection.Output, Label = "Body" }, new PortDefinition { PortId = PortNames.Done, Direction = PortDirection.Output, Label = "Done" }],
+            Config = new ForEachConfig { Collection = collectionKey } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Body);
@@ -181,8 +181,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new JoinNode {
             NodeId = id,
             Name = "Join",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new JoinConfig(mode) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new JoinConfig { Mode = mode } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -201,8 +201,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new DelayNode {
             NodeId = id,
             Name = "Delay",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new DelayConfig(duration) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new DelayConfig { Duration = duration } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -217,12 +217,12 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = "Webhook",
             Ports = [
-                new PortDefinition(PortNames.In, PortDirection.Input, "In"),
-                new PortDefinition(PortNames.Default, PortDirection.Output, "Out"),
-                new PortDefinition(PortNames.Error, PortDirection.Output, "Error")
+                new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" },
+                new PortDefinition { PortId = PortNames.Error, Direction = PortDirection.Output, Label = "Error" }
             ],
-            Config = new WebhookNotificationConfig(url, method, body),
-            Retry = new RetryPolicy(RetryStrategy.Exponential, TimeSpan.FromMilliseconds(500), null, null, 5, 0, []) });
+            Config = new WebhookNotificationConfig { Url = url, Method = method, Body = body },
+            Retry = new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromMilliseconds(500), Factor = null, MaxDelay = null, MaxAttempts = 5, JitterPct = 0, RetryOn = [] } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -236,20 +236,20 @@ public sealed class WorkflowBuilder
 
         var ports = new List<PortDefinition>
         {
-            new(PortNames.In, PortDirection.Input, "In"),
-            new(PortNames.Default, PortDirection.Output, "Out")
+            new() { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" },
+            new() { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }
         };
 
         if (ttl.HasValue)
         {
-            ports.Add(new(PortNames.Timeout, PortDirection.Output, "Timeout"));
+            ports.Add(new() { PortId = PortNames.Timeout, Direction = PortDirection.Output, Label = "Timeout" });
         }
 
         _nodes.Add(new AwaitSignalNode {
             NodeId = id,
             Name = $"Wait {signalName}",
             Ports = ports,
-            Config = new AwaitSignalConfig(signalName, null, ttl, ttl.HasValue ? "timeout" : null) });
+            Config = new AwaitSignalConfig { SignalName = signalName, Correlation = null, Ttl = ttl, OnTimeout = ttl.HasValue ? "timeout" : null } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -261,14 +261,14 @@ public sealed class WorkflowBuilder
         var id = Guid.NewGuid();
         nodeId = id;
 
-        var ports = branches.Select(b => new PortDefinition(b, PortDirection.Output, b)).ToList();
-        ports.Insert(0, new PortDefinition(PortNames.In, PortDirection.Input, "In"));
+        var ports = branches.Select(b => new PortDefinition { PortId = b, Direction = PortDirection.Output, Label = b }).ToList();
+        ports.Insert(0, new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" });
 
         _nodes.Add(new ForkNode {
             NodeId = id,
             Name = "Fork",
             Ports = ports,
-            Config = new ForkConfig(branches) });
+            Config = new ForkConfig { Branches = branches } });
 
         ConnectToHead(id, PortNames.In);
         _head = null;
@@ -281,8 +281,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new FailRunNode {
             NodeId = id,
             Name = "Fail Run",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In")],
-            Config = new FailRunConfig(reason) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }],
+            Config = new FailRunConfig { Reason = reason } });
 
         ConnectToHead(id, PortNames.In);
         _head = null;
@@ -295,7 +295,7 @@ public sealed class WorkflowBuilder
         _nodes.Add(new EndNode {
             NodeId = id,
             Name = "End",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In")] });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }] });
 
         ConnectToHead(id, PortNames.In);
         _head = null;
@@ -308,8 +308,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new SubWorkflowNode {
             NodeId = id,
             Name = "SubWorkflow",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new SubWorkflowConfig(targetWorkflowRefId, correlationKey) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new SubWorkflowConfig { WorkflowRefId = targetWorkflowRefId, CorrelationKey = correlationKey } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -323,8 +323,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new LogicGateNode {
             NodeId = id,
             Name = "Logic Gate",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.True, PortDirection.Output, "True"), new PortDefinition(PortNames.False, PortDirection.Output, "False")],
-            Config = new LogicGateConfig(condition) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.True, Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = PortNames.False, Direction = PortDirection.Output, Label = "False" }],
+            Config = new LogicGateConfig { Condition = condition } });
 
         ConnectToHead(id, PortNames.In);
         _head = null;
@@ -338,8 +338,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new WebhookTriggerNode {
             NodeId = id,
             Name = "Webhook Trigger",
-            Ports = [new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new WebhookTriggerConfig(path, method, null, concurrencyPolicy) });
+            Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new WebhookTriggerConfig { Path = path, Method = method, CorrelationKey = null, ConcurrencyPolicy = concurrencyPolicy } });
 
         _head = (id, PortNames.Default);
         return this;
@@ -352,8 +352,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new ScheduleTriggerNode {
             NodeId = id,
             Name = "Schedule Trigger",
-            Ports = [new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new ScheduleTriggerConfig(cron, null) });
+            Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new ScheduleTriggerConfig { Cron = cron, CorrelationKey = null } });
 
         _head = (id, PortNames.Default);
         return this;
@@ -392,17 +392,17 @@ public sealed class WorkflowBuilder
     public WorkflowBuilder AddFork(string[] branchNames, Action<ForkScope> branches)
     {
         var id = Guid.NewGuid();
-        var ports = new List<PortDefinition> { new PortDefinition(PortNames.In, PortDirection.Input, "In") };
+        var ports = new List<PortDefinition> { new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" } };
         foreach (var b in branchNames)
         {
-            ports.Add(new PortDefinition(b, PortDirection.Output, b));
+            ports.Add(new PortDefinition { PortId = b, Direction = PortDirection.Output, Label = b });
         }
 
         _nodes.Add(new ForkNode {
             NodeId = id,
             Name = "Fork",
             Ports = ports,
-            Config = new ForkConfig(branchNames) });
+            Config = new ForkConfig { Branches = branchNames } });
 
         ConnectToHead(id, PortNames.In);
 
@@ -481,8 +481,8 @@ public sealed class WorkflowBuilder
         _nodes.Add(new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpNode {
             NodeId = id,
             Name = "Wait For Http",
-            Ports = [new PortDefinition(PortNames.In, PortDirection.Input, "In"), new PortDefinition(PortNames.Default, PortDirection.Output, "Out")],
-            Config = new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpConfig(ttl, null) });
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpConfig { Ttl = ttl, OnTimeout = null } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);

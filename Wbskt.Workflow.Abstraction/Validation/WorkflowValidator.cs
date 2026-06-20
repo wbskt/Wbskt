@@ -135,13 +135,13 @@ public sealed class WorkflowValidator
 
     private static IReadOnlyCollection<PortDefinition> GetExpectedPorts(Wbskt.Workflow.Abstraction.Models.Nodes.BaseNode node)
     {
-        var inputIn = new PortDefinition("in", PortDirection.Input, "In");
-        var outputDefault = new PortDefinition("default", PortDirection.Output, "Default");
-        var outputTrue = new PortDefinition("true", PortDirection.Output, "True");
-        var outputFalse = new PortDefinition("false", PortDirection.Output, "False");
-        var outputBody = new PortDefinition("body", PortDirection.Output, "Body");
-        var outputDone = new PortDefinition("done", PortDirection.Output, "Done");
-        var outputEmpty = new PortDefinition("empty", PortDirection.Output, "Empty");
+        var inputIn = new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" };
+        var outputDefault = new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" };
+        var outputTrue = new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" };
+        var outputFalse = new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" };
+        var outputBody = new PortDefinition { PortId = "body", Direction = PortDirection.Output, Label = "Body" };
+        var outputDone = new PortDefinition { PortId = "done", Direction = PortDirection.Output, Label = "Done" };
+        var outputEmpty = new PortDefinition { PortId = "empty", Direction = PortDirection.Output, Label = "Empty" };
 
         if (node.Kind.StartsWith("trigger:"))
         {
@@ -152,7 +152,7 @@ public sealed class WorkflowValidator
         {
             if (node.Kind == "action:webhook")
             {
-                return new[] { inputIn, outputDefault, new PortDefinition("error", PortDirection.Output, "Error") };
+                return new[] { inputIn, outputDefault, new PortDefinition { PortId = "error", Direction = PortDirection.Output, Label = "Error" } };
             }
             return new[] { inputIn, outputDefault };
         }
@@ -174,7 +174,7 @@ public sealed class WorkflowValidator
                 {
                     foreach (var branch in forkNode.Config.Branches)
                     {
-                        forkOutputs.Add(new PortDefinition(branch, PortDirection.Output, branch));
+                        forkOutputs.Add(new PortDefinition { PortId = branch, Direction = PortDirection.Output, Label = branch });
                     }
                 }
                 return forkOutputs;
@@ -182,14 +182,14 @@ public sealed class WorkflowValidator
             case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlAwaitSignal:
                 if (node is Wbskt.Workflow.Abstraction.Models.Nodes.Controls.AwaitSignalNode awaitNode && !string.IsNullOrWhiteSpace(awaitNode.Config?.OnTimeout))
                 {
-                    return new[] { inputIn, outputDefault, new PortDefinition(awaitNode.Config.OnTimeout, PortDirection.Output, "Timeout") };
+                    return new[] { inputIn, outputDefault, new PortDefinition { PortId = awaitNode.Config.OnTimeout, Direction = PortDirection.Output, Label = "Timeout" } };
                 }
                 return new[] { inputIn, outputDefault };
 
             case Wbskt.Workflow.Abstraction.Models.Nodes.NodeKind.ControlWaitForHttp:
                 if (node is Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpNode waitNode && !string.IsNullOrWhiteSpace(waitNode.Config?.OnTimeout))
                 {
-                    return new[] { inputIn, outputDefault, new PortDefinition(waitNode.Config.OnTimeout, PortDirection.Output, "Timeout") };
+                    return new[] { inputIn, outputDefault, new PortDefinition { PortId = waitNode.Config.OnTimeout, Direction = PortDirection.Output, Label = "Timeout" } };
                 }
                 return new[] { inputIn, outputDefault };
                 

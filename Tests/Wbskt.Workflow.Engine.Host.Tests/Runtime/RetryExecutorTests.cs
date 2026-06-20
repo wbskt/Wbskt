@@ -19,7 +19,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task Retries_on_retryable_fail_until_success()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 3, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
         var executor = new RecordingExecutor(
             new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
             new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
@@ -41,7 +41,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task Stops_retrying_after_max_attempts()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 3, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
         var expected = new NodeExecutionResult.Fail("E_RETRY", "boom", true, null);
         var executor = new RecordingExecutor(expected, expected, expected, new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
@@ -61,7 +61,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task Does_not_retry_on_non_retryable_fail()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 5, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 5, JitterPct = 0, RetryOn = [] });
         var expected = new NodeExecutionResult.Fail("E_FATAL", "nope", false, null);
         var executor = new RecordingExecutor(expected, new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
@@ -81,7 +81,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task Exponential_backoff_delays_grow()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Exponential, TimeSpan.FromMilliseconds(15), null, null, 3, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromMilliseconds(15), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
         var executor = new RecordingExecutor(
             new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
             new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
@@ -103,7 +103,7 @@ public sealed class RetryExecutorTests
 
     private static SendCommandActionNode CreateNode(RetryPolicy? retry)
     {
-        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), Retry = retry };
+        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Retry = retry };
     }
 
     private static BranchContext CreateContext()
@@ -140,7 +140,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task RunWithRetryAsync_side_effecting_claims_pending_before_and_marks_succeeded_on_success()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
@@ -175,7 +175,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task RunWithRetryAsync_does_not_cache_WaitForBookmark_result()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
         var executor = new RecordingExecutor(new NodeExecutionResult.WaitForBookmark(new TimerWakeCondition(DateTime.UtcNow), new Dictionary<string, JsonElement>()));
 
         var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
@@ -205,7 +205,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task RunWithRetryAsync_side_effecting_bypasses_executor_if_already_succeeded()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -237,7 +237,7 @@ public sealed class RetryExecutorTests
     [Fact]
     public async Task RunWithRetryAsync_side_effect_free_runs_first_then_writes_cache()
     {
-        var node = CreateNode(new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 1, 0, []));
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
         
         var executorMock = new Mock<INodeExecutor>();
         executorMock.SetupGet(e => e.Kind).Returns("test");

@@ -15,7 +15,7 @@ public sealed class ForEachNodeExecutorTests
     public async Task ExecuteAsync_forks_one_child_per_item()
     {
         var executor = new ForEachNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new ForEachNode { NodeId = Guid.NewGuid(), Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig("items") }, new Dictionary<string, JsonElement>
+        NodeContext context = CreateContext(new ForEachNode { NodeId = Guid.NewGuid(), Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig { Collection = "items" } }, new Dictionary<string, JsonElement>
         {
             ["items"] = JsonSerializer.SerializeToElement(new[] { "a", "b", "c" })
         });
@@ -35,7 +35,7 @@ public sealed class ForEachNodeExecutorTests
     public async Task ExecuteAsync_empty_collection_returns_empty_fork()
     {
         var executor = new ForEachNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new ForEachNode { NodeId = Guid.NewGuid(), Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig("items") }, new Dictionary<string, JsonElement>
+        NodeContext context = CreateContext(new ForEachNode { NodeId = Guid.NewGuid(), Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig { Collection = "items" } }, new Dictionary<string, JsonElement>
         {
             ["items"] = JsonSerializer.SerializeToElement(Array.Empty<string>())
         });
@@ -63,9 +63,9 @@ public sealed class ForEachNodeExecutorTests
     private static IReadOnlyCollection<PortDefinition> CreatePorts()
     {
         return [
-            new PortDefinition("in", PortDirection.Input, "In"),
-            new PortDefinition("body", PortDirection.Output, "Body"),
-            new PortDefinition("done", PortDirection.Output, "Done")
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "body", Direction = PortDirection.Output, Label = "Body" },
+            new PortDefinition { PortId = "done", Direction = PortDirection.Output, Label = "Done" }
         ];
     }
 

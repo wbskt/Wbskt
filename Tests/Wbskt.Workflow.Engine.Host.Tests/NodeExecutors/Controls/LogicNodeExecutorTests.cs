@@ -15,7 +15,7 @@ public sealed class LogicNodeExecutorTests
     public async Task ExecuteAsync_true_condition_routes_to_true_port()
     {
         var executor = new LogicNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig("decision") }, new Dictionary<string, JsonElement>
+        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = "decision" } }, new Dictionary<string, JsonElement>
         {
             ["decision"] = JsonSerializer.SerializeToElement(true)
         });
@@ -31,7 +31,7 @@ public sealed class LogicNodeExecutorTests
     public async Task ExecuteAsync_false_condition_routes_to_false_port()
     {
         var executor = new LogicNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig("decision") }, new Dictionary<string, JsonElement>
+        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = "decision" } }, new Dictionary<string, JsonElement>
         {
             ["decision"] = JsonSerializer.SerializeToElement(false)
         });
@@ -46,7 +46,7 @@ public sealed class LogicNodeExecutorTests
     public async Task ExecuteAsync_non_bool_condition_returns_fail()
     {
         var executor = new LogicNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig("decision") }, new Dictionary<string, JsonElement>
+        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = "decision" } }, new Dictionary<string, JsonElement>
         {
             ["decision"] = JsonSerializer.SerializeToElement("yes")
         });
@@ -74,9 +74,9 @@ public sealed class LogicNodeExecutorTests
     private static IReadOnlyCollection<PortDefinition> CreatePorts()
     {
         return [
-            new PortDefinition("in", PortDirection.Input, "In"),
-            new PortDefinition("true", PortDirection.Output, "True"),
-            new PortDefinition("false", PortDirection.Output, "False")
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" },
+            new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }
         ];
     }
 

@@ -151,7 +151,7 @@ public sealed class RunStarterTests
                 "definition",
                 null,
                 true,
-                [new DeviceTriggerNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "device", Ports = [], Config = new DeviceTriggerConfig("device-1", "telemetry") }],
+                [new DeviceTriggerNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "device", Ports = [], Config = new DeviceTriggerConfig { DeviceRef = "device-1", Event = "telemetry" } }],
                 [],
                 [],
                 new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),

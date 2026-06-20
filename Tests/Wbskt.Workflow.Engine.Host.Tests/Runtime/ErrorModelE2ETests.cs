@@ -29,7 +29,7 @@ public sealed class ErrorModelE2ETests
             true,
             [
                 new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fork" },
-                new SendCommandActionNode { NodeId = compensableNodeId, Name = "compensable", Ports = [new PortDefinition("next", PortDirection.Output, "Next")], Config = new SendCommandConfig("device-1", "DoThing"), Compensation = new CompensationDeclaration(Guid.Empty, "action:email", null) },
+                new SendCommandActionNode { NodeId = compensableNodeId, Name = "compensable", Ports = [new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:email", Config = null } },
                 new TestNode { NodeId = fatalNodeId, Name = "fatal", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fail" },
                 new TestNode { NodeId = successNodeId, Name = "success", Ports = Array.Empty<PortDefinition>(), KindValue = "test:success" }
             ],

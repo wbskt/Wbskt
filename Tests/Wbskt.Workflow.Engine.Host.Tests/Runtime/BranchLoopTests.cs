@@ -368,7 +368,7 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new SendCommandActionNode { NodeId = nodeId, Name = "fail", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), Retry = new RetryPolicy(RetryStrategy.Constant, TimeSpan.Zero, null, null, 2, 0, []) }
+                new SendCommandActionNode { NodeId = nodeId, Name = "fail", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Retry = new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 2, JitterPct = 0, RetryOn = [] } }
             ],
             [],
             [],
@@ -457,7 +457,7 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new SendCommandActionNode { NodeId = startNodeId, Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), OnFailure = new OnFailureConfig(ErrorOutcome.ContinueAsSucceeded) },
+                new SendCommandActionNode { NodeId = startNodeId, Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.ContinueAsSucceeded } },
                 new TestNode { NodeId = nextNodeId, Name = "next", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }
             ],
             [new Edge((startNodeId, "default"), (nextNodeId, "in"))],
@@ -505,7 +505,7 @@ public sealed class BranchLoopTests
             null,
             true,
             [
-                new SendCommandActionNode { NodeId = startNodeId, Name = "command", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new SendCommandConfig("device-1", "DoThing"), OnFailure = new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: jumpNodeId) },
+                new SendCommandActionNode { NodeId = startNodeId, Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = jumpNodeId } },
                 new TestNode { NodeId = skippedNodeId, Name = "skipped", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
                 new TestNode { NodeId = jumpNodeId, Name = "jump", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }
             ],

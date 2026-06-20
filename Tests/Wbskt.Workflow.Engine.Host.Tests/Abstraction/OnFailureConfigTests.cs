@@ -23,9 +23,7 @@ public class OnFailureConfigTests
     public void OnFailureConfig_roundtrips_with_compensation()
     {
         var refundNodeId = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-        var config = new OnFailureConfig(
-            ErrorOutcome.Compensate,
-            new CompensationDeclaration(refundNodeId, "action:command", null));
+        var config = new OnFailureConfig { Outcome = ErrorOutcome.Compensate, Compensate = new CompensationDeclaration { NodeId = refundNodeId, Kind = "action:command", Config = null } };
 
         var json = JsonSerializer.Serialize(config, Options);
         var back = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);
@@ -39,7 +37,7 @@ public class OnFailureConfigTests
     public void OnFailureConfig_roundtrips_with_jump_target()
     {
         var targetNodeId = new Guid("11111111-2222-3333-4444-555555555555");
-        var config = new OnFailureConfig(ErrorOutcome.JumpToNode, TargetNodeId: targetNodeId);
+        var config = new OnFailureConfig { Outcome = ErrorOutcome.JumpToNode, TargetNodeId = targetNodeId };
 
         var json = JsonSerializer.Serialize(config, Options);
         var back = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);

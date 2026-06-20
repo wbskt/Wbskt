@@ -20,7 +20,7 @@ public sealed class DelayNodeExecutorTests
     {
         var clock = new MutableClock(T0);
         var executor = new DelayNodeExecutor(clock);
-        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig(TimeSpan.FromMinutes(5)) };
+        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig { Duration = TimeSpan.FromMinutes(5) } };
         NodeContext context = CreateContext(node, new Dictionary<string, JsonElement>());
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -36,7 +36,7 @@ public sealed class DelayNodeExecutorTests
     {
         var clock = new MutableClock(T0.AddMinutes(5).AddSeconds(1));
         var executor = new DelayNodeExecutor(clock);
-        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig(TimeSpan.FromMinutes(5)) };
+        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig { Duration = TimeSpan.FromMinutes(5) } };
         NodeContext context = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [DelayUntilKey] = JsonSerializer.SerializeToElement(T0.AddMinutes(5).ToString("O"))
@@ -53,7 +53,7 @@ public sealed class DelayNodeExecutorTests
     {
         var clock = new MutableClock(T0);
         var executor = new DelayNodeExecutor(clock);
-        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig(TimeSpan.Zero) };
+        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig { Duration = TimeSpan.Zero } };
         NodeContext context = CreateContext(node, new Dictionary<string, JsonElement>());
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -66,7 +66,7 @@ public sealed class DelayNodeExecutorTests
     {
         var clock = new MutableClock(T0);
         var executor = new DelayNodeExecutor(clock);
-        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig(TimeSpan.FromMinutes(5)) };
+        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig { Duration = TimeSpan.FromMinutes(5) } };
         NodeContext context = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [DelayUntilKey] = JsonSerializer.SerializeToElement(T0.AddMinutes(5).ToString("O"))
@@ -95,8 +95,8 @@ public sealed class DelayNodeExecutorTests
     private static IReadOnlyCollection<PortDefinition> CreatePorts()
     {
         return [
-            new PortDefinition("in", PortDirection.Input, "In"),
-            new PortDefinition("default", PortDirection.Output, "Out")
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
         ];
     }
 

@@ -73,8 +73,8 @@ public sealed class WorkflowDefinitionCacheTests
             null,
             true,
             [
-                new ManualTriggerNode { NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Name = "start", Ports = [new PortDefinition("default", PortDirection.Output, "Out")], Config = new ManualTriggerConfig() },
-                new LogicGateNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "logic", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], Config = new LogicGateConfig("true") }
+                new ManualTriggerNode { NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new ManualTriggerConfig() },
+                new LogicGateNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } }
             ],
             [
                 new Edge(

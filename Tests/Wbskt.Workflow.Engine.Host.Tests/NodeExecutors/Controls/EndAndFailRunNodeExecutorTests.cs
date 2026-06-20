@@ -27,7 +27,7 @@ public sealed class EndAndFailRunNodeExecutorTests
     public async Task FailRun_fails_branch_with_configured_reason_non_retryable()
     {
         var executor = new FailRunNodeExecutor();
-        var node = new FailRunNode { NodeId = Guid.NewGuid(), Name = "fail", Ports = [], Config = new FailRunConfig("temperature too high") };
+        var node = new FailRunNode { NodeId = Guid.NewGuid(), Name = "fail", Ports = [], Config = new FailRunConfig { Reason = "temperature too high" } };
         NodeContext ctx = Context(node);
 
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);

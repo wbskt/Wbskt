@@ -1,6 +1,15 @@
 using System.Text.Json.Serialization;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-public sealed record WebhookNotificationConfig(
-    [property: JsonPropertyName("url")] string Url,
-    [property: JsonPropertyName("method")] string Method,
-    [property: JsonPropertyName("body")] System.Text.Json.JsonElement? Body = null);
+public sealed record WebhookNotificationConfig
+{
+    [JsonPropertyName("url")]
+    public required string Url { get; init; }
+
+    [JsonPropertyName("method")]
+    public required string Method { get; init; }
+
+    [JsonPropertyName("body")]
+    public System.Text.Json.JsonElement? Body { get; init; } = null;
+
+}
+

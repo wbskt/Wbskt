@@ -41,10 +41,8 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
         var builder = new WorkflowBuilder($"E2E-SAGA-{workflowRefId:N}", workflowRefId)
             .EnableCompensationOnFailure(true)
             .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
-            .AddSendCommand(deviceRef, "ChargeCard", "Charge Card", new CompensationDeclaration(
-                Guid.NewGuid(), "action:command", JsonSerializer.SerializeToElement(new SendCommandConfig(deviceRef, "RefundCard", null))))
-            .AddSendCommand(deviceRef, "ReserveStock", "Reserve Stock", new CompensationDeclaration(
-                Guid.NewGuid(), "action:command", JsonSerializer.SerializeToElement(new SendCommandConfig(deviceRef, "ReleaseStock", null))))
+            .AddSendCommand(deviceRef, "ChargeCard", "Charge Card", new CompensationDeclaration { NodeId = Guid.NewGuid(), Kind = "action:command", Config = JsonSerializer.SerializeToElement(new SendCommandConfig { DeviceRef = deviceRef, Command = "RefundCard", Payload = null }) })
+            .AddSendCommand(deviceRef, "ReserveStock", "Reserve Stock", new CompensationDeclaration { NodeId = Guid.NewGuid(), Kind = "action:command", Config = JsonSerializer.SerializeToElement(new SendCommandConfig { DeviceRef = deviceRef, Command = "ReleaseStock", Payload = null }) })
             .AddDelay(TimeSpan.FromSeconds(2))
             .AddFailRun("inventory issue");
 

@@ -9,7 +9,7 @@ public class PortDefinitionTests
     [Fact]
     public void Port_serialises_to_json_with_id_direction_and_label()
     {
-        var port = new PortDefinition("true", PortDirection.Output, "True branch");
+        var port = new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True branch" };
 
         var json = System.Text.Json.JsonSerializer.Serialize(port);
 

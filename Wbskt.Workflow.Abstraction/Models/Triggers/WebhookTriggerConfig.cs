@@ -3,9 +3,20 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.Workflow.Abstraction.Models.Triggers;
 
-public sealed record WebhookTriggerConfig(
-    [property: JsonPropertyName("path")] string Path,
-    [property: JsonPropertyName("method")] string Method,
-    [property: JsonPropertyName("correlationKey")] string? CorrelationKey = null,
-    [property: JsonPropertyName("concurrencyPolicy")][property: JsonConverter(typeof(JsonStringEnumConverter))] WorkflowConcurrencyPolicy ConcurrencyPolicy = WorkflowConcurrencyPolicy.Queue
-);
+public sealed record WebhookTriggerConfig
+{
+    [JsonPropertyName("path")]
+    public required string Path { get; init; }
+
+    [JsonPropertyName("method")]
+    public required string Method { get; init; }
+
+    [JsonPropertyName("correlationKey")]
+    public string? CorrelationKey { get; init; } = null;
+
+    [JsonPropertyName("concurrencyPolicy")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public WorkflowConcurrencyPolicy ConcurrencyPolicy { get; init; } = WorkflowConcurrencyPolicy.Queue;
+
+}
+

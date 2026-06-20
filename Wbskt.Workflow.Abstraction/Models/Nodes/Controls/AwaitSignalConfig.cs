@@ -1,7 +1,18 @@
 using System.Text.Json.Serialization;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-public sealed record AwaitSignalConfig(
-    [property: JsonPropertyName("signalName")] string SignalName,
-    [property: JsonPropertyName("correlation")] string? Correlation = null,
-    [property: JsonPropertyName("ttl")] TimeSpan? Ttl = null,
-    [property: JsonPropertyName("onTimeout")] string? OnTimeout = null);
+public sealed record AwaitSignalConfig
+{
+    [JsonPropertyName("signalName")]
+    public required string SignalName { get; init; }
+
+    [JsonPropertyName("correlation")]
+    public string? Correlation { get; init; } = null;
+
+    [JsonPropertyName("ttl")]
+    public TimeSpan? Ttl { get; init; } = null;
+
+    [JsonPropertyName("onTimeout")]
+    public string? OnTimeout { get; init; } = null;
+
+}
+

@@ -91,9 +91,9 @@ public sealed class InboundEventToRunStartE2ETests
             null,
             true,
             [
-                new DeviceTriggerNode { NodeId = triggerNodeId, Name = "device", Ports = [new PortDefinition("default", PortDirection.Output, "Default")], Config = new DeviceTriggerConfig("device-serial-1", "telemetry", null, WorkflowConcurrencyPolicy.AllowParallel) },
-                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], Config = new LogicGateConfig("true") },
-                new LogicGateNode { NodeId = terminalNodeId, Name = "terminal", Ports = [new PortDefinition("in", PortDirection.Input, "In"), new PortDefinition("next", PortDirection.Output, "Next")], Config = new LogicGateConfig("true") }
+                new DeviceTriggerNode { NodeId = triggerNodeId, Name = "device", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new DeviceTriggerConfig { DeviceRef = "device-serial-1", Event = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.AllowParallel } },
+                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } },
+                new LogicGateNode { NodeId = terminalNodeId, Name = "terminal", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } }
             ],
             [new Edge((triggerNodeId, "default"), (logicNodeId, "in")), new Edge((logicNodeId, "next"), (terminalNodeId, "in"))],
             Array.Empty<SharedVariableDeclaration>(),
