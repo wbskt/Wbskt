@@ -33,7 +33,6 @@ public class ConcurrencyStressE2ETests
         var builder = new WorkflowBuilder($"E2E-Stress-{workflowRefId:N}", workflowRefId)
             .AddWebhookTrigger("stress", "POST", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
-        var tails = new List<(Guid, string)>();
         builder.AddFork(["b1", "b2", "b3", "b4", "b5"], fork =>
         {
             for (int i = 0; i < 5; i++)
@@ -41,12 +40,9 @@ public class ConcurrencyStressE2ETests
                 fork.Branch($"b{i + 1}", b => 
                 {
                     b.AddDelay(TimeSpan.FromSeconds(1));
-                    if (b.CurrentHead.HasValue) tails.Add(b.CurrentHead.Value);
                 });
             }
-        });
-
-        builder.AddJoin(JoinMode.All, tails.ToArray());
+        }, JoinMode.All);
 
         // 3. Publish
         var definitionElement = JsonSerializer.SerializeToElement(builder.BuildAndValidate(), JsonOptions);
