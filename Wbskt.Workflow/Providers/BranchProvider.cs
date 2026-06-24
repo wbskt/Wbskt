@@ -25,45 +25,30 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 
     public async Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
     {
-        const int maxAttempts = 3;
-        int attempt = 0;
-        while (true)
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand("dbo.Branch_Upsert", connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@RefId", row.RefId);
+        command.Parameters.AddWithValue("@RunId", row.RunId);
+        command.Parameters.AddWithValue("@ParentBranchId", (object?)row.ParentBranchId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ForkCohortId", (object?)row.ForkCohortId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@NodeId", row.NodeId);
+        command.Parameters.AddWithValue("@Status", row.Status);
+        command.Parameters.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
+        command.Parameters.AddWithValue("@LocalJson", row.LocalJson);
+        command.Parameters.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
+        command.Parameters.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
+
+        await connection.OpenAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        if (await reader.ReadAsync(ct))
         {
-            attempt++;
-            try
-            {
-                await using var connection = new SqlConnection(_connectionString);
-                await using var command = new SqlCommand("dbo.Branch_Upsert", connection);
-                command.CommandType = CommandType.StoredProcedure;
-
-                command.Parameters.AddWithValue("@RefId", row.RefId);
-                command.Parameters.AddWithValue("@RunId", row.RunId);
-                command.Parameters.AddWithValue("@ParentBranchId", (object?)row.ParentBranchId ?? DBNull.Value);
-                command.Parameters.AddWithValue("@ForkCohortId", (object?)row.ForkCohortId ?? DBNull.Value);
-                command.Parameters.AddWithValue("@NodeId", row.NodeId);
-                command.Parameters.AddWithValue("@Status", row.Status);
-                command.Parameters.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
-                command.Parameters.AddWithValue("@LocalJson", row.LocalJson);
-                command.Parameters.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
-                command.Parameters.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
-
-                await connection.OpenAsync(ct);
-                await using var reader = await command.ExecuteReaderAsync(ct);
-
-                if (await reader.ReadAsync(ct))
-                {
-                    return Map(reader);
-                }
-
-                throw new InvalidOperationException("Branch_Upsert did not return a row.");
-            }
-            catch (SqlException ex) when (ex.Number == 1205 && attempt < maxAttempts)
-            {
-                // SQL Server deadlock victim — retry with jittered backoff
-                int delayMs = 20 * attempt + Random.Shared.Next(0, 30);
-                await Task.Delay(delayMs, ct);
-            }
+            return Map(reader);
         }
+
+        throw new InvalidOperationException("Branch_Upsert did not return a row.");
     }
 
     public async Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct)

@@ -13,27 +13,30 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    MERGE dbo.Branches WITH (HOLDLOCK) AS target
-    USING (VALUES (
-        @RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
-        @Status, @PendingTakePort, @LocalJson, @LastOutputJson, @CompensationStackJson
-    )) AS src (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
-               Status, PendingTakePort, LocalJson, LastOutputJson, CompensationStackJson)
-    ON target.RefId = src.RefId
-    WHEN MATCHED THEN
-        UPDATE SET
-            NodeId                = src.NodeId,
-            Status                = src.Status,
-            PendingTakePort       = src.PendingTakePort,
-            LocalJson             = src.LocalJson,
-            LastOutputJson        = src.LastOutputJson,
-            CompensationStackJson = src.CompensationStackJson,
-            UpdatedAt             = SYSUTCDATETIME()
-    WHEN NOT MATCHED THEN
-        INSERT (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
-                Status, PendingTakePort, LocalJson, LastOutputJson, CompensationStackJson)
-        VALUES (src.RefId, src.RunId, src.ParentBranchId, src.ForkCohortId, src.NodeId,
-                src.Status, src.PendingTakePort, src.LocalJson, src.LastOutputJson, src.CompensationStackJson);
+    -- UPDATE first: targets a single key lock (UPDLOCK prevents dirty reads,
+    -- ROWLOCK avoids escalating to a page/table lock under concurrency).
+    -- This is deadlock-safe unlike MERGE+HOLDLOCK which takes range locks.
+    UPDATE dbo.Branches WITH (UPDLOCK, ROWLOCK)
+    SET
+        NodeId                = @NodeId,
+        Status                = @Status,
+        PendingTakePort       = @PendingTakePort,
+        LocalJson             = @LocalJson,
+        LastOutputJson        = @LastOutputJson,
+        CompensationStackJson = @CompensationStackJson,
+        UpdatedAt             = SYSUTCDATETIME()
+    WHERE RefId = @RefId;
+
+    -- INSERT only when no existing row was found.
+    IF @@ROWCOUNT = 0
+    BEGIN
+        INSERT INTO dbo.Branches
+            (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
+             Status, PendingTakePort, LocalJson, LastOutputJson, CompensationStackJson)
+        VALUES
+            (@RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
+             @Status, @PendingTakePort, @LocalJson, @LastOutputJson, @CompensationStackJson);
+    END
 
     SELECT
         Id,
