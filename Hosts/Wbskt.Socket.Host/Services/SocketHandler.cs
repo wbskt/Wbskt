@@ -2,10 +2,10 @@ using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
-using Wbskt.Socket.Host.Models;
 
 namespace Wbskt.Socket.Host.Services;
 
@@ -118,7 +118,7 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        await _eventBus.PublishAsync(new ClientPayloadReceivedEvent(clientRefId, clientId, workspaceId, message.Type, messageJson), cancellationToken);
+                        await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, clientId, workspaceId, message.Type, messageJson), cancellationToken);
                     }
                 }
                 catch (JsonException ex)

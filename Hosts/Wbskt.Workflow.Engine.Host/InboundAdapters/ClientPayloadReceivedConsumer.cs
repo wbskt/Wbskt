@@ -5,19 +5,19 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
-public sealed class ClientPayloadReceivedConsumer(IInboundHub hub) : IConsumer<ClientPayloadReceivedEvent>
+public sealed class ClientPayloadReceivedConsumer(IInboundHub hub) : IConsumer<ClientMessageReceivedEvent>
 {
-    public Task Consume(ConsumeContext<ClientPayloadReceivedEvent> context)
+    public Task Consume(ConsumeContext<ClientMessageReceivedEvent> context)
     {
-        ClientPayloadReceivedEvent evt = context.Message;
+        ClientMessageReceivedEvent evt = context.Message;
         InboundEvent inboundEvent = new(
             "device",
-            [$"device:{evt.ClientRefId}:{evt.MessageType}", $"device:{evt.ClientRefId}:*"],
+            [$"device:{evt.ClientRefId}:{evt.Type}", $"device:{evt.ClientRefId}:*"],
             $"client-payload:{evt.ClientRefId}:{InboundMessageId.Stable(context)}",
             new Dictionary<string, JsonElement>
             {
                 ["deviceSerial"] = JsonSerializer.SerializeToElement(evt.ClientRefId.ToString()),
-                ["payloadType"] = JsonSerializer.SerializeToElement(evt.MessageType),
+                ["payloadType"] = JsonSerializer.SerializeToElement(evt.Type),
                 ["clientRefId"] = JsonSerializer.SerializeToElement(evt.ClientRefId),
                 ["clientId"] = JsonSerializer.SerializeToElement(evt.ClientId),
                 ["workspaceId"] = JsonSerializer.SerializeToElement(evt.WorkspaceId),

@@ -369,3 +369,6 @@ FodyWeavers.xsd
 *appsettings.Production.json
 .aider*
 .DS_Store
+/.agents/mcp.json
+/.agents/mcp_config.json
+/class_metadata.json

@@ -2,13 +2,14 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using MassTransit;
+using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Socket.Host.Handlers;
 
-public sealed class ClientPayloadHandler : IConsumer<ClientPayloadEvent>
+public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
 {
     private readonly IConnectionManager _connectionManager;
     private readonly ILogger<ClientPayloadHandler> _logger;
@@ -21,7 +22,7 @@ public sealed class ClientPayloadHandler : IConsumer<ClientPayloadEvent>
         _eventBus = eventBus;
     }
 
-    public async Task Consume(ConsumeContext<ClientPayloadEvent> context)
+    public async Task Consume(ConsumeContext<ClientCommandEvent> context)
     {
         var socket = _connectionManager.GetConnection(context.Message.ClientRefId);
         if (socket?.State != WebSocketState.Open)
@@ -33,19 +34,20 @@ public sealed class ClientPayloadHandler : IConsumer<ClientPayloadEvent>
         try
         {
             await HandleCommandAsync(socket, context.Message, context.CancellationToken);
-            await _eventBus.PublishAsync(new ClientPayloadDeliveredEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.MessageType, context.Message.Payload), context.CancellationToken);
+            await _eventBus.PublishAsync(new ClientCommandDeliveredEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.Type, context.Message.Payload), context.CancellationToken);
         }
         catch (Exception ex)
         {
-            await _eventBus.PublishAsync(new ClientPayloadFailedEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.MessageType, ex.Message), context.CancellationToken);
+            await _eventBus.PublishAsync(new ClientCommandFailedEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.Type, ex.Message), context.CancellationToken);
         }
     }
 
-    private async Task HandleCommandAsync(WebSocket socket, ClientPayloadEvent command, CancellationToken ct)
+    private async Task HandleCommandAsync(WebSocket socket, ClientCommandEvent command, CancellationToken ct)
     {
-        _logger.LogInformation("Sending command {Action} to client {ClientRefId}.", command.MessageType, command.ClientRefId);
+        _logger.LogInformation("Sending command {Type} to client {ClientRefId}.", command.Type, command.ClientRefId);
 
-        var message = new { type = "command", action = command.MessageType, payload = command.Payload };
+        // [RJ]: TODO: command id will be used to do ack from the client
+        var message = new SocketMessage(command.Type, command.Payload /*, command.CommandId */);
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
 

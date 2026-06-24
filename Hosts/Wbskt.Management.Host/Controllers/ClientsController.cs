@@ -149,11 +149,11 @@ public class ClientsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{clientRefId:guid}/command")]
-    public async Task SendCommand(Guid workspaceRef, Guid clientRefId, DeviceCommandRequest request, CancellationToken cancellationToken)
+    public async Task SendCommand(Guid workspaceRef, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
         var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
         var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        await _eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, clientId, workspaceId, request.CommandName, request.Payload), cancellationToken);
+        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceId, request.Type, request.Payload), cancellationToken);
     }
 
     /// <summary>
@@ -174,4 +174,4 @@ public class ClientsController : ControllerBase
 
 public record UpdateClientStatusRequest(ClientStatus Status);
 
-public record DeviceCommandRequest(string CommandName, string Payload);
+public record ClientCommandRequest(string Type, string Payload);

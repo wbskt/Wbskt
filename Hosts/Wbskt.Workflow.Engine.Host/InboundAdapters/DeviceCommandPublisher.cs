@@ -8,6 +8,6 @@ public sealed class DeviceCommandPublisher(IEventBus eventBus) : IDeviceCommandP
 {
     public Task PublishCommandAsync(Guid clientRefId, int clientId, int workspaceId, string command, string payload, CancellationToken ct)
     {
-        return eventBus.PublishAsync(new ClientPayloadEvent(clientRefId, clientId, workspaceId, command, payload), ct);
+        return eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceId, command, payload), ct);
     }
 }

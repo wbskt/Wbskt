@@ -4,11 +4,11 @@ using Wbskt.Events.Abstractions;
 namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientPayloadEvent")]
-public sealed record ClientPayloadEvent(
+[SignalRNotify("OnClientCommandEvent")]
+public sealed record ClientCommandEvent(
     Guid ClientRefId,
     int ClientId,
     int WorkspaceId,
-    string MessageType,
+    string Type,
     string Payload
 ) : BaseEvent, IClientContext;

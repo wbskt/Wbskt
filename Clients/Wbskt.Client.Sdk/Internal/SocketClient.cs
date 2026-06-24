@@ -92,25 +92,16 @@ internal sealed class SocketClient : IAsyncDisposable
                 var doc = JsonDocument.Parse(json);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
-                if (type != "command")
+                switch (type)
                 {
-                    continue;
-                }
-
-                var action = doc.RootElement.GetProperty("action").GetString();
-                var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p : null;
-
-                if (action == "ping")
-                {
-                    var pongPayload = new 
-                    { 
-                        originalTimestamp = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime()
-                    };
-                    await SendAsync(new SocketMessage("pong", pongPayload));
-                }
-                else
-                {
-                    OnMessageReceived?.Invoke(action ?? "unknown", payload);
+                    case "sys.ping":
+                        var ts = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime();
+                        await SendAsync(new SocketMessage("sys.pong", new { originalTimestamp = ts }));
+                        break;
+                    default:
+                        var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p : null;
+                        OnMessageReceived?.Invoke(type ?? "unknown", payload);
+                        break;
                 }
             }
         }

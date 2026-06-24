@@ -19,8 +19,8 @@ public sealed class InboundAdaptersE2ETests
     {
         var hub = CreateHub();
         var consumer = new ClientPayloadReceivedConsumer(hub.Object);
-        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
-        ClientPayloadReceivedEvent evt = new(Guid.NewGuid(), 1, 1, "sensor", "{}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        ClientMessageReceivedEvent evt = new(Guid.NewGuid(), 1, 1, "sensor", "{}");
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
@@ -29,7 +29,7 @@ public sealed class InboundAdaptersE2ETests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "device"
-                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.MessageType}")),
+                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.Type}")),
             CancellationToken.None), Times.Once);
     }
 

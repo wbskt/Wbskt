@@ -16,8 +16,8 @@ public sealed class ClientPayloadReceivedConsumerTests
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
-        ClientPayloadReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{\"value\":1}");
-        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
+        ClientMessageReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{\"value\":1}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
         var consumer = new ClientPayloadReceivedConsumer(hub.Object);
@@ -29,10 +29,10 @@ public sealed class ClientPayloadReceivedConsumerTests
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "device"
-                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.MessageType}")
+                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.Type}")
                 && e.InboundEventId.StartsWith($"client-payload:{evt.ClientRefId}:", StringComparison.Ordinal)
                 && e.Payload["deviceSerial"].GetString() == evt.ClientRefId.ToString()
-                && e.Payload["payloadType"].GetString() == evt.MessageType
+                && e.Payload["payloadType"].GetString() == evt.Type
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
                 && e.Payload["clientId"].GetInt32() == evt.ClientId
                 && e.Payload["workspaceId"].GetInt32() == evt.WorkspaceId
@@ -47,8 +47,8 @@ public sealed class ClientPayloadReceivedConsumerTests
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
-        ClientPayloadReceivedEvent evt = new(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), 12, 34, "temperature", "{}");
-        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
+        ClientMessageReceivedEvent evt = new(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), 12, 34, "temperature", "{}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
         var consumer = new ClientPayloadReceivedConsumer(hub.Object);
@@ -71,8 +71,8 @@ public sealed class ClientPayloadReceivedConsumerTests
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
-        ClientPayloadReceivedEvent evt = new(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), 99, 77, "humidity", "{}");
-        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
+        ClientMessageReceivedEvent evt = new(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), 99, 77, "humidity", "{}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
         var consumer = new ClientPayloadReceivedConsumer(hub.Object);
@@ -96,7 +96,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
-        ClientPayloadReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{}");
+        ClientMessageReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{}");
         Guid messageId = Guid.Parse("11112222-3333-4444-5555-666677778888");
 
         var capturedIds = new List<string>();
@@ -114,9 +114,9 @@ public sealed class ClientPayloadReceivedConsumerTests
         Assert.EndsWith(messageId.ToString(), capturedIds[0]);
     }
 
-    private static Mock<ConsumeContext<ClientPayloadReceivedEvent>> ContextWithMessageId(ClientPayloadReceivedEvent evt, Guid messageId)
+    private static Mock<ConsumeContext<ClientMessageReceivedEvent>> ContextWithMessageId(ClientMessageReceivedEvent evt, Guid messageId)
     {
-        var context = new Mock<ConsumeContext<ClientPayloadReceivedEvent>>();
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
         context.SetupGet(c => c.MessageId).Returns(messageId);
