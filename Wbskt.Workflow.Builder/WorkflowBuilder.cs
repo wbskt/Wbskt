@@ -445,11 +445,23 @@ public sealed class WorkflowBuilder
 
     public WorkflowBuilder AddJoin(JoinMode mode, params (Guid NodeId, string PortId)[] branchEnds)
     {
-        AddJoin(mode, out var joinId);
+        var id = Guid.NewGuid();
+        _nodes.Add(new JoinNode
+        {
+            NodeId = id,
+            Name = "Join",
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new JoinConfig { Mode = mode }
+        });
+
+        // Wire each branch tail to join.In — do NOT call ConnectToHead here to avoid
+        // double-wiring the last tail (ConnectToHead would add it once, foreach adds it again).
         foreach (var end in branchEnds)
         {
-            _edges.Add(new Edge(end, (joinId, PortNames.In)));
+            _edges.Add(new Edge(end, (id, PortNames.In)));
         }
+
+        _head = (id, PortNames.Default);
         return this;
     }
 
