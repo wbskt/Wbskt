@@ -34,11 +34,11 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Timeout-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(2), awaitSignal => 
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
             });
 
         var definition = builder.BuildAndValidate();
@@ -49,7 +49,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {
@@ -74,7 +74,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
             timeout: TimeSpan.FromSeconds(15),
             interval: TimeSpan.FromSeconds(1));
             
-        arrived.Should().BeTrue("device must receive TimeoutFired after 2 seconds");
+        arrived.Should().BeTrue("client must receive TimeoutFired after 2 seconds");
 
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(15));
         summary.Should().NotBeNull();
@@ -100,10 +100,10 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Signal-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(10), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired", null));
                 awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
             });
 
@@ -115,7 +115,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {
@@ -145,7 +145,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
             timeout: TimeSpan.FromSeconds(15),
             interval: TimeSpan.FromSeconds(1));
             
-        arrived.Should().BeTrue("device must receive SignalFired");
+        arrived.Should().BeTrue("client must receive SignalFired");
 
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(15));
         summary.Should().NotBeNull();
@@ -171,11 +171,11 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-TTL-Race-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(3), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null));
-                awaitSignal.OnTimeout(b => b.AddSendCommand(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
             });
 
         var definition = builder.BuildAndValidate();
@@ -186,7 +186,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {

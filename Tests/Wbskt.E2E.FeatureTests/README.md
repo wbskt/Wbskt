@@ -66,8 +66,8 @@ All base URLs can be overridden so the tests can target non-default environments
 
 | Class | What it tests |
 |---|---|
-| `AuthAndRegistrationTests` | A new user can register + login; then the **seeded admin** creates an AutoApproval policy → device registration → client login |
-| `WorkflowCommandLoopTests` | Full round-trip: publish `DeviceTrigger→action:command` workflow, connect WbsktClient, send telemetry, assert OpenVent command received and run completes |
+| `AuthAndRegistrationTests` | A new user can register + login; then the **seeded admin** creates an AutoApproval policy → client registration → client login |
+| `WorkflowCommandLoopTests` | Full round-trip: publish `DeviceTrigger→action:clientMessage` workflow, connect WbsktClient, send telemetry, assert OpenVent command received and run completes |
 
 ---
 
@@ -92,13 +92,13 @@ Because the admin owns the workspace whose internal `Id = 1`, the published
 
 ```
 DeviceTrigger
-  config: { deviceRef: <clientRefId>, event: "telemetry", concurrencyPolicy: "AllowParallel" }
+  config: { clientRef: <clientRefId>, type: "telemetry", concurrencyPolicy: "AllowParallel" }
   ports:  [{ portId: "default", direction: "Output" }]
       |
       | edge from=(triggerNodeId,"default") to=(actionNodeId,"in")
       ▼
-action:command (SendCommandActionNode)
-  config: { deviceRef: <clientRefId>, command: "OpenVent" }
+action:clientMessage (SendCommandActionNode)
+  config: { clientRef: <clientRefId>, type: "OpenVent" }
   ports:  [{ portId: "in", direction: "Input" }, { portId: "out", direction: "Output" }]
 ```
 

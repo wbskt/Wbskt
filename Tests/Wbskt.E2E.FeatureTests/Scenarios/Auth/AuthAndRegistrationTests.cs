@@ -34,8 +34,8 @@ public sealed class AuthAndRegistrationTests(ServicesFixture fixture)
         policyRef.Should().NotBeEmpty("policy creation must return a valid RefId");
         pin.Should().NotBeNullOrWhiteSpace("policy must come with a non-empty PIN");
 
-        // ── 4. Initiate device registration via PIN ───────────────────────────
-        var deviceName = $"e2e-device-{Guid.NewGuid():N}";
+        // ── 4. Initiate client registration via PIN ───────────────────────────
+        var deviceName = $"e2e-client-{Guid.NewGuid():N}";
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
 
         clientRefId.Should().NotBeEmpty("client registration must return a valid ClientRefId");

@@ -23,7 +23,7 @@ public class OnFailureConfigTests
     public void OnFailureConfig_roundtrips_with_compensation()
     {
         var refundNodeId = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-        var config = new OnFailureConfig { Outcome = ErrorOutcome.Compensate, Compensate = new CompensationDeclaration { NodeId = refundNodeId, Kind = "action:command", Config = null } };
+        var config = new OnFailureConfig { Outcome = ErrorOutcome.Compensate, Compensate = new CompensationDeclaration { NodeId = refundNodeId, Kind = "action:clientMessage", Config = null } };
 
         var json = JsonSerializer.Serialize(config, Options);
         var back = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);

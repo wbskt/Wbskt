@@ -100,7 +100,7 @@ public static class ValidWorkflowBuilder
 
     public static WorkflowDefinition Build()
     {
-        var trigger = new DeviceTriggerNode { NodeId = Trigger1Id, Name = "Trigger", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.DeviceTriggerConfig { DeviceRef = "dev-1", Event = "telemetry" } };
+        var trigger = new ClientTriggerNode { NodeId = Trigger1Id, Name = "Trigger", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ClientTriggerConfig { ClientRef = "dev-1", Type = "telemetry" } };
 
         var logic = new LogicGateNode { NodeId = Logic1Id, Name = "Gate", Ports = [
                 new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },

@@ -92,7 +92,7 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {
@@ -132,20 +132,20 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
         }
     }
 
-    private static WorkflowDefinition BuildFailRunDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildFailRunDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-FailRun-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddFailRun("intentional E2E failure");
 
         return builder.BuildAndValidate();
     }
 
-    private static WorkflowDefinition BuildPartialFailureDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildPartialFailureDefinition(Guid workflowRefId, string clientRef)
     {
         var itemsValue = JsonSerializer.SerializeToElement(new[] { true, false });
         var builder = new WorkflowBuilder($"E2E-Partial-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddVariable(VariableScope.Local, VariableOperation.Set, "items", itemsValue)
             .AddParallelForEach("items", pfe =>
             {
@@ -153,7 +153,7 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
                 {
                     b1.AddLogicGate("item", gate =>
                     {
-                        gate.OnTrue(b2 => b2.AddSendCommand(deviceRef, "OpenVent"));
+                        gate.OnTrue(b2 => b2.AddClientMessage(clientRef, "OpenVent"));
                         gate.OnFalse(b2 => b2.AddFailRun("intentional sibling failure"));
                     });
                 });

@@ -15,19 +15,19 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 
 /// <summary>
 /// ForEach fan-out — proves a single trigger fans out into N independent body branches,
-/// each delivering its own device command. The per-branch action-idempotency key includes
+/// each delivering its own client command. The per-branch action-idempotency key includes
 /// BranchId, so the siblings are NOT deduped against each other.
 ///
 /// Topology:
 ///   DeviceTrigger ─► Variable(Set Local "items"=[a,b,c]) ─► ForEach("items")
-///                                                              ├─body─► action:command (OpenVent)
+///                                                              ├─body─► action:clientMessage (OpenVent)
 ///                                                              └─done─► End
 ///
 /// The collection is injected via a Variable node rather than read from telemetry because the
 /// inbound payload is delivered as an opaque JSON string (trigger.payload), not a parsed array.
 /// ForEach forks one "body" branch per item and the parent continues on the "done" port to an
 /// explicit End (the parent branch must have a resolvable continuation — an unconnected fork
-/// continue-port would throw). We assert the device receives exactly N commands, the run reaches
+/// continue-port would throw). We assert the client receives exactly N commands, the run reaches
 /// the terminal "Succeeded" status, and each fanned-out branch carried a distinct item.
 /// </summary>
 [Collection(E2ECollection.Name)]
@@ -42,7 +42,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + policy + device registration ─────────────────────
+        // ── 1. Admin auth + policy + client registration ─────────────────────
         var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
@@ -61,7 +61,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
             token, workspaceRef, workflowRefId, $"E2E-ForEach-{workflowRefId:N}",
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
-        // ── 3. Connect the device and count inbound commands ─────────────────
+        // ── 3. Connect the client and count inbound commands ─────────────────
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
@@ -73,7 +73,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {
@@ -94,7 +94,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         summary.Should().NotBeNull("the run must finalize");
         summary!.Status.Should().Be("Succeeded", "every fanned-out branch completes successfully");
 
-        // ── 6. The device must receive exactly one command per item ──────────
+        // ── 6. The client must receive exactly one command per item ──────────
         var allArrived = await ServicesFixture.PollAsync(
             () =>
             {
@@ -142,14 +142,14 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         return null;
     }
 
-    private static WorkflowDefinition BuildForEachDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildForEachDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-ForEach-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef)
+            .AddTelemetryClientTrigger(clientRef)
             .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(Items))
             .AddForEach("items", loop =>
             {
-                loop.OnBody(b => b.AddSendCommand(deviceRef, "OpenVent"));
+                loop.OnBody(b => b.AddClientMessage(clientRef, "OpenVent"));
                 loop.OnDone(b => b.AddEnd());
             });
 

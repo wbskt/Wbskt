@@ -16,7 +16,7 @@ public sealed class WbsktClient : IWbsktClient
     private string? _resolvedSecret;
     private ClientCapabilities? _lastCapabilities;
 
-    public event Action<string, object?>? OnCommandReceived;
+    public event Action<string, object?>? OnMessageReceived;
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
@@ -28,7 +28,7 @@ public sealed class WbsktClient : IWbsktClient
         _socket = new SocketClient(config.BaseSocketUrl);
 
         // Forward internal events to public surface
-        _socket.OnMessageReceived += (action, payload) => OnCommandReceived?.Invoke(action, payload);
+        _socket.OnMessageReceived += (type, payload) => OnMessageReceived?.Invoke(type, payload);
         _socket.OnConnected += HandleConnected;
         _socket.OnDisconnected += HandleDisconnect;
     }

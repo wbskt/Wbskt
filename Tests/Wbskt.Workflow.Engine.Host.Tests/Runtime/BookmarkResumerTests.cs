@@ -42,7 +42,7 @@ public sealed class BookmarkResumerTests
         Assert.False(result.Matched);
         Assert.Null(result.BookmarkId);
         Assert.False(result.Idempotent);
-        Assert.Equal("device-1", bookmarkProvider.LastMatchKey);
+        Assert.Equal("client-1", bookmarkProvider.LastMatchKey);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class BookmarkResumerTests
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
         var dispatcher = new RecordingRunDispatcher();
         var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, dispatcher);
-        var evt = new InboundEvent("signal", ["device-1"], "event-1", new Dictionary<string, JsonElement>
+        var evt = new InboundEvent("signal", ["client-1"], "event-1", new Dictionary<string, JsonElement>
         {
             ["signalName"] = JsonSerializer.SerializeToElement("approve"),
             ["body"] = JsonSerializer.SerializeToElement(new { approvedBy = "ops" })
@@ -164,7 +164,7 @@ public sealed class BookmarkResumerTests
     {
         return new InboundEvent(
             "mqtt",
-            ["device-1"],
+            ["client-1"],
             "event-1",
             new Dictionary<string, JsonElement>(),
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
@@ -180,7 +180,7 @@ public sealed class BookmarkResumerTests
             BranchRefId = branchRefId,
             NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             WakeConditionKind = "Inbound",
-            MatchKey = "device-1",
+            MatchKey = "client-1",
             WakeConditionJson = "{}",
             ExpiresAt = null,
             TtlPort = null,

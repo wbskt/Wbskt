@@ -18,15 +18,15 @@ public sealed class PendingTriggerEventDrainerTests
                 Id = 1,
                 WorkflowRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                 TriggerNodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-                CorrelationKey = "device:serial-1:telemetry",
+                CorrelationKey = "client:serial-1:telemetry",
                 InboundEventJson = JsonSerializer.Serialize(new InboundEvent(
-                    "device",
-                    ["device:serial-1:telemetry"],
+                    "client",
+                    ["client:serial-1:telemetry"],
                     "evt-1",
                     new Dictionary<string, JsonElement>
                     {
-                        ["deviceSerial"] = JsonSerializer.SerializeToElement("serial-1"),
-                        ["payloadType"] = JsonSerializer.SerializeToElement("telemetry")
+                        ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1"),
+                        ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
                     },
                     DateTime.UtcNow)),
                 EnqueuedAt = DateTime.UtcNow,
@@ -37,7 +37,7 @@ public sealed class PendingTriggerEventDrainerTests
         var drainer = new PendingTriggerEventDrainer(provider, inboundHub);
 
         // Act
-        await drainer.DrainAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "device:serial-1:telemetry", CancellationToken.None);
+        await drainer.DrainAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "client:serial-1:telemetry", CancellationToken.None);
 
         // Assert
         Assert.Single(inboundHub.Events);

@@ -80,7 +80,7 @@ public sealed class WorkflowValidator
 
     private static void WarnIfNoTriggers(WorkflowDefinition def, List<ValidationIssue> issues)
     {
-        var hasTrigger = def.Nodes.Any(n => n is DeviceTriggerNode or ScheduleTriggerNode or WebhookTriggerNode or ManualTriggerNode);
+        var hasTrigger = def.Nodes.Any(n => n is ClientTriggerNode or ScheduleTriggerNode or WebhookTriggerNode or ManualTriggerNode);
 
         if (!hasTrigger)
         {

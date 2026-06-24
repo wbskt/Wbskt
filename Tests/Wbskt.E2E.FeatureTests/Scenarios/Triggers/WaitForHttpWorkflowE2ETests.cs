@@ -17,7 +17,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// WaitForHttp round-trip — proves the third bookmark wake path (the public http-wake callback).
 ///
 /// Topology:
-///   DeviceTrigger (event="telemetry") ─► WaitForHttp(ttl=15m) ─► action:command (OpenVent)
+///   DeviceTrigger (event="telemetry") ─► WaitForHttp(ttl=15m) ─► action:clientMessage (OpenVent)
 ///
 /// Telemetry starts the run, which parks on an http-wake bookmark keyed "http-wake:{runRefId}".
 /// The command must NOT fire yet. An external caller POSTs /api/inbound/wake/{runRefId}, which the
@@ -52,7 +52,7 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         var commandTcs = new TaskCompletionSource<(string Action, string? Payload)>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
+        wbsktClient.OnMessageReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
         await wbsktClient.StartAsync();
 
         await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "http-test", value = 1 });
@@ -82,13 +82,13 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         (await commandTcs.Task).Action.Should().Be("OpenVent");
     }
 
-    private static WorkflowDefinition BuildHttpWaitDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildHttpWaitDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-Http-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddWaitForHttp(TimeSpan.FromMinutes(15), timeout => 
             {
-                timeout.OnSuccess(b => b.AddSendCommand(deviceRef, "OpenVent"));
+                timeout.OnSuccess(b => b.AddClientMessage(clientRef, "OpenVent"));
             });
 
         return builder.BuildAndValidate();

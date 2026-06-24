@@ -67,32 +67,27 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId, string? name = null)
+    public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId, string? name = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
-        _nodes.Add(new DeviceTriggerNode {
+        _nodes.Add(new ClientTriggerNode {
             NodeId = id,
             Name = name ?? "Device Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new DeviceTriggerConfig { DeviceRef = deviceRef, Event = eventName, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy } });
+            Config = new ClientTriggerConfig { ClientRef = clientRef, Type = type, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy } });
         _head = (id, PortNames.Default);
         return this;
     }
 
-    public WorkflowBuilder AddDeviceTrigger(string deviceRef, string eventName, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
+    public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
     {
-        return AddDeviceTrigger(deviceRef, eventName, concurrencyPolicy, null, out nodeId);
+        return AddClientTrigger(clientRef, type, concurrencyPolicy, null, out nodeId);
     }
 
-    public WorkflowBuilder AddDeviceTrigger(string deviceRef, out Guid nodeId)
+    public WorkflowBuilder AddTelemetryClientTrigger(string clientRef)
     {
-        return AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out nodeId);
-    }
-
-    public WorkflowBuilder AddDeviceTrigger(string deviceRef)
-    {
-        return AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
+        return AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
     }
 
     public WorkflowBuilder AddManualTrigger(out Guid nodeId, string? name = null)
@@ -127,14 +122,14 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddSendCommand(string deviceRef, string command, string? name = null, CompensationDeclaration? compensation = null)
+    public WorkflowBuilder AddClientMessage(string clientRef, string messageType, string? name = null, CompensationDeclaration? compensation = null)
     {
         var id = Guid.NewGuid();
-        _nodes.Add(new SendCommandActionNode {
+        _nodes.Add(new SendClientMessageNode {
             NodeId = id,
-            Name = name ?? command,
+            Name = name ?? messageType,
             Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new SendCommandConfig { DeviceRef = deviceRef, Command = command, Payload = null },
+            Config = new SendClientMessageConfig { ClientRef = clientRef, Type = messageType, Payload = null },
             Retry = null,
             OnFailure = null,
             Compensation = compensation });

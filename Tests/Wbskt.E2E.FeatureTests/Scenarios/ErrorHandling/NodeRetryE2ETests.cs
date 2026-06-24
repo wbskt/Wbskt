@@ -81,10 +81,10 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-Retry-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddWebhook("POST", url, null, webhook => 
             {
-                webhook.OnSuccess(b => b.AddSendCommand(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded", null));
+                webhook.OnSuccess(b => b.AddClientMessage(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded", null));
                 webhook.OnError(b => b.AddFailRun("Webhook failed permanently"));
             });
 
@@ -97,7 +97,7 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {
@@ -124,7 +124,7 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
             timeout: TimeSpan.FromSeconds(30), // Allow time for retries
             interval: TimeSpan.FromSeconds(1));
             
-        arrived.Should().BeTrue("device must receive WebhookSucceeded after retries");
+        arrived.Should().BeTrue("client must receive WebhookSucceeded after retries");
 
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(15));
         summary.Should().NotBeNull();

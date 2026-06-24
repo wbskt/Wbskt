@@ -96,10 +96,10 @@ public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
             "AwaitSignal must promote the operator-supplied payload into the resumed branch's local state");
     }
 
-    private static WorkflowDefinition BuildSignalDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildSignalDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-SigPayload-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddAwaitSignal("approve", null, timeout => 
             {
                 timeout.OnSuccess(b => b.AddEnd());

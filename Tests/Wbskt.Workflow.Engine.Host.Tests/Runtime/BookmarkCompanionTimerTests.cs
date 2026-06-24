@@ -49,7 +49,7 @@ public sealed class BookmarkCompanionTimerTests
     {
         // Arrange
         Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "device-1", null);
+        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "client-1", null);
         var companion = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
         var bookmarkProvider = new RecordingBookmarkProvider(primary, companion);
         var resumer = new BookmarkResumer(
@@ -59,7 +59,7 @@ public sealed class BookmarkCompanionTimerTests
             new RecordingRunDispatcher());
 
         // Act
-        await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["device-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
+        await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["client-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
 
         // Assert
         Assert.Empty(bookmarkProvider.Bookmarks);
@@ -71,7 +71,7 @@ public sealed class BookmarkCompanionTimerTests
     {
         // Arrange
         Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:device-1", null);
+        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:client-1", null);
         var timer = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
         var bookmarkProvider = new RecordingBookmarkProvider(primary, timer) { DueBookmarks = [timer] };
         var scheduler = new BookmarkScheduler(
@@ -95,7 +95,7 @@ public sealed class BookmarkCompanionTimerTests
     {
         // Arrange
         Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var winner = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:device-1", null);
+        var winner = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:client-1", null);
         var sibling = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
         var bookmarkProvider = new RecordingBookmarkProvider(winner, sibling);
 

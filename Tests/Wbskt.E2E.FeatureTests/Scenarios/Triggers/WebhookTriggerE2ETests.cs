@@ -42,7 +42,7 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
         await wbsktClient.StartAsync();
 
-        // Give the device time to connect
+        // Give the client time to connect
         await Task.Delay(500);
 
         // Send HTTP POST to the webhook endpoint (retry in case registration is delayed)
@@ -73,7 +73,7 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
             .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10));
 
-        // We only assert the run terminal state. Sending a command would fail because webhooks don't have a targeted deviceRef payload.
+        // We only assert the run terminal state. Sending a message would fail because webhooks don't have a targeted clientRef payload.
 
         return builder.BuildAndValidate();
     }

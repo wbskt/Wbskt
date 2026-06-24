@@ -19,7 +19,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 /// explicit terminal node in a single workflow, proving they compose end-to-end.
 ///
 /// Topology:
-///   DeviceTrigger ─► LogicGate("true") ──true──► Delay(5s) ─► action:command (OpenVent) ─► End
+///   DeviceTrigger ─► LogicGate("true") ──true──► Delay(5s) ─► action:clientMessage (OpenVent) ─► End
 ///                                       └─false─► (unused)
 ///
 /// Telemetry starts the run; the gate routes to the true port; the Delay node parks on a durable
@@ -61,7 +61,7 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
 
         var commandTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) => commandTcs.TrySetResult(action);
+        wbsktClient.OnMessageReceived += (action, _) => commandTcs.TrySetResult(action);
         await wbsktClient.StartAsync();
 
         var stopwatch = Stopwatch.StartNew();
@@ -95,13 +95,13 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
             "the gate, delay and command nodes should each complete");
     }
 
-    private static WorkflowDefinition BuildComplexDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildComplexDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-Complex-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddLogicGate("true", gate =>
             {
-                gate.OnTrue(b => b.AddDelay(Delay).AddSendCommand(deviceRef, "OpenVent").AddEnd());
+                gate.OnTrue(b => b.AddDelay(Delay).AddClientMessage(clientRef, "OpenVent").AddEnd());
             });
 
         return builder.BuildAndValidate();

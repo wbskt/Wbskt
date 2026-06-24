@@ -11,13 +11,12 @@ public sealed class ClientPayloadReceivedConsumer(IInboundHub hub) : IConsumer<C
     {
         ClientMessageReceivedEvent evt = context.Message;
         InboundEvent inboundEvent = new(
-            "device",
-            [$"device:{evt.ClientRefId}:{evt.Type}", $"device:{evt.ClientRefId}:*"],
-            $"client-payload:{evt.ClientRefId}:{InboundMessageId.Stable(context)}",
+            "client",
+            [$"client:{evt.ClientRefId}:{evt.Type}", $"client:{evt.ClientRefId}:*"],
+            $"client-message:{evt.ClientRefId}:{InboundMessageId.Stable(context)}",
             new Dictionary<string, JsonElement>
             {
-                ["deviceSerial"] = JsonSerializer.SerializeToElement(evt.ClientRefId.ToString()),
-                ["payloadType"] = JsonSerializer.SerializeToElement(evt.Type),
+                ["messageType"] = JsonSerializer.SerializeToElement(evt.Type),
                 ["clientRefId"] = JsonSerializer.SerializeToElement(evt.ClientRefId),
                 ["clientId"] = JsonSerializer.SerializeToElement(evt.ClientId),
                 ["workspaceId"] = JsonSerializer.SerializeToElement(evt.WorkspaceId),

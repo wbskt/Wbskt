@@ -6,9 +6,6 @@ using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
-using Wbskt.Workflow.Abstraction.Models.Triggers;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.ErrorHandling;
 
@@ -22,16 +19,16 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + policy + device registration ─────────────────────
+        // ── 1. Admin auth + policy + client registration ─────────────────────
         var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-saga-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-saga-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         // ── 2. Publish workflow ──────────────────────────────────────────────
         var workflowRefId = Guid.NewGuid();
-        var deviceRef = clientRefId.ToString();
+        var clientRef = clientRefId.ToString();
 
         // Topology:
         // DeviceTrigger -> Branch A: SendCommand("ChargeCard", Compensation="RefundCard")
@@ -40,9 +37,9 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
         
         var builder = new WorkflowBuilder($"E2E-SAGA-{workflowRefId:N}", workflowRefId)
             .EnableCompensationOnFailure(true)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
-            .AddSendCommand(deviceRef, "ChargeCard", "Charge Card", new CompensationDeclaration { NodeId = Guid.NewGuid(), Kind = "action:command", Config = JsonSerializer.SerializeToElement(new SendCommandConfig { DeviceRef = deviceRef, Command = "RefundCard", Payload = null }) })
-            .AddSendCommand(deviceRef, "ReserveStock", "Reserve Stock", new CompensationDeclaration { NodeId = Guid.NewGuid(), Kind = "action:command", Config = JsonSerializer.SerializeToElement(new SendCommandConfig { DeviceRef = deviceRef, Command = "ReleaseStock", Payload = null }) })
+            .AddClientTrigger(clientRef, "start", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientMessage(clientRef, "ChargeCard", "Charge Card", new CompensationDeclaration { NodeId = Guid.NewGuid(), Kind = "action:clientMessage", Config = JsonSerializer.SerializeToElement(new SendClientMessageConfig { ClientRef = clientRef, Type = "RefundCard", Payload = null }) })
+            .AddClientMessage(clientRef, "ReserveStock", "Reserve Stock", new CompensationDeclaration { NodeId = Guid.NewGuid(), Kind = "action:clientMessage", Config = JsonSerializer.SerializeToElement(new SendClientMessageConfig { ClientRef = clientRef, Type = "ReleaseStock", Payload = null }) })
             .AddDelay(TimeSpan.FromSeconds(2))
             .AddFailRun("inventory issue");
 
@@ -52,23 +49,23 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
-        // ── 3. Connect the device and count inbound commands ─────────────────
+        // ── 3. Connect the client and count inbound commands ─────────────────
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
             BaseSocketUrl: E2EConfig.SocketWsBaseUrl,
-            DeviceName: deviceName,
+            DeviceName: clientName,
             PolicyPin: null);
 
-        var commandLock = new object();
-        var commands = new List<string>();
+        var messageLock = new object();
+        var messageTypes = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (messageType, _) =>
         {
-            lock (commandLock)
+            lock (messageLock)
             {
-                commands.Add(action);
+                messageTypes.Add(messageType);
             }
         };
         await wbsktClient.StartAsync();
@@ -88,9 +85,9 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
         var arrived = await ServicesFixture.PollAsync(
             () =>
             {
-                lock (commandLock)
+                lock (messageLock)
                 {
-                    return Task.FromResult(commands.Count >= 4);
+                    return Task.FromResult(messageTypes.Count >= 4);
                 }
             },
             timeout: TimeSpan.FromSeconds(15),
@@ -100,23 +97,23 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
         {
             var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId);
             var historyJson = JsonSerializer.Serialize(history, JsonOpts);
-            arrived.Should().BeTrue($"device must receive original actions and their compensations. Received: {string.Join(", ", commands)}. History: {historyJson}");
+            arrived.Should().BeTrue($"client must receive original actions and their compensations. Received: {string.Join(", ", messageTypes)}. History: {historyJson}");
         }
         else
         {
-            arrived.Should().BeTrue($"device must receive original actions and their compensations. Received: {string.Join(", ", commands)}");
+            arrived.Should().BeTrue($"client must receive original actions and their compensations. Received: {string.Join(", ", messageTypes)}");
         }
 
-        lock (commandLock)
+        lock (messageLock)
         {
-            commands.Should().Contain(new[] { "ChargeCard", "ReserveStock", "RefundCard", "ReleaseStock" });
+            messageTypes.Should().Contain(new[] { "ChargeCard", "ReserveStock", "RefundCard", "ReleaseStock" });
             
-            var chargeIdx = commands.IndexOf("ChargeCard");
-            var refundIdx = commands.IndexOf("RefundCard");
+            var chargeIdx = messageTypes.IndexOf("ChargeCard");
+            var refundIdx = messageTypes.IndexOf("RefundCard");
             refundIdx.Should().BeGreaterThan(chargeIdx, "refund must happen after charge");
             
-            var reserveIdx = commands.IndexOf("ReserveStock");
-            var releaseIdx = commands.IndexOf("ReleaseStock");
+            var reserveIdx = messageTypes.IndexOf("ReserveStock");
+            var releaseIdx = messageTypes.IndexOf("ReleaseStock");
             releaseIdx.Should().BeGreaterThan(reserveIdx, "release must happen after reserve");
         }
     }

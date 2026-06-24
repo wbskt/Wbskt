@@ -10,7 +10,7 @@ public sealed class WakeConditionSerializationTests
     public static TheoryData<WakeCondition, Type> RoundTripCases => new()
     {
         { new TimerWakeCondition(new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)), typeof(TimerWakeCondition) },
-        { new InboundWakeCondition("device-1", "temperature"), typeof(InboundWakeCondition) },
+        { new InboundWakeCondition("client-1", "temperature"), typeof(InboundWakeCondition) },
         { new SignalWakeCondition("operator-ack", "corr-42"), typeof(SignalWakeCondition) },
         { new ChildRunCompletedWakeCondition(Guid.Parse("11111111-1111-1111-1111-111111111111")), typeof(ChildRunCompletedWakeCondition) }
     };

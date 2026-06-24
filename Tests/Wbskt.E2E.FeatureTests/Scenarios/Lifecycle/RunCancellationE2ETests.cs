@@ -34,10 +34,10 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-RunCancel-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(60), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddSendCommand(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired", null));
                 awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
             });
 
@@ -49,7 +49,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {

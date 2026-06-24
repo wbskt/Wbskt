@@ -211,7 +211,7 @@ public sealed class ServicesFixture : IDisposable
     // Client registration helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// <summary>Initiates device registration via PIN and returns (clientRefId, secret).</summary>
+    /// <summary>Initiates client registration via PIN and returns (clientRefId, secret).</summary>
     public async Task<(Guid ClientRefId, string Secret)> RegisterClientAsync(string pin, string name)
     {
         var resp = await _http.PostAsJsonAsync(
@@ -225,7 +225,7 @@ public sealed class ServicesFixture : IDisposable
         return (result.ClientRefId, result.Secret);
     }
 
-    /// <summary>Obtains a client JWT (device-side auth).</summary>
+    /// <summary>Obtains a client JWT (client-side auth).</summary>
     public async Task<string> LoginClientAsync(Guid clientRefId, string secret)
     {
         var resp = await _http.PostAsJsonAsync(

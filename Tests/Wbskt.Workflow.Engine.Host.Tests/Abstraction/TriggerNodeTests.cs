@@ -16,12 +16,12 @@ public class TriggerNodeTests
         var json = """
             {
                 "nodeId": "11111111-1111-1111-1111-111111111111",
-                "kind": "trigger:device",
+                "kind": "trigger:client",
                 "name": "Temp Trigger",
                 "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
                 "config": {
-                    "deviceRef": "sensor-A",
-                    "event": "telemetry",
+                    "clientRef": "sensor-A",
+                    "type": "telemetry",
                     "correlationKey": "$trigger.deviceId",
                     "concurrencyPolicy": "CancelExisting"
                 }
@@ -30,10 +30,10 @@ public class TriggerNodeTests
 
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
 
-        var trigger = Assert.IsType<DeviceTriggerNode>(node);
+        var trigger = Assert.IsType<ClientTriggerNode>(node);
         Assert.Equal(new Guid("11111111-1111-1111-1111-111111111111"), trigger.NodeId);
-        Assert.Equal("sensor-A", trigger.Config.DeviceRef);
-        Assert.Equal("telemetry", trigger.Config.Event);
+        Assert.Equal("sensor-A", trigger.Config.ClientRef);
+        Assert.Equal("telemetry", trigger.Config.Type);
         Assert.Equal("$trigger.deviceId", trigger.Config.CorrelationKey);
         Assert.Equal(WorkflowConcurrencyPolicy.CancelExisting, trigger.Config.ConcurrencyPolicy);
     }
@@ -44,15 +44,15 @@ public class TriggerNodeTests
         var json = """
             {
                 "nodeId": "11111111-1111-1111-1111-111111111111",
-                "kind": "trigger:device",
+                "kind": "trigger:client",
                 "name": "Trigger",
                 "ports": [],
-                "config": { "deviceRef": "dev-1", "event": "telemetry" }
+                "config": { "clientRef": "dev-1", "type": "telemetry" }
             }
             """;
 
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
-        var trigger = Assert.IsType<DeviceTriggerNode>(node);
+        var trigger = Assert.IsType<ClientTriggerNode>(node);
         Assert.Equal(WorkflowConcurrencyPolicy.Queue, trigger.Config.ConcurrencyPolicy);
     }
 

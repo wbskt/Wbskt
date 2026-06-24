@@ -85,10 +85,10 @@ public sealed class EventLogBridgeE2ETests(ServicesFixture fixture)
         completed.EventData.Should().Contain("Succeeded", "the completed event payload carries the terminal status");
     }
 
-    private static WorkflowDefinition BuildTrivialDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildTrivialDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-EventLog-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddEnd();
 
         return builder.BuildAndValidate();

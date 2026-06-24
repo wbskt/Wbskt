@@ -28,11 +28,11 @@ public sealed class ClientPayloadReceivedConsumerTests
         // Assert
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
-                e.ChannelKind == "device"
-                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.Type}")
-                && e.InboundEventId.StartsWith($"client-payload:{evt.ClientRefId}:", StringComparison.Ordinal)
-                && e.Payload["deviceSerial"].GetString() == evt.ClientRefId.ToString()
-                && e.Payload["payloadType"].GetString() == evt.Type
+                e.ChannelKind == "client"
+                && e.MatchKeys.Contains($"client:{evt.ClientRefId}:{evt.Type}")
+                && e.InboundEventId.StartsWith($"client-message:{evt.ClientRefId}:", StringComparison.Ordinal)
+                && e.Payload["clientRefId"].GetString() == evt.ClientRefId.ToString()
+                && e.Payload["messageType"].GetString() == evt.Type
                 && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
                 && e.Payload["clientId"].GetInt32() == evt.ClientId
                 && e.Payload["workspaceId"].GetInt32() == evt.WorkspaceId
@@ -59,8 +59,8 @@ public sealed class ClientPayloadReceivedConsumerTests
         // Assert
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
-                e.ChannelKind == "device"
-                && e.MatchKeys.Contains("device:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:temperature")),
+                e.ChannelKind == "client"
+                && e.MatchKeys.Contains("client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:temperature")),
             CancellationToken.None), Times.Once);
     }
 

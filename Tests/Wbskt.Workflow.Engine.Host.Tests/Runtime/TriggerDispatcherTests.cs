@@ -22,7 +22,7 @@ public sealed class TriggerDispatcherTests
         // Assert
         Assert.Equal(TriggerDispatchOutcome.ResumedBookmark, result.Outcome);
         Assert.Equal(77L, result.BookmarkId);
-        Assert.Equal("device:serial-1:telemetry", bookmarkResumer.Events.Single().CorrelationKey);
+        Assert.Equal("client:serial-1:telemetry", bookmarkResumer.Events.Single().CorrelationKey);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class TriggerDispatcherTests
 
         // Assert
         Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
-        Assert.Equal("device:serial-1:telemetry", result.Reason);
+        Assert.Equal("client:serial-1:telemetry", result.Reason);
     }
 
     [Fact]
@@ -171,13 +171,13 @@ public sealed class TriggerDispatcherTests
     private static InboundEvent CreateInboundEvent()
     {
         return new InboundEvent(
-            "device",
-            ["device:serial-1:telemetry"],
+            "client",
+            ["client:serial-1:telemetry"],
             "evt-1",
             new Dictionary<string, JsonElement>
             {
-                ["deviceSerial"] = JsonSerializer.SerializeToElement("serial-1"),
-                ["payloadType"] = JsonSerializer.SerializeToElement("telemetry")
+                ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1"),
+                ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
             },
             DateTime.UtcNow);
     }
@@ -191,8 +191,8 @@ public sealed class TriggerDispatcherTests
             WorkflowRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             WorkflowVersion = 3,
             TriggerNodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-            TriggerKind = "device",
-            TriggerKey = "device:serial-1:telemetry",
+            TriggerKind = "client",
+            TriggerKey = "client:serial-1:telemetry",
             CorrelationExpression = null,
             ConcurrencyPolicy = policy,
             FilterExpression = null,

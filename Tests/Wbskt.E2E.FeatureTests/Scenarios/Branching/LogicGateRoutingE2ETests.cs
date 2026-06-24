@@ -3,7 +3,6 @@ using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
-using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
@@ -21,28 +20,28 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
         var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
-        var deviceName = $"e2e-gate-{Guid.NewGuid():N}";
-        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
+        var clientName = $"e2e-gate-{Guid.NewGuid():N}";
+        var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, clientName);
 
         var workflowRefId = Guid.NewGuid();
         var definition = BuildLogicGateDefinition(workflowRefId, clientRefId.ToString());
 
-        var publishedRef = await fixture.PublishWorkflowAsync(
+        await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, $"E2E-Gate-{workflowRefId:N}",
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
-        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
+        var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, clientName);
 
-        var commandLock = new object();
-        var commandsReceived = new List<string>();
+        var messageLock = new object();
+        var messageTypesReceived = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (type, _) =>
         {
-            lock (commandLock)
+            lock (messageLock)
             {
-                commandsReceived.Add(action);
+                messageTypesReceived.Add(type);
             }
         };
         await wbsktClient.StartAsync();
@@ -57,9 +56,9 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
         var arrived = await ServicesFixture.PollAsync(
             () =>
             {
-                lock (commandLock)
+                lock (messageLock)
                 {
-                    return Task.FromResult(commandsReceived.Count == 2);
+                    return Task.FromResult(messageTypesReceived.Count == 2);
                 }
             },
             timeout: TimeSpan.FromSeconds(30),
@@ -67,13 +66,13 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
             
         arrived.Should().BeTrue("exactly two commands must be sent for the two telemetry events");
 
-        lock (commandLock)
+        lock (messageLock)
         {
-            commandsReceived.Should().Contain(new[] { "AlertHigh", "AlertLow" }, "the engine must correctly evaluate expressions and route to the expected branches");
+            messageTypesReceived.Should().Contain(["AlertHigh", "AlertLow"], "the engine must correctly evaluate expressions and route to the expected branches");
         }
     }
 
-    private static WorkflowDefinition BuildLogicGateDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildLogicGateDefinition(Guid workflowRefId, string clientRef)
     {
         // Topology:
         // DeviceTrigger -> LogicGate ("trigger.payload.data.value")
@@ -81,11 +80,11 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
         //                 --false-> SendCommand("AlertLow")
 
         var builder = new WorkflowBuilder($"E2E-Gate-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef)
-            .AddLogicGate("trigger.payload.payload.data.value", logic => 
+            .AddTelemetryClientTrigger(clientRef)
+            .AddLogicGate("trigger.payload.value", logic => 
             {
-                logic.OnTrue(b => b.AddSendCommand(deviceRef, "AlertHigh"));
-                logic.OnFalse(b => b.AddSendCommand(deviceRef, "AlertLow"));
+                logic.OnTrue(b => b.AddClientMessage(clientRef, "AlertHigh"));
+                logic.OnFalse(b => b.AddClientMessage(clientRef, "AlertLow"));
             });
 
         return builder.BuildAndValidate();

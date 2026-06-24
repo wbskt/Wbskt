@@ -4,7 +4,7 @@ namespace Wbskt.Client.Sdk;
 
 public interface IWbsktClient : IAsyncDisposable
 {
-    event Action<string, object?>? OnCommandReceived;
+    event Action<string, object?>? OnMessageReceived;
     event Action? OnConnected;
     event Action? OnDisconnected;
 

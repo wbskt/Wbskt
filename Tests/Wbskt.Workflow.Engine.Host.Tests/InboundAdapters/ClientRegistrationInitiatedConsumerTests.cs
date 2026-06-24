@@ -21,7 +21,7 @@ public sealed class ClientRegistrationInitiatedConsumerTests
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             13,
             34,
-            "device-1");
+            "client-1");
         var context = new Mock<ConsumeContext<ClientRegistrationInitiatedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
@@ -52,7 +52,7 @@ public sealed class ClientRegistrationInitiatedConsumerTests
             Guid.Parse("22222222-2222-2222-2222-222222222222"),
             13,
             34,
-            "device-2");
+            "client-2");
         var context = new Mock<ConsumeContext<ClientRegistrationInitiatedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);

@@ -28,8 +28,8 @@ public sealed class InboundAdaptersE2ETests
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
-                e.ChannelKind == "device"
-                && e.MatchKeys.Contains($"device:{evt.ClientRefId}:{evt.Type}")),
+                e.ChannelKind == "client"
+                && e.MatchKeys.Contains($"client:{evt.ClientRefId}:{evt.Type}")),
             CancellationToken.None), Times.Once);
     }
 

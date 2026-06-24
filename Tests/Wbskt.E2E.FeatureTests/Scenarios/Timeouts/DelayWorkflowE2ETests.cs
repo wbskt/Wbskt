@@ -18,7 +18,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Timeouts;
 /// Durable-delay round-trip — proves the bookmark "timer" wake path end-to-end.
 ///
 /// Topology:
-///   DeviceTrigger (event="telemetry") ─► Delay(4s) ─► action:command (OpenVent)
+///   DeviceTrigger (event="telemetry") ─► Delay(4s) ─► action:clientMessage (OpenVent)
 ///
 /// When the telemetry arrives the run starts, reaches the Delay node, parks itself with a
 /// timer bookmark, and returns. The BookmarkScheduler (polling ~1s) later leases the due
@@ -38,14 +38,14 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + policy + device registration ─────────────────────
+        // ── 1. Admin auth + policy + client registration ─────────────────────
         var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
         var deviceName = $"e2e-delay-{Guid.NewGuid():N}";
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
 
-        // ── 2. Publish the DeviceTrigger → Delay → action:command workflow ───
+        // ── 2. Publish the DeviceTrigger → Delay → action:clientMessage workflow ───
         var workflowRefId = Guid.NewGuid();
         var definition = BuildDelayDefinition(workflowRefId, clientRefId.ToString());
 
@@ -61,7 +61,7 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
             $"E2E-Delay-{workflowRefId:N}",
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
-        // ── 3. Connect the device and arm a command listener ─────────────────
+        // ── 3. Connect the client and arm a command listener ─────────────────
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
@@ -73,7 +73,7 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
+        wbsktClient.OnMessageReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
 
         await wbsktClient.StartAsync();
 
@@ -117,12 +117,12 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
     private static bool IsTerminal(string status) =>
         status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
 
-    private static WorkflowDefinition BuildDelayDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildDelayDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-Delay-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(Delay)
-            .AddSendCommand(deviceRef, "OpenVent");
+            .AddClientMessage(clientRef, "OpenVent");
 
         return builder.BuildAndValidate();
     }

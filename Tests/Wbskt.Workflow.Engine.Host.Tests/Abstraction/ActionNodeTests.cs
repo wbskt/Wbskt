@@ -17,18 +17,18 @@ public class ActionNodeTests
         var json = """
             {
                 "nodeId": "33333333-3333-3333-3333-333333333333",
-                "kind": "action:command",
+                "kind": "action:clientMessage",
                 "name": "OpenVent",
                 "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
-                "config": { "deviceRef": "$trigger.deviceId", "command": "OpenVent" },
+                "config": { "clientRef": "$trigger.deviceId", "type": "OpenVent" },
                 "retry": { "strategy": "Exponential", "initialDelay": "00:00:01", "factor": 2.0, "maxAttempts": 3, "jitterPct": 10, "retryOn": [] },
                 "onFailure": { "outcome": "FailBranch" }
             }
             """;
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
-        var cmd = Assert.IsType<SendCommandActionNode>(node);
-        Assert.Equal("$trigger.deviceId", cmd.Config.DeviceRef);
-        Assert.Equal("OpenVent", cmd.Config.Command);
+        var cmd = Assert.IsType<SendClientMessageNode>(node);
+        Assert.Equal("$trigger.deviceId", cmd.Config.ClientRef);
+        Assert.Equal("OpenVent", cmd.Config.Type);
         Assert.NotNull(cmd.Retry);
         Assert.Equal(RetryStrategy.Exponential, cmd.Retry!.Strategy);
         Assert.NotNull(cmd.OnFailure);

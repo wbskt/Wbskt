@@ -3,13 +3,13 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.Workflow.Abstraction.Models.Triggers;
 
-public sealed record DeviceTriggerConfig
+public sealed record ClientTriggerConfig
 {
-    [JsonPropertyName("deviceRef")]
-    public required string DeviceRef { get; init; }
+    [JsonPropertyName("clientRef")]
+    public required string ClientRef { get; init; }
 
-    [JsonPropertyName("event")]
-    public required string Event { get; init; }
+    [JsonPropertyName("type")]
+    public required string Type { get; init; }
 
     [JsonPropertyName("correlationKey")]
     public string? CorrelationKey { get; init; } = null;

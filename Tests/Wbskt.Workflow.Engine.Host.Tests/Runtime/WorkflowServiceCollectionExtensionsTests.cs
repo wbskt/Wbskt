@@ -190,7 +190,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.IsType<SubWorkflowNodeExecutor>(registry1.For(NodeKind.ControlSubWorkflow));
         Assert.IsType<FailRunNodeExecutor>(registry1.For(NodeKind.ControlFailRun));
         Assert.IsType<EndNodeExecutor>(registry1.For(NodeKind.ControlEnd));
-        Assert.IsType<CommandNodeExecutor>(registry1.For(NodeKind.ActionCommand));
+        Assert.IsType<CommandNodeExecutor>(registry1.For(NodeKind.ActionClientMessage));
         Assert.IsType<WebhookNodeExecutor>(registry1.For(NodeKind.ActionWebhook));
         Assert.IsType<EmailNodeExecutor>(registry1.For(NodeKind.ActionEmail));
         Assert.IsType<TelegramNodeExecutor>(registry1.For(NodeKind.ActionTelegram));

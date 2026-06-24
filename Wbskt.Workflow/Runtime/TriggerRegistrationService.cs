@@ -39,7 +39,7 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         {
             TriggerRegistrationRow? registration = node switch
             {
-                DeviceTriggerNode deviceTrigger => CreateRegistration(definitionRow, deviceTrigger.NodeId, "device", $"device:{deviceTrigger.Config.DeviceRef}:{deviceTrigger.Config.Event}", deviceTrigger.Config.ConcurrencyPolicy.ToString(), deviceTrigger.Config.CorrelationKey),
+                ClientTriggerNode clientTrigger => CreateRegistration(definitionRow, clientTrigger.NodeId, "client", $"client:{clientTrigger.Config.ClientRef}:{clientTrigger.Config.Type}", clientTrigger.Config.ConcurrencyPolicy.ToString(), clientTrigger.Config.CorrelationKey),
                 WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey),
                 ManualTriggerNode manualTrigger => CreateRegistration(definitionRow, manualTrigger.NodeId, "manual", $"manual:{definitionRow.RefId}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null),
                 ScheduleTriggerNode scheduleTrigger => await CreateScheduleRegistrationAsync(definitionRow, scheduleTrigger, ct),

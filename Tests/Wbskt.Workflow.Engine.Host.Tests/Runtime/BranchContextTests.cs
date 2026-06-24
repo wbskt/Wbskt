@@ -20,7 +20,7 @@ public sealed class BranchContextTests
         };
         var triggerPayload = new Dictionary<string, JsonElement>
         {
-            ["source"] = JsonDocument.Parse("\"device-a\"").RootElement.Clone()
+            ["source"] = JsonDocument.Parse("\"client-a\"").RootElement.Clone()
         };
         var startedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
         var context = CreateContext(originalState, triggerPayload, startedAt);
@@ -66,7 +66,7 @@ public sealed class BranchContextTests
         };
         var triggerPayload = new Dictionary<string, JsonElement>
         {
-            ["source"] = JsonDocument.Parse("\"device-a\"").RootElement.Clone()
+            ["source"] = JsonDocument.Parse("\"client-a\"").RootElement.Clone()
         };
         var startedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
         var context = CreateContext(originalState, triggerPayload, startedAt);

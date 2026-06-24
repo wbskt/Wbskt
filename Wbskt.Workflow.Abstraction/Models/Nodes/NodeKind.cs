@@ -2,7 +2,7 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes;
 
 public static class NodeKind
 {
-    public const string TriggerDevice = "trigger:device";
+    public const string TriggerClient = "trigger:client";
     public const string TriggerSchedule = "trigger:schedule";
     public const string TriggerWebhook = "trigger:webhook";
     public const string TriggerManual = "trigger:manual";
@@ -18,7 +18,7 @@ public static class NodeKind
     public const string ControlAwaitSignal = "control:awaitSignal";
     public const string ControlFailRun = "control:failRun";
     public const string ControlEnd = "control:end";
-    public const string ActionCommand = "action:command";
+    public const string ActionClientMessage = "action:clientMessage";
     public const string ActionEmail = "action:email";
     public const string ActionWebhook = "action:webhook";
     public const string ActionTelegram = "action:telegram";

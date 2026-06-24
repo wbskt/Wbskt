@@ -104,8 +104,8 @@ public sealed class TriggerConcurrencyEnforcerTests
             WorkflowRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             WorkflowVersion = 3,
             TriggerNodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-            TriggerKind = "device",
-            TriggerKey = "device:serial-1:telemetry",
+            TriggerKind = "client",
+            TriggerKey = "client:serial-1:telemetry",
             CorrelationExpression = null,
             ConcurrencyPolicy = policy,
             FilterExpression = null,
@@ -123,7 +123,7 @@ public sealed class TriggerConcurrencyEnforcerTests
             WorkflowRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             WorkflowVersion = 3,
             TriggerNodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-            CorrelationKey = "device:serial-1:telemetry",
+            CorrelationKey = "client:serial-1:telemetry",
             Status = "Running",
             StartedAt = DateTime.UtcNow,
             CompletedAt = null,
@@ -137,17 +137,17 @@ public sealed class TriggerConcurrencyEnforcerTests
     private static InboundEvent CreateInboundEvent()
     {
         return new InboundEvent(
-            "device",
-            ["device:serial-1:telemetry"],
+            "client",
+            ["client:serial-1:telemetry"],
             "evt-1",
             new Dictionary<string, JsonElement>
             {
-                ["deviceSerial"] = JsonSerializer.SerializeToElement("serial-1"),
-                ["payloadType"] = JsonSerializer.SerializeToElement("telemetry")
+                ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1"),
+                ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
             },
             DateTime.UtcNow)
         {
-            CorrelationKey = "device:serial-1:telemetry"
+            CorrelationKey = "client:serial-1:telemetry"
         };
     }
 

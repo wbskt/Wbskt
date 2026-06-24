@@ -43,25 +43,25 @@ public class Program
     {
         var builder = new WorkflowBuilder("Linear Happy Path", Guid.NewGuid());
         return builder
-            .AddDeviceTrigger("sensor-A", "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger("sensor-A", "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMinutes(1))
-            .AddSendCommand("device-A", "OpenVent")
+            .AddClientMessage("client-A", "OpenVent")
             .BuildAndValidate();
     }
 
     private static Wbskt.Workflow.Abstraction.Models.WorkflowDefinition BuildBranchingWorkflow()
     {
         var builder = new WorkflowBuilder("Branching Workflow", Guid.NewGuid());
-        builder.AddDeviceTrigger("sensor-A", "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
+        builder.AddClientTrigger("sensor-A", "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
         builder.AddLogicGate("event.value > 100", logic => 
         {
             logic.OnTrue(b => 
             {
-                b.AddSendCommand("device-B", "AlarmOn")
+                b.AddClientMessage("client-B", "AlarmOn")
                  .AddParallelForEach("event.subItems", loop => 
                  {
-                     loop.OnBody(lb => lb.AddSendCommand("device-C", "CheckItem"));
+                     loop.OnBody(lb => lb.AddClientMessage("client-C", "CheckItem"));
                  });
                  
                 // Note: Linear flow after ParallelForEach automatically connects from "empty" port
@@ -89,7 +89,7 @@ public class Program
 
         // Webhook success path
         builder.SetHead(webhookId, PortNames.Default)
-               .AddSendCommand("device-A", "Initialize")
+               .AddClientMessage("client-A", "Initialize")
                .AddAwaitSignal("ProcessCompleted", TimeSpan.FromMinutes(60), out var waitId);
 
         // Signal Timeout path

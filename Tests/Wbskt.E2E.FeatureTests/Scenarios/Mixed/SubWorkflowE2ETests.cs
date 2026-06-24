@@ -38,16 +38,16 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         // 2. Build and publish Parent workflow
         var parentWorkflowRefId = Guid.NewGuid();
         var parentDefinition = new WorkflowBuilder($"E2E-Parent-{parentWorkflowRefId:N}", parentWorkflowRefId)
-            .AddDeviceTrigger(clientRefId.ToString())
+            .AddTelemetryClientTrigger(clientRefId.ToString())
             .AddSubWorkflow(childWorkflowRefId)
-            .AddSendCommand(clientRefId.ToString(), "ParentCommand")
+            .AddClientMessage(clientRefId.ToString(), "ParentCommand")
             .BuildAndValidate();
 
         var parentPublishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, parentWorkflowRefId, $"E2E-Parent-{parentWorkflowRefId:N}",
             JsonSerializer.SerializeToElement(parentDefinition, JsonOpts));
 
-        // 3. Connect the device
+        // 3. Connect the client
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
 
@@ -55,7 +55,7 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         var commandsReceived = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {

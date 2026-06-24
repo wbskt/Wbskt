@@ -7,7 +7,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class CorrelationKeyResolverTests
 {
     [Theory]
-    [InlineData("device", "device:serial-1:telemetry", "deviceSerial", "serial-1", "payloadType", "telemetry")]
+    [InlineData("client", "client:serial-1:telemetry", "clientRefId", "serial-1", "messageType", "telemetry")]
     [InlineData("schedule", "schedule:fire-1", "scheduledFireId", "fire-1", null, null)]
     [InlineData("webhook", "webhook:/hooks/intake", "webhookPath", "/hooks/intake", null, null)]
     [InlineData("manual", "manual:11111111-1111-1111-1111-111111111111", "workflowDefinitionRefId", "11111111-1111-1111-1111-111111111111", null, null)]
@@ -48,14 +48,14 @@ public sealed class CorrelationKeyResolverTests
     {
         // Arrange
         var resolver = new CorrelationKeyResolver();
-        var evt = new InboundEvent("device", [], "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
+        var evt = new InboundEvent("client", [], "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
 
         // Act
         InvalidOperationException ex = Assert.Throws<InvalidOperationException>(new Action(() => resolver.Resolve(evt)));
 
         // Assert
-        Assert.Contains("deviceSerial", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("device", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("clientRefId", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("client", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]

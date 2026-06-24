@@ -110,6 +110,7 @@ internal sealed class SocketHandler : ISocketHandler
 
             if (result.MessageType == WebSocketMessageType.Text)
             {
+                // [RJ]: TODO: make this serialisation/deserialisation efficient
                 var messageJson = Encoding.UTF8.GetString(buffer, 0, result.Count);
                 _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, messageJson);
 
@@ -118,7 +119,8 @@ internal sealed class SocketHandler : ISocketHandler
                     var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                     if (message != null)
                     {
-                        await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, clientId, workspaceId, message.Type, messageJson), cancellationToken);
+                        var payload = JsonSerializer.Serialize(message.Payload);
+                        await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, clientId, workspaceId, message.Type, payload), cancellationToken);
                     }
                 }
                 catch (JsonException ex)

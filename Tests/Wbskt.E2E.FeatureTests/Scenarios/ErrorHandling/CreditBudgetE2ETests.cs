@@ -32,7 +32,7 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-CreditBudget-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
         builder.AddLogicGate("true", logic => 
         {
@@ -40,7 +40,7 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
             builder.Connect(logic.GateId, PortNames.True, logic.GateId, PortNames.In);
             
             // We'll also wire "false" to a success node just in case (though it won't be hit)
-            logic.OnFalse(b => b.AddSendCommand(deviceRefStr, "Done", "Done", null));
+            logic.OnFalse(b => b.AddClientMessage(deviceRefStr, "Done", "Done", null));
         });
 
         var definition = builder.BuildAndValidate();

@@ -101,9 +101,9 @@ public sealed class RetryExecutorTests
         Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(40), $"Expected at least 40ms, got {stopwatch.Elapsed.TotalMilliseconds}ms.");
     }
 
-    private static SendCommandActionNode CreateNode(RetryPolicy? retry)
+    private static SendClientMessageNode CreateNode(RetryPolicy? retry)
     {
-        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Retry = retry };
+        return new SendClientMessageNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, Retry = retry };
     }
 
     private static BranchContext CreateContext()
@@ -128,7 +128,7 @@ public sealed class RetryExecutorTests
 
         public int AttemptCount { get; private set; }
 
-        public string Kind => NodeKind.ActionCommand;
+        public string Kind => NodeKind.ActionClientMessage;
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {

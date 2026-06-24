@@ -17,14 +17,14 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 ///
 /// Topology:
 ///   DeviceTrigger (event="telemetry", AllowParallel)
-///       └─[default]─► action:command (command="OpenVent")
+///       └─[default]─► action:clientMessage (command="OpenVent")
 ///
 /// The test:
-///  1. Registers a user + workspace, creates an AutoApproval policy, registers a device client.
+///  1. Registers a user + workspace, creates an AutoApproval policy, registers a client client.
 ///  2. Builds and publishes a minimal DeviceTrigger → SendCommand workflow definition.
-///  3. Connects a WbsktClient for the registered device.
-///  4. Sends a "telemetry" event from the device.
-///  5. Asserts the device receives an "OpenVent" command within 30 s.
+///  3. Connects a WbsktClient for the registered client.
+///  4. Sends a "telemetry" event from the client.
+///  5. Asserts the client receives an "OpenVent" command within 30 s.
 ///  6. Polls the run list until the run reaches a terminal status within 30 s.
 /// </summary>
 [Collection(E2ECollection.Name)]
@@ -37,7 +37,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + workspace + policy + device registration ─────────
+        // ── 1. Admin auth + workspace + policy + client registration ─────────
         // Use the seeded admin (all permissions, owns Default Workspace Id=1) so the
         // permission-gated policy/publish calls succeed and the definition's
         // workspaceId:1 matches a real workspace.
@@ -81,14 +81,14 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, payload) =>
+        wbsktClient.OnMessageReceived += (action, payload) =>
         {
             commandTcs.TrySetResult((action, payload?.ToString()));
         };
 
         await wbsktClient.StartAsync();
 
-        // ── 4. Send a telemetry event from the device ────────────────────────
+        // ── 4. Send a telemetry event from the client ────────────────────────
         await wbsktClient.SendTelemetryAsync("telemetry", new
         {
             sensor = "vent-test",
@@ -96,7 +96,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
             timestamp = DateTime.UtcNow
         });
 
-        // ── 5. Assert the device receives the OpenVent command ───────────────
+        // ── 5. Assert the client receives the OpenVent command ───────────────
         var commandReceived = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(30)));
 
         if (commandReceived != commandTcs.Task)
@@ -108,15 +108,15 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
                 : string.Join(", ", runs.Select(r => $"RefId={r.RefId} Status={r.Status}"));
 
             commandTcs.Task.IsCompleted.Should().BeTrue(
-                $"device should have received an OpenVent command within 30 s, but none arrived. " +
+                $"client should have received an OpenVent command within 30 s, but none arrived. " +
                 $"Workflow runs: [{runDiag}]. " +
                 $"Check that the Workflow Engine is running, triggers are registered, " +
-                $"and the Socket host routes commands to the device.");
+                $"and the Socket host routes commands to the client.");
         }
 
         var (receivedAction, _) = await commandTcs.Task;
         receivedAction.Should().Be("OpenVent",
-            "the workflow action:command node must forward the OpenVent command to the device");
+            "the workflow action:clientMessage node must forward the OpenVent command to the client");
 
         // ── 6. Poll until the run reaches a terminal state ───────────────────
         var runCompleted = await ServicesFixture.PollAsync(
@@ -144,7 +144,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
 
     /// <summary>
-    /// Builds the minimal DeviceTrigger → action:command workflow definition.
+    /// Builds the minimal DeviceTrigger → action:clientMessage workflow definition.
     ///
     /// Port conventions:
     ///   - Trigger output port id = "default"  (matches DeviceTriggerExecutor.Continue("default", …))
@@ -158,11 +158,11 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
     /// is the seeded root admin user id. The Management host stores both as-is from the
     /// definition JSON.
     /// </summary>
-    private static WorkflowDefinition BuildMinimalDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildMinimalDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-OpenVent-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef)
-            .AddSendCommand(deviceRef, "OpenVent");
+            .AddTelemetryClientTrigger(clientRef)
+            .AddClientMessage(clientRef, "OpenVent");
 
         return builder.BuildAndValidate();
     }

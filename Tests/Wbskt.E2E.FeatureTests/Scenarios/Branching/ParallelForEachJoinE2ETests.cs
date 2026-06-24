@@ -20,7 +20,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 ///
 /// Topology:
 ///   DeviceTrigger ─► Variable(Set Local "items"=[a,b,c]) ─► ParallelForEach("items")
-///                                                              └─body─► Join(All) ─► action:command (OpenVent)
+///                                                              └─body─► Join(All) ─► action:clientMessage (OpenVent)
 ///
 /// ParallelForEach forks one "body" branch per item (the parent terminates — continue is null),
 /// each branch reaches Join, and the Join aggregator's compare-and-swap lets a single winner take
@@ -39,7 +39,7 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + policy + device registration ─────────────────────
+        // ── 1. Admin auth + policy + client registration ─────────────────────
         var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
@@ -58,7 +58,7 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
             token, workspaceRef, workflowRefId, $"E2E-PFE-{workflowRefId:N}",
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
-        // ── 3. Connect the device and count inbound commands ─────────────────
+        // ── 3. Connect the client and count inbound commands ─────────────────
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
@@ -70,7 +70,7 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             lock (commandLock)
             {
@@ -112,17 +112,17 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
         }
     }
 
-    private static WorkflowDefinition BuildParallelForEachDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildParallelForEachDefinition(Guid workflowRefId, string clientRef)
     {
         return new WorkflowBuilder($"E2E-PFE-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef)
+            .AddTelemetryClientTrigger(clientRef)
             .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(Items))
             .AddParallelForEach("items", loop => 
             {
                 loop.OnBody(b => 
                 {
                     b.AddJoin(JoinMode.All, out _)
-                     .AddSendCommand(deviceRef, "OpenVent");
+                     .AddClientMessage(clientRef, "OpenVent");
                 });
             })
             .BuildAndValidate();

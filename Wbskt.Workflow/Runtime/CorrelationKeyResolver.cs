@@ -9,7 +9,7 @@ internal sealed class CorrelationKeyResolver : ICorrelationKeyResolver
     {
         return evt.ChannelKind switch
         {
-            "device" => $"device:{GetRequiredString(evt, "deviceSerial")}:{GetRequiredString(evt, "payloadType")}",
+            "client" => $"client:{GetRequiredString(evt, "clientRefId")}:{GetRequiredString(evt, "messageType")}",
             "schedule" => $"schedule:{GetRequiredString(evt, "scheduledFireId")}",
             "webhook" => $"webhook:{GetRequiredString(evt, "webhookPath")}",
             "manual" => $"manual:{GetRequiredString(evt, "workflowDefinitionRefId")}",

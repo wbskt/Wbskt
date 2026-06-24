@@ -49,7 +49,7 @@ public class WorkflowDefinitionTests
         var json = LoadFixture();
         var def = JsonSerializer.Deserialize<WorkflowDefinition>(json, Options);
 
-        var trigger = def!.Nodes.OfType<DeviceTriggerNode>().Single();
+        var trigger = def!.Nodes.OfType<ClientTriggerNode>().Single();
         Assert.Equal(new Guid("11111111-1111-1111-1111-111111111111"), trigger.NodeId);
         Assert.Equal("CancelExisting", trigger.Config.ConcurrencyPolicy.ToString());
 

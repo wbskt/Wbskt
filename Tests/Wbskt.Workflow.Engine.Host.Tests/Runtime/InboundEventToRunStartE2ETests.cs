@@ -52,13 +52,13 @@ public sealed class InboundEventToRunStartE2ETests
             new SequenceIdGenerator(),
             new CompletingRunFinalizer(providers));
         InboundEvent evt = new(
-            "device",
-            ["device:device-serial-1:telemetry"],
+            "client",
+            ["client:client-serial-1:telemetry"],
             "evt-1",
             new Dictionary<string, JsonElement>
             {
-                ["deviceSerial"] = JsonSerializer.SerializeToElement("device-serial-1"),
-                ["payloadType"] = JsonSerializer.SerializeToElement("telemetry")
+                ["clientRefId"] = JsonSerializer.SerializeToElement("client-serial-1"),
+                ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
             },
             default);
 
@@ -91,7 +91,7 @@ public sealed class InboundEventToRunStartE2ETests
             null,
             true,
             [
-                new DeviceTriggerNode { NodeId = triggerNodeId, Name = "device", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new DeviceTriggerConfig { DeviceRef = "device-serial-1", Event = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.AllowParallel } },
+                new ClientTriggerNode { NodeId = triggerNodeId, Name = "client", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new ClientTriggerConfig { ClientRef = "client-serial-1", Type = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.AllowParallel } },
                 new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } },
                 new LogicGateNode { NodeId = terminalNodeId, Name = "terminal", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } }
             ],
@@ -342,7 +342,7 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetByTriggerKeyAsync(string triggerKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
         {
-            if (channelKind == "device" && channelKeys.Contains("device:device-serial-1:telemetry"))
+            if (channelKind == "client" && channelKeys.Contains("client:client-serial-1:telemetry"))
             {
                 return Task.FromResult<IReadOnlyCollection<TriggerRegistrationRow>>([
                     new TriggerRegistrationRow
@@ -352,8 +352,8 @@ public sealed class InboundEventToRunStartE2ETests
                         WorkflowRefId = _definition.WorkflowRefId,
                         WorkflowVersion = _definition.Version,
                         TriggerNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-                        TriggerKind = "device",
-                        TriggerKey = "device:device-serial-1:telemetry",
+                        TriggerKind = "client",
+                        TriggerKey = "client:client-serial-1:telemetry",
                         CorrelationExpression = null,
                         ConcurrencyPolicy = "AllowParallel",
                         FilterExpression = null,

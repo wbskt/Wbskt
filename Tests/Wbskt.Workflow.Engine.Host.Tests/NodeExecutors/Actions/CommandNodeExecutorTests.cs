@@ -71,7 +71,7 @@ public sealed class CommandNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
-        Assert.Equal("COMMAND_NO_TARGET", fail.ErrorCode);
+        Assert.Equal("CLIENT_MESSAGE_NO_TARGET", fail.ErrorCode);
         Assert.False(fail.Retryable);
         publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -90,7 +90,7 @@ public sealed class CommandNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
-        Assert.Equal("COMMAND_NO_TARGET", fail.ErrorCode);
+        Assert.Equal("CLIENT_MESSAGE_NO_TARGET", fail.ErrorCode);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class CommandNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
-        Assert.Equal("COMMAND_NO_TARGET", fail.ErrorCode);
+        Assert.Equal("CLIENT_MESSAGE_NO_TARGET", fail.ErrorCode);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public sealed class CommandNodeExecutorTests
             "corr-42",
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
-        var node = new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [], Config = new SendCommandConfig { DeviceRef = "device-1", Command = command, Payload = nodePayload } };
+        var node = new SendClientMessageNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = command, Payload = nodePayload } };
 
         var providers = new Mock<IProviderComposite>();
         providers.SetupGet(p => p.IdempotencyKey).Returns(idempotency ?? FreshClaim().Object);

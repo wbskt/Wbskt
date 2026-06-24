@@ -13,7 +13,7 @@ internal sealed class DeviceTriggerExecutor : INodeExecutor
         _clock = clock;
     }
 
-    public string Kind => NodeKind.TriggerDevice;
+    public string Kind => NodeKind.TriggerClient;
 
     public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

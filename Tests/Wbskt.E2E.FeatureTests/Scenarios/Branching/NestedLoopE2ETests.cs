@@ -42,7 +42,7 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         int commandCount = 0;
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _) =>
         {
             if (action == "ReachEnd")
             {
@@ -77,10 +77,10 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         arrived.Should().BeTrue("all 31 inner branches must send the command");
     }
 
-    private static WorkflowDefinition BuildNestedLoopDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildNestedLoopDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-Nested-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef)
+            .AddTelemetryClientTrigger(clientRef)
             .AddVariable(VariableScope.Local, VariableOperation.Set, "items", JsonSerializer.SerializeToElement(new[] { "1", "2", "3" }))
             .AddForEach("items", forEach1 =>
             {
@@ -93,14 +93,14 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
                           {
                               b2.AddFork(["path1", "path2"], fork =>
                               {
-                                  fork.Branch("path1", b3 => b3.AddSendCommand(deviceRef, "ReachEnd"));
-                                  fork.Branch("path2", b3 => b3.AddSendCommand(deviceRef, "ReachEnd"));
+                                  fork.Branch("path1", b3 => b3.AddClientMessage(clientRef, "ReachEnd"));
+                                  fork.Branch("path2", b3 => b3.AddClientMessage(clientRef, "ReachEnd"));
                               });
                           });
                       });
                 });
                 
-                forEach1.OnDone(b1 => b1.AddSendCommand(deviceRef, "ReachEnd"));
+                forEach1.OnDone(b1 => b1.AddClientMessage(clientRef, "ReachEnd"));
             });
 
         return builder.BuildAndValidate();

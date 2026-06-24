@@ -64,8 +64,8 @@ public sealed class OnFailureHandlerTests
         Assert.True(result.LocalStatePatch.ContainsKey("lastError"));
     }
 
-    private static SendCommandActionNode CreateNode(OnFailureConfig onFailure)
+    private static SendClientMessageNode CreateNode(OnFailureConfig onFailure)
     {
-        return new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, OnFailure = onFailure };
+        return new SendClientMessageNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, OnFailure = onFailure };
     }
 }

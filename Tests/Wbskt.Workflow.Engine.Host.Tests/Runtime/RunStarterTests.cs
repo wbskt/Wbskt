@@ -32,13 +32,13 @@ public sealed class RunStarterTests
             new FixedClock(),
             new SequenceIdGenerator());
         InboundEvent triggerEvent = new(
-            "device",
+            "client",
             [],
             "evt-1",
             new Dictionary<string, JsonElement>
             {
-                ["deviceSerial"] = JsonSerializer.SerializeToElement("serial-1"),
-                ["payloadType"] = JsonSerializer.SerializeToElement("telemetry")
+                ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1"),
+                ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
             },
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
@@ -50,7 +50,7 @@ public sealed class RunStarterTests
         Assert.Equal(801L, branchId);
         Assert.Equal(["run", "counters", "branch", "history"], operations);
         Assert.Equal(1, countersProvider.TotalDelta);
-        Assert.Equal("device:serial-1:telemetry", runProvider.CreatedRun!.CorrelationKey);
+        Assert.Equal("client:serial-1:telemetry", runProvider.CreatedRun!.CorrelationKey);
         Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), runProvider.CreatedRun.RefId);
         Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), branchProvider.CreatedBranch!.RefId);
         Assert.Contains("\"trigger\"", branchProvider.CreatedBranch.LocalJson, StringComparison.Ordinal);
@@ -151,7 +151,7 @@ public sealed class RunStarterTests
                 "definition",
                 null,
                 true,
-                [new DeviceTriggerNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "device", Ports = [], Config = new DeviceTriggerConfig { DeviceRef = "device-1", Event = "telemetry" } }],
+                [new ClientTriggerNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "client", Ports = [], Config = new ClientTriggerConfig { ClientRef = "client-1", Type = "telemetry" } }],
                 [],
                 [],
                 new DateTime(2026, 5, 26, 11, 0, 0, DateTimeKind.Utc),

@@ -18,7 +18,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// unification end-to-end (a human-in-the-loop approval gate).
 ///
 /// Topology:
-///   DeviceTrigger (event="telemetry") ─► AwaitSignal("approve") ─► action:command (OpenVent)
+///   DeviceTrigger (event="telemetry") ─► AwaitSignal("approve") ─► action:clientMessage (OpenVent)
 ///
 /// Telemetry starts the run, which reaches AwaitSignal and parks on a bookmark whose match
 /// key is "signal:approve:{runRefId}". The command must NOT fire yet — the branch is blocked.
@@ -36,7 +36,7 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + policy + device registration ─────────────────────
+        // ── 1. Admin auth + policy + client registration ─────────────────────
         var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
@@ -55,7 +55,7 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
             token, workspaceRef, workflowRefId, $"E2E-Signal-{workflowRefId:N}",
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
-        // ── 3. Connect the device and arm a command listener ─────────────────
+        // ── 3. Connect the client and arm a command listener ─────────────────
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(
             BaseApiUrl: E2EConfig.ManagementBaseUrl,
@@ -67,7 +67,7 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnCommandReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
+        wbsktClient.OnMessageReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
         await wbsktClient.StartAsync();
 
         // ── 4. Send telemetry → run starts and parks at AwaitSignal ──────────
@@ -120,13 +120,13 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
     private static bool IsTerminal(string status) =>
         status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
 
-    private static WorkflowDefinition BuildSignalDefinition(Guid workflowRefId, string deviceRef)
+    private static WorkflowDefinition BuildSignalDefinition(Guid workflowRefId, string clientRef)
     {
         var builder = new WorkflowBuilder($"E2E-Signal-{workflowRefId:N}", workflowRefId)
-            .AddDeviceTrigger(deviceRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddAwaitSignal("approve", null, timeout => 
             {
-                timeout.OnSuccess(b => b.AddSendCommand(deviceRef, "OpenVent"));
+                timeout.OnSuccess(b => b.AddClientMessage(clientRef, "OpenVent"));
             });
 
         return builder.BuildAndValidate();

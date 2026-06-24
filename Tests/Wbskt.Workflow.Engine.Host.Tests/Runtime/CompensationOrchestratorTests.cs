@@ -21,7 +21,7 @@ public sealed class CompensationOrchestratorTests
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Equal(["action:email", "action:command"], harness.Executor.ExecutedKinds);
+        Assert.Equal(["action:email", "action:clientMessage"], harness.Executor.ExecutedKinds);
         Assert.Equal([2, 1], harness.Executor.LocalStateValues);
         Assert.Equal(2, harness.InsertedCompensationEvents.Count(evt => evt.EventKind == "CompensationExecuted"));
     }
@@ -32,11 +32,11 @@ public sealed class CompensationOrchestratorTests
         var harness = new CompensationHarness(
             CreateDefinition(),
             [CreateHistoryEvent(1, Guid.Parse("11111111-1111-1111-1111-111111111111"), 1), CreateHistoryEvent(2, Guid.Parse("22222222-2222-2222-2222-222222222222"), 2)],
-            new RecordingExecutor(throwOnKinds: ["action:command"]));
+            new RecordingExecutor(throwOnKinds: ["action:clientMessage"]));
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Contains("action:command", harness.Executor.ExecutedKinds);
+        Assert.Contains("action:clientMessage", harness.Executor.ExecutedKinds);
         Assert.Contains("action:email", harness.Executor.ExecutedKinds);
         Assert.Single(harness.InsertedCompensationEvents, evt => evt.EventKind == "CompensationExecuted");
     }
@@ -51,7 +51,7 @@ public sealed class CompensationOrchestratorTests
 
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
-        Assert.Equal(["action:command"], harness.Executor.ExecutedKinds);
+        Assert.Equal(["action:clientMessage"], harness.Executor.ExecutedKinds);
         Assert.Equal([42], harness.Executor.LocalStateValues);
     }
 
@@ -66,8 +66,8 @@ public sealed class CompensationOrchestratorTests
             null,
             true,
             [
-                new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "first", Ports = [], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:command", Config = null } },
-                new SendCommandActionNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "second", Ports = [], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" } }
+                new SendClientMessageNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "first", Ports = [], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:clientMessage", Config = null } },
+                new SendClientMessageNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "second", Ports = [], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" } }
             ],
             [],
             [],
@@ -81,7 +81,7 @@ public sealed class CompensationOrchestratorTests
         await harness.Orchestrator.RunAsync(42, 1001, CancellationToken.None);
 
         Assert.Single(harness.Executor.ExecutedKinds);
-        Assert.Equal("action:command", harness.Executor.ExecutedKinds.Single());
+        Assert.Equal("action:clientMessage", harness.Executor.ExecutedKinds.Single());
     }
 
     private static WorkflowDefinition CreateDefinition()
@@ -94,8 +94,8 @@ public sealed class CompensationOrchestratorTests
             null,
             true,
             [
-                new SendCommandActionNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "first", Ports = [], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:command", Config = null } },
-                new SendCommandActionNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "second", Ports = [], Config = new SendCommandConfig { DeviceRef = "device-1", Command = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:email", Config = null } }
+                new SendClientMessageNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "first", Ports = [], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:clientMessage", Config = null } },
+                new SendClientMessageNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "second", Ports = [], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:email", Config = null } }
             ],
             [],
             [],

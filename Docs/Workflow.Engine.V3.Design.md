@@ -8,7 +8,7 @@
 
 Wbskt is an IoT automation builder. The Workflow Engine has to handle a wide spectrum:
 
-- **Real-time, short-lived reactive flows** — device event → a few nodes → done in milliseconds.
+- **Real-time, short-lived reactive flows** — client event → a few nodes → done in milliseconds.
 - **Long-running orchestrations** — flows that sleep for hours or days, survive process restarts, can be paused/resumed/cancelled.
 - **Multi-tenant user-facing automation platform** — many workspaces, many definitions, visible run history is a product feature.
 - **Mission-critical IoT command/control** — must-deliver semantics, retries, compensation when a step fails partway.
@@ -60,7 +60,7 @@ A unit of work in the graph. A Node is **data, not behavior** — the executor l
 ```text
 Node {
   NodeId: Guid           // unique within definition
-  Kind: string           // discriminator, e.g. "action:command", "control:logic"
+  Kind: string           // discriminator, e.g. "action:clientMessage", "control:logic"
   Name: string           // human label for the designer
   Config: object         // kind-specific settings (serializable)
   Ports: PortDefinition[] // declared exits
@@ -115,9 +115,9 @@ Structural metadata for designer UX, validation, and policy defaults. **Not** a 
 
 | Family | Purpose | Example kinds | Constraint |
 |---|---|---|---|
-| **Trigger** | Starts a Run. Output ports only. | `trigger:device`, `trigger:schedule`, `trigger:webhook`, `trigger:manual` | Soft warning if a definition has none |
+| **Trigger** | Starts a Run. Output ports only. | `trigger:client`, `trigger:schedule`, `trigger:webhook`, `trigger:manual` | Soft warning if a definition has none |
 | **Control** | Influences flow without external side effects (mostly). | `control:logic`, `control:foreach`, `control:parallelForEach`, `control:join`, `control:delay`, `control:variable`, `control:subWorkflow` | Pure w.r.t. outside world (except `variable`/`subWorkflow`) |
-| **Action** | Performs external side effects. | `action:command`, `action:email`, `action:webhook`, `action:telegram`, `action:toast` | Carries `RetryPolicy` and `OnFailure` (Section 5) |
+| **Action** | Performs external side effects. | `action:clientMessage`, `action:email`, `action:webhook`, `action:telegram`, `action:toast` | Carries `RetryPolicy` and `OnFailure` (Section 5) |
 
 ### 1.7 SharedVariableSchema
 
@@ -185,14 +185,14 @@ Demonstrates how Nodes, Ports, Edges, and SharedVariables compose. Everything be
     { "name": "smsToday", "type": "Counter", "default": 0, "resetPolicy": "DailyAtUtc(02:00)" }
   ],
   "nodes": [
-    { "nodeId": "T",   "kind": "trigger:device",
-      "config": { "deviceRef": "sensor-A", "event": "telemetry",
+    { "nodeId": "T",   "kind": "trigger:client",
+      "config": { "clientRef": "sensor-A", "type": "telemetry",
                   "correlationKey": "$trigger.deviceId",
                   "concurrencyPolicy": "CancelExisting" } },
     { "nodeId": "G1",  "kind": "control:logic",
       "config": { "condition": "$trigger.temperature > 35" } },
-    { "nodeId": "OV",  "kind": "action:command",
-      "config": { "deviceRef": "$trigger.deviceId", "command": "OpenVent" } },
+    { "nodeId": "OV",  "kind": "action:clientMessage",
+      "config": { "clientRef": "$trigger.deviceId", "type": "OpenVent" } },
     { "nodeId": "D",   "kind": "control:delay",
       "config": { "duration": "00:10:00" } },
     { "nodeId": "G2",  "kind": "control:logic",
@@ -332,7 +332,7 @@ NodeExecutionResult = one of:
     Forks: ForkSpec[]                     // N forks, each with its own seed state
   }
   ForkSpec {
-    LocalOverrides: Dict<string, object?> // e.g. { item: "device-A", index: 0 }
+    LocalOverrides: Dict<string, object?> // e.g. { item: "client-A", index: 0 }
     Output: object?
   }
 
@@ -588,17 +588,17 @@ External event with a stable name and a correlation identifier. Used by
 
 #### `DevicePropertyChange(deviceRefId: Guid, propertyName: string?)`
 
-Wakes when a device's reported property changes. `propertyName = null` means
+Wakes when a client's reported property changes. `propertyName = null` means
 "any property". Used by control nodes that wait for the side-effect of an
-action sent to a device (e.g., "send OpenVent → wait for `state.vent == open`").
+action sent to a client (e.g., "send OpenVent → wait for `state.vent == open`").
 
 - `MatchKey = "prop|{deviceRefId}|{propertyName ?? "*"}"`
 - Resumer on a property-change event checks **both** the exact key and the
-  device-wildcard key (`prop|{deviceRefId}|*`). Two index hits, cheap.
+  client-wildcard key (`prop|{deviceRefId}|*`). Two index hits, cheap.
 
 #### `DeviceTelemetryMatch(deviceRefId: Guid, propertyName: string, value: JsonValue)`
 
-Wakes when a device publishes telemetry where `propertyName == value` (equality
+Wakes when a client publishes telemetry where `propertyName == value` (equality
 comparison).
 
 - `MatchKey = "telemetry|{deviceRefId}|{propertyName}|{value}"` — pure index hit;
@@ -894,8 +894,8 @@ funnels through this:
                             ┌──────────────────┐
    timer tick ──────────────►   InboundHub     │
    signal HTTP ─────────────►  (normalizer:    │
-   device telemetry ────────►  build matchKeys)│
-   device prop change ──────►                  │
+   client telemetry ────────►  build matchKeys)│
+   client prop change ──────►                  │
    child run completion ────►                  │
                             └────────┬─────────┘
                                      │
@@ -1031,7 +1031,7 @@ wherever the definition lives.
 ```jsonc
 {
   "id": "n-trigger-1",
-  "kind": "trigger:device",
+  "kind": "trigger:client",
   "config": {
     "deviceRefId": "dev-greenhouse-thermo-01",
     "propertyName": "temperature",
@@ -1051,7 +1051,7 @@ TriggerRegistration {
   WorkflowRefId:    Guid
   Version:          int
   TriggerNodeId:    Guid         // which node in the definition
-  Kind:             string       // e.g. "trigger:device"
+  Kind:             string       // e.g. "trigger:client"
   TriggerKey:       string       // computed at publish time (see 4.2)
   CorrelationExpr:  string?      // copied from node config; nullable
   ConcurrencyJson:  string       // policy as JSON
@@ -1086,8 +1086,8 @@ Computed at publish time from the trigger node's `kind` + config.
 
 | Trigger node | TriggerKey |
 |---|---|
-| `trigger:device { deviceRefId: D, propertyName: P }` | `device\|D\|P` |
-| `trigger:device { deviceRefId: D }` (any property) | `device\|D\|*` |
+| `trigger:client { deviceRefId: D, propertyName: P }` | `client\|D\|P` |
+| `trigger:client { deviceRefId: D }` (any property) | `client\|D\|*` |
 | `trigger:webhook { path: "/water-start", method: "POST" }` | `webhook\|POST\|/water-start` |
 | `trigger:schedule { cron: "0 6 * * *" }` | `schedule\|<workflowRef>\|<triggerNodeId>` |
 | `trigger:signal { name: "ops-emergency" }` | `signal\|ops-emergency` |
@@ -1098,9 +1098,9 @@ Two details:
 - **Schedule triggers are workflow-scoped.** Each scheduled trigger is unique
   to its workflow; there is no "shared bus" of scheduled fires. The Ticker
   service (see 4.4) emits synthetic events with this exact key.
-- **Wildcards.** `device|D|*` lets a trigger fire on any property change for a
-  device. The InboundHub computes **both** `device|D|<propName>` and
-  `device|D|*` as candidate match-keys; the Dispatcher looks up registrations
+- **Wildcards.** `client|D|*` lets a trigger fire on any property change for a
+  client. The InboundHub computes **both** `client|D|<propName>` and
+  `client|D|*` as candidate match-keys; the Dispatcher looks up registrations
   matching any candidate key.
 
 The TriggerKey is identity, not data. The `correlationKey` expression — which
@@ -1114,26 +1114,26 @@ Every inbound source has an adapter that produces a uniform event:
 
 ```text
 InboundEvent {
-  Kind:        string         // "device-property" | "device-telemetry" | "http"
+  Kind:        string         // "client-property" | "client-telemetry" | "http"
                               // | "schedule" | "signal" | "event" | "child-run"
   MatchKeys:   string[]       // 1..N candidate keys
-                              // (e.g. ["device|D|P", "device|D|*"])
+                              // (e.g. ["client|D|P", "client|D|*"])
   Payload:     JsonElement    // arbitrary; what triggers/wakes see as $trigger.*
-  DeviceRefId: Guid?          // populated for device events; otherwise null
+  DeviceRefId: Guid?          // populated for client events; otherwise null
   Source:      string         // diagnostic — "rabbitmq", "http", "ticker", …
   ReceivedAt:  DateTime
 }
 ```
 
 `MatchKeys[]` (an array, not a single key) is what makes wildcards work
-cleanly: a single device-property-change event produces two candidates and the
+cleanly: a single client-property-change event produces two candidates and the
 engine checks both against bookmarks AND against trigger registrations. One
 inbound event, multiple potential matches, one lookup mechanism.
 
 **Adapters (one per source):**
 
-- `RabbitMqInboundAdapter` — consumes MassTransit topics (device-property,
-  device-telemetry, child-run-completed, generic `event` topics).
+- `RabbitMqInboundAdapter` — consumes MassTransit topics (client-property,
+  client-telemetry, child-run-completed, generic `event` topics).
 - `HttpInboundAdapter` — ASP.NET Core endpoint. Wake URLs (`/wake/{token}`)
   produce `Kind: "http", MatchKeys: ["manual|{token}"]`. Webhook URLs
   (`/hooks/{path}`) produce `Kind: "http", MatchKeys: ["webhook|{method}|{path}"]`.
@@ -1199,7 +1199,7 @@ function RunDispatchPipeline(reg, event):
   triggerNode ← def.FindNode(reg.TriggerNodeId)
 
   // 2b) Kind-specific filter (cheap, in-process)
-  //     e.g. trigger:device with `propertyName` AND a `valueFilter` config
+  //     e.g. trigger:client with `propertyName` AND a `valueFilter` config
   if !triggerNode.MatchesFilter(event.Payload):
     EmitHistoryEvent(TriggerDispatchSkipped { RegId: reg.RegistrationId, Reason: "filter" })
     continue
@@ -1286,7 +1286,7 @@ string in our `$`-prefixed expression language.
 
 ```jsonc
 {
-  "kind": "trigger:device",
+  "kind": "trigger:client",
   "config": {
     "deviceRefId": "dev-greenhouse-thermo-01",
     "correlationKey": "$trigger.deviceId"
@@ -1314,7 +1314,7 @@ All three are required:
 - `WorkflowRefId` — prevents Workflow A's correlation key from colliding with
   Workflow B's.
 - `TriggerNodeId` — prevents two triggers in the same workflow from sharing
-  concurrency scope unexpectedly (e.g., a `device` trigger and a `signal`
+  concurrency scope unexpectedly (e.g., a `client` trigger and a `signal`
   trigger both evaluating to `"deviceX"` should not queue against each other).
 - `correlationValue` — the runtime-evaluated expression result.
 
@@ -1425,7 +1425,7 @@ Six kinds, all share the dispatcher pipeline:
 
 | Kind | TriggerKey shape | Source adapter | Typical use |
 |---|---|---|---|
-| `trigger:device` | `device\|<refId>\|<propName or *>` | RabbitMqInboundAdapter | "When this device's temperature changes" |
+| `trigger:client` | `client\|<refId>\|<propName or *>` | RabbitMqInboundAdapter | "When this client's temperature changes" |
 | `trigger:webhook` | `webhook\|<METHOD>\|<path>` | HttpInboundAdapter | "When `/water-start` is POSTed" |
 | `trigger:schedule` | `schedule\|<workflowRef>\|<triggerNodeId>` | TickerInboundAdapter | "Every day at 6am" |
 | `trigger:signal` | `signal\|<name>` | SignalInboundAdapter | "When ops emits 'emergency' signal" |
@@ -1455,7 +1455,7 @@ Distinct outcomes:
 
 #### Burst / throttling
 
-Not in v1. If a device sprays 1000 property-change events per second, we
+Not in v1. If a client sprays 1000 property-change events per second, we
 start 1000 runs (subject to ConcurrencyPolicy). The `Queue` / `DropIfRunning`
 policies are the user's first-class throttle mechanism. Engine-level
 throttling, if needed later, slots in as a Section 7 (infrastructure) feature
@@ -1486,7 +1486,7 @@ This keeps the semantics clean:
 - `$shared` = workflow-scoped atomic vars (Section 1).
 - `$run` = run-private vars (counters etc.).
 
-The first-node author writes `$trigger.deviceId` to get the device ID, never
+The first-node author writes `$trigger.deviceId` to get the client ID, never
 `$output.deviceId`. The distinction is taught once and never confused again.
 
 ### Section 4 locked decisions
@@ -1545,7 +1545,7 @@ tokens.
 #### Category B — Permanent (business logic failed)
 
 The operation completed and produced a "no" answer. Validation failed, the
-device returned 404, the expression evaluated to a forbidden value, a guard
+client returned 404, the expression evaluated to a forbidden value, a guard
 raised.
 
 - **Engine response:** governed by `OnFailure` (5.3). Never retried.
@@ -2211,7 +2211,7 @@ optimization), not before. Saves one round-trip per branch step for cheap
 pure computations.
 
 **Locked (Q11): default `IsSideEffectFree = false`.** Authors must opt into
-the optimization. In IoT, "send command to device" looks pure but is not; we
+the optimization. In IoT, "send command to client" looks pure but is not; we
 will not let executor authors guess wrong by default.
 
 ### 6.5 Version pinning
@@ -2304,7 +2304,7 @@ AND Severity IN ('Debug', 'Info')   -- always keep Warn/Error
 
 - **90 days** for `Info` / `Debug`.
 - **Indefinite** for `Warn` / `Error` — operators need long-term forensic
-  visibility ("this device has been flaky since 2024"). Warn/Error volume is
+  visibility ("this client has been flaky since 2024"). Warn/Error volume is
   much lower than Info/Debug, so the storage trade is acceptable.
 
 #### Per-workflow overrides
@@ -2595,7 +2595,7 @@ The sink is the **InboundHub**, which:
 #### Concrete adapters for v1
 
 ```text
-RabbitMqInboundAdapter      // MassTransit consumer (device-property/telemetry/event)
+RabbitMqInboundAdapter      // MassTransit consumer (client-property/telemetry/event)
 HttpInboundAdapter          // ASP.NET endpoint group for /wake/{token}, /hooks/{path}
 TickerInboundAdapter        // Wraps TickerService → emits InboundEvent on each ScheduledFire claim
 SignalInboundAdapter        // Subscribes to internal signal bus AND exposes /signals/{name}
@@ -2641,7 +2641,7 @@ services.AddSingleton<ICreditCostCalculator, CreditCostCalculator>();
 services.AddSingleton<ILeaseHolder, AlwaysHoldsLeaseHolder>();   // SWAP POINT
 
 // Node executors — keyed Transient
-services.AddNodeExecutor<DeviceCommandExecutor>("action:device-command");
+services.AddNodeExecutor<DeviceCommandExecutor>("action:client-command");
 services.AddNodeExecutor<HttpRequestExecutor>("action:http");
 services.AddNodeExecutor<DelayExecutor>("control:delay");
 services.AddNodeExecutor<WaitForHttpExecutor>("control:waitForHttp");
@@ -2913,7 +2913,7 @@ Host stays purely backend.
 | `control:awaitSignal` | Named mid-graph signal wait with an authored correlation expression. |
 | Trigger | A node that starts a Run when its external condition is met. |
 | TriggerRegistration | Indexed SQL row created at publish time; the dispatcher's lookup record. |
-| TriggerKey | Identity-shaped string used to index trigger registrations (e.g. `device\|D\|P`). |
+| TriggerKey | Identity-shaped string used to index trigger registrations (e.g. `client\|D\|P`). |
 | InboundEvent | Normalized inbound shape `{Kind, MatchKeys[], Payload, DeviceRefId?, Source, ReceivedAt}`. |
 | TriggerDispatcher | Pipeline that turns a matched event into a new Run (or queues/cancels/drops per policy). |
 | Ticker | Service that fires scheduled trigger events from a `ScheduledFires` table. |

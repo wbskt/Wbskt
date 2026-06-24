@@ -15,7 +15,7 @@ public sealed class TriggerExecutorTests
     [Fact]
     public async Task DeviceTriggerExecutor_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new DeviceTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new DeviceTriggerNode { NodeId = Guid.NewGuid(), Name = "device", Ports = CreatePorts(), Config = new DeviceTriggerConfig { DeviceRef = "device-1", Event = "telemetry" } }), CancellationToken.None);
+        NodeExecutionResult result = await new DeviceTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ClientTriggerNode { NodeId = Guid.NewGuid(), Name = "client", Ports = CreatePorts(), Config = new ClientTriggerConfig { ClientRef = "client-1", Type = "telemetry" } }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
@@ -46,7 +46,7 @@ public sealed class TriggerExecutorTests
         {
             Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>
             {
-                ["deviceSerial"] = JsonSerializer.SerializeToElement("serial-1")
+                ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1")
             }, "corr-1", DateTime.UtcNow),
             Node = node,
             Providers = new StubProviderComposite(),
@@ -64,7 +64,7 @@ public sealed class TriggerExecutorTests
         Assert.Equal("default", continuation.OutboundPort);
         Assert.True(continuation.LocalStatePatch.ContainsKey("trigger"));
         Assert.True(continuation.LocalStatePatch.ContainsKey("triggeredAt"));
-        Assert.Equal("serial-1", continuation.LocalStatePatch["trigger"].GetProperty("deviceSerial").GetString());
+        Assert.Equal("serial-1", continuation.LocalStatePatch["trigger"].GetProperty("clientRefId").GetString());
         Assert.Equal(new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc), continuation.LocalStatePatch["triggeredAt"].GetDateTime());
     }
 
