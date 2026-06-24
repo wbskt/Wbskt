@@ -6,7 +6,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE dbo.Runs
+    UPDATE dbo.Runs WITH (ROWLOCK)
     SET Status = @ToStatus
     WHERE Id = @RunId
       AND Status = @FromStatus;

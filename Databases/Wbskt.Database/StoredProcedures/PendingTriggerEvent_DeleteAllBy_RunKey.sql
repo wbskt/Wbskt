@@ -6,7 +6,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DELETE FROM dbo.PendingTriggerEvents
+    DELETE FROM dbo.PendingTriggerEvents WITH (ROWLOCK)
     WHERE WorkflowRefId = @WorkflowRefId
       AND TriggerNodeId = @TriggerNodeId
       AND CorrelationKey = @CorrelationKey;

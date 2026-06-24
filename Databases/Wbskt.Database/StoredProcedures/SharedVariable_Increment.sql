@@ -6,7 +6,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE dbo.SharedVariables
+    UPDATE dbo.SharedVariables WITH (ROWLOCK)
     SET ValueJson = CAST(CAST(ValueJson AS BIGINT) + @Delta AS NVARCHAR(MAX)),
         UpdatedAt = SYSUTCDATETIME()
     OUTPUT inserted.ValueJson

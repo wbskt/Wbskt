@@ -11,7 +11,7 @@ BEGIN
 
     BEGIN TRAN;
 
-    UPDATE dbo.JoinAggregators WITH (UPDLOCK, HOLDLOCK)
+    UPDATE dbo.JoinAggregators WITH (ROWLOCK)
     SET ContributedCount = ContributedCount + 1,
         SucceededCount   = SucceededCount + CASE WHEN @Outcome = 'succeeded' THEN 1 ELSE 0 END,
         FailedCount      = FailedCount + CASE WHEN @Outcome = 'failed' THEN 1 ELSE 0 END

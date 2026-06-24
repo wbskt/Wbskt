@@ -7,7 +7,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE dbo.SharedVariables
+    UPDATE dbo.SharedVariables WITH (ROWLOCK)
     SET ValueJson = @NewValue,
         UpdatedAt = SYSUTCDATETIME()
     WHERE WorkflowRefId = @WorkflowRefId

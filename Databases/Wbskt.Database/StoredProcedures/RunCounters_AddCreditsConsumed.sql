@@ -5,7 +5,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE dbo.RunCounters
+    UPDATE dbo.RunCounters WITH (ROWLOCK)
        SET CreditsConsumed = CreditsConsumed + @Cost,
            UpdatedAt       = SYSUTCDATETIME()
     OUTPUT inserted.CreditsConsumed

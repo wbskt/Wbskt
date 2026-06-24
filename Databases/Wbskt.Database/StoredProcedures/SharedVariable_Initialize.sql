@@ -8,17 +8,21 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    BEGIN TRAN;
-
-    INSERT INTO dbo.SharedVariables (WorkflowRefId, VarName, VarType, ValueJson)
-    SELECT @WorkflowRefId, @VarName, @VarType, @ValueJson
-     WHERE NOT EXISTS (
-         SELECT 1
-           FROM dbo.SharedVariables WITH (UPDLOCK, HOLDLOCK)
-          WHERE WorkflowRefId = @WorkflowRefId AND VarName = @VarName
-     );
-
-    COMMIT TRAN;
+    -- Attempt insert directly. Under high concurrency, we avoid checking existence beforehand
+    -- with range/key locks (UPDLOCK, HOLDLOCK) which cause severe SQL deadlocks.
+    -- If another thread already inserted this variable, we catch the unique constraint error
+    -- (2601/2627), ignore it, and proceed to SELECT the existing row.
+    BEGIN TRY
+        INSERT INTO dbo.SharedVariables (WorkflowRefId, VarName, VarType, ValueJson)
+        VALUES (@WorkflowRefId, @VarName, @VarType, @ValueJson);
+    END TRY
+    BEGIN CATCH
+        -- Suppress duplicate key violation errors (2601 = Unique Index, 2627 = Unique Constraint)
+        IF ERROR_NUMBER() NOT IN (2601, 2627)
+        BEGIN
+            THROW;
+        END
+    END CATCH;
 
     SELECT
         Id,

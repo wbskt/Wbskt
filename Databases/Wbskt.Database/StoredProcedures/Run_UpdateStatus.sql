@@ -8,7 +8,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE dbo.Runs
+    UPDATE dbo.Runs WITH (ROWLOCK)
     SET Status                  = @Status,
         CompletedAt             = COALESCE(@CompletedAt, CompletedAt),
         CancellationRequestedAt = COALESCE(@CancellationRequestedAt, CancellationRequestedAt),

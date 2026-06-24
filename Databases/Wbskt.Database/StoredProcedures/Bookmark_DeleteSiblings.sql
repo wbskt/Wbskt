@@ -6,7 +6,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DELETE FROM dbo.Bookmarks
+    DELETE FROM dbo.Bookmarks WITH (ROWLOCK)
     WHERE RunId = @RunId
       AND BranchRefId = (
             SELECT RefId
