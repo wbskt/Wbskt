@@ -1,4 +1,3 @@
-using Microsoft.Data.SqlClient;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 

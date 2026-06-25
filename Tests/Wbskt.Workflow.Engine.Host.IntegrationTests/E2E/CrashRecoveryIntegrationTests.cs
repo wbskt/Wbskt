@@ -7,8 +7,6 @@ using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 using Wbskt.Workflow.Extensions;
-using Xunit;
-using FluentAssertions;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.E2E;
 

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Linq;
 using MassTransit;
 using Moq;
 using Wbskt.Events.Client;

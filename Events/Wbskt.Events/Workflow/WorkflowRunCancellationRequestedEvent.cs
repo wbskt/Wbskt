@@ -1,5 +1,4 @@
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Events.Workflow;
 

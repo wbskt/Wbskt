@@ -2,9 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
-using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Enums;
-using Xunit;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Performance;
 

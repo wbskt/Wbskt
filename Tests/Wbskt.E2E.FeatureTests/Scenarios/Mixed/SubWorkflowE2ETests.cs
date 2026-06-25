@@ -3,8 +3,6 @@ using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
-using Wbskt.Workflow.Abstraction.Enums;
-using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 

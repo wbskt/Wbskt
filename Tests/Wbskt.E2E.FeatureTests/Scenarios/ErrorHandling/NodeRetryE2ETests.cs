@@ -5,7 +5,6 @@ using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
-using Xunit;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.ErrorHandling;
 

@@ -1,12 +1,10 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
-using Xunit;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.State;
 

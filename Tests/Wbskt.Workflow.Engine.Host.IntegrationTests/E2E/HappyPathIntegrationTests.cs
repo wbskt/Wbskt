@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wbskt.Workflow.Abstraction.Entities;
