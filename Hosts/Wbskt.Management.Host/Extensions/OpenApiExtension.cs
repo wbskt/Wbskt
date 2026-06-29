@@ -45,12 +45,12 @@ internal static class OpenApiExtension
         builder.MapScalarApiReference(options =>
         {
             options.HideClientButton = true;
-            options.Layout = ScalarLayout.Classic;
+            options.Layout = ScalarLayout.Modern;
             options.DarkMode = true;
-            options.HiddenClients = true;
+            options.HiddenClients = false;
             options.DefaultOpenAllTags = true;
             options.ForceThemeMode = ThemeMode.Dark;
-            options.Theme = ScalarTheme.Moon;
+            options.Theme = ScalarTheme.Kepler;
             options.ShowDeveloperTools = DeveloperToolsVisibility.Never;
             options.AddPreferredSecuritySchemes("Bearer");
         });
