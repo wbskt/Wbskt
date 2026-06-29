@@ -52,7 +52,7 @@ try
 
         Console.WriteLine($"[TELEMETRY] Sending: {temp:F1}°C, {humidity:F1}% humidity");
         
-        await client.SendTelemetryAsync("environment", new { 
+        await client.SendTelemetryAsync("telemetry", new { 
             temperature = temp, 
             humidity = humidity,
             timestamp = DateTime.UtcNow 

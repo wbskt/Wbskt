@@ -119,6 +119,7 @@ public sealed class WbsktClient : IWbsktClient
         }
     }
 
+    // [RJ]: TODO: remove telemetry from this method name
     public async Task SendTelemetryAsync(string type, object payload)
     {
         await _socket.SendAsync(new SocketMessage(type, payload));
