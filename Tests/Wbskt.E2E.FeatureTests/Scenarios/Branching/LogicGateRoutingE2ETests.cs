@@ -47,10 +47,10 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // True Event
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "gate-test", value = true });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "gate-test", value = true });
         
         // False Event
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "gate-test", value = false });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "gate-test", value = false });
 
         // Wait for both commands to arrive
         var arrived = await ServicesFixture.PollAsync(

@@ -53,7 +53,7 @@ public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "sig-payload-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "sig-payload-test", value = 1 });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started a run that parks on the signal");

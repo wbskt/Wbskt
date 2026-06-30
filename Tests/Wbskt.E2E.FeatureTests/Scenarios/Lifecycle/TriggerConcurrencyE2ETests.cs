@@ -51,7 +51,7 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
         // ── 3. Fire 5 telemetry events ──────────────────────
         foreach (int i in Enumerable.Range(0, 5))
         {
-            await wbsktClient.SendTelemetryAsync("telemetry", new { });
+            await wbsktClient.SendAsync("telemetry", new { });
             await Task.Delay(50);
         }
 

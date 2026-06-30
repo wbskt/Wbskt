@@ -51,7 +51,7 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // Start the infinite loop
-        await wbsktClient.SendTelemetryAsync("telemetry", new { loop = true });
+        await wbsktClient.SendAsync("telemetry", new { loop = true });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);

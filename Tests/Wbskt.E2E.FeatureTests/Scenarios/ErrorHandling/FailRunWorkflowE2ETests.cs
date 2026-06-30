@@ -45,7 +45,7 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "failrun-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "failrun-test", value = 1 });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started a run");
@@ -97,7 +97,7 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
         };
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "partial-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "partial-test", value = 1 });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started a run");

@@ -85,7 +85,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // ── 4. Send a telemetry event from the client ────────────────────────
-        await wbsktClient.SendTelemetryAsync("telemetry", new
+        await wbsktClient.SendAsync("telemetry", new
         {
             sensor = "vent-test",
             value = 42,

@@ -69,7 +69,7 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         // Give time for Child workflow manual trigger registration to propagate
         await Task.Delay(2000);
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "subworkflow-test" });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "subworkflow-test" });
 
         var parentRunRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, parentPublishedRef, TimeSpan.FromSeconds(30));
         parentRunRefId.Should().NotBe(Guid.Empty, "telemetry should have started the parent run");

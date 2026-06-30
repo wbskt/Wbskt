@@ -67,7 +67,7 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // ── 4. Send telemetry → run starts and parks at AwaitSignal ──────────
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "signal-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "signal-test", value = 1 });
 
         // Wait until the run exists (it is now parked, status still "Running").
         Guid runRefId = Guid.Empty;

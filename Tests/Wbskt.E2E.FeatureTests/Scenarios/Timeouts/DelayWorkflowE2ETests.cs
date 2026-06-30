@@ -75,7 +75,7 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
 
         // ── 4. Send telemetry and time how long until the command comes back ─
         var stopwatch = Stopwatch.StartNew();
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "delay-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "delay-test", value = 1 });
 
         var commandReceived = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(40)));
         if (commandReceived != commandTcs.Task)

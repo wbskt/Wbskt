@@ -77,7 +77,7 @@ public class PayloadManipulationE2ETests(ServicesFixture fixture)
             }
         };
 
-        await wbsktClient.SendTelemetryAsync("process-docs", payload);
+        await wbsktClient.SendAsync("process-docs", payload);
 
         // Wait for run
         var summary = await fixture.WaitForRunStatusAsync(token, workspaceRef, publishedRef, "Succeeded", TimeSpan.FromSeconds(10));

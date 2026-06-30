@@ -60,7 +60,7 @@ var tasks = Enumerable.Range(0, clientCount).Select(i => Task.Run(async () =>
             var random = new Random();
             while (true)
             {
-                await client.SendTelemetryAsync("performance", new { cpu = random.NextDouble() * 100 });
+                await client.SendAsync("performance", new { cpu = random.NextDouble() * 100 });
                 await Task.Delay(TimeSpan.FromSeconds(5 + random.Next(10)));
             }
         });

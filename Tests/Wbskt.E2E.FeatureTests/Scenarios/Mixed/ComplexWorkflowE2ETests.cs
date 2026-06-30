@@ -61,7 +61,7 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         var stopwatch = Stopwatch.StartNew();
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "complex-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "complex-test", value = 1 });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started a run");

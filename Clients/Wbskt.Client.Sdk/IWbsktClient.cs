@@ -9,6 +9,6 @@ public interface IWbsktClient : IAsyncDisposable
     event Action? OnDisconnected;
 
     Task StartAsync();
-    Task SendTelemetryAsync(string type, object payload);
+    Task SendAsync(string type, object payload);
     Task UpdateCapabilitiesAsync(ClientCapabilities capabilities);
 }

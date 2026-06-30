@@ -115,12 +115,11 @@ public sealed class WbsktClient : IWbsktClient
         
         if (_socket.IsConnected)
         {
-            await SendTelemetryAsync("capabilities", capabilities);
+            await SendAsync("capabilities", capabilities);
         }
     }
 
-    // [RJ]: TODO: remove telemetry from this method name
-    public async Task SendTelemetryAsync(string type, object payload)
+    public async Task SendAsync(string type, object payload)
     {
         await _socket.SendAsync(new SocketMessage(type, payload));
     }

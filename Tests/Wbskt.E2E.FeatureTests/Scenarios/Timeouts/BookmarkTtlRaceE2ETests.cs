@@ -55,7 +55,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         };
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { });
+        await wbsktClient.SendAsync("telemetry", new { });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);
@@ -121,7 +121,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         };
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { });
+        await wbsktClient.SendAsync("telemetry", new { });
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);
 
@@ -192,7 +192,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         };
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { });
+        await wbsktClient.SendAsync("telemetry", new { });
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);
 

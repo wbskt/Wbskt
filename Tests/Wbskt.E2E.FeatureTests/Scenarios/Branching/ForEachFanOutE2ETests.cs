@@ -79,7 +79,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // ── 4. Send telemetry → run starts and fans out ─────────────────────
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "foreach-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "foreach-test", value = 1 });
 
         // Capture the single run this telemetry started (workflow is unique to this test).
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));

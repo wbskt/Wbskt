@@ -71,7 +71,7 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // ── 4. Trigger the workflow ───────────────
-        await wbsktClient.SendTelemetryAsync("start", new { });
+        await wbsktClient.SendAsync("start", new { });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);

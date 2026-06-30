@@ -54,7 +54,7 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         };
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "nested-test" });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "nested-test" });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);

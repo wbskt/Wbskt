@@ -76,7 +76,7 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // ── 4. Send telemetry → run starts, fans out and joins ───────────────
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "pfe-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "pfe-test", value = 1 });
 
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started exactly one run");

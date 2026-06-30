@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
+using Moq;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Exceptions;
@@ -20,7 +22,9 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var triggerService = new RecordingTriggerRegistrationService();
         var cache = new RecordingWorkflowDefinitionCache();
-        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator());
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object);
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, request, CancellationToken.None);
@@ -38,7 +42,9 @@ public sealed class PublishToObserveE2ETests
     public async Task Publish_workflow_increments_version()
     {
         var provider = new InMemoryWorkflowDefinitionProvider();
-        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator());
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object);
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, request, CancellationToken.None);

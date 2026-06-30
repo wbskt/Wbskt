@@ -51,7 +51,7 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         wbsktClient.OnMessageReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
         await wbsktClient.StartAsync();
 
-        await wbsktClient.SendTelemetryAsync("telemetry", new { sensor = "http-test", value = 1 });
+        await wbsktClient.SendAsync("telemetry", new { sensor = "http-test", value = 1 });
 
         // Wait until the run exists (parked at WaitForHttp); the run RefId is the wake token.
         Guid runRefId = Guid.Empty;
