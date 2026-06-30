@@ -76,7 +76,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             Name = request.Name,
             Description = request.Description,
             IsEnabled = true,
-            DefinitionJson = JsonSerializer.Serialize(request.Definition, SerializerOptions),
+            DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, Version = nextVersion, IsEnabled = true }, SerializerOptions),
             PublishedBy = definition.PublishedBy,
             CreatedAt = definition.CreatedAt
         }, ct);
