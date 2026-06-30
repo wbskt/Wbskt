@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -18,17 +19,20 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private readonly ITriggerRegistrationService _triggerRegistrationService;
     private readonly IWorkflowDefinitionCache _cache;
     private readonly WorkflowValidator _validator;
+    private readonly IIdentityService _identityService;
 
     public WorkflowDefinitionService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ITriggerRegistrationService triggerRegistrationService,
         IWorkflowDefinitionCache cache,
-        WorkflowValidator validator)
+        WorkflowValidator validator,
+        IIdentityService identityService)
     {
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _triggerRegistrationService = triggerRegistrationService;
         _cache = cache;
         _validator = validator;
+        _identityService = identityService;
     }
 
     public async Task<WorkflowPublishResponse> PublishAsync(int workspaceId, WorkflowPublishRequest request, CancellationToken ct)
@@ -77,7 +81,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             Description = request.Description,
             IsEnabled = true,
             DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, Version = nextVersion, IsEnabled = true }, SerializerOptions),
-            PublishedBy = definition.PublishedBy,
+            PublishedBy = _identityService.GetUserIdentity().UserId,
             CreatedAt = definition.CreatedAt
         }, ct);
 

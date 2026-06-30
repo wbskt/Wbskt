@@ -44,6 +44,7 @@ public static class Program
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
+        builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
@@ -176,6 +177,7 @@ public static class Program
         }
 
         app.UseAuthentication();
+        app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
         app.MapGet("/api/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTimeOffset.UtcNow })).AllowAnonymous();
 

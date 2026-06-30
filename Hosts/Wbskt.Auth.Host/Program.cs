@@ -36,6 +36,7 @@ public static class Program
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
+        builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
@@ -103,6 +104,7 @@ public static class Program
         }
 
         app.UseAuthentication();
+        app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
 
         app.MapControllers();
