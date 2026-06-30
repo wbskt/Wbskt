@@ -4,23 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WBSKT Control Dashboard</title>
+    <!-- Modern Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0f172a;
-            --surface: #1e293b;
-            --surface-hover: #334155;
-            --primary: #38bdf8;
-            --secondary: #2dd4bf;
-            --accent: #818cf8;
-            --error: #f43f5e;
-            --text: #f8fafc;
-            --text-dim: #94a3b8;
-            --border: #334155;
+            --bg: #030712;
+            --surface: #0b0f19;
+            --surface-hover: #161b26;
+            --primary: #06b6d4; /* cyan */
+            --primary-glow: rgba(6, 182, 212, 0.15);
+            --secondary: #10b981; /* emerald */
+            --secondary-glow: rgba(16, 185, 129, 0.15);
+            --accent: #6366f1; /* indigo */
+            --error: #f43f5e; /* rose */
+            --warning: #f59e0b; /* amber */
+            --text: #f3f4f6;
+            --text-dim: #9ca3af;
+            --border: #1f2937;
+            --border-hover: #374151;
         }
 
         * { box-sizing: border-box; }
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', sans-serif;
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
@@ -31,29 +39,56 @@
 
         /* Sidebar Styles */
         aside {
-            width: 280px;
+            width: 260px;
             background-color: var(--surface);
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            padding: 20px;
-            gap: 20px;
+            padding: 24px;
+            gap: 24px;
         }
 
-        .logo { font-size: 1.5rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 10px; }
-        .logo-icon { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; }
+        .logo { 
+            font-size: 1.4rem; 
+            font-weight: 800; 
+            color: var(--text); 
+            display: flex; 
+            align-items: center; 
+            gap: 12px;
+            letter-spacing: 1px;
+        }
+        .logo-icon { 
+            width: 28px; 
+            height: 28px; 
+            background: linear-gradient(135deg, var(--primary), var(--accent)); 
+            border-radius: 6px; 
+            box-shadow: 0 0 12px var(--primary-glow);
+        }
 
-        nav { display: flex; flex-direction: column; gap: 5px; }
+        nav { display: flex; flex-direction: column; gap: 6px; }
         .nav-item {
-            padding: 10px 15px;
+            padding: 10px 14px;
             border-radius: 8px;
             cursor: pointer;
             color: var(--text-dim);
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             font-weight: 500;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .nav-item:hover { background: var(--surface-hover); color: var(--text); }
-        .nav-item.active { background: var(--primary); color: #000; }
+        .nav-item:hover { 
+            background: var(--surface-hover); 
+            color: var(--text); 
+        }
+        .nav-item.active { 
+            background: var(--primary-glow); 
+            color: var(--primary); 
+            border-left: 3px solid var(--primary);
+            padding-left: 11px;
+            font-weight: 600;
+        }
 
         /* Main Content Styles */
         main {
@@ -77,69 +112,95 @@
             flex: 1;
             padding: 30px;
             overflow-y: auto;
-            display: none; /* Controlled by JS */
+            display: none;
         }
         .content-area.active { display: block; }
 
         /* UI Components */
         .card {
-            background: var(--surface);
+            background: rgba(11, 15, 25, 0.6);
+            backdrop-filter: blur(12px);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 24px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 8px 24px -8px rgba(0,0,0,0.6);
         }
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
         }
 
-        h1, h2, h3 { margin-top: 0; }
+        h1 { font-size: 1.75rem; font-weight: 700; margin: 0 0 20px 0; }
+        h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 15px 0; }
+        h3 { font-size: 1.05rem; font-weight: 600; margin: 0; }
         
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-size: 0.875rem; color: var(--text-dim); font-weight: 500; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; font-size: 0.8rem; color: var(--text-dim); font-weight: 500; }
         input, select, textarea {
             width: 100%;
-            padding: 10px 12px;
-            background: #0f172a;
+            padding: 9px 12px;
+            background: #060a13;
             border: 1px solid var(--border);
             color: white;
             border-radius: 8px;
             font-family: inherit;
+            font-size: 0.9rem;
+            transition: all 0.2s;
         }
-        input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+        input:focus, select:focus, textarea:focus { 
+            outline: none; 
+            border-color: var(--primary); 
+            box-shadow: 0 0 0 3px var(--primary-glow); 
+        }
 
         button {
-            padding: 10px 18px;
+            padding: 9px 16px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
-            transition: transform 0.1s, opacity 0.2s;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
         }
         button:active { transform: scale(0.98); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        .btn-primary { background: var(--primary); color: #000; }
-        .btn-secondary { background: var(--surface-hover); color: var(--text); }
-        .btn-accent { background: var(--accent); color: white; }
-        .btn-danger { background: var(--error); color: white; }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), #0891b2); color: #030712; }
+        .btn-primary:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px var(--primary-glow); }
+        
+        .btn-secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover:not(:disabled) { background: var(--border); }
+        
+        .btn-accent { background: linear-gradient(135deg, var(--accent), #4f46e5); color: white; }
+        .btn-accent:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+        
+        .btn-danger { background: linear-gradient(135deg, var(--error), #e11d48); color: white; }
+        .btn-danger:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
 
         .badge {
-            padding: 2px 8px;
-            border-radius: 99px;
-            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
             font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
         }
-        .badge-success { background: #065f46; color: #34d399; }
-        .badge-warning { background: #92400e; color: #fbbf24; }
-        .badge-info { background: #1e40af; color: #60a5fa; }
+        .badge-success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-info { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+        .badge-danger { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
 
         /* Auth Screen */
         #auth-overlay {
@@ -152,67 +213,115 @@
             z-index: 1000;
         }
         .auth-card {
-            width: 400px;
+            width: 420px;
             background: var(--surface);
             padding: 40px;
             border-radius: 16px;
             border: 1px solid var(--border);
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);
         }
 
-        /* Client Simulator Table */
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; color: var(--text-dim); font-size: 0.75rem; padding: 12px; border-bottom: 1px solid var(--border); }
-        td { padding: 12px; border-bottom: 1px solid var(--border); }
+        /* Tables */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #070b13;
+        }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { color: var(--text-dim); font-size: 0.75rem; padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background-color: var(--surface-hover); }
 
         .client-log {
-            height: 150px;
+            height: 180px;
             overflow-y: auto;
-            background: #000;
-            padding: 8px;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            background: #020617;
+            border: 1px solid var(--border);
+            padding: 10px;
+            font-family: 'Fira Code', monospace;
             font-size: 0.75rem;
-            border-radius: 4px;
+            border-radius: 6px;
         }
 
-        /* Notifications */
+        /* Toast Notifications */
         #toast-container {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: 24px;
+            right: 24px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             z-index: 2000;
         }
         .toast {
-            padding: 12px 20px;
+            padding: 14px 20px;
             border-radius: 8px;
             background: var(--surface);
             border-left: 4px solid var(--primary);
             color: white;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
-            animation: slideIn 0.3s ease-out;
+            font-size: 0.85rem;
+            font-weight: 500;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+            animation: slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
         .loading-spinner {
-            width: 20px; height: 20px;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-top-color: white;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top-color: currentColor;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Compact Layout Modifiers */
+        .flex-row-space {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        /* Modal Backdrop */
+        #modal-container {
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; right: 0; bottom: 0; 
+            background: rgba(2, 6, 23, 0.85); 
+            backdrop-filter: blur(8px);
+            z-index: 1500; 
+            align-items: center; 
+            justify-content: center;
+        }
+        .modal-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 20px 40px -15px rgba(0,0,0,0.8);
+            width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .empty-state {
+            padding: 30px;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
     <!-- Auth Overlay -->
     <div id="auth-overlay">
         <div class="auth-card">
-            <div class="logo" style="margin-bottom: 30px;">
+            <div class="logo" style="margin-bottom: 30px; justify-content: center;">
                 <div class="logo-icon"></div>
-                WBSKT Core
+                WBSKT Engine
             </div>
             <div id="login-form">
                 <div class="form-group">
@@ -223,16 +332,16 @@
                     <label>Password</label>
                     <input type="password" id="login-pass" value="Admin@123">
                 </div>
-                <button class="btn-primary" style="width: 100%;" onclick="auth.login()">Login</button>
+                <button class="btn-primary" style="width: 100%; margin-top: 10px;" onclick="auth.login()">Login</button>
             </div>
             <div id="workspace-select" style="display: none;">
-                <h2 style="font-size: 1.25rem;">Select Workspace</h2>
-                <div id="workspace-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                    <!-- Workspaces will be injected here -->
+                <h2 style="font-size: 1.1rem; text-align: center; margin-bottom: 20px;">Select Workspace</h2>
+                <div id="workspace-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px;">
+                    <!-- Workspaces injected here -->
                 </div>
                 
                 <div style="padding-top: 20px; border-top: 1px solid var(--border);">
-                    <h3 style="font-size: 1rem; margin-bottom: 15px;">Create New Workspace</h3>
+                    <h3 style="font-size: 0.95rem; margin-bottom: 12px;">Create New Workspace</h3>
                     <div class="form-group">
                         <label>Workspace Name</label>
                         <input type="text" id="new-ws-name" placeholder="My Production Workspace">
@@ -250,28 +359,28 @@
             WBSKT
         </div>
         <nav>
-            <div class="nav-item active" data-target="dashboard">Overview</div>
-            <div class="nav-item" data-target="policies">Policies</div>
-            <div class="nav-item" data-target="workflows">Workflows</div>
-            <div class="nav-item" data-target="clients">Clients</div>
-            <div class="nav-item" data-target="simulator">Simulator</div>
+            <div class="nav-item active" data-target="dashboard"><span>📊</span> Overview</div>
+            <div class="nav-item" data-target="policies"><span>🛡️</span> Policies</div>
+            <div class="nav-item" data-target="workflows"><span>⚙️</span> Workflows</div>
+            <div class="nav-item" data-target="clients"><span>📱</span> Clients</div>
+            <div class="nav-item" data-target="simulator"><span>💻</span> Simulator</div>
         </nav>
         <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border);">
-            <div id="user-info" style="font-size: 0.875rem; color: var(--text-dim);">Logged in as...</div>
-            <button class="btn-secondary" style="margin-top: 10px; width: 100%;" onclick="auth.logout()">Logout</button>
+            <div id="user-info" style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 12px; word-break: break-all;">Workspace: ...</div>
+            <button class="btn-secondary" style="width: 100%;" onclick="auth.logout()">🚪 Logout</button>
         </div>
     </aside>
 
     <!-- Main -->
     <main>
         <header>
-            <div id="current-workspace-name" style="font-weight: 600; font-size: 1.1rem;">No Workspace Selected</div>
+            <div id="current-workspace-name" style="font-weight: 700; font-size: 1.15rem; color: var(--primary);">No Workspace Selected</div>
             <div style="display: flex; gap: 15px; align-items: center;">
                 <button class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="management.fetchAll()">
                     <span id="refresh-icon">🔄</span> Refresh
                 </button>
-                <div id="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background: var(--secondary);"></div>
-                <span style="font-size: 0.875rem; color: var(--text-dim);">System Active</span>
+                <div id="status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--secondary);"></div>
+                <span style="font-size: 0.8rem; color: var(--text-dim);">System Active</span>
             </div>
         </header>
 
@@ -279,60 +388,60 @@
         <div id="view-dashboard" class="content-area active">
             <h1>System Overview</h1>
             <div class="grid">
-                <div class="card">
+                <div class="card" style="border-left: 3px solid var(--primary);">
                     <h3 style="color: var(--primary);">Workspaces</h3>
-                    <div id="stat-workspaces" style="font-size: 2.5rem; font-weight: 800;">0</div>
+                    <div id="stat-workspaces" style="font-size: 2.2rem; font-weight: 800; margin-top: 10px;">0</div>
                 </div>
-                <div class="card">
+                <div class="card" style="border-left: 3px solid var(--secondary);">
                     <h3 style="color: var(--secondary);">Active Clients</h3>
-                    <div id="stat-clients" style="font-size: 2.5rem; font-weight: 800;">0</div>
+                    <div id="stat-clients" style="font-size: 2.2rem; font-weight: 800; margin-top: 10px;">0</div>
                 </div>
-                <div class="card">
+                <div class="card" style="border-left: 3px solid var(--accent);">
                     <h3 style="color: var(--accent);">Workflows</h3>
-                    <div id="stat-workflows" style="font-size: 2.5rem; font-weight: 800;">0</div>
+                    <div id="stat-workflows" style="font-size: 2.2rem; font-weight: 800; margin-top: 10px;">0</div>
                 </div>
             </div>
         </div>
 
         <!-- View: Policies -->
         <div id="view-policies" class="content-area">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div class="flex-row-space" style="margin-bottom: 24px;">
                 <h1>Registration Policies</h1>
-                <button class="btn-primary" onclick="ui.showModal('create-policy-modal')">Create Policy</button>
+                <button class="btn-primary" onclick="ui.showModal('create-policy-modal')">➕ Create Policy</button>
             </div>
             <div id="policies-list" class="grid">
-                <!-- Policies will be injected here -->
+                <!-- Policies injected here -->
             </div>
         </div>
 
         <!-- View: Workflows -->
         <div id="view-workflows" class="content-area">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div class="flex-row-space" style="margin-bottom: 24px;">
                 <h1>Workflows</h1>
-                <button class="btn-primary" onclick="ui.showModal('create-workflow-modal')">Create Workflow</button>
+                <button class="btn-primary" onclick="ui.showModal('create-workflow-modal')">➕ Create Workflow</button>
             </div>
             <div id="workflows-list" class="grid">
-                <!-- Workflows will be injected here -->
+                <!-- Workflows injected here -->
             </div>
         </div>
 
         <!-- View: Clients -->
         <div id="view-clients" class="content-area">
             <h1>Manage Clients</h1>
-            <div class="card">
+            <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>CLIENT REF</th>
-                            <th>NAME</th>
-                            <th>STATUS</th>
-                            <th>POLICY</th>
-                            <th>CREATED AT</th>
-                            <th>ACTIONS</th>
+                            <th>Client Ref</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Policy ID</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="clients-table-body">
-                        <!-- Clients will be injected here -->
+                        <!-- Clients injected here -->
                     </tbody>
                 </table>
             </div>
@@ -341,9 +450,9 @@
         <!-- View: Simulator -->
         <div id="view-simulator" class="content-area">
             <h1>Client Simulator</h1>
-            <div class="card">
+            <div class="card" style="background: rgba(6, 182, 212, 0.05); border-color: rgba(6, 182, 212, 0.2);">
                 <h2>Add Virtual Client</h2>
-                <div style="display: flex; gap: 20px; align-items: flex-end;">
+                <div style="display: flex; gap: 16px; align-items: flex-end;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label>Select Policy</label>
                         <select id="sim-policy-select"></select>
@@ -362,11 +471,11 @@
         </div>
     </main>
 
-    <!-- Modals -->
-    <div id="modal-container" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1500; align-items: center; justify-content: center;">
+    <!-- Modals Backdrops -->
+    <div id="modal-container">
         
         <!-- Create Policy Modal -->
-        <div id="create-policy-modal" class="card modal-content" style="display: none; width: 500px;">
+        <div id="create-policy-modal" class="modal-content" style="display: none;">
             <h2>New Registration Policy</h2>
             <div class="form-group">
                 <label>Policy Name</label>
@@ -376,18 +485,18 @@
                 <label>Max Clients (Empty for unlimited)</label>
                 <input type="number" id="policy-max" placeholder="10">
             </div>
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" id="policy-auto" checked style="width: auto;">
-                <label style="margin-bottom: 0;">Auto-approve clients</label>
+            <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="policy-auto" checked style="width: auto; margin: 0;">
+                <label style="margin-bottom: 0; cursor: pointer;" for="policy-auto">Auto-approve clients</label>
             </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;">
                 <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
                 <button class="btn-primary" onclick="management.createPolicy()">Create</button>
             </div>
         </div>
 
         <!-- Create Workflow Modal -->
-        <div id="create-workflow-modal" class="card modal-content" style="display: none; width: 500px;">
+        <div id="create-workflow-modal" class="modal-content" style="display: none;">
             <h2>New Workflow</h2>
             <div class="form-group">
                 <label>Workflow Name</label>
@@ -395,24 +504,82 @@
             </div>
             <div class="form-group">
                 <label>Description</label>
-                <textarea id="workflow-desc" placeholder="Turns off all lights at midnight..."></textarea>
+                <textarea id="workflow-desc" rows="3" placeholder="Turns off all lights at midnight..."></textarea>
             </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;">
                 <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
                 <button class="btn-primary" onclick="management.createWorkflow()">Create</button>
             </div>
         </div>
 
         <!-- Edit Workflow Modal -->
-        <div id="edit-workflow-modal" class="card modal-content" style="display: none; width: 800px; max-height: 90vh; overflow-y: auto;">
+        <div id="edit-workflow-modal" class="modal-content" style="display: none; width: 750px;">
             <h2 id="edit-workflow-title">Edit Workflow</h2>
             <div class="form-group">
                 <label>Definition (JSON)</label>
-                <textarea id="workflow-json" style="height: 400px; font-family: monospace; font-size: 0.8rem;"></textarea>
+                <textarea id="workflow-json" style="height: 380px; font-family: 'Fira Code', monospace; font-size: 0.8rem;"></textarea>
             </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;">
                 <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
                 <button class="btn-primary" onclick="management.saveWorkflow()">Save Definition</button>
+            </div>
+        </div>
+
+        <!-- Run Workflow Modal -->
+        <div id="run-workflow-modal" class="modal-content" style="display: none;">
+            <h2 id="run-workflow-title">Run Workflow</h2>
+            <div class="form-group">
+                <label>Choose Manual Trigger Node</label>
+                <select id="run-trigger-node-id"></select>
+            </div>
+            <div class="form-group">
+                <label>Input Payload (JSON)</label>
+                <textarea id="run-payload" rows="5" style="font-family: 'Fira Code', monospace; font-size: 0.8rem;"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;">
+                <button class="btn-secondary" onclick="ui.hideModal()">Cancel</button>
+                <button class="btn-accent" onclick="management.triggerWorkflowRun()">⚡ Start Run</button>
+            </div>
+        </div>
+
+        <!-- Runs List Modal -->
+        <div id="runs-list-modal" class="modal-content" style="display: none; width: 850px;">
+            <h2 id="runs-list-title">Workflow Runs</h2>
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Run Ref ID</th>
+                            <th>Status</th>
+                            <th>Correlation Key</th>
+                            <th>Started</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runs-table-body">
+                        <!-- Runs injected here -->
+                    </tbody>
+                </table>
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-top: 24px;">
+                <button class="btn-secondary" onclick="ui.hideModal()">Close</button>
+            </div>
+        </div>
+
+        <!-- Signal Run Modal -->
+        <div id="signal-run-modal" class="modal-content" style="display: none;">
+            <h2 id="signal-run-title">Deliver Signal</h2>
+            <div class="form-group">
+                <label>Signal Name</label>
+                <input type="text" id="signal-name" placeholder="e.g. approve">
+            </div>
+            <div class="form-group">
+                <label>Payload (JSON)</label>
+                <textarea id="signal-payload" rows="4" style="font-family: 'Fira Code', monospace; font-size: 0.8rem;"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;">
+                <button class="btn-secondary" onclick="ui.hideModal('runs-list-modal')">Back</button>
+                <button class="btn-accent" onclick="management.sendSignal()">Send Signal</button>
             </div>
         </div>
     </div>
@@ -435,7 +602,16 @@
             policies: [],
             workflows: [],
             clients: [],
-            activeSimulators: []
+            activeSimulators: [],
+            
+            // Workflow Execution & Signal State
+            editingWorkflow: null,
+            runningWorkflowRefId: null,
+            runningWorkflowName: null,
+            runningWorkflowTriggers: [],
+            viewingRunsWorkflowRefId: null,
+            viewingRunsWorkflowName: null,
+            signalingRunRefId: null
         };
 
         // --- Auth Module ---
@@ -609,13 +785,33 @@
                 const desc = document.getElementById('workflow-desc').value;
 
                 try {
+                    const refId = crypto.randomUUID();
+                    const defaultDefinition = {
+                        workflowRefId: refId,
+                        version: 1,
+                        name: name,
+                        description: desc || null,
+                        isEnabled: true,
+                        nodes: [],
+                        edges: [],
+                        sharedVariableSchema: [],
+                        createdAt: new Date().toISOString()
+                    };
+
+                    const body = {
+                        refId: refId,
+                        name: name,
+                        description: desc || null,
+                        definition: defaultDefinition
+                    };
+
                     const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows`, {
                         method: 'POST',
                         headers: { 
                             'Authorization': `Bearer ${state.token}`,
                             'Content-Type': 'application/json' 
                         },
-                        body: JSON.stringify({ name, description: desc })
+                        body: JSON.stringify(body)
                     });
 
                     if (!resp.ok) throw new Error('Failed to create workflow');
@@ -638,7 +834,7 @@
                     state.editingWorkflow = wf;
                     
                     document.getElementById('edit-workflow-title').innerText = `Editing: ${wf.name}`;
-                    document.getElementById('workflow-json').value = JSON.stringify(wf, null, 2);
+                    document.getElementById('workflow-json').value = JSON.stringify(wf.definition || wf, null, 2);
                     ui.showModal('edit-workflow-modal');
                 } catch (err) {
                     ui.notify(err.message, 'error');
@@ -649,24 +845,241 @@
                 const json = document.getElementById('workflow-json').value;
                 try {
                     const data = JSON.parse(json);
-                    const refId = state.editingWorkflow.workflowRefId;
+                    const refId = state.editingWorkflow.refId || state.editingWorkflow.workflowRefId;
 
-                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${refId}`, {
-                        method: 'PUT',
+                    const body = {
+                        refId: refId,
+                        name: data.name || state.editingWorkflow.name,
+                        description: data.description !== undefined ? data.description : state.editingWorkflow.description,
+                        definition: data.nodes ? data : (data.definition || data)
+                    };
+
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows`, {
+                        method: 'POST',
                         headers: { 
                             'Authorization': `Bearer ${state.token}`,
                             'Content-Type': 'application/json' 
                         },
-                        body: JSON.stringify(data)
+                        body: JSON.stringify(body)
                     });
 
-                    if (!resp.ok) throw new Error('Update failed');
+                    if (!resp.ok) throw new Error('Publish/Update failed');
                     
-                    ui.notify('Workflow saved');
+                    ui.notify('Workflow saved (published new version)');
                     ui.hideModal();
                     this.fetchAll();
                 } catch (err) {
-                    ui.notify('Invalid JSON or update error', 'error');
+                    ui.notify(err.message || 'Invalid JSON or update error', 'error');
+                }
+            },
+
+            async deprecateWorkflow(refId) {
+                if (!confirm("Are you sure you want to deprecate this workflow definition?")) return;
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${refId}/deprecate`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${state.token}` }
+                    });
+                    if (!resp.ok) throw new Error('Failed to deprecate workflow');
+                    ui.notify('Workflow deprecated successfully');
+                    this.fetchAll();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async openRunWorkflowModal(refId, name) {
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${refId}`, {
+                        headers: { 'Authorization': `Bearer ${state.token}` }
+                    });
+                    if (!resp.ok) throw new Error('Failed to fetch workflow definition');
+                    const wf = await resp.json();
+                    
+                    const definition = wf.definition || wf;
+                    const manualTriggers = (definition.nodes || []).filter(n => n.kind === 'trigger:manual');
+                    
+                    if (manualTriggers.length === 0) {
+                        ui.notify('This workflow does not have any manual trigger nodes.', 'error');
+                        return;
+                    }
+                    
+                    state.runningWorkflowRefId = refId;
+                    state.runningWorkflowName = name;
+                    state.runningWorkflowTriggers = manualTriggers;
+                    
+                    const triggerSelect = document.getElementById('run-trigger-node-id');
+                    triggerSelect.innerHTML = '';
+                    manualTriggers.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.nodeId;
+                        opt.innerText = `${t.name || 'Manual Trigger'} (${t.nodeId})`;
+                        triggerSelect.appendChild(opt);
+                    });
+                    
+                    document.getElementById('run-workflow-title').innerText = `Run Workflow: ${name}`;
+                    document.getElementById('run-payload').value = '{\n  \n}';
+                    ui.showModal('run-workflow-modal');
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async triggerWorkflowRun() {
+                const triggerNodeId = document.getElementById('run-trigger-node-id').value;
+                const payloadStr = document.getElementById('run-payload').value.trim();
+                let payload = null;
+                
+                if (payloadStr) {
+                    try {
+                        payload = JSON.parse(payloadStr);
+                    } catch (e) {
+                        ui.notify('Invalid JSON in Payload input', 'error');
+                        return;
+                    }
+                }
+
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${state.runningWorkflowRefId}/runs`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            triggerNodeId: triggerNodeId,
+                            payload: payload
+                        })
+                    });
+
+                    if (!resp.ok) throw new Error('Failed to trigger run');
+                    const run = await resp.json();
+                    ui.notify(`Run started successfully! ID: ${run.runRefId}`);
+                    ui.hideModal();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            async openRunsListModal(refId, name) {
+                state.viewingRunsWorkflowRefId = refId;
+                state.viewingRunsWorkflowName = name;
+                document.getElementById('runs-list-title').innerText = `Runs - ${name}`;
+                ui.showModal('runs-list-modal');
+                await this.refreshRunsList();
+            },
+
+            async refreshRunsList() {
+                if (!state.viewingRunsWorkflowRefId) return;
+                const tbody = document.getElementById('runs-table-body');
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading runs...</td></tr>';
+                
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/workflows/${state.viewingRunsWorkflowRefId}/runs`, {
+                        headers: { 'Authorization': `Bearer ${state.token}` }
+                    });
+                    if (!resp.ok) throw new Error('Failed to load runs');
+                    const data = await resp.json();
+                    
+                    tbody.innerHTML = '';
+                    const runs = data.runs || [];
+                    
+                    if (runs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No runs found for this workflow.</td></tr>';
+                        return;
+                    }
+                    
+                    runs.forEach(run => {
+                        const tr = document.createElement('tr');
+                        
+                        let badgeClass = 'badge-info';
+                        if (run.status === 'Completed') badgeClass = 'badge-success';
+                        if (run.status === 'Failed' || run.status === 'Faulted') badgeClass = 'badge-danger';
+                        if (run.status === 'Canceled') badgeClass = 'badge-warning';
+                        
+                        const isCancelable = ['Running', 'Scheduled', 'Pending'].includes(run.status);
+                        const isSignalable = ['Running'].includes(run.status);
+                        
+                        tr.innerHTML = `
+                            <td style="font-family: monospace; font-size: 0.75rem;">${run.refId}</td>
+                            <td><span class="badge ${badgeClass}">${run.status}</span></td>
+                            <td style="font-size: 0.8rem;">${run.correlationKey || '-'}</td>
+                            <td style="font-size: 0.8rem;">${new Date(run.startedAt).toLocaleString()}</td>
+                            <td>
+                                <button class="btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;" 
+                                    onclick="management.openSignalModal('${run.refId}')" ${isSignalable ? '' : 'disabled'}>✉️ Signal</button>
+                                <button class="btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" 
+                                    onclick="management.cancelRun('${run.refId}')" ${isCancelable ? '' : 'disabled'}>🚫 Cancel</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } catch (err) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="empty-state" style="color:var(--error);">${err.message}</td></tr>`;
+                }
+            },
+
+            async cancelRun(runRefId) {
+                if (!confirm("Are you sure you want to cancel this workflow run?")) return;
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/runs/${runRefId}/cancel`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ reason: "Canceled by administrator" })
+                    });
+                    if (!resp.ok) throw new Error('Failed to cancel run');
+                    ui.notify('Workflow run canceled');
+                    await this.refreshRunsList();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
+                }
+            },
+
+            openSignalModal(runRefId) {
+                state.signalingRunRefId = runRefId;
+                document.getElementById('signal-name').value = '';
+                document.getElementById('signal-payload').value = '{\n  \n}';
+                ui.showModal('signal-run-modal');
+            },
+
+            async sendSignal() {
+                const name = document.getElementById('signal-name').value.trim();
+                const payloadStr = document.getElementById('signal-payload').value.trim();
+                if (!name) return ui.notify('Signal Name is required', 'error');
+                
+                let payload = {};
+                if (payloadStr) {
+                    try {
+                        payload = JSON.parse(payloadStr);
+                    } catch (e) {
+                        return ui.notify('Invalid Payload JSON', 'error');
+                    }
+                }
+
+                try {
+                    const resp = await fetch(`${CONFIG.mgmtUrl}/api/workspaces/${state.currentWorkspace.refId}/runs/${state.signalingRunRefId}/signals/${name}`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${state.token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            signalName: name,
+                            payload: payload
+                        })
+                    });
+
+                    if (!resp.ok) throw new Error('Failed to deliver signal');
+                    ui.notify('Signal delivered successfully');
+                    
+                    // Return to runs list modal
+                    ui.showModal('runs-list-modal');
+                    await this.refreshRunsList();
+                } catch (err) {
+                    ui.notify(err.message, 'error');
                 }
             }
         };
@@ -729,8 +1142,8 @@
                         secret,
                         ws,
                         logs: [],
-                        currentType: 'status',
-                        currentPayload: '{ "active": true }'
+                        currentType: 'telemetry',
+                        currentPayload: '{\n  "temperature": 24.5,\n  "humidity": 48\n}'
                     };
 
                     ws.onopen = () => {
@@ -768,12 +1181,12 @@
 
             sendTelemetry(index) {
                 const sim = state.activeSimulators[index];
-                const type = document.getElementById(`tele-type-${index}`).value;
+                const type = document.getElementById(`tele-type-${index}`).value || 'telemetry';
                 const payloadStr = document.getElementById(`tele-payload-${index}`).value;
                 
                 try {
                     const payload = JSON.parse(payloadStr);
-                    const msg = { type: 'telemetry', payload: { subType: type, data: payload } };
+                    const msg = { type: type, payload: payload };
                     sim.ws.send(JSON.stringify(msg));
                     this.log(sim, `SENT: ${JSON.stringify(msg)}`, 'sent');
                 } catch (e) {
@@ -793,7 +1206,7 @@
         // --- UI Module ---
         const ui = {
             init() {
-                // Navigation
+                // Navigation tabs trigger
                 document.querySelectorAll('.nav-item').forEach(item => {
                     item.onclick = () => {
                         document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -840,19 +1253,23 @@
                 list.innerHTML = '';
                 select.innerHTML = '<option value="">-- Choose Policy --</option>';
 
+                if (state.policies.length === 0) {
+                    list.innerHTML = '<div class="card" style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">No policies found.</div>';
+                    return;
+                }
+
                 state.policies.forEach(p => {
                     const card = document.createElement('div');
                     card.className = 'card';
                     card.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                             <h3 style="margin: 0;">${p.name}</h3>
                             <span class="badge ${p.autoApproval ? 'badge-success' : 'badge-warning'}">${p.autoApproval ? 'Auto' : 'Manual'}</span>
                         </div>
-                        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 15px;">
-                            <div>PIN: <strong style="color: var(--primary); letter-spacing: 2px;">${p.pin}</strong></div>
+                        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 15px; display:flex; flex-direction:column; gap:6px;">
+                            <div>PIN: <strong style="color: var(--primary); letter-spacing: 1.5px; font-family:'Fira Code',monospace;">${p.pin}</strong></div>
                             <div>Max Clients: ${p.maxClients || 'Unlimited'}</div>
                         </div>
-                        <button class="btn-secondary" style="width: 100%; font-size: 0.8rem;">View Details</button>
                     `;
                     list.appendChild(card);
 
@@ -867,16 +1284,38 @@
                 const list = document.getElementById('workflows-list');
                 list.innerHTML = '';
 
+                if (state.workflows.length === 0) {
+                    list.innerHTML = '<div class="card" style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">No workflows found.</div>';
+                    return;
+                }
+
                 state.workflows.forEach(w => {
                     const card = document.createElement('div');
                     card.className = 'card';
+                    card.style.display = 'flex';
+                    card.style.flexDirection = 'column';
+                    
+                    let badgeClass = 'badge-info';
+                    if (w.status === 'Active') badgeClass = 'badge-success';
+                    if (w.status === 'Deprecated') badgeClass = 'badge-danger';
+                    
+                    const isDeprecated = w.status === 'Deprecated';
+
                     card.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                             <h3 style="margin: 0;">${w.name}</h3>
-                            <span class="badge ${w.isEnabled ? 'badge-success' : 'badge-info'}">${w.isEnabled ? 'Active' : 'Draft'}</span>
+                            <span class="badge ${badgeClass}">v${w.version} - ${w.status}</span>
                         </div>
-                        <p style="font-size: 0.875rem; color: var(--text-dim); margin-bottom: 20px;">${w.description || 'No description'}</p>
-                        <button class="btn-accent" style="width: 100%;" onclick="management.openWorkflowEditor('${w.workflowRefId}')">Edit Definition</button>
+                        <p style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 20px; flex:1; min-height: 38px;">${w.description || 'No description'}</p>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                            <button class="btn-accent" style="padding: 7px;" onclick="management.openRunWorkflowModal('${w.refId}', '${w.name}')" ${isDeprecated ? 'disabled' : ''}>⚡ Run</button>
+                            <button class="btn-secondary" style="padding: 7px;" onclick="management.openRunsListModal('${w.refId}', '${w.name}')">📋 Runs</button>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button class="btn-secondary" style="padding: 7px;" onclick="management.openWorkflowEditor('${w.refId}')" ${isDeprecated ? 'disabled' : ''}>📝 Edit</button>
+                            <button class="btn-secondary" style="padding: 7px; color: var(--error); border-color: rgba(244,63,94,0.2);" onclick="management.deprecateWorkflow('${w.refId}')" ${isDeprecated ? 'disabled' : ''}>🗑️ Deprecate</button>
+                        </div>
                     `;
                     list.appendChild(card);
                 });
@@ -886,18 +1325,23 @@
                 const tbody = document.getElementById('clients-table-body');
                 tbody.innerHTML = '';
 
+                if (state.clients.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No clients found.</td></tr>';
+                    return;
+                }
+
                 state.clients.forEach(c => {
                     const row = document.createElement('tr');
-                    const statusClass = c.status === 1 ? 'badge-success' : (c.status === 0 ? 'badge-warning' : '');
+                    const statusClass = c.status === 1 ? 'badge-success' : (c.status === 0 ? 'badge-warning' : 'badge-danger');
                     const statusText = ['Pending', 'Registered', 'Revoked', 'Rejected'][c.status];
 
                     row.innerHTML = `
-                        <td style="font-family: monospace; font-size: 0.75rem;">${c.clientRefId}</td>
+                        <td style="font-family: 'Fira Code', monospace; font-size: 0.75rem; color: var(--primary);">${c.clientRefId}</td>
                         <td style="font-weight: 600;">${c.name}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
-                        <td style="font-size: 0.75rem; color: var(--text-dim);">${c.policyRefId}</td>
-                        <td style="font-size: 0.75rem;">${new Date(c.createdAt).toLocaleString()}</td>
-                        <td><button class="btn-secondary" style="padding: 5px 10px; font-size: 0.7rem;">Manage</button></td>
+                        <td style="font-family: 'Fira Code', monospace; font-size: 0.75rem; color: var(--text-dim);">${c.policyRefId}</td>
+                        <td style="font-size: 0.8rem; color: var(--text-dim);">${new Date(c.createdAt).toLocaleString()}</td>
+                        <td><button class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">Manage</button></td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -907,37 +1351,45 @@
                 const list = document.getElementById('simulated-clients-list');
                 list.innerHTML = '';
 
+                if (state.activeSimulators.length === 0) {
+                    list.innerHTML = '<div class="empty-state" style="border: 1px dashed var(--border); border-radius:12px; margin-top:20px;">No active virtual simulators connected. Add one above!</div>';
+                    return;
+                }
+
                 state.activeSimulators.forEach((sim, idx) => {
                     const card = document.createElement('div');
                     card.className = 'card';
                     card.style.borderColor = sim.status === 'connected' ? 'var(--secondary)' : 'var(--error)';
                     
                     card.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 16px; align-items: center;">
                             <div>
-                                <h3 style="margin:0;">${sim.name}</h3>
-                                <small style="font-family: monospace; color: var(--text-dim);">${sim.clientRefId}</small>
+                                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                                    ${sim.name} 
+                                    <span class="badge ${sim.status==='connected'?'badge-success':'badge-danger'}">${sim.status}</span>
+                                </h3>
+                                <small style="font-family: 'Fira Code', monospace; color: var(--text-dim); font-size:0.7rem;">${sim.clientRefId}</small>
                             </div>
-                            <div style="display: flex; gap: 10px;">
-                                <button class="btn-secondary" onclick="simulator.connect('${sim.clientRefId}', '${sim.secret}', '${sim.name}')" ${sim.status==='connected'?'disabled':''}>Reconnect</button>
-                                <button class="btn-danger" onclick="simulator.remove(${idx})">Remove</button>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn-secondary" style="padding:6px 12px; font-size:0.75rem;" onclick="simulator.connect('${sim.clientRefId}', '${sim.secret}', '${sim.name}')" ${sim.status==='connected'?'disabled':''}>Reconnect</button>
+                                <button class="btn-danger" style="padding:6px 12px; font-size:0.75rem;" onclick="simulator.remove(${idx})">Remove</button>
                             </div>
                         </div>
-                        <div class="grid" style="grid-template-columns: 1fr 1fr;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                             <div>
-                                <label>Send Telemetry</label>
-                                <div class="form-group">
-                                    <input type="text" id="tele-type-${idx}" value="${sim.currentType}" oninput="ui.updateSimInput(${idx}, 'currentType', this.value)" placeholder="Type">
+                                <label>Send Message</label>
+                                <div class="form-group" style="margin-bottom:8px;">
+                                    <input type="text" id="tele-type-${idx}" value="${sim.currentType}" oninput="ui.updateSimInput(${idx}, 'currentType', this.value)" placeholder="Message Type (e.g. telemetry)">
                                 </div>
-                                <div class="form-group">
-                                    <textarea id="tele-payload-${idx}" oninput="ui.updateSimInput(${idx}, 'currentPayload', this.value)" placeholder="JSON Payload">${sim.currentPayload}</textarea>
+                                <div class="form-group" style="margin-bottom:12px;">
+                                    <textarea id="tele-payload-${idx}" rows="4" style="font-family: 'Fira Code', monospace; font-size:0.75rem;" oninput="ui.updateSimInput(${idx}, 'currentPayload', this.value)" placeholder="JSON Payload">${sim.currentPayload}</textarea>
                                 </div>
-                                <button class="btn-secondary" style="width: 100%;" onclick="simulator.sendTelemetry(${idx})" ${sim.status!=='connected'?'disabled':''}>Send Message</button>
+                                <button class="btn-accent" style="width: 100%;" onclick="simulator.sendTelemetry(${idx})" ${sim.status!=='connected'?'disabled':''}>📨 Send Message</button>
                             </div>
                             <div>
-                                <label>Client Logs</label>
+                                <label>Client Console Logs</label>
                                 <div class="client-log" id="log-${idx}">
-                                    ${sim.logs.map(l => `<div style="margin-bottom:2px; color: ${l.type === 'sent' ? '#60a5fa' : (l.type === 'recv' ? '#34d399' : 'white')}">
+                                    ${sim.logs.map(l => `<div style="margin-bottom:4px; line-height: 1.3; color: ${l.type === 'sent' ? '#60a5fa' : (l.type === 'recv' ? '#34d399' : (l.type === 'error' ? '#f43f5e' : 'white'))}">
                                         [${l.time}] ${l.msg}
                                     </div>`).join('')}
                                 </div>
@@ -947,7 +1399,7 @@
                     list.appendChild(card);
                     
                     const logDiv = document.getElementById(`log-${idx}`);
-                    logDiv.scrollTop = logDiv.scrollHeight;
+                    if (logDiv) logDiv.scrollTop = logDiv.scrollHeight;
                 });
             },
 
@@ -965,8 +1417,13 @@
                 document.getElementById(id).style.display = 'block';
             },
 
-            hideModal() {
-                document.getElementById('modal-container').style.display = 'none';
+            hideModal(fallbackId = null) {
+                if (fallbackId) {
+                    document.querySelectorAll('.modal-content').forEach(m => m.style.display = 'none');
+                    document.getElementById(fallbackId).style.display = 'block';
+                } else {
+                    document.getElementById('modal-container').style.display = 'none';
+                }
             },
 
             notify(msg, type = 'info') {
