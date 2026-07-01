@@ -33,7 +33,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         string idempotencyKey = $"inbound-event:{evt.InboundEventId}";
         Guid claimToken = Guid.NewGuid();
         
-        /* [RJ] For my information. (yes this is AI explanation. but this is correct)
+        /* [RJ]: For my information. (yes this is AI explanation. but this is correct)
         Deciphering Inbound Idempotency
           
           I've realized the random GUID is a lock or claim token for inbound events, used before knowing the target branch(es). The `IdempotencyKeys` table's `branchRefId` column, originally for outbound executions, is repurposed here. Since inbound events may

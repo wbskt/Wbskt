@@ -94,6 +94,7 @@ internal sealed class SocketClient : IAsyncDisposable
 
                 switch (type)
                 {
+                    // [RJ]: TODO: this ping-pong system does not work. need to revise this.
                     case "sys.ping":
                         var ts = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime();
                         await SendAsync(new SocketMessage("sys.pong", new { originalTimestamp = ts }));

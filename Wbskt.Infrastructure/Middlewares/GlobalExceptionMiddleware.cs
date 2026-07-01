@@ -10,7 +10,7 @@ using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Infrastructure.Middlewares;
 
-public class GlobalExceptionMiddleware
+public partial class GlobalExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
@@ -37,7 +37,7 @@ public class GlobalExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError("An unhandled exception occurred: {Message}", ex.Message);
-            _logger.LogDebug(ex, "An unhandled exception occurred: {Message}", ex.Message);
+            LogAnUnhandledExceptionOccurredMessage(LogLevel.Trace, ex.Message, ex);
             await HandleExceptionAsync(context, ex, eventBus);
         }
     }
@@ -80,4 +80,7 @@ public class GlobalExceptionMiddleware
 
         await context.Response.WriteAsync(result);
     }
+
+    [LoggerMessage("An unhandled exception occurred: {Message}")]
+    partial void LogAnUnhandledExceptionOccurredMessage(LogLevel logLevel, string message, Exception exception);
 }
