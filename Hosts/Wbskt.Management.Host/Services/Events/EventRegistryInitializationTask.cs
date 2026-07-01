@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Management.Host.Providers;
@@ -25,6 +26,24 @@ public sealed class EventRegistryInitializationTask : IStartupTask
     {
         _logger.LogInformation("Initializing Event Registry from database...");
 
+        // Ensure all Wbskt assemblies in the application folder are loaded into memory 
+        // to bypass lazy loading when registering startup tasks.
+        var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        if (Directory.Exists(baseDirectory))
+        {
+            foreach (var file in Directory.GetFiles(baseDirectory, "Wbskt.*.dll"))
+            {
+                try
+                {
+                    Assembly.LoadFrom(file);
+                }
+                catch
+                {
+                    // Suppress dll load warnings/exceptions
+                }
+            }
+        }
+
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.FullName?.StartsWith("Wbskt") == true);
 
@@ -33,23 +52,37 @@ public sealed class EventRegistryInitializationTask : IStartupTask
             try { return a.GetTypes(); }
             catch { return Type.EmptyTypes; }
         })
-        .Where(t => t.IsClass && !t.IsAbstract && typeof(BaseEvent).IsAssignableFrom(t));
+        .Where(t => t.IsClass && !t.IsAbstract && typeof(BaseEvent).IsAssignableFrom(t))
+        .ToList();
 
-        foreach (var type in eventTypes)
+        const int maxRetries = 15;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            var eventName = type.Name;
-            var attribute = type.GetCustomAttribute<EventCriticalityAttribute>();
-            var criticality = attribute?.Criticality ?? EventCriticality.Info;
-
             try
             {
-                var id = await _eventProvider.GetOrInsertEventIdAsync(eventName, (short)criticality, cancellationToken);
-                _registry.RegisterEvent(eventName, id);
-                _logger.LogDebug("Registered event {EventName} with ID {EventId}", eventName, id);
+                foreach (var type in eventTypes)
+                {
+                    var eventName = type.Name;
+                    var attribute = type.GetCustomAttribute<EventCriticalityAttribute>();
+                    var criticality = attribute?.Criticality ?? EventCriticality.Info;
+
+                    var id = await _eventProvider.GetOrInsertEventIdAsync(eventName, (short)criticality, cancellationToken);
+                    _registry.RegisterEvent(eventName, id);
+                    _logger.LogDebug("Registered event {EventName} with ID {EventId}", eventName, id);
+                }
+                
+                _logger.LogInformation("Event Registry successfully initialized.");
+                return;
+            }
+            catch (Exception ex) when (attempt < maxRetries)
+            {
+                _logger.LogWarning(ex, "Failed to initialize event registry (attempt {Attempt}/{Max}). Retrying in 3 seconds...", attempt, maxRetries);
+                await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to register event {EventName} during startup.", eventName);
+                _logger.LogError(ex, "Failed to initialize event registry after {Max} attempts.", maxRetries);
+                throw;
             }
         }
     }

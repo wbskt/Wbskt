@@ -86,7 +86,7 @@ public sealed class TriggerRegistrationServiceTests
 
     private sealed class RecordingWorkflowDefinitionProvider(WorkflowDefinition definition) : IWorkflowDefinitionProvider
     {
-        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
+        public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
         public WorkflowDefinitionRow? Row { get; set; }
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();

@@ -135,8 +135,12 @@ internal sealed class BookmarkResumer : IBookmarkResumer
      */
     public async Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct)
     {
-        BookmarkRow? bookmark = await _bookmarkProvider.GetByIdAsync(bookmarkId, ct);
-        if (bookmark is null)
+        BookmarkRow bookmark;
+        try
+        {
+            bookmark = await _bookmarkProvider.GetByIdAsync(bookmarkId, ct);
+        }
+        catch (KeyNotFoundException)
         {
             return;
         }

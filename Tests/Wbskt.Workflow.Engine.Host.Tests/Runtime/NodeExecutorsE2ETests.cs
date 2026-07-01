@@ -211,7 +211,7 @@ public sealed class NodeExecutorsE2ETests
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
         Task<BookmarkRow> IBookmarkProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        Task<BookmarkRow?> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
+        Task<BookmarkRow> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();

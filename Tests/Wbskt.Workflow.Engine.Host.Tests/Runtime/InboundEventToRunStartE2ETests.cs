@@ -171,7 +171,7 @@ public sealed class InboundEventToRunStartE2ETests
         private int _nextRunId = 100;
         private int _nextBranchId = 1000;
         private readonly Dictionary<long, int> _activeBranches = [];
-        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
+        public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
 
         public InMemoryRuntime(WorkflowDefinition definition)
         {
@@ -303,7 +303,7 @@ public sealed class InboundEventToRunStartE2ETests
         }
 
         Task<BookmarkRow> IBookmarkProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        Task<BookmarkRow?> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult<BookmarkRow?>(Bookmarks.SingleOrDefault(bookmark => bookmark.Id == bookmarkId));
+        Task<BookmarkRow> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(Bookmarks.Single(bookmark => bookmark.Id == bookmarkId));
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.MatchKey == matchKey).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => matchKeys.Contains(bookmark.MatchKey)).ToArray());
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.RunId == runId).ToArray());

@@ -10,13 +10,7 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 {
-    private readonly string _connectionString;
-
-    public BranchProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public BranchProvider(IConfiguration configuration) : base(configuration) { }
 
     public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
     {
@@ -25,163 +19,87 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 
     public async Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_Upsert", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", row.RefId);
-        command.Parameters.AddWithValue("@RunId", row.RunId);
-        command.Parameters.AddWithValue("@ParentBranchId", (object?)row.ParentBranchId ?? DBNull.Value);
-        command.Parameters.AddWithValue("@ForkCohortId", (object?)row.ForkCohortId ?? DBNull.Value);
-        command.Parameters.AddWithValue("@NodeId", row.NodeId);
-        command.Parameters.AddWithValue("@Status", row.Status);
-        command.Parameters.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
-        command.Parameters.AddWithValue("@LocalJson", row.LocalJson);
-        command.Parameters.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
-        command.Parameters.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("Branch_Upsert did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.Branch_Upsert",
+            p =>
+            {
+                p.AddWithValue("@RefId", row.RefId);
+                p.AddWithValue("@RunId", row.RunId);
+                p.AddWithValue("@ParentBranchId", (object?)row.ParentBranchId ?? DBNull.Value);
+                p.AddWithValue("@ForkCohortId", (object?)row.ForkCohortId ?? DBNull.Value);
+                p.AddWithValue("@NodeId", row.NodeId);
+                p.AddWithValue("@Status", row.Status);
+                p.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
+                p.AddWithValue("@LocalJson", row.LocalJson);
+                p.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
+                p.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
+            },
+            Map,
+            new InvalidOperationException("Branch_Upsert did not return a row."),
+            ct
+        );
     }
 
     public async Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(
-            """
-            SELECT
-                Id,
-                RefId,
-                RunId,
-                ParentBranchId,
-                ForkCohortId,
-                NodeId,
-                Status,
-                PendingTakePort,
-                LocalJson,
-                LastOutputJson,
-                CompensationStackJson,
-                CreatedAt,
-                UpdatedAt,
-                RowVersion
-            FROM dbo.Branches
-            WHERE Id = @Id;
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddWithValue("@Id", checked((int)branchId));
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Branch with Id={branchId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Branch_GetById",
+            p => p.AddWithValue("@Id", checked((int)branchId)),
+            Map,
+            new KeyNotFoundException($"Branch with Id={branchId} not found."),
+            ct
+        );
     }
 
     public async Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_GetBy_RefId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Branch with RefId={refId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Branch_GetBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            Map,
+            new KeyNotFoundException($"Branch with RefId={refId} not found."),
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_GetAllBy_RunId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BranchRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Branch_GetAllBy_RunId",
+            p => p.AddWithValue("@RunId", runId),
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_GetActiveBy_RunId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BranchRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Branch_GetActiveBy_RunId",
+            p => p.AddWithValue("@RunId", runId),
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_GetAllActive", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BranchRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Branch_GetAllActive",
+            null,
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Branch_GetAllActive", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BranchRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Branch_GetRunning",
+            null,
+            Map,
+            ct
+        );
     }
 
     public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
@@ -201,71 +119,29 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 
     private async Task<BranchRow> UpdateBranchAsync(long branchId, Guid? currentNodeId, string status, string? localJson, string? lastOutputJson, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(
-            """
-            UPDATE dbo.Branches
-            SET
-                NodeId = COALESCE(@NodeId, NodeId),
-                Status = @Status,
-                LocalJson = COALESCE(@LocalJson, LocalJson),
-                LastOutputJson = @LastOutputJson,
-                PendingTakePort = NULL,
-                UpdatedAt = SYSUTCDATETIME()
-            WHERE Id = @Id;
-
-            SELECT
-                Id,
-                RefId,
-                RunId,
-                ParentBranchId,
-                ForkCohortId,
-                NodeId,
-                Status,
-                PendingTakePort,
-                LocalJson,
-                LastOutputJson,
-                CompensationStackJson,
-                CreatedAt,
-                UpdatedAt,
-                RowVersion
-            FROM dbo.Branches
-            WHERE Id = @Id;
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddWithValue("@Id", checked((int)branchId));
-        command.Parameters.AddWithValue("@NodeId", (object?)currentNodeId ?? DBNull.Value);
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@LocalJson", (object?)localJson ?? DBNull.Value);
-        command.Parameters.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Branch with Id={branchId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Branch_Update",
+            p =>
+            {
+                p.AddWithValue("@Id", checked((int)branchId));
+                p.AddWithValue("@NodeId", (object?)currentNodeId ?? DBNull.Value);
+                p.AddWithValue("@Status", status);
+                p.AddWithValue("@LocalJson", (object?)localJson ?? DBNull.Value);
+                p.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
+            },
+            Map,
+            new KeyNotFoundException($"Branch with Id={branchId} not found."),
+            ct
+        );
     }
 
     public async Task<int> CancelWaitingBranchesAsync(int runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(
-            """
-            UPDATE dbo.Branches
-            SET Status = 'Cancelled', UpdatedAt = SYSUTCDATETIME()
-            WHERE RunId = @RunId AND Status IN ('Waiting', 'WaitingAtJoin');
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddWithValue("@RunId", runId);
-
-        await connection.OpenAsync(ct);
-        return await command.ExecuteNonQueryAsync(ct);
+        return await ExecuteNonQueryResultAsync(
+            "dbo.Branch_CancelWaiting",
+            p => p.AddWithValue("@RunId", runId),
+            ct
+        );
     }
 
     internal static BranchRow Map(DbDataReader reader)

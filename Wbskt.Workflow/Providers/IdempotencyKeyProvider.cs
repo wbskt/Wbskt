@@ -10,107 +10,78 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyProvider
 {
-    private readonly string _connectionString;
-
-    public IdempotencyKeyProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public IdempotencyKeyProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.IdempotencyKey_Upsert_Pending", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@KeyValue", keyValue);
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@BranchRefId", branchRefId);
-        command.Parameters.AddWithValue("@NodeId", nodeId);
-        command.Parameters.AddWithValue("@Attempt", attempt);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("IdempotencyKey_Upsert_Pending did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.IdempotencyKey_Upsert_Pending",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@BranchRefId", branchRefId);
+                p.AddWithValue("@NodeId", nodeId);
+                p.AddWithValue("@Attempt", attempt);
+            },
+            Map,
+            new InvalidOperationException("IdempotencyKey_Upsert_Pending did not return a row."),
+            ct
+        );
     }
 
     public async Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.IdempotencyKey_GetBy_Key", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@KeyValue", keyValue);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"IdempotencyKey with KeyValue={keyValue} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.IdempotencyKey_GetBy_Key",
+            p => p.AddWithValue("@KeyValue", keyValue),
+            Map,
+            new KeyNotFoundException($"IdempotencyKey with KeyValue={keyValue} not found."),
+            ct
+        );
     }
 
     public async Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.IdempotencyKey_MarkSucceeded", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@KeyValue", keyValue);
-        command.Parameters.AddWithValue("@ResultJson", resultJson);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("IdempotencyKey_MarkSucceeded did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.IdempotencyKey_MarkSucceeded",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@ResultJson", resultJson);
+            },
+            Map,
+            new InvalidOperationException("IdempotencyKey_MarkSucceeded did not return a row."),
+            ct
+        );
     }
 
     public async Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.IdempotencyKey_MarkFailed", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@KeyValue", keyValue);
-        command.Parameters.AddWithValue("@ErrorJson", errorJson);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("IdempotencyKey_MarkFailed did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.IdempotencyKey_MarkFailed",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@ErrorJson", errorJson);
+            },
+            Map,
+            new InvalidOperationException("IdempotencyKey_MarkFailed did not return a row."),
+            ct
+        );
     }
 
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.IdempotencyKey_DeleteExpired", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
-        command.Parameters.AddWithValue("@BatchSize", batchSize);
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.IdempotencyKey_DeleteExpired",
+            p =>
+            {
+                p.AddWithValue("@CutoffUtc", cutoffUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            ct
+        );
         return result is int count ? count : Convert.ToInt32(result ?? 0);
     }
 

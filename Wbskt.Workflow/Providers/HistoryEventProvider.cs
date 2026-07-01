@@ -10,20 +10,10 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvider
 {
-    private readonly string _connectionString;
-
-    public HistoryEventProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public HistoryEventProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task InsertBatchAsync(IReadOnlyCollection<HistoryEventRow> events, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.HistoryEvent_InsertBatch", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
         var eventsTable = new DataTable();
         eventsTable.Columns.Add("RunId", typeof(int));
         eventsTable.Columns.Add("BranchRefId", typeof(Guid));
@@ -46,47 +36,44 @@ internal sealed class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvi
             );
         }
 
-        var parameter = command.Parameters.AddWithValue("@Events", eventsTable);
-        parameter.SqlDbType = SqlDbType.Structured;
-        parameter.TypeName = "dbo.HistoryEventTableType";
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.HistoryEvent_InsertBatch",
+            p =>
+            {
+                var parameter = p.AddWithValue("@Events", eventsTable);
+                parameter.SqlDbType = SqlDbType.Structured;
+                parameter.TypeName = "dbo.HistoryEventTableType";
+            },
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.HistoryEvent_GetBy_RunId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@AfterEventId", afterEventId);
-        command.Parameters.AddWithValue("@PageSize", pageSize);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<HistoryEventRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.HistoryEvent_GetBy_RunId",
+            p =>
+            {
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@AfterEventId", afterEventId);
+                p.AddWithValue("@PageSize", pageSize);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.HistoryEvent_DeleteForRetiredRuns", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
-        command.Parameters.AddWithValue("@BatchSize", batchSize);
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.HistoryEvent_DeleteForRetiredRuns",
+            p =>
+            {
+                p.AddWithValue("@CutoffUtc", cutoffUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            ct
+        );
         return result is int count ? count : Convert.ToInt32(result ?? 0);
     }
 

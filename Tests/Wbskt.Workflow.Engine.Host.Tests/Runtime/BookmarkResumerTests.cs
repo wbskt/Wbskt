@@ -195,7 +195,14 @@ public sealed class BookmarkResumerTests
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(bookmark is not null && bookmark.Id == bookmarkId ? bookmark : null);
+        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct)
+        {
+            if (bookmark is not null && bookmark.Id == bookmarkId)
+            {
+                return Task.FromResult(bookmark);
+            }
+            return Task.FromException<BookmarkRow>(new KeyNotFoundException());
+        }
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct)
         {
             LastMatchKey = matchKey;

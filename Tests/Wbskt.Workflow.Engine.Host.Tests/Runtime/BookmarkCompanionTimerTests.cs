@@ -274,7 +274,7 @@ public sealed class BookmarkCompanionTimerTests
         }
 
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_bookmarks.Single(row => row.RefId == refId));
-        public Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(_bookmarks.SingleOrDefault(row => row.Id == bookmarkId));
+        public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(_bookmarks.Single(row => row.Id == bookmarkId));
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.MatchKey == matchKey).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => matchKeys.Contains(row.MatchKey)).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.RunId == runId).ToArray());

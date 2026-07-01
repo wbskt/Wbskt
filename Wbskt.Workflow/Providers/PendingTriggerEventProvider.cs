@@ -10,113 +10,105 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTriggerEventProvider
 {
-    private readonly string _connectionString;
-
-    public PendingTriggerEventProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public PendingTriggerEventProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.PendingTriggerEvent_Enqueue", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
-        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
-        command.Parameters.AddWithValue("@InboundEventJson", inboundEventJson);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("PendingTriggerEvent_Enqueue did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.PendingTriggerEvent_Enqueue",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@TriggerNodeId", triggerNodeId);
+                p.AddWithValue("@CorrelationKey", correlationKey);
+                p.AddWithValue("@InboundEventJson", inboundEventJson);
+            },
+            Map,
+            new InvalidOperationException("PendingTriggerEvent_Enqueue did not return a row."),
+            ct
+        );
     }
 
     public async Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.PendingTriggerEvent_DequeueNext", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
-        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
+        try
         {
-            return Map(reader);
+            return await ExecuteSingleAsync(
+                "dbo.PendingTriggerEvent_DequeueNext",
+                p =>
+                {
+                    p.AddWithValue("@WorkflowRefId", workflowRefId);
+                    p.AddWithValue("@TriggerNodeId", triggerNodeId);
+                    p.AddWithValue("@CorrelationKey", correlationKey);
+                },
+                Map,
+                null,
+                ct
+            );
         }
-
-        return null;
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     public async Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.PendingTriggerEvent_DequeueNextBy_WorkflowDefinitionId_Correlation", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
-        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
+        try
         {
-            return Map(reader);
+            return await ExecuteSingleAsync(
+                "dbo.PendingTriggerEvent_DequeueNextBy_WorkflowDefinitionId_Correlation",
+                p =>
+                {
+                    p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
+                    p.AddWithValue("@CorrelationKey", correlationKey);
+                },
+                Map,
+                null,
+                ct
+            );
         }
-
-        return null;
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     public async Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.PendingTriggerEvent_DeleteAllBy_RunKey", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
-        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.PendingTriggerEvent_DeleteAllBy_RunKey",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@TriggerNodeId", triggerNodeId);
+                p.AddWithValue("@CorrelationKey", correlationKey);
+            },
+            ct
+        );
     }
 
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.PendingTriggerEvent_DeleteExpired", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
-        command.Parameters.AddWithValue("@BatchSize", batchSize);
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.PendingTriggerEvent_DeleteExpired",
+            p =>
+            {
+                p.AddWithValue("@CutoffUtc", cutoffUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            ct
+        );
         return result is int count ? count : Convert.ToInt32(result ?? 0);
     }
 
     public async Task<long> CountAllAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.PendingTriggerEvent_CountAll", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.PendingTriggerEvent_CountAll",
+            null,
+            ct
+        );
         return result is long count ? count : Convert.ToInt64(result ?? 0L);
     }
 

@@ -3,6 +3,7 @@ using System.Data.Common;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 
@@ -10,158 +11,106 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDefinitionProvider
 {
-    private readonly string _connectionString;
-
-    public WorkflowDefinitionProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public WorkflowDefinitionProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_FindBy_RefId_Version", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-        command.Parameters.AddWithValue("@Version", version);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetInt32(0);
-        }
-
-        return null;
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.WorkflowDefinition_FindBy_RefId_Version",
+            p =>
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@Version", version);
+            },
+            ct
+        );
+        return result is int id ? id : (result == null ? null : Convert.ToInt32(result));
     }
 
     public async Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_GetBy_Id", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@Id", id);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"WorkflowDefinition with Id={id} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.WorkflowDefinition_GetBy_Id",
+            p => p.AddWithValue("@Id", id),
+            Map,
+            new KeyNotFoundException($"WorkflowDefinition with Id={id} not found."),
+            ct
+        );
     }
 
     public async Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_GetBy_RefId_Version", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-        command.Parameters.AddWithValue("@Version", version);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"WorkflowDefinition with RefId={refId} Version={version} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.WorkflowDefinition_GetBy_RefId_Version",
+            p =>
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@Version", version);
+            },
+            Map,
+            new KeyNotFoundException($"WorkflowDefinition with RefId={refId} Version={version} not found."),
+            ct
+        );
     }
 
     public async Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_GetLatestVersion_By_RefId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"WorkflowDefinition with RefId={refId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.WorkflowDefinition_GetLatestVersion_By_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            Map,
+            new KeyNotFoundException($"WorkflowDefinition with RefId={refId} not found."),
+            ct
+        );
     }
 
     public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_Publish", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", row.RefId);
-        command.Parameters.AddWithValue("@WorkspaceId", row.WorkspaceId);
-        command.Parameters.AddWithValue("@Name", row.Name);
-        command.Parameters.AddWithValue("@Description", (object?)row.Description ?? DBNull.Value);
-        command.Parameters.AddWithValue("@IsEnabled", row.IsEnabled);
-        command.Parameters.AddWithValue("@DefinitionJson", row.DefinitionJson);
-        command.Parameters.AddWithValue("@PublishedBy", row.PublishedBy);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("WorkflowDefinition_Publish did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.WorkflowDefinition_Publish",
+            p =>
+            {
+                p.AddWithValue("@RefId", row.RefId);
+                p.AddWithValue("@WorkspaceId", row.WorkspaceId);
+                p.AddWithValue("@Name", row.Name);
+                p.AddWithValue("@Description", (object?)row.Description ?? DBNull.Value);
+                p.AddWithValue("@IsEnabled", row.IsEnabled);
+                p.AddWithValue("@DefinitionJson", row.DefinitionJson);
+                p.AddWithValue("@PublishedBy", row.PublishedBy);
+            },
+            Map,
+            new InvalidOperationException("WorkflowDefinition_Publish did not return a row."),
+            ct
+        );
     }
 
-    public async Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct)
+    public async Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_GetAll_Summaries_By_WorkspaceId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
-        command.Parameters.AddWithValue("@Skip", skip);
-        command.Parameters.AddWithValue("@Take", take);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        int totalCount = 0;
-        if (await reader.ReadAsync(ct))
-        {
-            totalCount = reader.GetInt32(0);
-        }
-
-        await reader.NextResultAsync(ct);
-
-        var items = new List<WorkflowDefinitionRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            items.Add(Map(reader));
-        }
-
-        return (totalCount, items);
+        return await ExecutePagedCollectionAsync(
+            "dbo.WorkflowDefinition_GetAll_Summaries_By_WorkspaceId",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task DeprecateAsync(int id, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.WorkflowDefinition_UpdateIsEnabled", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@Id", id);
-        command.Parameters.AddWithValue("@IsEnabled", false);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.WorkflowDefinition_UpdateIsEnabled",
+            p =>
+            {
+                p.AddWithValue("@Id", id);
+                p.AddWithValue("@IsEnabled", false);
+            },
+            ct
+        );
     }
 
     internal static WorkflowDefinitionRow Map(DbDataReader reader)
@@ -180,5 +129,4 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
     }
-
 }

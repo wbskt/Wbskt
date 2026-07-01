@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
@@ -10,59 +11,38 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerRegistrationProvider
 {
-    private readonly string _connectionString;
-
-    public TriggerRegistrationProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public TriggerRegistrationProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<TriggerRegistrationRow> InsertAsync(TriggerRegistrationRow row, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.TriggerRegistration_Insert", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowDefinitionId", row.WorkflowDefinitionId);
-        command.Parameters.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
-        command.Parameters.AddWithValue("@WorkflowVersion", row.WorkflowVersion);
-        command.Parameters.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
-        command.Parameters.AddWithValue("@TriggerKind", row.TriggerKind);
-        command.Parameters.AddWithValue("@TriggerKey", row.TriggerKey);
-        command.Parameters.AddWithValue("@CorrelationExpression", (object?)row.CorrelationExpression ?? DBNull.Value);
-        command.Parameters.AddWithValue("@ConcurrencyPolicy", row.ConcurrencyPolicy);
-        command.Parameters.AddWithValue("@FilterExpression", (object?)row.FilterExpression ?? DBNull.Value);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("TriggerRegistration_Insert did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.TriggerRegistration_Insert",
+            p =>
+            {
+                p.AddWithValue("@WorkflowDefinitionId", row.WorkflowDefinitionId);
+                p.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
+                p.AddWithValue("@WorkflowVersion", row.WorkflowVersion);
+                p.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
+                p.AddWithValue("@TriggerKind", row.TriggerKind);
+                p.AddWithValue("@TriggerKey", row.TriggerKey);
+                p.AddWithValue("@CorrelationExpression", (object?)row.CorrelationExpression ?? DBNull.Value);
+                p.AddWithValue("@ConcurrencyPolicy", (object?)row.ConcurrencyPolicy ?? DBNull.Value);
+                p.AddWithValue("@FilterExpression", (object?)row.FilterExpression ?? DBNull.Value);
+            },
+            Map,
+            new InvalidOperationException("TriggerRegistration_Insert did not return a row."),
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetByTriggerKeyAsync(string triggerKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.TriggerRegistration_GetBy_TriggerKey", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@TriggerKey", triggerKey);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<TriggerRegistrationRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.TriggerRegistration_GetBy_TriggerKey",
+            p => p.AddWithValue("@TriggerKey", triggerKey),
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetActiveByChannelKeysAsync(string channelKind, IReadOnlyCollection<string> channelKeys, CancellationToken ct)
@@ -72,77 +52,37 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
             return Array.Empty<TriggerRegistrationRow>();
         }
 
-        await using var connection = new SqlConnection(_connectionString);
-        var parameters = channelKeys.Select((key, index) => new SqlParameter($"@Key{index}", key)).ToList();
-        var parameterNames = string.Join(", ", parameters.Select(p => p.ParameterName));
+        string jsonKeys = JsonSerializer.Serialize(channelKeys);
 
-        var kindParam = new SqlParameter("@TriggerKind", channelKind);
-        parameters.Add(kindParam);
-
-        await using var command = new SqlCommand(
-            $"""
-            SELECT
-                Id,
-                WorkflowDefinitionId,
-                WorkflowRefId,
-                WorkflowVersion,
-                TriggerNodeId,
-                TriggerKind,
-                TriggerKey,
-                CorrelationExpression,
-                ConcurrencyPolicy,
-                FilterExpression,
-                CreatedAt
-            FROM dbo.TriggerRegistrations
-            WHERE TriggerKind = @TriggerKind
-              AND TriggerKey IN ({parameterNames});
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddRange(parameters.ToArray());
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<TriggerRegistrationRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.TriggerRegistration_GetAllByKeys",
+            p =>
+            {
+                p.AddWithValue("@TriggerKind", channelKind);
+                p.AddWithValue("@KeysJson", jsonKeys);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<TriggerRegistrationRow>> GetAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.TriggerRegistration_GetAllBy_WorkflowDefinitionId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<TriggerRegistrationRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.TriggerRegistration_GetAllBy_WorkflowDefinitionId",
+            p => p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId),
+            Map,
+            ct
+        );
     }
 
     public async Task DeleteAllByWorkflowDefinitionIdAsync(int workflowDefinitionId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.TriggerRegistration_DeleteAllBy_WorkflowDefinitionId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.TriggerRegistration_DeleteAllBy_WorkflowDefinitionId",
+            p => p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId),
+            ct
+        );
     }
 
     internal static TriggerRegistrationRow Map(DbDataReader reader)
@@ -157,7 +97,7 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
             TriggerKind = reader.GetString(reader.GetOrdinal("TriggerKind")),
             TriggerKey = reader.GetString(reader.GetOrdinal("TriggerKey")),
             CorrelationExpression = reader.IsDBNull(reader.GetOrdinal("CorrelationExpression")) ? null : reader.GetString(reader.GetOrdinal("CorrelationExpression")),
-            ConcurrencyPolicy = reader.GetString(reader.GetOrdinal("ConcurrencyPolicy")),
+            ConcurrencyPolicy = reader.IsDBNull(reader.GetOrdinal("ConcurrencyPolicy")) ? null : reader.GetString(reader.GetOrdinal("ConcurrencyPolicy")),
             FilterExpression = reader.IsDBNull(reader.GetOrdinal("FilterExpression")) ? null : reader.GetString(reader.GetOrdinal("FilterExpression")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };

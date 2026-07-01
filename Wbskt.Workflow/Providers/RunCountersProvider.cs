@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
@@ -9,116 +10,82 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvider
 {
-    private readonly string _connectionString;
-
-    public RunCountersProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public RunCountersProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(
-            """
-            SELECT
-                RunId,
-                ActiveBranchCount,
-                CreditsConsumed,
-                UpdatedAt
-            FROM dbo.RunCounters
-            WHERE RunId = @RunId;
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddWithValue("@RunId", runId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return new RunCountersRow
-            {
-                RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
-                ActiveBranchCount = reader.GetInt32(reader.GetOrdinal("ActiveBranchCount")),
-                CreditsConsumed = reader.GetDecimal(reader.GetOrdinal("CreditsConsumed")),
-                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
-            };
-        }
-
-        throw new KeyNotFoundException($"Run counters for RunId={runId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.RunCounters_GetBy_RunId",
+            p => p.AddWithValue("@RunId", runId),
+            Map,
+            new KeyNotFoundException($"Run counters for RunId={runId} not found."),
+            ct
+        );
     }
 
     public async Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.RunCounters_IncrementActiveBranches", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@Delta", delta);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetInt32(0);
-        }
-
-        throw new InvalidOperationException("RunCounters_IncrementActiveBranches did not return a value.");
+        return await ExecuteSingleAsync(
+            "dbo.RunCounters_IncrementActiveBranches",
+            p =>
+            {
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@Delta", delta);
+            },
+            r => r.GetInt32(0),
+            new InvalidOperationException("RunCounters_IncrementActiveBranches did not return a value."),
+            ct
+        );
     }
 
     public async Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.RunCounters_DecrementActiveBranches", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@Delta", delta);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetInt32(0);
-        }
-
-        throw new InvalidOperationException("RunCounters_DecrementActiveBranches did not return a value.");
+        return await ExecuteSingleAsync(
+            "dbo.RunCounters_DecrementActiveBranches",
+            p =>
+            {
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@Delta", delta);
+            },
+            r => r.GetInt32(0),
+            new InvalidOperationException("RunCounters_DecrementActiveBranches did not return a value."),
+            ct
+        );
     }
 
     public async Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.RunCounters_AddCreditsConsumed", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@Cost", cost);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetDecimal(0);
-        }
-
-        throw new InvalidOperationException("RunCounters_AddCreditsConsumed did not return a value.");
+        return await ExecuteSingleAsync(
+            "dbo.RunCounters_AddCreditsConsumed",
+            p =>
+            {
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@Cost", cost);
+            },
+            r => r.GetDecimal(0),
+            new InvalidOperationException("RunCounters_AddCreditsConsumed did not return a value."),
+            ct
+        );
     }
 
     public async Task<long> SumActiveBranchesAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.RunCounters_SumActiveBranches", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.RunCounters_SumActiveBranches",
+            null,
+            ct
+        );
         return result is long count ? count : Convert.ToInt64(result ?? 0L);
+    }
+
+    internal static RunCountersRow Map(DbDataReader reader)
+    {
+        return new RunCountersRow
+        {
+            RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
+            ActiveBranchCount = reader.GetInt32(reader.GetOrdinal("ActiveBranchCount")),
+            CreditsConsumed = reader.GetDecimal(reader.GetOrdinal("CreditsConsumed")),
+            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        };
     }
 }

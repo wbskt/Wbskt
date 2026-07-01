@@ -9,48 +9,37 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class JoinAggregatorProvider : BaseSqlProvider, IJoinAggregatorProvider
 {
-    private readonly string _connectionString;
-
-    public JoinAggregatorProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public JoinAggregatorProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task InitializeAsync(Guid joinToken, int runId, int expectedCount, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.JoinAggregator_Initialize", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@JoinToken", joinToken);
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@ExpectedCount", expectedCount);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.JoinAggregator_Initialize",
+            p =>
+            {
+                p.AddWithValue("@JoinToken", joinToken);
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@ExpectedCount", expectedCount);
+            },
+            ct
+        );
     }
 
     public async Task<JoinContributionResult> ContributeAsync(Guid joinToken, string outcome, string mode, int quorumCount, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.JoinAggregator_Contribute", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@JoinToken", joinToken);
-        command.Parameters.AddWithValue("@Outcome", outcome);
-        command.Parameters.AddWithValue("@Mode", mode);
-        command.Parameters.AddWithValue("@QuorumCount", quorumCount);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("JoinAggregator_Contribute did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.JoinAggregator_Contribute",
+            p =>
+            {
+                p.AddWithValue("@JoinToken", joinToken);
+                p.AddWithValue("@Outcome", outcome);
+                p.AddWithValue("@Mode", mode);
+                p.AddWithValue("@QuorumCount", quorumCount);
+            },
+            Map,
+            new InvalidOperationException("JoinAggregator_Contribute did not return a row."),
+            ct
+        );
     }
 
     internal static JoinContributionResult Map(DbDataReader reader)
@@ -60,6 +49,7 @@ internal sealed class JoinAggregatorProvider : BaseSqlProvider, IJoinAggregatorP
             ContributedCount: reader.GetInt32(reader.GetOrdinal("ContributedCount")),
             SucceededCount: reader.GetInt32(reader.GetOrdinal("SucceededCount")),
             FailedCount: reader.GetInt32(reader.GetOrdinal("FailedCount")),
-            ExpectedCount: reader.GetInt32(reader.GetOrdinal("ExpectedCount")));
+            ExpectedCount: reader.GetInt32(reader.GetOrdinal("ExpectedCount"))
+        );
     }
 }

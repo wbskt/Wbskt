@@ -10,273 +10,177 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class RunProvider : BaseSqlProvider, IRunProvider
 {
-    private readonly string _connectionString;
-
-    public RunProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public RunProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<RunRow> CreateAsync(RunRow row, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_Create", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", row.RefId);
-        command.Parameters.AddWithValue("@WorkflowDefinitionId", row.WorkflowDefinitionId);
-        command.Parameters.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
-        command.Parameters.AddWithValue("@WorkflowVersion", row.WorkflowVersion);
-        command.Parameters.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
-        command.Parameters.AddWithValue("@CorrelationKey", (object?)row.CorrelationKey ?? DBNull.Value);
-        command.Parameters.AddWithValue("@StartedAt", row.StartedAt);
-        command.Parameters.AddWithValue("@CreditBudget", row.CreditBudget);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("Run_Create did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.Run_Create",
+            p =>
+            {
+                p.AddWithValue("@RefId", row.RefId);
+                p.AddWithValue("@WorkflowDefinitionId", row.WorkflowDefinitionId);
+                p.AddWithValue("@WorkflowRefId", row.WorkflowRefId);
+                p.AddWithValue("@WorkflowVersion", row.WorkflowVersion);
+                p.AddWithValue("@TriggerNodeId", row.TriggerNodeId);
+                p.AddWithValue("@CorrelationKey", (object?)row.CorrelationKey ?? DBNull.Value);
+                p.AddWithValue("@StartedAt", row.StartedAt);
+                p.AddWithValue("@CreditBudget", row.CreditBudget);
+            },
+            Map,
+            new InvalidOperationException("Run_Create did not return a row."),
+            ct
+        );
     }
 
     public async Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_FindBy_RefId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetInt32(0);
-        }
-
-        return null;
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Run_FindBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            ct
+        );
+        return result is int id ? id : (result == null ? null : Convert.ToInt32(result));
     }
 
     public async Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(
-            """
-            SELECT
-                Id,
-                RefId,
-                WorkflowDefinitionId,
-                WorkflowRefId,
-                WorkflowVersion,
-                TriggerNodeId,
-                CorrelationKey,
-                Status,
-                StartedAt,
-                CompletedAt,
-                CancellationRequestedAt,
-                CancellationReason,
-                CreditBudget,
-                CreatedAt
-            FROM dbo.Runs
-            WHERE Id = @Id;
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddWithValue("@Id", checked((int)runId));
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Run with Id={runId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Run_GetById",
+            p => p.AddWithValue("@Id", checked((int)runId)),
+            Map,
+            new KeyNotFoundException($"Run with Id={runId} not found."),
+            ct
+        );
     }
 
     public async Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_GetBy_RefId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Run with RefId={refId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Run_GetBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            Map,
+            new KeyNotFoundException($"Run with RefId={refId} not found."),
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_ListBy_WorkflowRefId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@StatusFilter", (object?)statusFilter ?? DBNull.Value);
-        command.Parameters.AddWithValue("@Top", top);
-        command.Parameters.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<RunRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Run_ListBy_WorkflowRefId",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@StatusFilter", (object?)statusFilter ?? DBNull.Value);
+                p.AddWithValue("@Top", top);
+                p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_GetActiveBy_WorkflowRefId_CorrelationKey", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<RunRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetActiveBy_WorkflowRefId_CorrelationKey",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@CorrelationKey", correlationKey);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_GetActiveBy_Correlation", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
-        command.Parameters.AddWithValue("@CorrelationKey", correlationKey);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<RunRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetActiveBy_Correlation",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@TriggerNodeId", triggerNodeId);
+                p.AddWithValue("@CorrelationKey", correlationKey);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_UpdateStatus", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@CompletedAt", (object?)completedAt ?? DBNull.Value);
-        command.Parameters.AddWithValue("@CancellationRequestedAt", (object?)cancellationRequestedAt ?? DBNull.Value);
-        command.Parameters.AddWithValue("@CancellationReason", (object?)cancellationReason ?? DBNull.Value);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Run with RefId={refId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Run_UpdateStatus",
+            p =>
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@Status", status);
+                p.AddWithValue("@CompletedAt", (object?)completedAt ?? DBNull.Value);
+                p.AddWithValue("@CancellationRequestedAt", (object?)cancellationRequestedAt ?? DBNull.Value);
+                p.AddWithValue("@CancellationReason", (object?)cancellationReason ?? DBNull.Value);
+            },
+            Map,
+            new KeyNotFoundException($"Run with RefId={refId} not found."),
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_GetStuck", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@CutoffUtc", cutoffUtc);
-        command.Parameters.AddWithValue("@BatchSize", batchSize);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<RunRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetStuck",
+            p =>
+            {
+                p.AddWithValue("@CutoffUtc", cutoffUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task<long> CountByStatusAsync(string status, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_CountByStatus", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@Status", status);
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Run_CountByStatus",
+            p => p.AddWithValue("@Status", status),
+            ct
+        );
         return result is long count ? count : Convert.ToInt64(result ?? 0L);
     }
 
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_TransitionStatus", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", checked((int)runId));
-        command.Parameters.AddWithValue("@FromStatus", fromStatus);
-        command.Parameters.AddWithValue("@ToStatus", toStatus);
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Run_TransitionStatus",
+            p =>
+            {
+                p.AddWithValue("@RunId", checked((int)runId));
+                p.AddWithValue("@FromStatus", fromStatus);
+                p.AddWithValue("@ToStatus", toStatus);
+            },
+            ct
+        );
         return result is int rowsAffected && rowsAffected > 0;
     }
 
     public async Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Run_SetTerminal", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", checked((int)runId));
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@CompletedAt", completedAt);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Run with Id={runId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Run_SetTerminal",
+            p =>
+            {
+                p.AddWithValue("@RunId", checked((int)runId));
+                p.AddWithValue("@Status", status);
+                p.AddWithValue("@CompletedAt", completedAt);
+            },
+            Map,
+            new KeyNotFoundException($"Run with Id={runId} not found."),
+            ct
+        );
     }
 
     internal static RunRow Map(DbDataReader reader)

@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -11,102 +12,69 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
 {
-    private readonly string _connectionString;
     private readonly ILogger<BookmarkProvider>? _logger;
 
-    public BookmarkProvider(IConfiguration configuration, ILogger<BookmarkProvider>? logger = null) : base(configuration)
+    public BookmarkProvider(IConfiguration configuration, ILogger<BookmarkProvider>? logger = null) 
+        : base(configuration)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
         _logger = logger;
     }
 
     public async Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_Create", connection);
-        command.CommandType = CommandType.StoredProcedure;
+        var result = await ExecuteSingleAsync(
+            "dbo.Bookmark_Create",
+            p =>
+            {
+                p.AddWithValue("@RefId", row.RefId);
+                p.AddWithValue("@RunId", row.RunId);
+                p.AddWithValue("@BranchRefId", row.BranchRefId);
+                p.AddWithValue("@NodeId", row.NodeId);
+                p.AddWithValue("@WakeConditionKind", row.WakeConditionKind);
+                p.AddWithValue("@MatchKey", row.MatchKey);
+                p.AddWithValue("@WakeConditionJson", row.WakeConditionJson);
+                p.AddWithValue("@ExpiresAt", (object?)row.ExpiresAt ?? DBNull.Value);
+                p.AddWithValue("@TtlPort", (object?)row.TtlPort ?? DBNull.Value);
+            },
+            Map,
+            new InvalidOperationException("Failed to create bookmark."),
+            ct
+        );
 
-        command.Parameters.AddWithValue("@RefId", row.RefId);
-        command.Parameters.AddWithValue("@RunId", row.RunId);
-        command.Parameters.AddWithValue("@BranchRefId", row.BranchRefId);
-        command.Parameters.AddWithValue("@NodeId", row.NodeId);
-        command.Parameters.AddWithValue("@WakeConditionKind", row.WakeConditionKind);
-        command.Parameters.AddWithValue("@MatchKey", row.MatchKey);
-        command.Parameters.AddWithValue("@WakeConditionJson", row.WakeConditionJson);
-        command.Parameters.AddWithValue("@ExpiresAt", (object?)row.ExpiresAt ?? DBNull.Value);
-        command.Parameters.AddWithValue("@TtlPort", (object?)row.TtlPort ?? DBNull.Value);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            var result = Map(reader);
-            _logger?.LogDebug("Created bookmark {BookmarkId} for run {RunId} on branch {BranchRefId} with match key {MatchKey}", result.Id, result.RunId, result.BranchRefId, result.MatchKey);
-            return result;
-        }
-
-        _logger?.LogError("Failed to create bookmark for run {RunId} on branch {BranchRefId}", row.RunId, row.BranchRefId);
-        throw new InvalidOperationException("Bookmark_Create did not return a row.");
+        _logger?.LogDebug("Created bookmark {BookmarkId} for run {RunId} on branch {BranchRefId} with match key {MatchKey}", result.Id, result.RunId, result.BranchRefId, result.MatchKey);
+        return result;
     }
 
     public async Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_GetBy_RefId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"Bookmark with RefId={refId} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.Bookmark_GetBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            Map,
+            new KeyNotFoundException($"Bookmark with RefId={refId} not found."),
+            ct
+        );
     }
 
-    public async Task<BookmarkRow?> GetByIdAsync(long bookmarkId, CancellationToken ct)
+    public async Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_GetBy_Id", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@Id", bookmarkId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        return null;
+        return await ExecuteSingleAsync(
+            "dbo.Bookmark_GetBy_Id",
+            p => p.AddWithValue("@Id", checked((int)bookmarkId)),
+            Map,
+            new KeyNotFoundException($"Bookmark with Id={bookmarkId} not found."),
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_GetAllBy_MatchKey", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@MatchKey", matchKey);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BookmarkRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Bookmark_GetAllBy_MatchKey",
+            p => p.AddWithValue("@MatchKey", matchKey),
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
@@ -116,164 +84,109 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
             return Array.Empty<BookmarkRow>();
         }
 
-        await using var connection = new SqlConnection(_connectionString);
-        var parameters = matchKeys.Select((key, index) => new SqlParameter($"@Key{index}", key)).ToArray();
-        var parameterNames = string.Join(", ", parameters.Select(p => p.ParameterName));
+        string jsonKeys = JsonSerializer.Serialize(matchKeys);
 
-        await using var command = new SqlCommand(
-            $"""
-            SELECT
-                Id,
-                RefId,
-                RunId,
-                BranchRefId,
-                NodeId,
-                WakeConditionKind,
-                MatchKey,
-                WakeConditionJson,
-                ExpiresAt,
-                TtlPort,
-                CreatedAt
-            FROM dbo.Bookmarks
-            WHERE MatchKey IN ({parameterNames});
-            """,
-            connection);
-        command.CommandType = CommandType.Text;
-        command.Parameters.AddRange(parameters);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BookmarkRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Bookmark_GetAllBy_MatchKeys",
+            p => p.AddWithValue("@MatchKeysJson", jsonKeys),
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_GetAllBy_RunId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BookmarkRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Bookmark_GetAllBy_RunId",
+            p => p.AddWithValue("@RunId", runId),
+            Map,
+            ct
+        );
     }
 
     public async Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_GetDue", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@Now", nowUtc);
-        command.Parameters.AddWithValue("@BatchSize", batchSize);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new List<BookmarkRow>();
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add(Map(reader));
-        }
-
-        return results.AsReadOnly();
+        return await ExecuteCollectionAsync(
+            "dbo.Bookmark_GetDue",
+            p =>
+            {
+                p.AddWithValue("@Now", nowUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            Map,
+            ct
+        );
     }
 
     public async Task DeleteAsync(Guid refId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_Delete", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RefId", refId);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.Bookmark_Delete",
+            p => p.AddWithValue("@RefId", refId),
+            ct
+        );
     }
 
     public async Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_DeleteSiblings", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-        command.Parameters.AddWithValue("@BranchId", branchId);
-        command.Parameters.AddWithValue("@ExcludeId", excludeBookmarkId);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.Bookmark_DeleteSiblings",
+            p =>
+            {
+                p.AddWithValue("@RunId", checked((int)runId));
+                p.AddWithValue("@BranchId", checked((int)branchId));
+                p.AddWithValue("@ExcludeId", checked((int)excludeBookmarkId));
+            },
+            ct
+        );
     }
 
     public async Task<long> CountAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_Count", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        await connection.OpenAsync(ct);
-        object? result = await command.ExecuteScalarAsync(ct);
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Bookmark_Count",
+            null,
+            ct
+        );
         return result is long count ? count : Convert.ToInt64(result ?? 0L);
     }
 
     public async Task<int> DeleteOrphansAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_DeleteOrphans", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        await connection.OpenAsync(ct);
-        return await command.ExecuteNonQueryAsync(ct);
+        return await ExecuteNonQueryResultAsync(
+            "dbo.Bookmark_DeleteOrphans",
+            null,
+            ct
+        );
     }
 
     public async Task DeleteAllByRunIdAsync(int runId, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.Bookmark_DeleteAllBy_RunId", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@RunId", runId);
-
-        await connection.OpenAsync(ct);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(
+            "dbo.Bookmark_DeleteAllBy_RunId",
+            p => p.AddWithValue("@RunId", runId),
+            ct
+        );
     }
 
     public async Task<IReadOnlyDictionary<string, long>> CountGroupedByWakeKindAsync(CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(
-            "SELECT WakeConditionKind, COUNT(*) AS [Count] FROM dbo.Bookmarks GROUP BY WakeConditionKind;",
-            connection);
-        command.CommandType = CommandType.Text;
+        var results = await ExecuteCollectionAsync(
+            "dbo.Bookmark_CountGroupedByWakeKind",
+            null,
+            r => new
+            {
+                Kind = r.GetString(r.GetOrdinal("WakeConditionKind")),
+                Count = r.GetValue(r.GetOrdinal("Count"))
+            },
+            ct
+        );
 
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var results = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        while (await reader.ReadAsync(ct))
-        {
-            string kind = reader.GetString(reader.GetOrdinal("WakeConditionKind"));
-            object val = reader.GetValue(reader.GetOrdinal("Count"));
-            long count = val is int i ? i : Convert.ToInt64(val);
-            results[kind] = count;
-        }
-
-        return results;
+        return results.ToDictionary(
+            x => x.Kind,
+            x => x.Count is int i ? (long)i : Convert.ToInt64(x.Count),
+            StringComparer.OrdinalIgnoreCase
+        );
     }
 
     internal static BookmarkRow Map(DbDataReader reader)

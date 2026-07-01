@@ -10,139 +10,103 @@ namespace Wbskt.Workflow.Providers;
 
 internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableProvider
 {
-    private readonly string _connectionString;
-
-    public SharedVariableProvider(IConfiguration configuration) : base(configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection connection string not found.");
-    }
+    public SharedVariableProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<SharedVariableRow> GetByWorkflowRefIdNameAsync(Guid workflowRefId, string varName, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.SharedVariable_GetBy_WorkflowRefId_Name", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@VarName", varName);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new KeyNotFoundException($"SharedVariable with WorkflowRefId={workflowRefId} VarName={varName} not found.");
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_GetBy_WorkflowRefId_Name",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+            },
+            Map,
+            new KeyNotFoundException($"SharedVariable with WorkflowRefId={workflowRefId} VarName={varName} not found."),
+            ct
+        );
     }
 
     public async Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.SharedVariable_Initialize", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@VarName", varName);
-        command.Parameters.AddWithValue("@VarType", varType);
-        command.Parameters.AddWithValue("@ValueJson", valueJson);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("SharedVariable_Initialize did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_Initialize",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+                p.AddWithValue("@VarType", varType);
+                p.AddWithValue("@ValueJson", valueJson);
+            },
+            Map,
+            new InvalidOperationException("SharedVariable_Initialize did not return a row."),
+            ct
+        );
     }
 
     public async Task<SharedVariableRow> SetAsync(Guid workflowRefId, string varName, string valueJson, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.SharedVariable_Set", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@VarName", varName);
-        command.Parameters.AddWithValue("@ValueJson", valueJson);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return Map(reader);
-        }
-
-        throw new InvalidOperationException("SharedVariable_Set did not return a row.");
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_Set",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+                p.AddWithValue("@ValueJson", valueJson);
+            },
+            Map,
+            new InvalidOperationException("SharedVariable_Set did not return a row."),
+            ct
+        );
     }
 
     public async Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.SharedVariable_Increment", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@VarName", varName);
-        command.Parameters.AddWithValue("@Delta", delta);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetString(0);
-        }
-
-        throw new InvalidOperationException("SharedVariable_Increment did not return a value.");
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_Increment",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+                p.AddWithValue("@Delta", delta);
+            },
+            r => r.GetString(0),
+            new InvalidOperationException("SharedVariable_Increment did not return a value."),
+            ct
+        );
     }
 
     public async Task<string> DecrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.SharedVariable_Decrement", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@VarName", varName);
-        command.Parameters.AddWithValue("@Delta", delta);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetString(0);
-        }
-
-        throw new InvalidOperationException("SharedVariable_Decrement did not return a value.");
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_Decrement",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+                p.AddWithValue("@Delta", delta);
+            },
+            r => r.GetString(0),
+            new InvalidOperationException("SharedVariable_Decrement did not return a value."),
+            ct
+        );
     }
 
     public async Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.SharedVariable_CompareAndSet", connection);
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
-        command.Parameters.AddWithValue("@VarName", varName);
-        command.Parameters.AddWithValue("@Expected", expected);
-        command.Parameters.AddWithValue("@NewValue", newValue);
-
-        await connection.OpenAsync(ct);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        if (await reader.ReadAsync(ct))
-        {
-            return reader.GetInt32(0);
-        }
-
-        throw new InvalidOperationException("SharedVariable_CompareAndSet did not return a value.");
+        return await ExecuteSingleAsync(
+            "dbo.SharedVariable_CompareAndSet",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+                p.AddWithValue("@Expected", expected);
+                p.AddWithValue("@NewValue", newValue);
+            },
+            r => r.GetInt32(0),
+            new InvalidOperationException("SharedVariable_CompareAndSet did not return a value."),
+            ct
+        );
     }
 
     internal static SharedVariableRow Map(DbDataReader reader)

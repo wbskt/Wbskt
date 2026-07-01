@@ -124,7 +124,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     {
         var result = await _workflowDefinitionProvider.GetAllSummariesAsync(workspaceId, skip, take, ct);
 
-        var dtos = result.Items.Select(row => new WorkflowSummaryDto(
+        var dtos = result.Select(row => new WorkflowSummaryDto(
             row.RefId,
             row.Version,
             row.IsEnabled ? "Published" : "Deprecated",

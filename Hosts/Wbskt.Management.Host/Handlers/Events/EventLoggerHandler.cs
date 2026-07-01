@@ -1,9 +1,11 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers.Events;
@@ -12,15 +14,18 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
 {
     private readonly EventLogBuffer _buffer;
     private readonly IEventRegistry _registry;
+    private readonly IEventProvider _eventProvider;
     private readonly ILogger<EventLoggerHandler> _logger;
 
     public EventLoggerHandler(
         EventLogBuffer buffer,
         IEventRegistry registry,
+        IEventProvider eventProvider,
         ILogger<EventLoggerHandler> logger)
     {
         _buffer = buffer;
         _registry = registry;
+        _eventProvider = eventProvider;
         _logger = logger;
     }
 
@@ -33,6 +38,23 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
             var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
 
             var eventId = _registry.GetEventId(eventName);
+
+            if (eventId <= 0)
+            {
+                // Fallback to dynamic registration on demand to handle startup timing race conditions
+                try
+                {
+                    var attribute = @event.GetType().GetCustomAttribute<EventCriticalityAttribute>();
+                    var criticality = attribute?.Criticality ?? EventCriticality.Info;
+
+                    eventId = await _eventProvider.GetOrInsertEventIdAsync(eventName, (short)criticality, context.CancellationToken);
+                    _registry.RegisterEvent(eventName, eventId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to dynamically register event {EventName} on demand.", eventName);
+                }
+            }
 
             if (eventId <= 0)
             {

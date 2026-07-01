@@ -1,13 +1,14 @@
 CREATE PROCEDURE dbo.WorkflowDefinition_GetAll_Summaries_By_WorkspaceId
     @WorkspaceId INT,
     @Skip INT,
-    @Take INT
+    @Take INT,
+    @TotalCount INT OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Return total count for pagination
-    SELECT COUNT(DISTINCT RefId) AS TotalCount
+    -- Get total count for pagination
+    SELECT @TotalCount = COUNT(DISTINCT RefId)
     FROM dbo.WorkflowDefinitions
     WHERE WorkspaceId = @WorkspaceId;
 

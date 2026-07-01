@@ -114,6 +114,21 @@ public abstract class BaseSqlProvider
         return command.Parameters;
     }
 
+    protected async Task<int> ExecuteNonQueryResultAsync(
+        string procedureName, 
+        Action<SqlParameterCollection>? addParameters,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(procedureName, connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        addParameters?.Invoke(command.Parameters);
+
+        await connection.OpenAsync(cancellationToken);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     protected async Task<T?> ExecuteScalarAsync<T>(
         string procedureName, 
         Action<SqlParameterCollection>? addParameters,

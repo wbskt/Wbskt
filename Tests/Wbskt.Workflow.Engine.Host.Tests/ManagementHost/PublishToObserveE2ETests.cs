@@ -69,7 +69,7 @@ public sealed class PublishToObserveE2ETests
     {
         private readonly Dictionary<Guid, List<WorkflowDefinitionRow>> _rows = new();
 
-        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
+        public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
         private int _nextId;
 
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)

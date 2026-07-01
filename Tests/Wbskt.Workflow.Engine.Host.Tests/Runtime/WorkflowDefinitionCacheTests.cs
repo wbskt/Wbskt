@@ -101,7 +101,7 @@ public sealed class WorkflowDefinitionCacheTests
 
     private sealed class RecordingWorkflowDefinitionProvider(params WorkflowDefinitionRow[] rows) : IWorkflowDefinitionProvider
     {
-        public Task<(int TotalCount, IReadOnlyCollection<WorkflowDefinitionRow> Items)> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<(int, IReadOnlyCollection<WorkflowDefinitionRow>)>((0, Array.Empty<WorkflowDefinitionRow>()));
+        public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
         
         private readonly Queue<WorkflowDefinitionRow> _rows = new(rows);
 
