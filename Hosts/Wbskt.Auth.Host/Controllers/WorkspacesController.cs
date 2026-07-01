@@ -18,7 +18,7 @@ public class WorkspacesController : ControllerBase
 
     public WorkspacesController(
         IWorkspaceService workspaceService,
-        [FromKeyedServices("Workspace")] IReferenceMapper workspaceMapper)
+        [FromKeyedServices(ReferenceType.Workspace)] IReferenceMapper workspaceMapper)
     {
         _workspaceService = workspaceService;
         _workspaceMapper = workspaceMapper;
@@ -32,15 +32,20 @@ public class WorkspacesController : ControllerBase
     /// <returns>A response containing the internal workspace ID if authorized.</returns>
     /// <exception cref="SecurityException">Thrown if the workspace reference is invalid.</exception>
     [HttpPost("resolve")]
-    public async Task<ResolvedWorkspaceResponse> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ResolvedWorkspaceResponse>> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
     {
         var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(request.WorkspaceRef, cancellationToken);
         if (workspaceId <= 0)
         {
-            throw new SecurityException("Invalid workspace.");
+            return NotFound();
         }
-        await _workspaceService.AuthorizeAsync(workspaceId, request.RequiredPermission, cancellationToken);
-        return new ResolvedWorkspaceResponse(workspaceId);
+        var result = await _workspaceService.AuthorizeAsync(workspaceId, request.RequiredPermission, cancellationToken);
+        if (result.IsSuccess)
+        {
+            return new ResolvedWorkspaceResponse(workspaceId);
+        }
+        
+        return Unauthorized(result.Error.Code);
     }
 
     /// <summary>

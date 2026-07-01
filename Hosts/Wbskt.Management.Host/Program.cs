@@ -88,8 +88,8 @@ public static class Program
             });
 
         // Register Keyed ReferenceMappers
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>("RegistrationPolicy");
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>("Client");
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>(ReferenceType.RegistrationPolicy);
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>(ReferenceType.Client);
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

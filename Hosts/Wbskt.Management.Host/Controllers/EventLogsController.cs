@@ -21,8 +21,8 @@ public sealed class EventLogsController : ControllerBase
     private readonly IReferenceMapper _clientMapper;
 
     public EventLogsController(IEventLogService eventLogService, IAuthServiceClient authClient, 
-        [FromKeyedServices("RegistrationPolicy")] IReferenceMapper policyMapper,
-        [FromKeyedServices("Client")] IReferenceMapper clientMapper
+        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
+        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper
         )
     {
         _eventLogService = eventLogService;

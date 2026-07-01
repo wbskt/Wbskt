@@ -21,7 +21,7 @@ public class RegistrationPoliciesController : ControllerBase
 
     public RegistrationPoliciesController(
         IRegistrationPolicyService policyService,
-        IAuthServiceClient authClient, [FromKeyedServices("RegistrationPolicy")]IReferenceMapper policyMapper)
+        IAuthServiceClient authClient, [FromKeyedServices(ReferenceType.RegistrationPolicy)]IReferenceMapper policyMapper)
     {
         _policyService = policyService;
         _authClient = authClient;

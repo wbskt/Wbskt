@@ -1,5 +1,6 @@
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Infrastructure;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
@@ -41,7 +42,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         await _workspaceProvider.AddUserToWorkspaceAsync(workspaceId, user.Id, request.Role, cancellationToken);
     }
     
-    public async Task AuthorizeAsync(int workspaceId, string requiredPermission, CancellationToken cancellationToken = default)
+    public async Task<Result> AuthorizeAsync(int workspaceId, string requiredPermission, CancellationToken cancellationToken = default)
     {
         var userId = GetCurrentUserId();
 
@@ -49,7 +50,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         var role = await _workspaceProvider.VerifyWorkspaceMembershipAsync(userId, workspaceId, cancellationToken);
         if (!role.HasValue)
         {
-            throw new SecurityException("Access denied to workspace.");
+            return Result.Failure(Error.Unauthorized("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
         }
 
         // 2. Verify Permission
@@ -57,8 +58,10 @@ internal sealed class WorkspaceService : IWorkspaceService
         var hasPermission = await _authProvider.VerifyPermissionAsync(userId, requiredPermission, cancellationToken);
         if (!hasPermission)
         {
-            throw new SecurityException($"Missing required permission: {requiredPermission}");
+            return Result.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {requiredPermission}"));
         }
+        
+        return Result.Success();
     }
     
     private int GetCurrentUserId()

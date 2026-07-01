@@ -26,10 +26,10 @@ public class ClientsController : ControllerBase
 
     public ClientsController(
         IClientService clientService,
-        [FromKeyedServices("Client")] IReferenceMapper clientMapper,
+        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper,
         IAuthServiceClient authClient, 
         IEventBus eventBus,
-        [FromKeyedServices("RegistrationPolicy")] IReferenceMapper policyMapper,
+        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
         IRegistrationPolicyService policyService)
     {
         _clientService = clientService;

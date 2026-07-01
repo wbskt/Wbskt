@@ -45,7 +45,7 @@ public static class Program
         builder.Services.AddHttpContextAccessor();
 
         // Register Keyed ReferenceMappers
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>("Workspace");
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>(ReferenceType.Workspace);
 
         // Event Bus
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
