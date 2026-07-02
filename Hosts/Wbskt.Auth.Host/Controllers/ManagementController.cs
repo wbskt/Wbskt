@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Infrastructure;
 
 namespace Wbskt.Auth.Host.Controllers;
 
@@ -11,10 +12,12 @@ namespace Wbskt.Auth.Host.Controllers;
 public class ManagementController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly ILogger<ManagementController> _logger;
 
-    public ManagementController(IAuthService authService)
+    public ManagementController(IAuthService authService, ILogger<ManagementController> _logger)
     {
-        _authService = authService;
+        this._authService = authService;
+        this._logger = _logger;
     }
 
     /// <summary>
@@ -23,9 +26,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of role responses.</returns>
     [HttpGet("roles")]
-    public async Task<IReadOnlyCollection<RoleResponse>> GetRoles(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyCollection<RoleResponse>>> GetRoles(CancellationToken cancellationToken)
     {
-        return await _authService.GetRolesAsync(cancellationToken);
+        _logger.LogInformation("API: GetRoles requested");
+        var result = await _authService.GetRolesAsync(cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -34,9 +39,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of group responses.</returns>
     [HttpGet("groups")]
-    public async Task<IReadOnlyCollection<GroupResponse>> GetGroups(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyCollection<GroupResponse>>> GetGroups(CancellationToken cancellationToken)
     {
-        return await _authService.GetGroupsAsync(cancellationToken);
+        _logger.LogInformation("API: GetGroups requested");
+        var result = await _authService.GetGroupsAsync(cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -45,9 +52,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of permission responses.</returns>
     [HttpGet("permissions")]
-    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissions(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyCollection<PermissionResponse>>> GetPermissions(CancellationToken cancellationToken)
     {
-        return await _authService.GetPermissionsAsync(cancellationToken);
+        _logger.LogInformation("API: GetPermissions requested");
+        var result = await _authService.GetPermissionsAsync(cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -58,9 +67,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("roles")]
-    public async Task CreateRole(string name, string description, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateRole(string name, string description, CancellationToken cancellationToken)
     {
-        await _authService.CreateRoleAsync(name, description, cancellationToken);
+        _logger.LogInformation("API: CreateRole requested (Name: '{RoleName}')", name);
+        var result = await _authService.CreateRoleAsync(name, description, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -71,9 +82,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("groups")]
-    public async Task CreateGroup(string name, int? parentGroupId, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateGroup(string name, int? parentGroupId, CancellationToken cancellationToken)
     {
-        await _authService.CreateGroupAsync(name, parentGroupId, cancellationToken);
+        _logger.LogInformation("API: CreateGroup requested (Name: '{GroupName}', ParentGroupId: {ParentGroupId})", name, parentGroupId);
+        var result = await _authService.CreateGroupAsync(name, parentGroupId, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -84,9 +97,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("users/{userId}/groups/{groupId}")]
-    public async Task AddUserToGroup(int userId, int groupId, CancellationToken cancellationToken)
+    public async Task<IActionResult> AddUserToGroup(int userId, int groupId, CancellationToken cancellationToken)
     {
-        await _authService.AddUserToGroupAsync(userId, groupId, cancellationToken);
+        _logger.LogInformation("API: AddUserToGroup requested for UserId {UserId} and GroupId {GroupId}", userId, groupId);
+        var result = await _authService.AddUserToGroupAsync(userId, groupId, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -97,9 +112,11 @@ public class ManagementController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("permissions")]
-    public async Task CreatePermission(string slug, string description, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreatePermission(string slug, string description, CancellationToken cancellationToken)
     {
-        await _authService.CreatePermissionAsync(slug, description, cancellationToken);
+        _logger.LogInformation("API: CreatePermission requested (Slug: '{PermissionSlug}')", slug);
+        var result = await _authService.CreatePermissionAsync(slug, description, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -111,9 +128,11 @@ public class ManagementController : ControllerBase
     /// <param name="isDeny">If true, explicitly denies the permission.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("roles/{roleId}/permissions")]
-    public async Task GrantRolePermission(int roleId, string slug, CancellationToken cancellationToken, bool isDeny = false)
+    public async Task<IActionResult> GrantRolePermission(int roleId, string slug, CancellationToken cancellationToken, bool isDeny = false)
     {
-        await _authService.GrantRolePermissionAsync(roleId, slug, isDeny, cancellationToken);
+        _logger.LogInformation("API: GrantRolePermission requested for RoleId {RoleId}, Slug: '{PermissionSlug}' (IsDeny: {IsDeny})", roleId, slug, isDeny);
+        var result = await _authService.GrantRolePermissionAsync(roleId, slug, isDeny, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -125,8 +144,43 @@ public class ManagementController : ControllerBase
     /// <param name="isDeny">If true, explicitly denies the permission.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("users/{userId}/permissions")]
-    public async Task GrantUserPermission(int userId, string slug, CancellationToken cancellationToken, bool isDeny = false)
+    public async Task<IActionResult> GrantUserPermission(int userId, string slug, CancellationToken cancellationToken, bool isDeny = false)
     {
-        await _authService.GrantUserPermissionAsync(userId, slug, isDeny, cancellationToken);
+        _logger.LogInformation("API: GrantUserPermission requested for UserId {UserId}, Slug: '{PermissionSlug}' (IsDeny: {IsDeny})", userId, slug, isDeny);
+        var result = await _authService.GrantUserPermissionAsync(userId, slug, isDeny, cancellationToken);
+        return MapResult(result);
+    }
+
+    private IActionResult MapResult(Result result)
+    {
+        if (result.IsSuccess)
+        {
+            return NoContent();
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult<T> MapResult<T>(Result<T> result)
+    {
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult MapError(Error error)
+    {
+        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
+        return error.Type switch
+        {
+            ErrorType.Validation => BadRequest(error),
+            ErrorType.NotFound => NotFound(error),
+            ErrorType.Conflict => Conflict(error),
+            ErrorType.Unauthorized => Unauthorized(error),
+            _ => BadRequest(error)
+        };
     }
 }
