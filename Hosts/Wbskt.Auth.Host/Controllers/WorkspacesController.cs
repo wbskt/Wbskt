@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;
 using Wbskt.Primitives;
 
@@ -16,15 +17,18 @@ public class WorkspacesController : ControllerBase
     private readonly IWorkspaceService _workspaceService;
     private readonly IReferenceMapper _workspaceMapper;
     private readonly ILogger<WorkspacesController> _logger;
+    private readonly AuthMetrics _metrics;
 
     public WorkspacesController(
         IWorkspaceService workspaceService,
         [FromKeyedServices(ReferenceType.Workspace)] IReferenceMapper workspaceMapper,
-        ILogger<WorkspacesController> logger)
+        ILogger<WorkspacesController> logger,
+        AuthMetrics metrics)
     {
         _workspaceService = workspaceService;
         _workspaceMapper = workspaceMapper;
         _logger = logger;
+        _metrics = metrics;
     }
 
     /// <summary>
@@ -42,6 +46,7 @@ public class WorkspacesController : ControllerBase
         if (workspaceId <= 0)
         {
             _logger.LogWarning("API: Resolve failed - Workspace with RefId: '{WorkspaceRef}' not found", request.WorkspaceRef);
+            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "not_found");
             return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
         }
         
@@ -49,9 +54,19 @@ public class WorkspacesController : ControllerBase
         if (result.IsSuccess)
         {
             _logger.LogInformation("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId})", request.WorkspaceRef, workspaceId);
+            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "success");
             return Ok(new ResolvedWorkspaceResponse(workspaceId));
         }
         
+        if (result.Error.Type == ErrorType.Unauthorized)
+        {
+            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "unauthorized");
+        }
+        else
+        {
+            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "error");
+        }
+
         return MapError(result.Error);
     }
 

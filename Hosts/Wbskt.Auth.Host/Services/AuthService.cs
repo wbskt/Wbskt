@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
@@ -18,18 +20,21 @@ internal sealed class AuthService : IAuthService
     private readonly IJwtService _jwtService;
     private readonly IEventBus _eventBus;
     private readonly ILogger<AuthService> _logger;
+    private readonly AuthMetrics _metrics;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(
         IAuthProvider provider, 
         IJwtService jwtService, 
         IEventBus eventBus,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        AuthMetrics metrics)
     {
         _provider = provider;
         _jwtService = jwtService;
         _eventBus = eventBus;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<Result<LoginResponse>> LoginAsync(string email, string password, string ipAddress, CancellationToken cancellationToken = default)
@@ -48,15 +53,20 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Login failed: User with email {Email} not found. IP: {IpAddress}. Error: {Message}", email, ipAddress, ex.Message);
                 _logger.LogTrace(ex, "Login user lookup failed stack trace for {Email}", email);
+                _metrics.RecordLogin("invalid_credentials");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(-1, Guid.Empty, ipAddress, "Invalid credentials"), cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
+            var stopwatch = Stopwatch.StartNew();
             var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+            stopwatch.Stop();
+            _metrics.RecordPasswordHash(stopwatch.Elapsed.TotalMilliseconds);
 
             if (verificationResult == PasswordVerificationResult.Failed)
             {
                 _logger.LogWarning("Login failed: Invalid password for email {Email}. IP: {IpAddress}", email, ipAddress);
+                _metrics.RecordLogin("invalid_credentials");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password"), cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
@@ -64,6 +74,7 @@ internal sealed class AuthService : IAuthService
             if (!user.IsActive)
             {
                 _logger.LogWarning("Login failed: Account is inactive for user {Username} ({Email}). IP: {IpAddress}", user.Username, email, ipAddress);
+                _metrics.RecordLogin("user_inactive");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive"), cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
             }
@@ -78,12 +89,14 @@ internal sealed class AuthService : IAuthService
             await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, user.RefId, ipAddress), cancellationToken);
             _logger.LogInformation("User {Username} logged in successfully. IP: {IpAddress}", user.Username, ipAddress);
 
+            _metrics.RecordLogin("success");
             return Result<LoginResponse>.Success(new LoginResponse(accessToken, refreshToken.Token));
         }
         catch (Exception ex)
         {
             _logger.LogError("Unexpected error during login for email: {Email}. IP: {IpAddress}. Error: {Message}", email, ipAddress, ex.Message);
             _logger.LogTrace(ex, "Login exception stack trace for {Email}", email);
+            _metrics.RecordLogin("error");
             await _eventBus.PublishAsync(new SecurityAlertEvent(
                 "LoginFailure", 
                 $"Unexpected error during login for {email}: {ex.Message}", 
@@ -109,12 +122,14 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Token refresh failed: Provided token is invalid. IP: {IpAddress}. Error: {Message}", ipAddress, ex.Message);
                 _logger.LogTrace(ex, "Token refresh lookup failed stack trace");
+                _metrics.RecordRefresh("invalid_token");
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_TOKEN", "Invalid refresh token."));
             }
 
             if (!existingToken.IsActive)
             {
                 _logger.LogWarning("Token refresh failed: Provided token for user ID {UserId} is inactive. IP: {IpAddress}", existingToken.UserId, ipAddress);
+                _metrics.RecordRefresh("token_inactive");
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
             }
 
@@ -128,12 +143,14 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Token refresh failed: User with ID {UserId} not found. IP: {IpAddress}. Error: {Message}", existingToken.UserId, ipAddress, ex.Message);
                 _logger.LogTrace(ex, "Token refresh user lookup failed stack trace for User ID {UserId}", existingToken.UserId);
+                _metrics.RecordRefresh("user_not_found");
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
             }
 
             if (!user.IsActive)
             {
                 _logger.LogWarning("Token refresh failed: Account is inactive for user {Username}. IP: {IpAddress}", user.Username, ipAddress);
+                _metrics.RecordRefresh("user_inactive");
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
             }
 
@@ -145,12 +162,14 @@ internal sealed class AuthService : IAuthService
             await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
             _logger.LogInformation("Token refreshed successfully for user: {Username}. IP: {IpAddress}", user.Username, ipAddress);
+            _metrics.RecordRefresh("success");
             return Result<LoginResponse>.Success(new LoginResponse(newAccessToken, newRefreshToken.Token));
         }
         catch (Exception ex)
         {
             _logger.LogError("Unexpected error during token refresh from IP: {IpAddress}. Error: {Message}", ipAddress, ex.Message);
             _logger.LogTrace(ex, "Token refresh exception stack trace");
+            _metrics.RecordRefresh("error");
             return Result<LoginResponse>.Failure(Error.Failure("AUTH_REFRESH_ERROR", ex.Message));
         }
     }
@@ -163,12 +182,14 @@ internal sealed class AuthService : IAuthService
         {
             var isAllowed = await _provider.VerifyPermissionAsync(userId, permissionSlug, cancellationToken);
             _logger.LogTrace("Permission '{PermissionSlug}' verification result for user ID {UserId}: {IsAllowed}", permissionSlug, userId, isAllowed);
+            _metrics.RecordPermissionCheck(permissionSlug, isAllowed ? "allowed" : "denied");
             return Result<bool>.Success(isAllowed);
         }
         catch (Exception ex)
         {
             _logger.LogError("Error verifying permission '{PermissionSlug}' for user ID: {UserId}. Error: {Message}", permissionSlug, userId, ex.Message);
             _logger.LogTrace(ex, "VerifyPermission stack trace for user {UserId}", userId);
+            _metrics.RecordPermissionCheck(permissionSlug, "error");
             return Result<bool>.Failure(Error.Failure("AUTH_PERMISSION_ERROR", ex.Message));
         }
     }
@@ -249,18 +270,21 @@ internal sealed class AuthService : IAuthService
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
             _logger.LogInformation("User {Username} registered successfully. RefId: {RefId}", username, user.RefId);
             
+            _metrics.RecordRegistration("success");
             return Result.Success();
         }
         catch (Exception ex)
         {
-            if (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") || ex is SqlException { Number: 2601 or 2627 })
+            if (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") || (ex is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627)))
             {
                 _logger.LogWarning("User registration failed: Conflict on Username={Username} or Email={Email}. Error: {Message}", username, email, ex.Message);
                 _logger.LogTrace(ex, "User registration conflict stack trace for {Username}", username);
+                _metrics.RecordRegistration("conflict");
                 return Result.Failure(Error.Conflict("AUTH_USER_CONFLICT", "Username or email is already registered."));
             }
             _logger.LogError("Failed to register user: {Username} ({Email}). Error: {Message}", username, email, ex.Message);
             _logger.LogTrace(ex, "User registration failure stack trace for {Username}", username);
+            _metrics.RecordRegistration("error");
             return Result.Failure(Error.Failure("AUTH_REGISTRATION_ERROR", ex.Message));
         }
     }

@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;
 using Wbskt.Primitives.Exceptions;
 
@@ -11,17 +13,20 @@ internal sealed class WorkspaceService : IWorkspaceService
     private readonly IAuthProvider _authProvider;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<WorkspaceService> _logger;
+    private readonly AuthMetrics _metrics;
 
     public WorkspaceService(
         IWorkspaceProvider workspaceProvider, 
         IAuthProvider authProvider,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<WorkspaceService> logger)
+        ILogger<WorkspaceService> logger,
+        AuthMetrics metrics)
     {
         _workspaceProvider = workspaceProvider;
         _authProvider = authProvider;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<Result<WorkspaceResponse>> CreateWorkspaceAsync(int ownerId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
@@ -36,7 +41,8 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create workspace '{WorkspaceName}' for owner ID: {OwnerId}", request.Name, ownerId);
+            _logger.LogError("Failed to create workspace '{WorkspaceName}' for owner ID: {OwnerId}. Error: {Message}", request.Name, ownerId, ex.Message);
+            _logger.LogTrace(ex, "CreateWorkspace failure stack trace for owner ID {OwnerId}", ownerId);
             return Result<WorkspaceResponse>.Failure(Error.Failure("WORKSPACE_CREATE_ERROR", ex.Message));
         }
     }
@@ -55,7 +61,8 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to query workspaces for user ID: {UserId}", userId);
+            _logger.LogError("Failed to query workspaces for user ID: {UserId}. Error: {Message}", userId, ex.Message);
+            _logger.LogTrace(ex, "GetWorkspacesForUser failure stack trace for user ID {UserId}", userId);
             return Result<IReadOnlyCollection<WorkspaceResponse>>.Failure(Error.Failure("WORKSPACE_QUERY_ERROR", ex.Message));
         }
     }
@@ -73,7 +80,8 @@ internal sealed class WorkspaceService : IWorkspaceService
             }
             catch (SecurityException ex)
             {
-                _logger.LogWarning(ex, "Failed to add member to workspace ID {WorkspaceId}: User with email {UserEmail} not found.", workspaceId, request.Email);
+                _logger.LogWarning("Failed to add member to workspace ID {WorkspaceId}: User with email {UserEmail} not found. Error: {Message}", workspaceId, request.Email, ex.Message);
+                _logger.LogTrace(ex, "AddUserToWorkspace user not found stack trace for email {UserEmail}", request.Email);
                 return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
             }
 
@@ -83,7 +91,8 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add user {UserEmail} to workspace ID: {WorkspaceId}", request.Email, workspaceId);
+            _logger.LogError("Failed to add user {UserEmail} to workspace ID: {WorkspaceId}. Error: {Message}", request.Email, workspaceId, ex.Message);
+            _logger.LogTrace(ex, "AddUserToWorkspace failure stack trace for email {UserEmail} in workspace ID {WorkspaceId}", request.Email, workspaceId);
             return Result.Failure(Error.Failure("WORKSPACE_MEMBER_ERROR", ex.Message));
         }
     }
@@ -96,6 +105,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         if (currentUserIdResult.IsFailure)
         {
             _logger.LogWarning("Workspace authorization failed: User not authenticated. WorkspaceId: {WorkspaceId}", workspaceId);
+            _metrics.RecordPermissionCheck(requiredPermission, "unauthorized");
             return Result.Failure(currentUserIdResult.Error);
         }
 
@@ -106,6 +116,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         if (!role.HasValue)
         {
             _logger.LogWarning("Workspace authorization failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, workspaceId);
+            _metrics.RecordPermissionCheck(requiredPermission, "unauthorized");
             return Result.Failure(Error.Unauthorized("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
         }
 
@@ -114,10 +125,12 @@ internal sealed class WorkspaceService : IWorkspaceService
         if (!hasPermission)
         {
             _logger.LogWarning("Workspace authorization failed: User ID {UserId} lacks permission '{RequiredPermission}' in workspace ID: {WorkspaceId}", userId, requiredPermission, workspaceId);
+            _metrics.RecordPermissionCheck(requiredPermission, "denied");
             return Result.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {requiredPermission}"));
         }
         
         _logger.LogInformation("User ID {UserId} successfully authorized with permission '{RequiredPermission}' in workspace ID: {WorkspaceId}", userId, requiredPermission, workspaceId);
+        _metrics.RecordPermissionCheck(requiredPermission, "allowed");
         return Result.Success();
     }
     

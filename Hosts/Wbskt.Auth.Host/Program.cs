@@ -1,10 +1,12 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Metrics;
 using Serilog;
 using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
@@ -36,6 +38,7 @@ public static class Program
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
+        builder.Services.AddSingleton<AuthMetrics>();
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
@@ -43,6 +46,12 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
         builder.Services.AddHttpContextAccessor();
+
+        builder.Services.AddOpenTelemetry()
+            .WithMetrics(metrics => metrics
+                .AddMeter(AuthMetrics.MeterName)
+                .AddAspNetCoreInstrumentation()
+                .AddPrometheusExporter());
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>(ReferenceType.Workspace);
@@ -107,6 +116,7 @@ public static class Program
         app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
 
+        app.MapPrometheusScrapingEndpoint();
         app.MapControllers();
 
         await app.RunAsync();
