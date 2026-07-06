@@ -270,6 +270,9 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     {
         WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions)
             ?? throw new InvalidOperationException($"Could not deserialize workflow definition for '{row.RefId}'");
+        
+        definition = definition with { WorkspaceId = row.WorkspaceId, PublishedBy = row.PublishedBy };
+
         return new WorkflowDefinitionDto(
             row.RefId,
             row.Version,

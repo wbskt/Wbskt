@@ -35,6 +35,8 @@ internal sealed class WorkflowDefinitionCache : IWorkflowDefinitionCache
         var definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions)
             ?? throw new InvalidOperationException($"Workflow definition {workflowDefinitionId} could not be deserialized.");
 
+        definition = definition with { WorkspaceId = row.WorkspaceId, PublishedBy = row.PublishedBy };
+
         _cache.Set(workflowDefinitionId, definition, new MemoryCacheEntryOptions
         {
             SlidingExpiration = SlidingExpiration

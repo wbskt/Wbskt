@@ -67,11 +67,11 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
             
             var eventData = doc.RootElement.TryGetProperty("message", out var messageNode) 
                 ? messageNode.GetRawText() 
-                : Encoding.UTF8.GetString(bodyBytes);
+                : (doc.RootElement.TryGetProperty("Message", out messageNode) ? messageNode.GetRawText() : Encoding.UTF8.GetString(bodyBytes));
 
             JsonElement targetNode = doc.RootElement.TryGetProperty("message", out var msgNode) 
                 ? msgNode 
-                : doc.RootElement;
+                : (doc.RootElement.TryGetProperty("Message", out msgNode) ? msgNode : doc.RootElement);
 
             int? workspaceId = (@event as IWorkspaceContext)?.WorkspaceId ?? GetIntProperty(targetNode, "workspaceId");
             int? policyId = (@event as IPolicyContext)?.PolicyId ?? GetIntProperty(targetNode, "policyId");
