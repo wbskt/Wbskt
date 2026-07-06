@@ -1,7 +1,11 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Moq;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
+using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -18,7 +22,7 @@ public sealed class WorkflowHistoryControllerTests
     {
         var authClient = new Mock<IAuthServiceClient>();
         authClient.Setup(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsRead, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(WorkspaceId);
+            .ReturnsAsync(Result<int>.Success(WorkspaceId));
         return authClient;
     }
 
@@ -29,18 +33,20 @@ public sealed class WorkflowHistoryControllerTests
         var historyProvider = new Mock<IHistoryEventProvider>();
         var authClient = AuthClient();
         var runRefId = Guid.NewGuid();
-        runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(12);
+        runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(12));
         historyProvider.Setup(x => x.GetByRunIdAsync(12, 100, 3, It.IsAny<CancellationToken>())).ReturnsAsync([
             CreateEvent(101, 12, "Started"),
             CreateEvent(102, 12, "Completed")
         ]);
-        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object);
+        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
 
         var response = await controller.List(WorkspaceRef, runRefId, 100, 2, CancellationToken.None);
 
-        Assert.Equal(2, response.Events.Count);
-        Assert.Equal(101, response.Events[0].HistoryEventId);
-        Assert.Null(response.NextCursor);
+        var okResult = Assert.IsType<OkObjectResult>(response.Result);
+        var historyListResponse = Assert.IsType<HistoryListResponse>(okResult.Value);
+        Assert.Equal(2, historyListResponse.Events.Count);
+        Assert.Equal(101, historyListResponse.Events[0].HistoryEventId);
+        Assert.Null(historyListResponse.NextCursor);
         authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsRead, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -51,18 +57,20 @@ public sealed class WorkflowHistoryControllerTests
         var historyProvider = new Mock<IHistoryEventProvider>();
         var authClient = AuthClient();
         var runRefId = Guid.NewGuid();
-        runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(18);
+        runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(18));
         historyProvider.Setup(x => x.GetByRunIdAsync(18, 0, 3, It.IsAny<CancellationToken>())).ReturnsAsync([
             CreateEvent(201, 18, "A"),
             CreateEvent(202, 18, "B"),
             CreateEvent(203, 18, "C")
         ]);
-        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object);
+        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
 
         var response = await controller.List(WorkspaceRef, runRefId, 0, 2, CancellationToken.None);
 
-        Assert.Equal(2, response.Events.Count);
-        Assert.Equal(202, response.NextCursor);
+        var okResult = Assert.IsType<OkObjectResult>(response.Result);
+        var historyListResponse = Assert.IsType<HistoryListResponse>(okResult.Value);
+        Assert.Equal(2, historyListResponse.Events.Count);
+        Assert.Equal(202, historyListResponse.NextCursor);
     }
 
     [Fact]
@@ -73,10 +81,12 @@ public sealed class WorkflowHistoryControllerTests
         var authClient = AuthClient();
         var runRefId = Guid.NewGuid();
         runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new SecurityException("denied"));
-        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object);
+            .ReturnsAsync(Result<int>.Failure(Error.Unauthorized("RUN_UNAUTHORIZED", "denied")));
+        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
 
-        await Assert.ThrowsAsync<SecurityException>(() => controller.List(WorkspaceRef, runRefId, 0, 200, CancellationToken.None));
+        var response = await controller.List(WorkspaceRef, runRefId, 0, 200, CancellationToken.None);
+        
+        Assert.IsType<UnauthorizedObjectResult>(response.Result);
     }
 
     private static HistoryEventRow CreateEvent(long id, int runId, string kind)

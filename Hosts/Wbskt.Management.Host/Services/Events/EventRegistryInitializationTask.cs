@@ -1,4 +1,3 @@
-using System.IO;
 using System.Reflection;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Management.Host.Providers;

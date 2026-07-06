@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
@@ -19,16 +20,20 @@ public sealed class EventLogsController : ControllerBase
     private readonly IAuthServiceClient _authClient;
     private readonly IReferenceMapper _policyMapper;
     private readonly IReferenceMapper _clientMapper;
+    private readonly ILogger<EventLogsController> _logger;
 
-    public EventLogsController(IEventLogService eventLogService, IAuthServiceClient authClient, 
+    public EventLogsController(
+        IEventLogService eventLogService, 
+        IAuthServiceClient authClient, 
         [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
-        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper
-        )
+        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper,
+        ILogger<EventLogsController> logger)
     {
         _eventLogService = eventLogService;
         _authClient = authClient;
         _policyMapper = policyMapper;
         _clientMapper = clientMapper;
+        _logger = logger;
     }
 
     /// <summary>
@@ -44,7 +49,7 @@ public sealed class EventLogsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of event logs.</returns>
     [HttpGet]
-    public async Task<ListResponse<EventLogResponse>> GetLogs(
+    public async Task<ActionResult<ListResponse<EventLogResponse>>> GetLogs(
         Guid workspaceRef,
         [FromQuery] string? eventName,
         [FromQuery] EventCriticality? criticality,
@@ -54,27 +59,79 @@ public sealed class EventLogsController : ControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
+        _logger.LogInformation("API: GetLogs requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(workspaceIdResult.Error));
+        }
+
         int? clientId = null;
         int? policyId = null;
 
         if (policyRefId.HasValue)
         {
             policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId.Value, cancellationToken);
+            if (policyId <= 0)
+            {
+                return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+            }
         }
         
         if (clientRefId.HasValue)
         {
             clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId.Value, cancellationToken);
+            if (clientId <= 0)
+            {
+                return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            }
         }
         
-        var pagedList = await _eventLogService.GetLogsAsync(workspaceId, eventName, criticality, policyId, clientId, null, skip, take, cancellationToken);
-        
-        Response.Headers.Append("X-Total-Count", pagedList.TotalCount.ToString());
-
-        return new ListResponse<EventLogResponse>()
+        var result = await _eventLogService.GetLogsAsync(workspaceIdResult.Value, eventName, criticality, policyId, clientId, null, skip, take, cancellationToken);
+        if (result.IsFailure)
         {
-            Items = pagedList
+            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(result.Error));
+        }
+
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
+
+        return Ok(new ListResponse<EventLogResponse>
+        {
+            Items = result.Value
+        });
+    }
+
+    private IActionResult MapResult(Result result)
+    {
+        if (result.IsSuccess)
+        {
+            return NoContent();
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult<T> MapResult<T>(Result<T> result)
+    {
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult MapError(Error error)
+    {
+        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
+        return error.Type switch
+        {
+            ErrorType.Validation => BadRequest(error),
+            ErrorType.NotFound => NotFound(error),
+            ErrorType.Conflict => Conflict(error),
+            ErrorType.Unauthorized => Unauthorized(error),
+            _ => BadRequest(error)
         };
     }
 }

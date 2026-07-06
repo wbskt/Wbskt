@@ -1,10 +1,11 @@
+using Wbskt.Infrastructure;
 using Wbskt.Primitives.Models;
 
 namespace Wbskt.Management.Host.Services.Clients;
 
 public interface IAuthServiceClient
 {
-    Task<int> ResolveWorkspaceAsync(Guid workspaceRef, PermissionSlug requiredPermission, CancellationToken cancellationToken = default);
+    Task<Result<int>> ResolveWorkspaceAsync(Guid workspaceRef, PermissionSlug requiredPermission, CancellationToken cancellationToken = default);
 }
 
 public record ResolvedWorkspaceResponse(int WorkspaceId);

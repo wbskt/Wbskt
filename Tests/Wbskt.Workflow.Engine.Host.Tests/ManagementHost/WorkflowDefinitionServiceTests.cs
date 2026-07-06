@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Moq;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -32,12 +34,13 @@ public sealed class WorkflowDefinitionServiceTests
             .ThrowsAsync(new NotFoundException("missing"));
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 11 });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
         var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
 
-        Assert.Equal(1, response.Version);
-        Assert.Equal("Published", response.Status);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(1, response.Value.Version);
+        Assert.Equal("Published", response.Value.Status);
         triggerService.Verify(x => x.OnPublishedAsync(11, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         cache.Verify(x => x.Invalidate(11), Times.Once);
@@ -57,7 +60,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ThrowsAsync(new NotFoundException("missing"));
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { inserted = row; return row with { Id = 21 }; });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
         await service.PublishAsync(42, request, CancellationToken.None);
 
@@ -78,11 +81,12 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6 });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
         var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
 
-        Assert.Equal(2, response.Version);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(2, response.Value.Version);
         workflowProvider.Verify(x => x.DeprecateAsync(5, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(5, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnPublishedAsync(6, It.IsAny<CancellationToken>()), Times.Once);
@@ -101,9 +105,12 @@ public sealed class WorkflowDefinitionServiceTests
         var request = CreatePublishRequest();
         var existing = CreateWorkflowRow(5, request.RefId, 1, true);
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        await Assert.ThrowsAsync<SecurityException>(() => service.PublishAsync(WorkspaceId + 99, request, CancellationToken.None));
+        var response = await service.PublishAsync(WorkspaceId + 99, request, CancellationToken.None);
+        
+        Assert.True(response.IsFailure);
+        Assert.Equal(ErrorType.Unauthorized, response.Error.Type);
         workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -118,14 +125,15 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var dto = await service.GetCurrentAsync(WorkspaceId, refId, CancellationToken.None);
+        var result = await service.GetCurrentAsync(WorkspaceId, refId, CancellationToken.None);
 
-        Assert.Equal(refId, dto.RefId);
-        Assert.Equal(4, dto.Version);
-        Assert.Equal("Published", dto.Status);
-        Assert.Equal("Vent control + escalation", dto.Name);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(refId, result.Value.RefId);
+        Assert.Equal(4, result.Value.Version);
+        Assert.Equal("Published", result.Value.Status);
+        Assert.Equal("Vent control + escalation", result.Value.Name);
     }
 
     [Fact]
@@ -139,9 +147,12 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        await Assert.ThrowsAsync<SecurityException>(() => service.GetCurrentAsync(WorkspaceId + 1, refId, CancellationToken.None));
+        var result = await service.GetCurrentAsync(WorkspaceId + 1, refId, CancellationToken.None);
+        
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Unauthorized, result.Error.Type);
     }
 
     [Fact]
@@ -155,13 +166,14 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.GetByRefIdVersionAsync(refId, 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(13, refId, 2, false));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var dto = await service.GetVersionAsync(WorkspaceId, refId, 2, CancellationToken.None);
+        var result = await service.GetVersionAsync(WorkspaceId, refId, 2, CancellationToken.None);
 
-        Assert.Equal(refId, dto.RefId);
-        Assert.Equal(2, dto.Version);
-        Assert.Equal("Deprecated", dto.Status);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(refId, result.Value.RefId);
+        Assert.Equal(2, result.Value.Version);
+        Assert.Equal("Deprecated", result.Value.Status);
     }
 
     [Fact]
@@ -175,10 +187,11 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(14, refId, 6, true));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        await service.DeprecateAsync(WorkspaceId, refId, CancellationToken.None);
+        var result = await service.DeprecateAsync(WorkspaceId, refId, CancellationToken.None);
 
+        Assert.True(result.IsSuccess);
         workflowProvider.Verify(x => x.DeprecateAsync(14, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(14, It.IsAny<CancellationToken>()), Times.Once);
         cache.Verify(x => x.Invalidate(14), Times.Once);
@@ -197,10 +210,11 @@ public sealed class WorkflowDefinitionServiceTests
             .ThrowsAsync(new NotFoundException("missing"));
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 17 });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
 
+        Assert.True(response.IsSuccess);
         triggerService.Verify(x => x.OnPublishedAsync(17, It.IsAny<CancellationToken>()), Times.Once);
         cache.Verify(x => x.Invalidate(17), Times.Once);
     }
@@ -214,10 +228,12 @@ public sealed class WorkflowDefinitionServiceTests
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, null!);
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        await Assert.ThrowsAsync<ValidationException>(() => service.PublishAsync(WorkspaceId, request, CancellationToken.None));
-
+        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+        
+        Assert.True(response.IsFailure);
+        Assert.Equal(ErrorType.Validation, response.Error.Type);
         workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -238,6 +254,7 @@ public sealed class WorkflowDefinitionServiceTests
 
     private static WorkflowDefinitionRow CreateWorkflowRow(int id, Guid refId, int version, bool isEnabled)
     {
+        var json = LoadFixture();
         return new WorkflowDefinitionRow
         {
             Id = id,
@@ -245,11 +262,11 @@ public sealed class WorkflowDefinitionServiceTests
             Version = version,
             WorkspaceId = WorkspaceId,
             Name = "Vent control + escalation",
-            Description = null,
+            Description = "Initial setup",
             IsEnabled = isEnabled,
-            DefinitionJson = LoadFixture(),
-            PublishedBy = 1,
-            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            DefinitionJson = json,
+            PublishedBy = 7,
+            CreatedAt = DateTime.UtcNow
         };
     }
 }

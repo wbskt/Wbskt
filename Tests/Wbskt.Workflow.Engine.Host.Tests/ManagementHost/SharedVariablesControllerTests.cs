@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.System;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Services.Clients;
@@ -28,8 +31,8 @@ public sealed class SharedVariablesControllerTests
         var workflowService = new Mock<IWorkflowDefinitionService>();
         var authClient = new Mock<IAuthServiceClient>();
         authClient.Setup(x => x.ResolveWorkspaceAsync(WorkspaceRef, permission, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(WorkspaceId);
-        var controller = new SharedVariablesController(provider, workflowService.Object, authClient.Object);
+            .ReturnsAsync(Result<int>.Success(WorkspaceId));
+        var controller = new SharedVariablesController(provider, workflowService.Object, authClient.Object, Mock.Of<ILogger<SharedVariablesController>>());
         return (controller, workflowService, authClient);
     }
 
@@ -50,9 +53,13 @@ public sealed class SharedVariablesControllerTests
                 CreatedAt = DateTime.UtcNow
             });
         var (controller, workflowService, authClient) = CreateController(provider.Object, Permissions.WorkflowsRead);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
 
-        var dto = await controller.Get(WorkspaceRef, workflowRefId, "counter", CancellationToken.None);
+        var response = await controller.Get(WorkspaceRef, workflowRefId, "counter", CancellationToken.None);
 
+        var okResult = Assert.IsType<OkObjectResult>(response.Result);
+        var dto = Assert.IsType<SharedVariableDto>(okResult.Value);
         Assert.Equal(workflowRefId, dto.WorkflowRefId);
         Assert.Equal("counter", dto.VarName);
         Assert.Equal("1", dto.ValueJson);
@@ -77,9 +84,13 @@ public sealed class SharedVariablesControllerTests
                 CreatedAt = DateTime.UtcNow
             });
         var (controller, workflowService, authClient) = CreateController(provider.Object, Permissions.WorkflowsUpdate);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
 
-        var dto = await controller.Set(WorkspaceRef, workflowRefId, "counter", new SharedVariableSetRequest("2"), CancellationToken.None);
+        var response = await controller.Set(WorkspaceRef, workflowRefId, "counter", new SharedVariableSetRequest("2"), CancellationToken.None);
 
+        var okResult = Assert.IsType<OkObjectResult>(response.Result);
+        var dto = Assert.IsType<SharedVariableDto>(okResult.Value);
         Assert.Equal("2", dto.ValueJson);
         provider.Verify(x => x.SetAsync(workflowRefId, "counter", "2", It.IsAny<CancellationToken>()), Times.Once);
         authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsUpdate, It.IsAny<CancellationToken>()), Times.Once);
@@ -93,9 +104,11 @@ public sealed class SharedVariablesControllerTests
         var workflowRefId = Guid.NewGuid();
         var (controller, workflowService, _) = CreateController(provider.Object, Permissions.WorkflowsRead);
         workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new SecurityException("denied"));
+            .ReturnsAsync(Result.Failure(Error.Unauthorized("WORKFLOW_UNAUTHORIZED", "denied")));
 
-        await Assert.ThrowsAsync<SecurityException>(() => controller.Get(WorkspaceRef, workflowRefId, "counter", CancellationToken.None));
+        var result = await controller.Get(WorkspaceRef, workflowRefId, "counter", CancellationToken.None);
+        
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
         provider.Verify(x => x.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -105,10 +118,14 @@ public sealed class SharedVariablesControllerTests
         var provider = new Mock<ISharedVariableProvider>();
         var workflowRefId = Guid.NewGuid();
         provider.Setup(x => x.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new NotFoundException("missing"));
-        var (controller, _, _) = CreateController(provider.Object, Permissions.WorkflowsRead);
+            .ThrowsAsync(new KeyNotFoundException("missing"));
+        var (controller, workflowService, _) = CreateController(provider.Object, Permissions.WorkflowsRead);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
 
-        await Assert.ThrowsAsync<NotFoundException>(() => controller.Get(WorkspaceRef, workflowRefId, "missing", CancellationToken.None));
+        var result = await controller.Get(WorkspaceRef, workflowRefId, "missing", CancellationToken.None);
+        
+        Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
     [Fact]

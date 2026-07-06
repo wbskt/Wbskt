@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Models;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Controllers;
 
@@ -18,14 +18,18 @@ public class RegistrationPoliciesController : ControllerBase
     private readonly IRegistrationPolicyService _policyService;
     private readonly IAuthServiceClient _authClient;
     private readonly IReferenceMapper _policyMapper;
+    private readonly ILogger<RegistrationPoliciesController> _logger;
 
     public RegistrationPoliciesController(
         IRegistrationPolicyService policyService,
-        IAuthServiceClient authClient, [FromKeyedServices(ReferenceType.RegistrationPolicy)]IReferenceMapper policyMapper)
+        IAuthServiceClient authClient, 
+        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
+        ILogger<RegistrationPoliciesController> logger)
     {
         _policyService = policyService;
         _authClient = authClient;
         _policyMapper = policyMapper;
+        _logger = logger;
     }
 
     /// <summary>
@@ -39,7 +43,7 @@ public class RegistrationPoliciesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of registration policies.</returns>
     [HttpGet]
-    public async Task<ListResponse<RegistrationPolicyResponse>> GetAll(
+    public async Task<ActionResult<ListResponse<RegistrationPolicyResponse>>> GetAll(
         Guid workspaceRef,
         [FromQuery] bool? autoApproval,
         [FromQuery] string? name,
@@ -47,16 +51,26 @@ public class RegistrationPoliciesController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        var workSpaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesRead, cancellationToken);
+        _logger.LogInformation("API: GetAll registration policies requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
 
-        var pagedData = await _policyService.GetAllAsync(workSpaceId, autoApproval, name, skip, take, cancellationToken);
-
-        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
-
-        return new ListResponse<RegistrationPolicyResponse>
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
         {
-            Items = pagedData
-        };
+            return MapResult(Result<ListResponse<RegistrationPolicyResponse>>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _policyService.GetAllAsync(workspaceIdResult.Value, autoApproval, name, skip, take, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<ListResponse<RegistrationPolicyResponse>>.Failure(result.Error));
+        }
+
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
+
+        return Ok(new ListResponse<RegistrationPolicyResponse>
+        {
+            Items = result.Value
+        });
     }
 
     /// <summary>
@@ -66,34 +80,44 @@ public class RegistrationPoliciesController : ControllerBase
     /// <param name="refId">The unique reference ID of the policy.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The registration policy details.</returns>
-    /// <exception cref="NotFoundException">Thrown if the policy is not found.</exception>
-    /// <exception cref="SecurityException">Thrown if the policy does not belong to the specified workspace.</exception>
     [HttpGet("{refId:guid}")]
-    public async Task<RegistrationPolicyResponse> Get(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegistrationPolicyResponse>> Get(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesRead, cancellationToken);
+        _logger.LogInformation("API: Get registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<RegistrationPolicyResponse>.Failure(workspaceIdResult.Error));
+        }
         
         var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
         if (policyId <= 0)
         {
-            throw new NotFoundException("Policy not found.");
+            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
         }
 
-        var policy = await _policyService.GetByIdAsync(policyId, cancellationToken);
-        if (policy.WorkspaceId != workspaceId)
+        var result = await _policyService.GetByIdAsync(policyId, cancellationToken);
+        if (result.IsFailure)
         {
-            throw new SecurityException("Policy does not belong to the specified workspace.");
+            return MapResult(Result<RegistrationPolicyResponse>.Failure(result.Error));
+        }
+
+        if (result.Value.WorkspaceId != workspaceIdResult.Value)
+        {
+            _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceIdResult.Value);
+            return MapError(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
         }
         
-        return new RegistrationPolicyResponse(
-            policy.RefId,
-            policy.Pin,
-            policy.Name,
-            policy.MaxClients,
-            policy.AutoApproval,
-            policy.IsEnabled,
-            policy.CreatedAt
-        );
+        return Ok(new RegistrationPolicyResponse(
+            result.Value.RefId,
+            result.Value.Pin,
+            result.Value.Name,
+            result.Value.MaxClients,
+            result.Value.AutoApproval,
+            result.Value.IsEnabled,
+            result.Value.CreatedAt
+        ));
     }
 
     /// <summary>
@@ -104,10 +128,18 @@ public class RegistrationPoliciesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The created registration policy details.</returns>
     [HttpPost]
-    public async Task<RegistrationPolicyResponse> Create(Guid workspaceRef, RegistrationPolicyRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegistrationPolicyResponse>> Create(Guid workspaceRef, RegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
-        return await _policyService.CreateAsync(workspaceId, request, cancellationToken);
+        _logger.LogInformation("API: Create registration policy requested for WorkspaceRef: '{WorkspaceRef}' (Name: '{PolicyName}')", workspaceRef, request.Name);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<RegistrationPolicyResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _policyService.CreateAsync(workspaceIdResult.Value, request, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -118,19 +150,25 @@ public class RegistrationPoliciesController : ControllerBase
     /// <param name="request">The updated policy details (Name, AutoApproval, IsEnabled).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="SecurityException">Thrown if the policy reference is invalid or access is denied.</exception>
     [HttpPatch("{refId:guid}")]
-    public async Task Update(Guid workspaceRef, Guid refId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update(Guid workspaceRef, Guid refId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
+        _logger.LogInformation("API: Update registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
         
         var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
         if (policyId <= 0)
         {
-            throw new SecurityException("Access denied.");
+            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
         }
 
-        await _policyService.UpdateAsync(workspaceId, policyId, request, cancellationToken);
+        var result = await _policyService.UpdateAsync(workspaceIdResult.Value, policyId, request, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -140,18 +178,57 @@ public class RegistrationPoliciesController : ControllerBase
     /// <param name="refId">The unique reference ID of the policy to disable.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="SecurityException">Thrown if the policy reference is invalid or access is denied.</exception>
     [HttpPost("{refId:guid}/disable")]
-    public async Task Disable(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Disable(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
+        _logger.LogInformation("API: Disable registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
         
         var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
         if (policyId <= 0)
         {
-            throw new SecurityException("Access denied.");
+            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
         }
 
-        await _policyService.DisableAsync(workspaceId, policyId, cancellationToken);
+        var result = await _policyService.DisableAsync(workspaceIdResult.Value, policyId, cancellationToken);
+        return MapResult(result);
+    }
+
+    private IActionResult MapResult(Result result)
+    {
+        if (result.IsSuccess)
+        {
+            return NoContent();
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult<T> MapResult<T>(Result<T> result)
+    {
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult MapError(Error error)
+    {
+        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
+        return error.Type switch
+        {
+            ErrorType.Validation => BadRequest(error),
+            ErrorType.NotFound => NotFound(error),
+            ErrorType.Conflict => Conflict(error),
+            ErrorType.Unauthorized => Unauthorized(error),
+            _ => BadRequest(error)
+        };
     }
 }

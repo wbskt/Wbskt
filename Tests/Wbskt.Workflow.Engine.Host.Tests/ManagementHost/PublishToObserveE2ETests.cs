@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Moq;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -24,15 +26,18 @@ public sealed class PublishToObserveE2ETests
         var cache = new RecordingWorkflowDefinitionCache();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, request, CancellationToken.None);
         var v2 = await service.PublishAsync(1, request, CancellationToken.None);
-        await service.DeprecateAsync(1, request.RefId, CancellationToken.None);
+        var deprecateResult = await service.DeprecateAsync(1, request.RefId, CancellationToken.None);
 
-        Assert.Equal(1, v1.Version);
-        Assert.Equal(2, v2.Version);
+        Assert.True(v1.IsSuccess);
+        Assert.True(v2.IsSuccess);
+        Assert.True(deprecateResult.IsSuccess);
+        Assert.Equal(1, v1.Value.Version);
+        Assert.Equal(2, v2.Value.Version);
         Assert.Equal([1, 2], triggerService.PublishedWorkflowDefinitionIds);
         Assert.Equal([1, 2], triggerService.DeprecatedWorkflowDefinitionIds);
         Assert.Equal([1, 2], cache.InvalidatedWorkflowDefinitionIds.Distinct().OrderBy(x => x));
@@ -44,16 +49,19 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object);
+        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, request, CancellationToken.None);
         var second = await service.PublishAsync(1, request, CancellationToken.None);
         var current = await service.GetCurrentAsync(1, request.RefId, CancellationToken.None);
 
-        Assert.Equal(1, first.Version);
-        Assert.Equal(2, second.Version);
-        Assert.Equal(2, current.Version);
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.True(current.IsSuccess);
+        Assert.Equal(1, first.Value.Version);
+        Assert.Equal(2, second.Value.Version);
+        Assert.Equal(2, current.Value.Version);
     }
 
     private static WorkflowPublishRequest CreatePublishRequest()

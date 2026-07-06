@@ -1,20 +1,18 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Models;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/workspaces/{workspaceRef:guid}/clients")]
+[Route("api/clients")]
 [ApiController]
-[Authorize]
 public class ClientsController : ControllerBase
 {
     private readonly IClientService _clientService;
@@ -23,6 +21,7 @@ public class ClientsController : ControllerBase
     private readonly IEventBus _eventBus;
     private readonly IReferenceMapper _policyMapper;
     private readonly IRegistrationPolicyService _policyService;
+    private readonly ILogger<ClientsController> _logger;
 
     public ClientsController(
         IClientService clientService,
@@ -30,7 +29,8 @@ public class ClientsController : ControllerBase
         IAuthServiceClient authClient, 
         IEventBus eventBus,
         [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
-        IRegistrationPolicyService policyService)
+        IRegistrationPolicyService policyService,
+        ILogger<ClientsController> logger)
     {
         _clientService = clientService;
         _clientMapper = clientMapper;
@@ -38,6 +38,7 @@ public class ClientsController : ControllerBase
         _eventBus = eventBus;
         _policyMapper = policyMapper;
         _policyService = policyService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -51,7 +52,7 @@ public class ClientsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of clients.</returns>
     [HttpGet]
-    public async Task<ListResponse<ClientResponse>> GetAll(
+    public async Task<ActionResult<ListResponse<ClientResponse>>> GetAll(
         Guid workspaceRef,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
@@ -59,16 +60,26 @@ public class ClientsController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        _logger.LogInformation("API: GetAll requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
         
-        var pagedData = await _clientService.GetAllAsync(workspaceId, status, name, skip, take, cancellationToken);
-        
-        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
-
-        return new ListResponse<ClientResponse>
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
         {
-            Items = pagedData
-        };
+            return MapResult(Result<ListResponse<ClientResponse>>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.GetAllAsync(workspaceIdResult.Value, status, name, skip, take, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
+        }
+
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
+
+        return Ok(new ListResponse<ClientResponse>
+        {
+            Items = result.Value
+        });
     }
 
     /// <summary>
@@ -82,9 +93,8 @@ public class ClientsController : ControllerBase
     /// <param name="take">Number of records to take for pagination.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of clients linked to the specified policy.</returns>
-    /// <exception cref="SecurityException">Thrown if the policy reference is invalid or does not belong to the workspace.</exception>
     [HttpGet("policy/{policyRefId:guid}")]
-    public async Task<ListResponse<ClientResponse>> GetByPolicy(
+    public async Task<ActionResult<ListResponse<ClientResponse>>> GetByPolicy(
         Guid workspaceRef,
         Guid policyRefId,
         [FromQuery] ClientStatus? status,
@@ -93,28 +103,44 @@ public class ClientsController : ControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("API: GetByPolicy requested for WorkspaceRef: '{WorkspaceRef}', PolicyRefId: '{PolicyRefId}'", workspaceRef, policyRefId);
+
         // 1. Authorize workspace access
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientResponse>>.Failure(workspaceIdResult.Error));
+        }
 
         // 2. Resolve Policy RefId
         var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
         if (policyId <= 0)
         {
-            throw new SecurityException("Access denied for policy.");
+            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
         }
 
-        // 3. !! CRITICAL !! Verify Policy belongs to Workspace
-        var policy = await _policyService.GetByIdAsync(policyId, cancellationToken);
-        if (policy.WorkspaceId != workspaceId)
+        // 3. Verify Policy belongs to Workspace
+        var policyResult = await _policyService.GetByIdAsync(policyId, cancellationToken);
+        if (policyResult.IsFailure)
         {
-            throw new SecurityException("Policy does not belong to the specified workspace.");
+            return MapResult(Result<ListResponse<ClientResponse>>.Failure(policyResult.Error));
+        }
+
+        if (policyResult.Value.WorkspaceId != workspaceIdResult.Value)
+        {
+            _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceIdResult.Value);
+            return MapError(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
         }
 
         // 4. All checks pass, get the data
-        var pagedData = await _clientService.GetByPolicyIdAsync(workspaceId, policyId, status, name, skip, take, cancellationToken);
+        var result = await _clientService.GetByPolicyIdAsync(workspaceIdResult.Value, policyId, status, name, skip, take, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
+        }
 
-        Response.Headers.Append("X-Total-Count", pagedData.TotalCount.ToString());
-        return new ListResponse<ClientResponse> { Items = pagedData };
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
+        return Ok(new ListResponse<ClientResponse> { Items = result.Value });
     }
 
     /// <summary>
@@ -125,19 +151,25 @@ public class ClientsController : ControllerBase
     /// <param name="request">The new status details.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="SecurityException">Thrown if the client reference is invalid or access is denied.</exception>
     [HttpPatch("{clientRefId:guid}/status")]
-    public async Task UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
-        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        _logger.LogInformation("API: UpdateStatus requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}' to Status: '{Status}'", workspaceRef, clientRefId, request.Status);
 
-        if (id <= 0)
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
+        if (workspaceIdResult.IsFailure)
         {
-            throw new SecurityException($"Access denied for client {clientRefId}.");
+            return MapResult(Result.Failure(workspaceIdResult.Error));
         }
 
-        await _clientService.UpdateStatusAsync(workspaceId, id, request.Status, cancellationToken);
+        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        if (id <= 0)
+        {
+            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        var result = await _clientService.UpdateStatusAsync(workspaceIdResult.Value, id, request.Status, cancellationToken);
+        return MapResult(result);
     }
 
     /// <summary>
@@ -149,11 +181,25 @@ public class ClientsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{clientRefId:guid}/command")]
-    public async Task SendCommand(Guid workspaceRef, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> SendCommand(Guid workspaceRef, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
+        _logger.LogInformation("API: SendCommand requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
+
         var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceId, request.Type, request.Payload), cancellationToken);
+        if (clientId <= 0)
+        {
+            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceIdResult.Value, request.Type, request.Payload), cancellationToken);
+        _logger.LogInformation("Successfully published client command event for ClientRefId: '{ClientRefId}'", clientRefId);
+        return NoContent();
     }
 
     /// <summary>
@@ -164,11 +210,58 @@ public class ClientsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{clientRefId:guid}/ping")]
-    public async Task Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsPing, cancellationToken);
+        _logger.LogInformation("API: Ping requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsPing, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
+
         var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientId, workspaceId, DateTime.UtcNow), cancellationToken);
+        if (clientId <= 0)
+        {
+            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientId, workspaceIdResult.Value, DateTime.UtcNow), cancellationToken);
+        _logger.LogInformation("Successfully published client ping event for ClientRefId: '{ClientRefId}'", clientRefId);
+        return NoContent();
+    }
+
+    private IActionResult MapResult(Result result)
+    {
+        if (result.IsSuccess)
+        {
+            return NoContent();
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult<T> MapResult<T>(Result<T> result)
+    {
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        return MapError(result.Error);
+    }
+
+    private ActionResult MapError(Error error)
+    {
+        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
+        return error.Type switch
+        {
+            ErrorType.Validation => BadRequest(error),
+            ErrorType.NotFound => NotFound(error),
+            ErrorType.Conflict => Conflict(error),
+            ErrorType.Unauthorized => Unauthorized(error),
+            _ => BadRequest(error)
+        };
     }
 }
 
