@@ -11,7 +11,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers;
 
-[Route("api/clients")]
+[Route("api/workspaces/{workspaceRef:guid}/clients")]
 [ApiController]
 public class ClientsController : ControllerBase
 {
