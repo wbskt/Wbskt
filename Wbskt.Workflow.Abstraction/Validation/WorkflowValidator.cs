@@ -6,9 +6,14 @@ namespace Wbskt.Workflow.Abstraction.Validation;
 
 public sealed class WorkflowValidator
 {
-    public ValidationResult Validate(WorkflowDefinition definition)
+    public ValidationResult Validate(WorkflowDefinition? definition)
     {
         var issues = new List<ValidationIssue>();
+        if (definition is null)
+        {
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, "NULL_DEFINITION", "Workflow definition must not be null."));
+            return new ValidationResult(issues);
+        }
         ValidateShape(definition, issues);
         ValidateDuplicateNodeIds(definition, issues);
         ValidateEdges(definition, issues);
