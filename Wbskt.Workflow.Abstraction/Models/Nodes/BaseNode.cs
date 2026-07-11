@@ -17,4 +17,10 @@ public abstract record BaseNode
     
     [JsonPropertyName("ports")]
     public required IReadOnlyCollection<PortDefinition> Ports { get; init; }
+
+    [JsonPropertyName("posX")]
+    public double PosX { get; init; } = 0;
+    
+    [JsonPropertyName("posY")]
+    public double PosY { get; init; } = 0;
 }
