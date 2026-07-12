@@ -32,7 +32,8 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
 
         try
         {
-            await publisher.PublishCommandAsync(clientRefId, 0 /* this will be filled in the DeviceCommandPublisher*/, workspaceId, command, payload, ct);
+            // [RJ]: TODO: do we need clientId for the event?
+            await publisher.PublishCommandAsync(clientRefId, 0 /* Skip this for now */, workspaceId, command, payload, ct);
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());
         }
         catch (Exception ex)
