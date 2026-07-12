@@ -13,7 +13,8 @@ public sealed record BranchContext(
     IReadOnlyDictionary<string, JsonElement> LocalState,
     IReadOnlyDictionary<string, JsonElement> TriggerPayload,
     string CorrelationKey,
-    DateTime StartedAt
+    DateTime StartedAt,
+    int WorkspaceId
 )
 {
     /// <summary>

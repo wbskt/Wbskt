@@ -114,7 +114,8 @@ public sealed class OutboundWebhookExecutorTests
             new Dictionary<string, JsonElement>(),
             new Dictionary<string, JsonElement>(),
             "corr-42",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            9);
         var node = new WebhookNotificationNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "webhook", Ports = [], Config = new WebhookNotificationConfig { Url = url, Method = method, Body = body } };
 
         return new NodeContext

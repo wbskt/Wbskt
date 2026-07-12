@@ -118,7 +118,8 @@ public sealed class RetryExecutorTests
             new Dictionary<string, JsonElement>(),
             new Dictionary<string, JsonElement>(),
             "corr-42",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            9);
     }
 
     private sealed class RecordingExecutor(params NodeExecutionResult[] results) : INodeExecutor

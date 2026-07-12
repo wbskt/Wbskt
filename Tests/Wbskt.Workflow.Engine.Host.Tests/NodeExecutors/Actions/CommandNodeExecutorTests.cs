@@ -159,7 +159,8 @@ public sealed class CommandNodeExecutorTests
             new Dictionary<string, JsonElement>(),
             triggerPayload,
             "corr-42",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            9);
 
         var node = new SendClientMessageNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "command", Ports = [], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = command, Payload = nodePayload } };
 

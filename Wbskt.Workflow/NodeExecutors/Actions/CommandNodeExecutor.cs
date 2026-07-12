@@ -18,11 +18,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         SendClientMessageNode node = (SendClientMessageNode)ctx.Node;
-        IReadOnlyDictionary<string, JsonElement> triggerPayload = ctx.Branch.TriggerPayload;
-
-        if (!TryGetClientRefId(triggerPayload, out Guid clientRefId)
-            || !TryGetInt(triggerPayload, "clientId", out int clientId)
-            || !TryGetInt(triggerPayload, "workspaceId", out int workspaceId))
+        if (!Guid.TryParse(node.Config.ClientRef, out Guid clientRefId))
         {
             return new NodeExecutionResult.Fail(
                 "CLIENT_MESSAGE_NO_TARGET",
@@ -30,40 +26,18 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
                 false,
                 null);
         }
-
+        int workspaceId = ctx.Branch.WorkspaceId;
         string command = node.Config.Type;
         string payload = node.Config.Payload?.GetRawText() ?? "{}";
 
         try
         {
-            await publisher.PublishCommandAsync(clientRefId, clientId, workspaceId, command, payload, ct);
+            await publisher.PublishCommandAsync(clientRefId, 0 /* this will be filled in the DeviceCommandPublisher*/, workspaceId, command, payload, ct);
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());
         }
         catch (Exception ex)
         {
             return new NodeExecutionResult.Fail("COMMAND_PUBLISH_ERROR", ex.Message, true, ex);
         }
-    }
-
-    private static bool TryGetClientRefId(IReadOnlyDictionary<string, JsonElement> payload, out Guid clientRefId)
-    {
-        clientRefId = default;
-        if (!payload.TryGetValue("clientRefId", out JsonElement element))
-        {
-            return false;
-        }
-
-        if (element.ValueKind == JsonValueKind.String)
-        {
-            return Guid.TryParse(element.GetString(), out clientRefId);
-        }
-
-        return element.TryGetGuid(out clientRefId);
-    }
-
-    private static bool TryGetInt(IReadOnlyDictionary<string, JsonElement> payload, string key, out int value)
-    {
-        value = 0;
-        return payload.TryGetValue(key, out JsonElement element) && element.TryGetInt32(out value);
     }
 }

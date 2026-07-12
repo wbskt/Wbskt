@@ -20,7 +20,8 @@ public sealed class OnFailureHandlerTests
         new Dictionary<string, JsonElement>(),
         new Dictionary<string, JsonElement>(),
         "corr-42",
-        new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+        9);
 
     [Fact]
     public void Apply_with_fail_branch_returns_original_fail()

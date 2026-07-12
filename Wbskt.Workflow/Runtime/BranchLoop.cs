@@ -117,7 +117,7 @@ internal sealed class BranchLoop : IBranchLoop
                 return;
             }
 
-            BranchContext branchContext = BuildBranchContext(branchRow, runRow);
+            BranchContext branchContext = BuildBranchContext(branchRow, runRow, definition.WorkspaceId);
 
             NodeExecutionResult? result = null;
             
@@ -405,7 +405,7 @@ internal sealed class BranchLoop : IBranchLoop
         ], ct);
     }
 
-    private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow)
+    private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)
     {
         IReadOnlyDictionary<string, JsonElement> localState = DeserializeDictionary(branchRow.LocalJson);
 
@@ -432,7 +432,8 @@ internal sealed class BranchLoop : IBranchLoop
             localState,
             triggerPayload,
             runRow.CorrelationKey ?? string.Empty,
-            runRow.StartedAt)
+            runRow.StartedAt,
+            workspaceId)
         {
             RunRefId = runRow.RefId,
             BranchRefId = branchRow.RefId

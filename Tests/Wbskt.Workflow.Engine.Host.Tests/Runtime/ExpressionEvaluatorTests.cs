@@ -63,6 +63,7 @@ public sealed class ExpressionEvaluatorTests
             localState ?? new Dictionary<string, JsonElement>(),
             new Dictionary<string, JsonElement>(),
             "corr-1",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            9);
     }
 }

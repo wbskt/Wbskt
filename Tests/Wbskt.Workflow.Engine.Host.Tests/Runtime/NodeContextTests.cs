@@ -25,7 +25,8 @@ public sealed class NodeContextTests
             new Dictionary<string, JsonElement>(),
             new Dictionary<string, JsonElement>(),
             "corr-1",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            9);
         var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
         var providers = new Mock<IProviderComposite>().Object;
         var cts = new CancellationTokenSource();
@@ -66,7 +67,8 @@ public sealed class NodeContextTests
             new Dictionary<string, JsonElement>(),
             new Dictionary<string, JsonElement>(),
             "corr-1",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            9);
         var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
         var providers = new Mock<IProviderComposite>().Object;
         var parentResults = new Dictionary<string, JsonElement>();

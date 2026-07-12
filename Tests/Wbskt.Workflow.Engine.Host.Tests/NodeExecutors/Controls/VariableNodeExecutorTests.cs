@@ -77,7 +77,7 @@ public sealed class VariableNodeExecutorTests
     {
         return new NodeContext
         {
-            Branch = new BranchContext(42, 1001, 5, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow),
+            Branch = new BranchContext(42, 1001, 5, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow, 9),
             Node = node,
             Providers = new StubProviderComposite(),
             Tick = 1,

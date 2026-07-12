@@ -56,7 +56,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         {
             try
             {
-                await ExecuteCompensationAsync(run, branch, item.Node!, item.Event, ct);
+                await ExecuteCompensationAsync(run, branch, item.Node!, item.Event, definition.WorkspaceId, ct);
                 await AppendCompensationEventAsync(run.Id, branch.RefId, item.Event.NodeId, item.Node!.Compensation!, ct);
             }
             catch
@@ -67,7 +67,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         await Task.WhenAll(tasks);
     }
 
-    private async Task ExecuteCompensationAsync(RunRow run, BranchRow branch, BaseActionNode node, HistoryEventRow historyEvent, CancellationToken ct)
+    private async Task ExecuteCompensationAsync(RunRow run, BranchRow branch, BaseActionNode node, HistoryEventRow historyEvent, int workspaceId, CancellationToken ct)
     {
         CompensationDeclaration compensation = node.Compensation!;
         
@@ -112,7 +112,8 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 ParseLocalState(historyEvent.PayloadJson),
                 triggerPayload,
                 run.CorrelationKey ?? string.Empty,
-                run.StartedAt)
+                run.StartedAt,
+                workspaceId)
             {
                 RunRefId = run.RefId,
                 BranchRefId = branch.RefId

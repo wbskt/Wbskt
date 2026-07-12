@@ -72,7 +72,7 @@ public sealed class SubWorkflowNodeExecutorTests
         var node = new SubWorkflowNode { NodeId = Guid.NewGuid(), Name = "sub", Ports = [], Config = new SubWorkflowConfig { WorkflowRefId = ChildRefId } };
         return new NodeContext
         {
-            Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState, new Dictionary<string, JsonElement>(), "corr-1", new DateTime(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc))
+            Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState, new Dictionary<string, JsonElement>(), "corr-1", new DateTime(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc), 9)
             {
                 RunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")
             },

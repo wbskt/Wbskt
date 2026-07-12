@@ -24,7 +24,8 @@ public sealed class BranchPointerTests
             localState,
             new Dictionary<string, JsonElement>(),
             "corr-42",
-            new DateTime(2026, 5, 26, 13, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 5, 26, 13, 0, 0, DateTimeKind.Utc),
+            9);
 
         // Act
         var pointer = BranchPointer.From(context);

@@ -47,7 +47,7 @@ public sealed class TriggerExecutorTests
             Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>
             {
                 ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1")
-            }, "corr-1", DateTime.UtcNow),
+            }, "corr-1", DateTime.UtcNow, 9),
             Node = node,
             Providers = new StubProviderComposite(),
             Tick = 1,

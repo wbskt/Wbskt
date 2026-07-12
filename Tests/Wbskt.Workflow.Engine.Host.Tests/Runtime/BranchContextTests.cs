@@ -39,6 +39,7 @@ public sealed class BranchContextTests
         Assert.Equal(context.Attempt, updated.Attempt);
         Assert.Equal(context.CorrelationKey, updated.CorrelationKey);
         Assert.Equal(context.StartedAt, updated.StartedAt);
+        Assert.Equal(context.WorkspaceId, updated.WorkspaceId);
         Assert.Same(originalState, context.LocalState);
     }
 
@@ -52,6 +53,7 @@ public sealed class BranchContextTests
     [InlineData("Attempt")]
     [InlineData("CorrelationKey")]
     [InlineData("StartedAt")]
+    [InlineData("WorkspaceId")]
     public void BranchContext_with_local_state_preserves_other_fields(string fieldName)
     {
         // Arrange
@@ -103,6 +105,9 @@ public sealed class BranchContextTests
             case "StartedAt":
                 Assert.Equal(context.StartedAt, updated.StartedAt);
                 break;
+            case "WorkspaceId":
+                Assert.Equal(context.WorkspaceId, updated.WorkspaceId);
+                break;
             default:
                 throw new InvalidOperationException($"Unexpected field '{fieldName}'.");
         }
@@ -124,6 +129,7 @@ public sealed class BranchContextTests
             localState,
             triggerPayload,
             "corr-1",
-            startedAt);
+            startedAt,
+            9);
     }
 }
