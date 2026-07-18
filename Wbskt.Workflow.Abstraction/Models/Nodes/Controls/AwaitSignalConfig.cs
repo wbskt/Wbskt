@@ -11,8 +11,5 @@ public sealed record AwaitSignalConfig
     [JsonPropertyName("ttl")]
     public TimeSpan? Ttl { get; init; } = null;
 
-    [JsonPropertyName("onTimeout")]
-    public string? OnTimeout { get; init; } = null;
-
 }
 

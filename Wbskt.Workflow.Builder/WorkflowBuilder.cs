@@ -244,7 +244,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = $"Wait {signalName}",
             Ports = ports,
-            Config = new AwaitSignalConfig { SignalName = signalName, Correlation = null, Ttl = ttl, OnTimeout = ttl.HasValue ? "timeout" : null } });
+            Config = new AwaitSignalConfig { SignalName = signalName, Correlation = null, Ttl = ttl } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -517,8 +517,12 @@ public sealed class WorkflowBuilder
         _nodes.Add(new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpNode {
             NodeId = id,
             Name = "Wait For Http",
-            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpConfig { Ttl = ttl, OnTimeout = null } });
+            Ports = [
+                new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" },
+                new PortDefinition { PortId = PortNames.Timeout, Direction = PortDirection.Output, Label = "Timeout" }
+            ],
+            Config = new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpConfig { Ttl = ttl } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);

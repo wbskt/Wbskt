@@ -23,9 +23,9 @@ public sealed class ForEachNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
         var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
-        Assert.Equal("done", fork.ContinueNodeId);
+        Assert.Equal("done", fork.ContinueOutboundPort);
         Assert.Equal(3, fork.Children.Count);
-        Assert.All(fork.Children, child => Assert.Equal("body", child.NodeId));
+        Assert.All(fork.Children, child => Assert.Equal("body", child.OutboundPort));
         Assert.Equal("a", fork.Children.ElementAt(0).LocalState["item"].GetString());
         Assert.Equal("b", fork.Children.ElementAt(1).LocalState["item"].GetString());
         Assert.Equal("c", fork.Children.ElementAt(2).LocalState["item"].GetString());
@@ -43,7 +43,7 @@ public sealed class ForEachNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
         var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
-        Assert.Equal("done", fork.ContinueNodeId);
+        Assert.Equal("done", fork.ContinueOutboundPort);
         Assert.Empty(fork.Children);
     }
 

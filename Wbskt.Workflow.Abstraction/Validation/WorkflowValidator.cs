@@ -186,20 +186,15 @@ public sealed class WorkflowValidator
                 return forkOutputs;
                 
             case Models.Nodes.NodeKind.ControlAwaitSignal:
-                if (node is Models.Nodes.Controls.AwaitSignalNode awaitNode && !string.IsNullOrWhiteSpace(awaitNode.Config?.OnTimeout))
+                if (node is Models.Nodes.Controls.AwaitSignalNode awaitNode && awaitNode.Config?.Ttl is not null)
                 {
-                    return [inputIn, outputDefault, new PortDefinition { PortId = awaitNode.Config.OnTimeout, Direction = PortDirection.Output, Label = "Timeout" }
-                    ];
+                    return [inputIn, outputDefault, new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }];
                 }
                 return [inputIn, outputDefault];
 
             case Models.Nodes.NodeKind.ControlWaitForHttp:
-                if (node is Models.Nodes.Controls.WaitForHttpNode waitNode && !string.IsNullOrWhiteSpace(waitNode.Config?.OnTimeout))
-                {
-                    return [inputIn, outputDefault, new PortDefinition { PortId = waitNode.Config.OnTimeout, Direction = PortDirection.Output, Label = "Timeout" }
-                    ];
-                }
-                return [inputIn, outputDefault];
+                // WaitForHttp always has a mandatory Ttl, so the timeout port is always present.
+                return [inputIn, outputDefault, new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }];
                 
             case Models.Nodes.NodeKind.ControlEnd:
             case Models.Nodes.NodeKind.ControlFailRun:

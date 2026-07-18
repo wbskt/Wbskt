@@ -50,7 +50,7 @@ public sealed class WaitForHttpNodeExecutorTests
     public async Task Resume_after_deadline_continues_timeout_port()
     {
         var executor = new WaitForHttpNodeExecutor(new MutableClock(T0.AddMinutes(16)));
-        var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15), OnTimeout = "expired" } };
+        var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement(RunRefId.ToString()),
@@ -58,7 +58,7 @@ public sealed class WaitForHttpNodeExecutorTests
         });
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
-        Assert.Equal("expired", cont.OutboundPort);
+        Assert.Equal("timeout", cont.OutboundPort);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class WaitForHttpNodeExecutorTests
     public async Task Resume_with_wake_payload_wins_over_elapsed_deadline()
     {
         var executor = new WaitForHttpNodeExecutor(new MutableClock(T0.AddMinutes(20)));
-        var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15), OnTimeout = "expired" } };
+        var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement(RunRefId.ToString()),

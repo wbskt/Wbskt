@@ -33,9 +33,9 @@ public sealed class ParallelForEachNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
-        Assert.Null(fork.ContinueNodeId);
+        Assert.Null(fork.ContinueOutboundPort);
         Assert.Equal(3, fork.Children.Count);
-        Assert.All(fork.Children, child => Assert.Equal("body", child.NodeId));
+        Assert.All(fork.Children, child => Assert.Equal("body", child.OutboundPort));
         Assert.Equal("x", fork.Children.ElementAt(0).LocalState["item"].GetString());
         Assert.Equal("y", fork.Children.ElementAt(1).LocalState["item"].GetString());
         Assert.Equal("z", fork.Children.ElementAt(2).LocalState["item"].GetString());

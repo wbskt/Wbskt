@@ -220,11 +220,11 @@ internal sealed class BranchLoop : IBranchLoop
                 case NodeExecutionResult.Fork fork:
                 {
                     IReadOnlyDictionary<string, JsonElement> baseLocalState = MergeLocalState(branchRow.LocalJson, fork.LocalStatePatch);
-                    if (fork.Children.Count == 1 && string.IsNullOrWhiteSpace(fork.ContinueNodeId))
+                    if (fork.Children.Count == 1 && string.IsNullOrWhiteSpace(fork.ContinueOutboundPort))
                     {
                         ForkSpec child = fork.Children.Single();
                         string childLocalJson = SerializeLocalState(MergeLocalState(SerializeLocalState(baseLocalState), child.LocalState));
-                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, child.NodeId), ActiveStatus, childLocalJson, branchRow.LastOutputJson, ct);
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, child.OutboundPort), ActiveStatus, childLocalJson, branchRow.LastOutputJson, ct);
                         break;
                     }
 
@@ -242,7 +242,7 @@ internal sealed class BranchLoop : IBranchLoop
                                 RunId = runRow.Id,
                                 ParentBranchId = branchRow.RefId,
                                 ForkCohortId = cohortId,
-                                NodeId = ResolveForkTargetNodeId(definition, node.NodeId, child.NodeId),
+                                NodeId = ResolveForkTargetNodeId(definition, node.NodeId, child.OutboundPort),
                                 Status = ActiveStatus,
                                 PendingTakePort = null,
                                 LocalJson = childLocalJson,
@@ -256,14 +256,14 @@ internal sealed class BranchLoop : IBranchLoop
                         }
                     }
 
-                    if (string.IsNullOrWhiteSpace(fork.ContinueNodeId))
+                    if (string.IsNullOrWhiteSpace(fork.ContinueOutboundPort))
                     {
                         await CompleteBranchAsync(runRow.Id, branchId, branchRow.RefId, ct);
                         return;
                     }
 
                     string continueLocalJson = SerializeLocalState(baseLocalState);
-                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, fork.ContinueNodeId), ActiveStatus, continueLocalJson, branchRow.LastOutputJson, ct);
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, fork.ContinueOutboundPort), ActiveStatus, continueLocalJson, branchRow.LastOutputJson, ct);
                     break;
                 }
 
@@ -519,15 +519,15 @@ internal sealed class BranchLoop : IBranchLoop
         };
     }
 
-    private static Guid ResolveForkTargetNodeId(WorkflowDefinition definition, Guid currentNodeId, string target)
+    private static Guid ResolveForkTargetNodeId(WorkflowDefinition definition, Guid currentNodeId, string outboundPort)
     {
-        Guid? resolvedNodeId = ResolveNextNodeId(definition, currentNodeId, target);
+        Guid? resolvedNodeId = ResolveNextNodeId(definition, currentNodeId, outboundPort);
         if (resolvedNodeId is Guid nodeId)
         {
             return nodeId;
         }
 
-        throw new InvalidOperationException($"Unable to resolve fork target '{target}' from node {currentNodeId}.");
+        throw new InvalidOperationException($"Unable to resolve fork target port '{outboundPort}' from node {currentNodeId}.");
     }
 
     private static Guid? ResolveNextNodeId(WorkflowDefinition definition, Guid currentNodeId, string outboundPort)

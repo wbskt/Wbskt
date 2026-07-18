@@ -79,11 +79,10 @@ public class ControlNodeTests
     [Fact]
     public void WaitForHttpNode_deserialises()
     {
-        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000026", "kind": "control:waitForHttp", "name": "WaitHttp", "ports": [], "config": { "ttl": "01:00:00", "onTimeout": "timeout" } }""";
+        var json = """{ "nodeId": "00000000-0000-0000-0000-000000000026", "kind": "control:waitForHttp", "name": "WaitHttp", "ports": [], "config": { "ttl": "01:00:00" } }""";
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var wh = Assert.IsType<WaitForHttpNode>(node);
         Assert.Equal(TimeSpan.FromHours(1), wh.Config!.Ttl);
-        Assert.Equal("timeout", wh.Config.OnTimeout);
     }
 
     [Fact]

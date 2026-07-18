@@ -5,8 +5,5 @@ public sealed record WaitForHttpConfig
     [JsonPropertyName("ttl")]
     public required TimeSpan Ttl { get; init; }
 
-    [JsonPropertyName("onTimeout")]
-    public string? OnTimeout { get; init; } = null;
-
 }
 

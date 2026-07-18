@@ -19,7 +19,7 @@ public abstract record NodeExecutionResult
 
     public sealed record Continue(string OutboundPort, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
 
-    public sealed record Fork(IReadOnlyCollection<ForkSpec> Children, string? ContinueNodeId, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
+    public sealed record Fork(IReadOnlyCollection<ForkSpec> Children, string? ContinueOutboundPort, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
 
     public sealed record WaitForBookmark(WakeCondition Condition, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
 
@@ -28,6 +28,6 @@ public abstract record NodeExecutionResult
     public sealed record Terminal(BranchTerminalReason Reason) : NodeExecutionResult;
 }
 
-public sealed record ForkSpec(string NodeId, IReadOnlyDictionary<string, JsonElement> LocalState);
+public sealed record ForkSpec(string OutboundPort, IReadOnlyDictionary<string, JsonElement> LocalState);
 
 public enum BranchTerminalReason { Completed, Cancelled, Failed }

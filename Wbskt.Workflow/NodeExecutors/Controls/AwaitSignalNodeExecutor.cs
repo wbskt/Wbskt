@@ -33,7 +33,7 @@ internal sealed class AwaitSignalNodeExecutor(IClock clock) : INodeExecutor
         AwaitSignalConfig config = node.Config
             ?? throw new InvalidOperationException($"AwaitSignal node {node.NodeId} is missing config.");
 
-        string timeoutPort = string.IsNullOrWhiteSpace(config.OnTimeout) ? DefaultTimeoutPort : config.OnTimeout;
+        string timeoutPort = DefaultTimeoutPort; // always "timeout"; edges map the port to the target node
 
         // Resume visit: the marker from the first visit is present.
         if (ctx.Branch.LocalState.ContainsKey(ParkedKey))

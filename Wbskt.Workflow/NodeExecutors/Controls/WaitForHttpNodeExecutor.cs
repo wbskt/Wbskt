@@ -33,7 +33,7 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
         WaitForHttpConfig config = node.Config
             ?? throw new InvalidOperationException($"WaitForHttp node {node.NodeId} is missing config.");
 
-        string timeoutPort = string.IsNullOrWhiteSpace(config.OnTimeout) ? DefaultTimeoutPort : config.OnTimeout;
+        string timeoutPort = DefaultTimeoutPort; // always "timeout"; edges map the port to the target node
 
         // Resume visit.
         if (ctx.Branch.LocalState.ContainsKey(ParkedKey))

@@ -77,7 +77,7 @@ public sealed class AwaitSignalNodeExecutorTests
     public async Task Resume_after_deadline_continues_timeout_port()
     {
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(11)));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10), OnTimeout = "expired" } };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement("approve"),
@@ -85,7 +85,7 @@ public sealed class AwaitSignalNodeExecutorTests
         });
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
-        Assert.Equal("expired", cont.OutboundPort);
+        Assert.Equal("timeout", cont.OutboundPort);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class AwaitSignalNodeExecutorTests
     {
         // A signal that arrives at/after the deadline still resumes via the signal path, not timeout.
         var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(20)));
-        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10), OnTimeout = "expired" } };
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
         {
             [ParkedKey] = JsonSerializer.SerializeToElement("approve"),

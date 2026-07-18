@@ -52,7 +52,7 @@ public sealed class NodeExecutionResultTests
         // Assert
         var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
         Assert.Equal(2, fork.Children.Count);
-        Assert.Equal("continue-node", fork.ContinueNodeId);
+        Assert.Equal("continue-node", fork.ContinueOutboundPort);
         Assert.Same(children, fork.Children);
         Assert.Same(patch, fork.LocalStatePatch);
     }
