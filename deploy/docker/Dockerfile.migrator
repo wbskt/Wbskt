@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+# Builds both .sqlproj (Microsoft.Build.Sql is cross-platform) into DACPACs, then publishes them
+# with sqlpackage. Deploy-Databases.ps1 stays the Windows-dev path; this is the container path,
+# run via: docker compose --profile migrate run --rm migrator
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Databases/ Databases/
+COPY Directory.Packages.props nuget.config global.json ./
+# sharing=locked: see deploy/docker/Dockerfile - this cache mount can run concurrently with the
+# 4 host image builds (`docker compose build` with no service filter), so it needs the same
+# serialization to avoid corrupting the shared NuGet package cache.
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    dotnet build Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj -c Release \
+    && dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj -c Release
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS final
+RUN dotnet tool install --global microsoft.sqlpackage
+ENV PATH="${PATH}:/root/.dotnet/tools"
+WORKDIR /app
+COPY --from=build /src/Databases/Wbskt.Database.Auth/bin/Release/*/Wbskt.Database.Auth.dacpac ./
+COPY --from=build /src/Databases/Wbskt.Database/bin/Release/*/Wbskt.Database.dacpac ./
+COPY deploy/docker/migrate.sh ./
+RUN chmod +x ./migrate.sh
+ENTRYPOINT ["/app/migrate.sh"]

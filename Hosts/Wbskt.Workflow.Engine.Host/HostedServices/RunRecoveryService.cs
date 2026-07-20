@@ -33,7 +33,12 @@ public sealed class RunRecoveryService : IHostedService, IEngineStartupTracker
     {
     }
 
-    public async Task StartAsync(CancellationToken ct)
+    // Recovery only ever runs on a new leader (see EngineLeadershipCoordinator) - the previous
+    // leader is either dead or self-fenced by LeadershipState, so no other instance can be
+    // concurrently dispatching these same branches.
+    public Task StartAsync(CancellationToken ct) => RecoverAsync(ct);
+
+    public async Task RecoverAsync(CancellationToken ct)
     {
         try
         {

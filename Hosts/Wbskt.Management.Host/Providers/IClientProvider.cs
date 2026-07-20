@@ -16,8 +16,8 @@ public interface IClientProvider : IReferenceProvider
         CancellationToken cancellationToken = default);
     Task<Client> VerifyAsync(Guid refId, string secret, CancellationToken cancellationToken = default);
     Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default);
-    Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, CancellationToken cancellationToken = default);
-    Task ResetAllPresenceAsync(CancellationToken cancellationToken = default);
+    Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default);
+    Task ResetAllPresenceAsync(string? hostId = null, CancellationToken cancellationToken = default);
     Task<ClientDetail> GetDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);

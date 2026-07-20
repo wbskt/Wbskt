@@ -13,6 +13,10 @@ public sealed class ClientConnection : IDisposable
     public required int ClientId { get; init; }
     public required int WorkspaceId { get; init; }
 
+    // Used by ConnectionSupersededHandler to decide which of two concurrent connections for the
+    // same client (one per socket-host instance) is the older one to close.
+    public DateTime EstablishedAtUtc { get; init; } = DateTime.UtcNow;
+
     // Timestamp of the last sys.ping sent on this connection; RTT fallback when the pong payload is unreadable.
     public DateTime? LastPingSentAt { get; set; }
 

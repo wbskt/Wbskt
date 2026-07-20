@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
+using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
@@ -84,6 +85,7 @@ public sealed class BookmarkCompanionTimerTests
         var scheduler = new BookmarkScheduler(
             new FixedClock(),
             new FixedHostIdentity(),
+            new AlwaysHeldLeaseHolder(),
             branchProvider,
             bookmarkProvider,
             new RecordingRunDispatcher(),
@@ -394,5 +396,12 @@ public sealed class BookmarkCompanionTimerTests
     private sealed class FixedHostIdentity : IHostIdentity
     {
         public string HostId => "host-1";
+    }
+
+    private sealed class AlwaysHeldLeaseHolder : ILeaseHolder
+    {
+        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(true);
+        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
+        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct) => Task.FromResult(true);
     }
 }

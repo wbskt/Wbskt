@@ -18,4 +18,9 @@ public sealed class WorkflowEngineOptions
     public int LeaseDurationSeconds { get; init; } = 120;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;
+
+    // Engine active/standby leader election (WP4) - separate from LeaseDurationSeconds above,
+    // which governs per-item claim leases (bookmarks, scheduled fires), not the engine-leader lease.
+    public TimeSpan LeaderElectionRenewInterval { get; init; } = TimeSpan.FromSeconds(10);
+    public int LeaderElectionLeaseTtlSeconds { get; init; } = 30;
 }

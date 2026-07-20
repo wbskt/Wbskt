@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+.git/
+.claude/
+Tests/
+Docs/
+Clients/Wbskt.Simulator/
+Tools/
+deploy/console/dist/

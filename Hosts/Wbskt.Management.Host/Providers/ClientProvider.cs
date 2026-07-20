@@ -125,19 +125,23 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
-    public async Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, CancellationToken cancellationToken = default)
+    public async Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Client_UpdatePresence", p =>
         {
             p.AddWithValue("@Id", id);
             p.AddWithValue("@IsConnected", isConnected);
             p.AddWithValue("@LastActivityAt", lastActivityAt);
+            p.AddWithValue("@HostId", (object?)hostId ?? DBNull.Value);
         }, cancellationToken);
     }
 
-    public async Task ResetAllPresenceAsync(CancellationToken cancellationToken = default)
+    public async Task ResetAllPresenceAsync(string? hostId = null, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.Client_ResetAllPresence", null, cancellationToken);
+        await ExecuteNonQueryAsync("dbo.Client_ResetAllPresence", p =>
+        {
+            p.AddWithValue("@HostId", (object?)hostId ?? DBNull.Value);
+        }, cancellationToken);
     }
 
     public async Task<ClientDetail> GetDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)

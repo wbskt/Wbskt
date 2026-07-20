@@ -54,6 +54,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IPendingTriggerEventProvider, PendingTriggerEventProvider>();
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
         services.AddScoped<IJoinAggregatorProvider, JoinAggregatorProvider>();
+        services.AddScoped<ILeaseProvider, LeaseProvider>();
 
         return services;
     }
@@ -73,6 +74,9 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
         services.AddSingleton<IHostIdentity, HostIdentity>();
         services.AddSingleton<ILeaseHolder, AlwaysHoldsLeaseHolder>();
+        // The engine host re-registers ILeaseHolder as SqlLeaseHolder (last registration wins);
+        // Management/tests keep the always-true default since they never run engine hosted services.
+        services.AddSingleton<LeadershipState>();
         services.AddSingleton<WorkflowMetrics>();
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());

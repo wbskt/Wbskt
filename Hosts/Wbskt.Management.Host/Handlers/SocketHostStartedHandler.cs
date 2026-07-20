@@ -20,7 +20,7 @@ public sealed class SocketHostStartedHandler : IConsumer<SocketHostStartedEvent>
 
     public async Task Consume(ConsumeContext<SocketHostStartedEvent> context)
     {
-        _logger.LogInformation("Socket host started; resetting stale client presence flags.");
-        await _clientProvider.ResetAllPresenceAsync(context.CancellationToken);
+        _logger.LogInformation("Socket host {HostId} started; resetting its stale client presence flags.", context.Message.HostId);
+        await _clientProvider.ResetAllPresenceAsync(context.Message.HostId, context.CancellationToken);
     }
 }

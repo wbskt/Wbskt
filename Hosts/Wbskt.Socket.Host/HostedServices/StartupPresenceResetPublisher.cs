@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Hosting;
 
 namespace Wbskt.Socket.Host.HostedServices;
@@ -12,11 +13,13 @@ internal sealed class StartupPresenceResetPublisher : BackgroundService
 
     private readonly IEventBus _eventBus;
     private readonly ILogger<StartupPresenceResetPublisher> _logger;
+    private readonly string _hostId;
 
-    public StartupPresenceResetPublisher(IEventBus eventBus, ILogger<StartupPresenceResetPublisher> logger)
+    public StartupPresenceResetPublisher(IEventBus eventBus, ILogger<StartupPresenceResetPublisher> logger, BusInstanceId busInstanceId)
     {
         _eventBus = eventBus;
         _logger = logger;
+        _hostId = busInstanceId.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -25,7 +28,7 @@ internal sealed class StartupPresenceResetPublisher : BackgroundService
         {
             try
             {
-                await _eventBus.PublishAsync(new SocketHostStartedEvent(), stoppingToken);
+                await _eventBus.PublishAsync(new SocketHostStartedEvent(_hostId), stoppingToken);
                 _logger.LogInformation("Published SocketHostStartedEvent (presence reset).");
                 return;
             }

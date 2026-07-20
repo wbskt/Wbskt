@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
+using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -8,9 +9,11 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 public sealed class BookmarkScheduler : BackgroundService
 {
     private const int BatchSize = 64;
+    private const string LeaseName = "bookmark-scheduler";
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(2);
     private readonly IClock _clock;
     private readonly IHostIdentity _hostIdentity;
+    private readonly ILeaseHolder _leaseHolder;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
     private readonly ILogger<BookmarkScheduler> _logger;
@@ -23,6 +26,7 @@ public sealed class BookmarkScheduler : BackgroundService
     public BookmarkScheduler(
         IClock clock,
         IHostIdentity hostIdentity,
+        ILeaseHolder leaseHolder,
         IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
         ILogger<BookmarkScheduler> logger,
@@ -30,6 +34,7 @@ public sealed class BookmarkScheduler : BackgroundService
         : this(
             clock,
             hostIdentity,
+            leaseHolder,
             scopeFactory,
             runDispatcher,
             logger,
@@ -43,6 +48,7 @@ public sealed class BookmarkScheduler : BackgroundService
     internal BookmarkScheduler(
         IClock clock,
         IHostIdentity hostIdentity,
+        ILeaseHolder leaseHolder,
         IServiceScopeFactory scopeFactory,
         IRunDispatcher runDispatcher,
         ILogger<BookmarkScheduler> logger,
@@ -53,6 +59,7 @@ public sealed class BookmarkScheduler : BackgroundService
     {
         _clock = clock;
         _hostIdentity = hostIdentity;
+        _leaseHolder = leaseHolder;
         _scopeFactory = scopeFactory;
         _runDispatcher = runDispatcher;
         _logger = logger;
@@ -65,6 +72,7 @@ public sealed class BookmarkScheduler : BackgroundService
     internal BookmarkScheduler(
         IClock clock,
         IHostIdentity hostIdentity,
+        ILeaseHolder leaseHolder,
         IBranchProvider branchProvider,
         IBookmarkProvider bookmarkProvider,
         IRunDispatcher runDispatcher,
@@ -76,6 +84,7 @@ public sealed class BookmarkScheduler : BackgroundService
         : this(
             clock,
             hostIdentity,
+            leaseHolder,
             new StaticScopeFactory(branchProvider, bookmarkProvider),
             runDispatcher,
             logger,
@@ -88,6 +97,11 @@ public sealed class BookmarkScheduler : BackgroundService
 
     public async Task ProcessDueBookmarksAsync(CancellationToken ct)
     {
+        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        {
+            return;
+        }
+
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
@@ -129,6 +143,11 @@ public sealed class BookmarkScheduler : BackgroundService
 
     public async Task RunOrphanGcAsync(CancellationToken ct)
     {
+        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        {
+            return;
+        }
+
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
         int deletedCount = await bookmarkProvider.DeleteOrphansAsync(ct);

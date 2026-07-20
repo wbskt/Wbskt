@@ -39,8 +39,9 @@ public static class Program
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
 
-        // Event Bus
-        builder.Services.AddRabbitMqEventBus(builder.Configuration);
+        // Event Bus — per-instance fan-out so every socket instance sees every client event
+        // (ClientCommandEvent, ClientPingEvent, ClientStatusChangedEvent); see EventBusExtensions.
+        builder.Services.AddRabbitMqEventBus(builder.Configuration, perInstanceEndpoints: true);
 
         // Background services (registered after the bus so it starts first)
         builder.Services.AddHostedService<StartupPresenceResetPublisher>();
@@ -51,16 +52,6 @@ public static class Program
 
         builder.Services.AddAuthorization();
 
-        builder.Services.AddCors(options =>
-        {
-            options.AddDefaultPolicy(policy =>
-            {
-                policy.AllowAnyOrigin()
-                      .AllowAnyHeader()
-                      .AllowAnyMethod();
-            });
-        });
-
         builder.Services.AddControllers();
         builder.Services.AddCustomOpenApi();
 
@@ -69,8 +60,6 @@ public static class Program
         await app.RunStartupTasksAsync();
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
-
-        app.UseCors();
 
         if (app.Environment.IsDevelopment())
         {
@@ -94,6 +83,7 @@ public static class Program
             await handler.HandleAsync(context);
         });
 
+        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
         app.MapControllers();
 
         await app.RunAsync();

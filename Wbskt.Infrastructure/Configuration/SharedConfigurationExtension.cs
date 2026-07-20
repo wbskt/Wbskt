@@ -30,6 +30,10 @@ public static class SharedConfigurationExtension
         builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
         builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
 
+        // CreateBuilder already adds env vars, but at lower precedence than the JSON providers
+        // above. Re-append so container env vars (secrets, per-instance overrides) win.
+        builder.Configuration.AddEnvironmentVariables();
+
         return builder;
     }
     

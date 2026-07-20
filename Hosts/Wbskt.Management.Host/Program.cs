@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -60,20 +61,21 @@ public static class Program
         builder.Services.AddSingleton<WorkflowValidator>();
         
         builder.Services.AddTransient<AuthenticationForwardingHandler>();
+        builder.Services.AddTransient<WorkflowEngineApiKeyHandler>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"] 
+            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         builder.Services.AddHttpClient<IWorkflowEngineClient, WorkflowEngineClient>(client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"] 
+            client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"]
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:WorkflowEngine configuration is missing."));
-        });
-        // [RJ]: TODO: auth header for requests for WEH. WEH currently do not have authentication.
-        
+        })
+        .AddHttpMessageHandler<WorkflowEngineApiKeyHandler>();
+
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
         builder.Services.AddWorkflowManagementServices(builder.Configuration);
 
@@ -141,31 +143,49 @@ public static class Program
 
         builder.Services.AddCors(options =>
         {
-            options.AddPolicy("AllowAll",
-                policyBuilder =>
+            options.AddPolicy("AllowAll", policyBuilder =>
+            {
+                var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                if (allowedOrigins is { Length: > 0 })
                 {
-                    policyBuilder
-                        .SetIsOriginAllowed(_ => true)
-                        .AllowAnyMethod()
-                        .AllowAnyHeader()
-                        .AllowCredentials();
+                    policyBuilder.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
                 }
-            );
+                else if (builder.Environment.IsDevelopment())
+                {
+                    policyBuilder.SetIsOriginAllowed(_ => true).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
+                }
+            });
         });
 
         builder.Services.AddControllers();
-        builder.Services.AddSignalR().AddJsonProtocol(options =>
+        var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options =>
         {
             options.PayloadSerializerOptions.TypeInfoResolver = new DefaultJsonTypeInfoResolver
             {
                 Modifiers = { IgnoreSignalRPrivateProperties }
             };
         });
+
+        var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+        if (!string.IsNullOrWhiteSpace(redisConnectionString))
+        {
+            // Backplane for scale-out: signalr-forwarder-* consumers stay a shared/competing queue
+            // (one consume -> one IHubContext.Group broadcast), the backplane then fans that
+            // broadcast out to every instance's locally-connected clients.
+            signalRBuilder.AddStackExchangeRedis(redisConnectionString);
+        }
         builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
 
         await app.RunStartupTasksAsync();
+
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+            KnownIPNetworks = { },
+            KnownProxies = { }
+        });
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -182,6 +202,7 @@ public static class Program
         app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
         app.MapGet("/api/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTimeOffset.UtcNow })).AllowAnonymous();
+        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
 
         app.MapControllers();
         app.MapHub<NotificationHub>("/hubs/notifications");

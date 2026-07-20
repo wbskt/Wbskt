@@ -1,0 +1,275 @@
+name: wbskt
+
+networks:
+  edge:
+  backend:
+
+volumes:
+  sql-data:
+  rabbitmq-data:
+  redis-data:
+  traefik-acme:
+
+x-host-env: &host-env
+  ASPNETCORE_ENVIRONMENT: Production
+  RabbitMQ__HostName: rabbitmq
+  RabbitMQ__UserName: ${RABBITMQ_USER}
+  RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+
+services:
+  traefik:
+    # v3.1/v3.5 fail against recent Docker Engine releases (their vendored Docker client
+    # hardcodes an old API version instead of negotiating; confirmed by direct testing).
+    # v3.7 negotiates correctly.
+    image: traefik:v3.7
+    container_name: wbskt-traefik
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --entrypoints.web.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.web.transport.respondingTimeouts.writeTimeout=0
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0
+      # Internal-only entrypoint for the engine's api/inbound/*; never published to the host,
+      # only reachable by other containers as http://traefik:8081.
+      - --entrypoints.engine.address=:8081
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      # Defaults to production Let's Encrypt; set ACME_CASERVER to the staging directory
+      # (https://acme-staging-v02.api.letsencrypt.org/directory) while iterating, to avoid
+      # tripping production rate limits.
+      - --certificatesresolvers.letsencrypt.acme.caserver=${ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-acme:/letsencrypt
+    networks: [edge, backend]
+    restart: unless-stopped
+
+  console:
+    build:
+      context: ../console
+    container_name: wbskt-console
+    networks: [edge]
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.console.rule=Host(`console.${DOMAIN}`)
+      - traefik.http.routers.console.entrypoints=websecure
+      - traefik.http.routers.console.tls.certresolver=letsencrypt
+      - traefik.http.services.console.loadbalancer.server.port=80
+
+  auth:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Auth.Host/Wbskt.Auth.Host.csproj
+        HOST_DLL: Wbskt.Auth.Host.dll
+    environment:
+      <<: *host-env
+      ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      Jwt__Key: ${JWT_KEY}
+      Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+    volumes:
+      - ../config:/Config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      sql:
+        condition: service_healthy
+    networks: [edge, backend]
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)
+      - traefik.http.routers.auth.entrypoints=websecure
+      - traefik.http.routers.auth.tls.certresolver=letsencrypt
+      - traefik.http.services.auth.loadbalancer.server.port=8080
+
+  management:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
+        HOST_DLL: Wbskt.Management.Host.dll
+    environment:
+      <<: *host-env
+      ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      ConnectionStrings__Redis: redis:6379
+      Jwt__Key: ${JWT_KEY}
+      Services__Auth: http://auth:8080
+      Services__WorkflowEngine: http://traefik:8081
+      Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY}
+      Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+    volumes:
+      - ../config:/Config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      sql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      auth:
+        condition: service_healthy
+    networks: [edge, backend]
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.management.rule=Host(`api.${DOMAIN}`)
+      - traefik.http.routers.management.entrypoints=websecure
+      - traefik.http.routers.management.tls.certresolver=letsencrypt
+      - traefik.http.services.management.loadbalancer.server.port=8080
+      # SignalR negotiate affinity across scaled instances.
+      - traefik.http.services.management.loadbalancer.sticky.cookie=true
+
+  socket:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj
+        HOST_DLL: Wbskt.Socket.Host.dll
+    environment:
+      <<: *host-env
+      Jwt__Key: ${JWT_KEY}
+    volumes:
+      - ../config:/Config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [edge, backend]
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.socket.rule=Host(`ws.${DOMAIN}`)
+      - traefik.http.routers.socket.entrypoints=websecure
+      - traefik.http.routers.socket.tls.certresolver=letsencrypt
+      - traefik.http.services.socket.loadbalancer.server.port=8080
+      # No stickiness needed: per-instance fan-out (WP2) means every instance can route commands
+      # to any client it doesn't hold, and WebSocket upgrade pins the TCP connection natively.
+
+  engine:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj
+        HOST_DLL: Wbskt.Workflow.Engine.Host.dll
+    environment:
+      <<: *host-env
+      ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      Engine__InboundApiKey: ${ENGINE_INBOUND_API_KEY}
+    volumes:
+      - ../config:/Config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      sql:
+        condition: service_healthy
+    networks: [backend]
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`)
+      - traefik.http.routers.engine.entrypoints=engine
+      - traefik.http.services.engine.loadbalancer.server.port=8080
+      # Only the leader reports ready (see LeadershipState/EngineLeadershipCoordinator), so
+      # Traefik's active health check is what actually routes traffic to the current leader.
+      - traefik.http.services.engine.loadbalancer.healthcheck.path=/healthz/ready
+      - traefik.http.services.engine.loadbalancer.healthcheck.interval=5s
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: wbskt-rabbitmq
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks: [backend]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: wbskt-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks: [backend]
+    restart: unless-stopped
+
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: wbskt-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
+    volumes:
+      - sql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [backend]
+    restart: unless-stopped
+
+  migrator:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.migrator
+    container_name: wbskt-migrator
+    profiles: ["migrate"]
+    environment:
+      AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      DEFAULT_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      # Defaults to incremental (safe to rerun against a database with real data). Only ever
+      # set this to "true" for a brand-new environment - see deploy/README.md.
+      MIGRATE_FRESH: "false"
+    depends_on:
+      sql:
+        condition: service_healthy
+    networks: [backend]

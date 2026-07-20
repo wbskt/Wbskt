@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using Serilog;
@@ -87,9 +88,15 @@ public static class Program
         {
             options.AddDefaultPolicy(policy =>
             {
-                policy.AllowAnyOrigin()
-                      .AllowAnyHeader()
-                      .AllowAnyMethod();
+                var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                if (allowedOrigins is { Length: > 0 })
+                {
+                    policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+                }
+                else if (builder.Environment.IsDevelopment())
+                {
+                    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+                }
             });
         });
 
@@ -100,6 +107,13 @@ public static class Program
         var app = builder.Build();
 
         await app.RunStartupTasksAsync();
+
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+            KnownIPNetworks = { },
+            KnownProxies = { }
+        });
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -117,6 +131,7 @@ public static class Program
         app.UseAuthorization();
 
         app.MapPrometheusScrapingEndpoint();
+        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
         app.MapControllers();
 
         await app.RunAsync();

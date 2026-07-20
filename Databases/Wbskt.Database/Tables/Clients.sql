@@ -11,6 +11,7 @@ CREATE TABLE dbo.Clients (
     LastActivityAt DATETIME2(3)     NULL,
     LastRttMs      INT              NULL, -- last measured socket round-trip
     RttMeasuredAt  DATETIME2(3)     NULL,
+    ConnectedHostId NVARCHAR(100)   NULL, -- socket-host instance currently holding this connection
     CreatedAt      DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
 
     -- Constraints

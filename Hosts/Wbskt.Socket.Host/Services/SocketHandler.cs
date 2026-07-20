@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
 
@@ -24,19 +25,22 @@ internal sealed class SocketHandler : ISocketHandler
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
+    private readonly string _hostId;
 
     public SocketHandler(
         IConnectionManager connectionManager,
         IRevocationCache revocationCache,
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        BusInstanceId busInstanceId)
     {
         _connectionManager = connectionManager;
         _revocationCache = revocationCache;
         _logger = logger;
         _appLifetime = appLifetime;
         _eventBus = eventBus;
+        _hostId = busInstanceId.Value;
     }
 
     public async Task HandleAsync(HttpContext context)
@@ -86,7 +90,7 @@ internal sealed class SocketHandler : ISocketHandler
         }
 
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
-        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId), cts.Token);
+        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), cts.Token);
 
         try
         {
@@ -109,7 +113,7 @@ internal sealed class SocketHandler : ISocketHandler
         {
             await _connectionManager.RemoveConnectionAsync(clientRefId, cancellationToken: CancellationToken.None);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
-            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, "Socket closed"), CancellationToken.None);
+            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, "Socket closed", _hostId), CancellationToken.None);
         }
     }
 
