@@ -6,8 +6,19 @@ using Wbskt.EventBus.Abstractions;
 
 namespace Wbskt.EventBus.RabbitMQ;
 
-// Reused as the socket presence HostId so a connection's owning instance can be identified
-// independently of the MassTransit queue naming.
+// Also reused as the socket presence ConnectedHostId (see ConnectionSupersededHandler,
+// StartupPresenceResetPublisher, Client_UpdatePresence.sql) - a connection's owning instance is
+// identified by the same value used for its MassTransit queue name.
+//
+// This is deliberately NOT Wbskt.Workflow.Abstraction.Runtime.IHostIdentity, and the two must not
+// be unified: IHostIdentity is intentionally regenerated (fresh GUID) on every process start, so
+// a workflow-engine lease holder never appears to "continue" as the same identity across a crash
+// - restarting must fence out the old instance, not reclaim it. BusInstanceId is the opposite: it
+// must stay STABLE across a socket-host's restart (defaults to Environment.MachineName, i.e. the
+// container's hostname) because StartupPresenceResetPublisher relies on the restarted instance
+// republishing the same id its previous run used, so Client_ResetAllPresence can find and clear
+// exactly the presence rows that instance left dangling after a crash. Giving either identity the
+// other's lifetime would break its own use case.
 public sealed record BusInstanceId(string Value);
 
 public static class EventBusExtensions

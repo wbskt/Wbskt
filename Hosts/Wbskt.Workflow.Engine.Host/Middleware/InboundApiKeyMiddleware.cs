@@ -26,7 +26,7 @@ public sealed class InboundApiKeyMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!context.Request.Path.StartsWithSegments("/api/inbound"))
+        if (context.GetEndpoint()?.Metadata.GetMetadata<InboundEndpointAttribute>() == null)
         {
             await _next(context);
             return;

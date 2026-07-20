@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Host.Middleware;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
 [ApiController]
 [Route("api/inbound/signal")]
+[InboundEndpoint]
 public sealed class InboundSignalController(IInboundHub hub, ILogger<InboundSignalController>? logger = null) : ControllerBase
 {
     [HttpPost("{scopeRunRefId:guid}/{signalName}")]

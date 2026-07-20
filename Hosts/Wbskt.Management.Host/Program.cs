@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -181,15 +182,18 @@ public static class Program
         await app.RunStartupTasksAsync();
 
         // A nested `KnownProxies = { }` initializer is a no-op (it Adds nothing, the loopback
-        // defaults survive), so the lists must be cleared explicitly or Traefik's X-Forwarded-*
-        // headers get silently ignored. Trusting any immediate peer is safe here: the host only
-        // listens inside the compose networks, and Traefik overwrites client-supplied values.
+        // defaults survive) - the lists must be populated explicitly or Traefik's X-Forwarded-*
+        // headers get silently ignored. Trust Traefik's own pinned addresses specifically rather
+        // than clearing the lists (which would trust X-Forwarded-* from any container reachable
+        // on the docker network, not just Traefik). These addresses must match the static
+        // ipv4_address pinned to the traefik service on the edge/backend networks in
+        // deploy/compose/docker-compose.yml.
         var forwardedHeadersOptions = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
         };
-        forwardedHeadersOptions.KnownIPNetworks.Clear();
-        forwardedHeadersOptions.KnownProxies.Clear();
+        forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("172.28.0.2"));
+        forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("172.28.1.2"));
         app.UseForwardedHeaders(forwardedHeadersOptions);
 
         app.UseMiddleware<GlobalExceptionMiddleware>();

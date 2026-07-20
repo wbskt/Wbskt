@@ -23,7 +23,7 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(branchProvider, runDispatcher, logger);
 
         // Act
-        await service.StartAsync(CancellationToken.None);
+        await service.RecoverAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal([(171L, 71L, BranchExecutionReason.BookmarkResumed), (172L, 72L, BranchExecutionReason.BookmarkResumed)], runDispatcher.Requests);
@@ -39,7 +39,7 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(branchProvider, runDispatcher, logger);
 
         // Act
-        await service.StartAsync(CancellationToken.None);
+        await service.RecoverAsync(CancellationToken.None);
 
         // Assert
         Assert.Contains(logger.Messages, message => message.Contains("Recovered 0 running branches.", StringComparison.Ordinal));
@@ -57,7 +57,7 @@ public sealed class RunRecoveryServiceTests
         Assert.False(service.Ready.IsCompleted);
 
         // Act
-        await service.StartAsync(CancellationToken.None);
+        await service.RecoverAsync(CancellationToken.None);
 
         // Assert
         Assert.True(service.Ready.IsCompleted);
@@ -84,7 +84,7 @@ public sealed class RunRecoveryServiceTests
         var service = new RunRecoveryService(branchProvider, runDispatcher, logger, runProvider, cancellationService);
 
         // Act
-        await service.StartAsync(CancellationToken.None);
+        await service.RecoverAsync(CancellationToken.None);
 
         // Assert
         Assert.Contains(171L, cancellationService.CancelledRuns);

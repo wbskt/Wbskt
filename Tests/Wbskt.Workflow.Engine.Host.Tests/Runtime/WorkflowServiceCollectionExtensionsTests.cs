@@ -62,7 +62,6 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddHostedService<RunReaper>();
         services.AddHostedService<HistoryRetentionGc>();
         services.AddHostedService<PendingTriggerEventBacklogReaper>();
-        services.AddHostedService<RunRecoveryService>();
         services.AddHostedService<MetricsExporter>();
 
         using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -200,7 +199,6 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Contains(hostedServices, service => service is RunReaper);
         Assert.Contains(hostedServices, service => service is HistoryRetentionGc);
         Assert.Contains(hostedServices, service => service is PendingTriggerEventBacklogReaper);
-        Assert.Contains(hostedServices, service => service is RunRecoveryService);
         Assert.Contains(hostedServices, service => service is MetricsExporter);
     }
 }

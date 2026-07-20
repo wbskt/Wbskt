@@ -13,7 +13,8 @@ public sealed class LeaderOnlyMiddleware(RequestDelegate next)
         // Gate on the same signal as /healthz/ready: a "leader" whose bus never finished starting
         // can't actually publish outbound events for a trigger it accepts, so it must not accept one.
         bool canServeInbound = leadershipState.IsLeader && leadershipState.BusStarted;
-        if (context.Request.Path.StartsWithSegments("/api/inbound") && !canServeInbound)
+        bool isInboundEndpoint = context.GetEndpoint()?.Metadata.GetMetadata<InboundEndpointAttribute>() != null;
+        if (isInboundEndpoint && !canServeInbound)
         {
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             context.Response.Headers.RetryAfter = "5";

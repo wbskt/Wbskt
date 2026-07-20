@@ -134,7 +134,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             mockDispatcher,
             NullLogger<RunRecoveryService>.Instance);
             
-        await recoveryService.StartAsync(CancellationToken.None);
+        await recoveryService.RecoverAsync(CancellationToken.None);
         
         // 4. Verify it was dispatched
         mockDispatcher.DispatchedBranches.Should().ContainSingle();
@@ -249,7 +249,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             mockDispatcher,
             NullLogger<RunRecoveryService>.Instance);
 
-        await recoveryService.StartAsync(CancellationToken.None);
+        await recoveryService.RecoverAsync(CancellationToken.None);
 
         mockDispatcher.DispatchedBranches.Should().ContainSingle();
         mockDispatcher.DispatchedBranches[0].RunId.Should().Be(createdRun.Id);

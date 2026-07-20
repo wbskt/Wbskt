@@ -7,10 +7,10 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine;
 
-// All granular lease names map to the single engine-leader lease for now (seam kept for
-// per-workload leases later). IsHeldAsync is a pure in-memory read of LeadershipState with a
-// safety margin before the DB row actually expires - no DB call per tick, and it flips to false
-// slightly before a standby could win the row, so overlapping work stays extremely unlikely.
+// leaseName is ignored - see ILeaseHolder for why. IsHeldAsync is a pure in-memory read of
+// LeadershipState with a safety margin before the DB row actually expires - no DB call per tick,
+// and it flips to false slightly before a standby could win the row, so overlapping work stays
+// extremely unlikely.
 internal sealed class SqlLeaseHolder : ILeaseHolder
 {
     private const string EngineLeaderLease = "engine-leader";

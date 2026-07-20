@@ -45,7 +45,6 @@ public sealed class GracefulShutdownIntegrationTests
                 services.AddHostedService<RunReaper>();
                 services.AddHostedService<HistoryRetentionGc>();
                 services.AddHostedService<PendingTriggerEventBacklogReaper>();
-                services.AddHostedService<RunRecoveryService>();
                 services.AddHostedService<MetricsExporter>();
             })
             .Build();

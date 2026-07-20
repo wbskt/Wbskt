@@ -1,8 +1,16 @@
 name: wbskt
 
 networks:
+  # Fixed subnets so auth/management can pin ForwardedHeadersOptions.KnownProxies to Traefik's
+  # own address instead of trusting X-Forwarded-For/Proto from any container on the network.
   edge:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
   backend:
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
 
 volumes:
   sql-data:
@@ -55,7 +63,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/letsencrypt
-    networks: [edge, backend]
+    networks:
+      edge:
+        ipv4_address: 172.28.0.2
+      backend:
+        ipv4_address: 172.28.1.2
     restart: unless-stopped
 
   console:

@@ -25,13 +25,18 @@ BEGIN
     END
 
     -- No row yet for this lease name: first-ever acquisition. A concurrent first-acquirer racing
-    -- here loses on the primary key and reports Acquired = 0 rather than an error.
+    -- here loses on the primary key (error 2627) and reports Acquired = 0 rather than an error;
+    -- any other error is a genuine failure and must not be mistaken for ordinary contention.
     BEGIN TRY
         INSERT INTO dbo.Leases (LeaseName, HolderId, ExpiresAt, AcquiredAt)
         VALUES (@LeaseName, @HolderId, @NewExpiry, @Now);
         SELECT CAST(1 AS BIT) AS Acquired;
     END TRY
     BEGIN CATCH
+        IF ERROR_NUMBER() <> 2627
+        BEGIN
+            THROW;
+        END
         SELECT CAST(0 AS BIT) AS Acquired;
     END CATCH
 END

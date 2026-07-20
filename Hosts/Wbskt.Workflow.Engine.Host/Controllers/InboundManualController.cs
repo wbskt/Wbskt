@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Host.Middleware;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
 [ApiController]
 [Route("api/inbound/manual")]
+[InboundEndpoint]
 public sealed class InboundManualController(IInboundHub hub, IRunProvider runProvider) : ControllerBase
 {
     [HttpPost("{workflowRefId:guid}")]

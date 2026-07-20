@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Host.Middleware;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
 [ApiController]
 [Route("api/inbound/wake")]
+[InboundEndpoint]
 public sealed class InboundWakeController(IInboundHub hub) : ControllerBase
 {
     [HttpPost("{token}")]

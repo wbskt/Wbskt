@@ -4,7 +4,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
-public sealed class RunRecoveryService : IHostedService, IEngineStartupTracker
+public sealed class RunRecoveryService : IEngineStartupTracker
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRunDispatcher _runDispatcher;
@@ -35,9 +35,8 @@ public sealed class RunRecoveryService : IHostedService, IEngineStartupTracker
 
     // Recovery only ever runs on a new leader (see EngineLeadershipCoordinator) - the previous
     // leader is either dead or self-fenced by LeadershipState, so no other instance can be
-    // concurrently dispatching these same branches.
-    public Task StartAsync(CancellationToken ct) => RecoverAsync(ct);
-
+    // concurrently dispatching these same branches. Not an IHostedService: EngineLeadershipCoordinator
+    // calls this directly, only once this instance becomes leader (see Program.cs).
     public async Task RecoverAsync(CancellationToken ct)
     {
         try
@@ -87,11 +86,6 @@ public sealed class RunRecoveryService : IHostedService, IEngineStartupTracker
             _readyTcs.TrySetException(ex);
             throw;
         }
-    }
-
-    public Task StopAsync(CancellationToken ct)
-    {
-        return Task.CompletedTask;
     }
 
     private sealed class StaticScopeFactory(
