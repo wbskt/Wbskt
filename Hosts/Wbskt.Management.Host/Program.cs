@@ -180,12 +180,17 @@ public static class Program
 
         await app.RunStartupTasksAsync();
 
-        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        // A nested `KnownProxies = { }` initializer is a no-op (it Adds nothing, the loopback
+        // defaults survive), so the lists must be cleared explicitly or Traefik's X-Forwarded-*
+        // headers get silently ignored. Trusting any immediate peer is safe here: the host only
+        // listens inside the compose networks, and Traefik overwrites client-supplied values.
+        var forwardedHeadersOptions = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-            KnownIPNetworks = { },
-            KnownProxies = { }
-        });
+        };
+        forwardedHeadersOptions.KnownIPNetworks.Clear();
+        forwardedHeadersOptions.KnownProxies.Clear();
+        app.UseForwardedHeaders(forwardedHeadersOptions);
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
 

@@ -34,9 +34,7 @@ public static class Program
             ContentRootPath = Directory.GetCurrentDirectory()
         });
 
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json");
-        builder.Configuration.AddJsonFile(Path.Combine(builder.Environment.ContentRootPath, "Config", "workflow-engine.json"), optional: true, reloadOnChange: true);
-        builder.Configuration.AddJsonFile("workflow-engine.json", optional: true, reloadOnChange: true);
+        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "workflow-engine.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
 

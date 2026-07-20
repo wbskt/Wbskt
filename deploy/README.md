@@ -106,6 +106,14 @@ you want to keep destroys all data in it — there's no confirmation prompt, so 
 as `DROP DATABASE`. Verified: rerunning the migrator without `MIGRATE_FRESH` against a database
 with existing rows leaves them untouched while still applying schema changes.
 
+If an incremental run fails with a "possible data loss" error, the DACPAC contains a change that
+would destroy existing rows (a dropped or narrowed column). That block is deliberate. Review what
+sqlpackage reported, and if the loss is intended, rerun with:
+
+```
+MIGRATE_ALLOW_DATA_LOSS=true docker compose --profile migrate run --rm migrator
+```
+
 ## SQL placement
 
 The `sql` service (container + volume) is the staging/dev path. For production, prefer a

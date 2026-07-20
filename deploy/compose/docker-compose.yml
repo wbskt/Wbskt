@@ -26,6 +26,10 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedByDefault=false
+      # Pin which container network Traefik dials targets on; without this it picks one
+      # arbitrarily from the container's networks and only works while Traefik happens to be
+      # attached to it. Services not on edge (engine) override via traefik.docker.network.
+      - --providers.docker.network=wbskt_edge
       - --entrypoints.web.address=:80
       - --entrypoints.web.http.redirections.entryPoint.to=websecure
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
@@ -58,6 +62,11 @@ services:
     build:
       context: ../console
     container_name: wbskt-console
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks: [edge]
     restart: unless-stopped
     labels:
@@ -131,7 +140,7 @@ services:
       sql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       auth:
         condition: service_healthy
     networks: [edge, backend]
@@ -144,6 +153,8 @@ services:
       - traefik.http.services.management.loadbalancer.server.port=8080
       # SignalR negotiate affinity across scaled instances.
       - traefik.http.services.management.loadbalancer.sticky.cookie=true
+      - traefik.http.services.management.loadbalancer.sticky.cookie.secure=true
+      - traefik.http.services.management.loadbalancer.sticky.cookie.httpOnly=true
 
   socket:
     build:
@@ -207,6 +218,8 @@ services:
       - traefik.enable=true
       - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`)
       - traefik.http.routers.engine.entrypoints=engine
+      # Engine is backend-only, so override the provider-level wbskt_edge default.
+      - traefik.docker.network=wbskt_backend
       - traefik.http.services.engine.loadbalancer.server.port=8080
       # Only the leader reports ready (see LeadershipState/EngineLeadershipCoordinator), so
       # Traefik's active health check is what actually routes traffic to the current leader.
@@ -237,6 +250,11 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks: [backend]
     restart: unless-stopped
 
@@ -266,9 +284,13 @@ services:
     environment:
       AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       DEFAULT_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
-      # Defaults to incremental (safe to rerun against a database with real data). Only ever
-      # set this to "true" for a brand-new environment - see deploy/README.md.
-      MIGRATE_FRESH: "false"
+      # Both interpolate from the invoking shell (e.g. `MIGRATE_FRESH=true docker compose run ...`);
+      # a literal value here would ignore the shell and make the documented commands silent no-ops.
+      # MIGRATE_FRESH=true drops and recreates both DBs - only ever for a brand-new environment.
+      # MIGRATE_ALLOW_DATA_LOSS=true lets sqlpackage apply schema changes that destroy existing
+      # rows (column drops/narrowing) on an incremental run - see deploy/README.md.
+      MIGRATE_FRESH: ${MIGRATE_FRESH:-false}
+      MIGRATE_ALLOW_DATA_LOSS: ${MIGRATE_ALLOW_DATA_LOSS:-false}
     depends_on:
       sql:
         condition: service_healthy
