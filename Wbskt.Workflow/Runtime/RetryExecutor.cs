@@ -22,7 +22,6 @@ internal static class RetryExecutor
         INodeExecutionServices services,
         IClock clock,
         CancellationToken ct,
-        IRunProvider? runProvider = null,
         IRunCountersProvider? runCountersProvider = null,
         ICreditCostCalculator? creditCostCalculator = null,
         WorkflowMetrics? workflowMetrics = null)
@@ -136,15 +135,16 @@ internal static class RetryExecutor
                 }
             }
 
-            if (runProvider != null && runCountersProvider != null)
+            if (runCountersProvider != null)
             {
                 var calc = creditCostCalculator ?? new DefaultCreditCostCalculator();
-                // Perform credit budget check and increment credit counters.
-                RunRow run = await runProvider.GetByIdAsync(context.RunId, ct);
-                RunCountersRow counters = await runCountersProvider.GetByRunIdAsync((int)context.RunId, ct);
                 decimal cost = calc.Calculate(node, null!);
 
-                if (counters.CreditsConsumed + cost > run.CreditBudget)
+                // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
+                // same row lock as the increment, so this is a single round-trip with no
+                // check-then-act race between concurrent branches on the same run.
+                bool charged = await runCountersProvider.TryChargeAsync((int)context.RunId, cost, ct);
+                if (!charged)
                 {
                     var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
                     string errorJson = JsonSerializer.Serialize(outOfCreditsResult, JsonOptions);
@@ -173,8 +173,6 @@ internal static class RetryExecutor
                     return outOfCreditsResult;
                 }
 
-                // Charge the credit cost.
-                await runCountersProvider.AddCreditsConsumedAsync((int)context.RunId, cost, ct);
                 if (workflowMetrics != null)
                 {
                     workflowMetrics.RecordCreditsConsumed(context.WorkflowDefinitionRefId.ToString(), (double)cost);

@@ -89,7 +89,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             InboundEvent normalizedEvent = resolvedEvent with { CorrelationKey = correlationValue };
 
             TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
-            _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdToCancel: {RunIdToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdToCancel);
+            _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
             switch (concurrencyDecision.Outcome)
             {
                 case TriggerConcurrencyOutcome.Dropped:
@@ -108,8 +108,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                     }
                     continue;
 
-                case TriggerConcurrencyOutcome.ProceedAfterCancellingActive when concurrencyDecision.RunIdToCancel.HasValue:
-                    await _runCancellationService.RequestCancellationAsync(concurrencyDecision.RunIdToCancel.Value, "Trigger-cancel-policy", ct);
+                case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
+                    foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
+                    {
+                        await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
+                    }
                     break;
             }
 

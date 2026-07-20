@@ -152,7 +152,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         return result is long count ? count : Convert.ToInt64(result ?? 0L);
     }
 
-    public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+    public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(
             "dbo.Run_TransitionStatus",
@@ -161,6 +161,8 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@RunId", checked((int)runId));
                 p.AddWithValue("@FromStatus", fromStatus);
                 p.AddWithValue("@ToStatus", toStatus);
+                p.AddWithValue("@CancellationRequestedAt", (object?)cancellationRequestedAt ?? DBNull.Value);
+                p.AddWithValue("@CancellationReason", (object?)cancellationReason ?? DBNull.Value);
             },
             ct
         );

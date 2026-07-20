@@ -50,6 +50,49 @@ public sealed class RunFinalizerTests
     }
 
     [Fact]
+    public async Task FinalizeAsync_sets_cancelled_when_only_cancelled_branches_exist()
+    {
+        var harness = new RunFinalizerHarness("Cancelling", [CreateBranch("Cancelled")]);
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal("Cancelled", harness.RunProvider.TerminalStatus);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_sets_partially_failed_when_cancelled_and_completed_branches_exist()
+    {
+        var harness = new RunFinalizerHarness("Cancelling", [CreateBranch("Cancelled"), CreateBranch("Completed")]);
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal("PartiallyFailed", harness.RunProvider.TerminalStatus);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_sets_out_of_credits_when_cancellation_reason_is_credit_exhaustion()
+    {
+        var harness = new RunFinalizerHarness("Cancelling", [CreateBranch("Failed")], cancellationReason: "OUT_OF_CREDITS");
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal("OutOfCredits", harness.RunProvider.TerminalStatus);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_leaves_faulted_run_untouched()
+    {
+        var harness = new RunFinalizerHarness("Faulted", [CreateBranch("Failed")]);
+        harness.RunProvider.Transitions = false;
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Null(harness.RunProvider.TerminalStatus);
+        Assert.Empty(harness.Publisher.RunIds);
+        Assert.Empty(harness.HistoryProvider.Events);
+    }
+
+    [Fact]
     public async Task FinalizeAsync_drains_pending_events()
     {
         var harness = new RunFinalizerHarness("Running", [CreateBranch("Completed")]);
@@ -121,21 +164,19 @@ public sealed class RunFinalizerTests
 
     private sealed class RunFinalizerHarness
     {
-        public RunFinalizerHarness(string runStatus, IReadOnlyCollection<BranchRow> branches)
+        public RunFinalizerHarness(string runStatus, IReadOnlyCollection<BranchRow> branches, string? cancellationReason = null)
         {
-            RunProvider = new RecordingRunProvider(runStatus);
-            CountersProvider = new StubRunCountersProvider();
+            RunProvider = new RecordingRunProvider(runStatus, cancellationReason);
             BranchProvider = new StubBranchProvider(branches);
             HistoryProvider = new RecordingHistoryEventProvider();
             Drainer = new RecordingPendingTriggerEventDrainer();
             Publisher = new RecordingRunCompletedPublisher();
             BookmarkProvider = new RecordingBookmarkProvider();
             CompletionHook = new NoOpCompletionHook();
-            Finalizer = new RunFinalizer(RunProvider, CountersProvider, BranchProvider, HistoryProvider, Drainer, Publisher, BookmarkProvider, CompletionHook, new FixedClock());
+            Finalizer = new RunFinalizer(RunProvider, BranchProvider, HistoryProvider, Drainer, Publisher, BookmarkProvider, CompletionHook, new FixedClock());
         }
 
         public RecordingRunProvider RunProvider { get; }
-        public StubRunCountersProvider CountersProvider { get; }
         public StubBranchProvider BranchProvider { get; }
         public RecordingHistoryEventProvider HistoryProvider { get; }
         public RecordingPendingTriggerEventDrainer Drainer { get; }
@@ -145,7 +186,7 @@ public sealed class RunFinalizerTests
         public RunFinalizer Finalizer { get; }
     }
 
-    private sealed class RecordingRunProvider(string status) : IRunProvider
+    private sealed class RecordingRunProvider(string status, string? cancellationReason = null) : IRunProvider
     {
         private RunRow _run = new()
         {
@@ -160,7 +201,7 @@ public sealed class RunFinalizerTests
             StartedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             CompletedAt = null,
             CancellationRequestedAt = null,
-            CancellationReason = null,
+            CancellationReason = cancellationReason,
             CreditBudget = 100m,
             CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
         };
@@ -180,7 +221,7 @@ public sealed class RunFinalizerTests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
@@ -194,25 +235,6 @@ public sealed class RunFinalizerTests
             _run = _run with { Status = status, CompletedAt = completedAt };
             return Task.FromResult((true, _run));
         }
-    }
-
-    private sealed class StubRunCountersProvider : IRunCountersProvider
-    {
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
-        {
-            return Task.FromResult(new RunCountersRow
-            {
-                RunId = runId,
-                ActiveBranchCount = 0,
-                CreditsConsumed = 0m,
-                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
-            });
-        }
-
-        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubBranchProvider(IReadOnlyCollection<BranchRow> branches) : IBranchProvider

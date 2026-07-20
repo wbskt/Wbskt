@@ -14,6 +14,7 @@ public sealed class WorkflowEngineOptions
     public TimeSpan MetricsExportInterval { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan IdempotencyRetentionInterval { get; init; } = TimeSpan.FromHours(1);
     public TimeSpan IdempotencyRetentionWindow { get; init; } = TimeSpan.FromHours(24);
+    public decimal DefaultCreditBudgetPerRun { get; init; } = 10000m;
     public int LeaseDurationSeconds { get; init; } = 120;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;

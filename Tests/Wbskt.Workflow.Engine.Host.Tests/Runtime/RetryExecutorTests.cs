@@ -275,6 +275,53 @@ public sealed class RetryExecutorTests
         idempotencyMock.Verify(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task RunWithRetryAsync_returns_OutOfCredits_fail_when_charge_fails()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            new FixedClock(),
+            CancellationToken.None,
+            countersMock.Object);
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal("OUT_OF_CREDITS", fail.ErrorCode);
+        Assert.Equal(0, executor.AttemptCount);
+    }
+
+    [Fact]
+    public async Task RunWithRetryAsync_charges_via_single_atomic_call_and_executes_when_charge_succeeds()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            new FixedClock(),
+            CancellationToken.None,
+            countersMock.Object);
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(1, executor.AttemptCount);
+        countersMock.Verify(p => p.TryChargeAsync(42, It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Once);
+        countersMock.Verify(p => p.GetByRunIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private sealed class TestNodeExecutionServices(IIdempotencyKeyProvider? idempotencyKey = null) : INodeExecutionServices
     {
         public IProviderComposite Providers => new StubProviderComposite(idempotencyKey);

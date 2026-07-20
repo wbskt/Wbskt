@@ -90,20 +90,20 @@ internal sealed class RunCancellationService : IRunCancellationService
     public async Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
     {
         // [RJ]: this will transition only if the run currently is in "Running" what about requesting cancellation for runs that are waiting/bookmarked.
-        bool transitioned = await _runProvider.TransitionStatusAsync(runId, "Running", "Cancelling", ct);
+        // Single status write (2.3): the reason/timestamp ride along with the transition itself,
+        // so there's no follow-up UpdateStatusAsync call (and no extra GetByIdAsync round trip).
+        bool transitioned = await _runProvider.TransitionStatusAsync(runId, "Running", "Cancelling", _clock.UtcNow, reason, ct);
         if (!transitioned)
         {
             return false;
         }
 
-        RunRow run = await _runProvider.GetByIdAsync(runId, ct);
-        await _runProvider.UpdateStatusAsync(run.RefId, "Cancelling", null, _clock.UtcNow, reason, ct);
         await _historyEventProvider.InsertBatchAsync(
         [
             new HistoryEventRow
             {
                 HistoryEventId = 0,
-                RunId = run.Id,
+                RunId = checked((int)runId),
                 BranchRefId = null,
                 NodeId = null,
                 EventKind = "RunCancellationRequested",
@@ -133,14 +133,14 @@ internal sealed class RunCancellationService : IRunCancellationService
                 int newActiveCount = await _runCountersProvider.IncrementActiveBranchesAsync(checked((int)runId), -cancelledBranches, ct);
                 if (newActiveCount == 0)
                 {
+                    // No bare SetTerminalAsync fallback here (2.3): a caller without a finalizer
+                    // registered (e.g. the management host) relies on the engine host - which always
+                    // has one - to finalize. A bare SetTerminalAsync would skip the pending-trigger
+                    // drain, run-completed publish, and sub-workflow completion hook, stranding parents.
                     var runFinalizer = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IRunFinalizer>(_serviceProvider);
                     if (runFinalizer is not null)
                     {
                         await runFinalizer.FinalizeAsync(runId, ct);
-                    }
-                    else
-                    {
-                        _ = await _runProvider.SetTerminalAsync(runId, "Cancelled", _clock.UtcNow, ct);
                     }
                 }
             }

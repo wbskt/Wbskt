@@ -13,7 +13,7 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     [SkippableFact]
-    public async Task InfiniteLoop_ExhaustsCreditBudget_AndTransitionsToFailed()
+    public async Task InfiniteLoop_ExhaustsCreditBudget_AndTransitionsToOutOfCredits()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -58,13 +58,14 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
 
         try
         {
-            // Wait for the run to transition to terminal.
-            var summary = await fixture.WaitForRunStatusAsync(token, workspaceRef, publishedRef, "Failed", TimeSpan.FromSeconds(60));
-            
-            if (summary == null || summary.Status != "Failed")
+            // Wait for the run to transition to terminal. Credit exhaustion cascades a
+            // cancellation of the run (2.2), so the terminal status is "OutOfCredits", not "Failed".
+            var summary = await fixture.WaitForRunStatusAsync(token, workspaceRef, publishedRef, "OutOfCredits", TimeSpan.FromSeconds(60));
+
+            if (summary == null || summary.Status != "OutOfCredits")
             {
                 var debugHistory = await fixture.GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
-                throw new Exception($"Run is {summary?.Status ?? "still running"} instead of Failed. Executed {debugHistory.Count} events. Last event: {debugHistory.LastOrDefault()?.EventKind}");
+                throw new Exception($"Run is {summary?.Status ?? "still running"} instead of OutOfCredits. Executed {debugHistory.Count} events. Last event: {debugHistory.LastOrDefault()?.EventKind}");
             }
             
             // Assert the history event was recorded

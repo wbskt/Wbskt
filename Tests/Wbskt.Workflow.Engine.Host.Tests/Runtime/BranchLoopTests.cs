@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -308,6 +309,52 @@ public sealed class BranchLoopTests
         using JsonDocument failedPayload = JsonDocument.Parse(failedEvent.PayloadJson!);
         Assert.Equal("E_FAIL", failedPayload.RootElement.GetProperty("errorCode").GetString());
         Assert.Equal("boom", failedPayload.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Fail_out_of_credits_cascades_cancellation_to_siblings()
+    {
+        // Arrange: an OUT_OF_CREDITS fail on one branch must request run cancellation so
+        // sibling branches stop burning an already-exhausted budget (2.2).
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "out-of-credits",
+            null,
+            true,
+            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var counters = new StubRunCountersProvider();
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var cancellationService = new RecordingRunCancellationService();
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(
+                new ScriptedExecutor(
+                    new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            runFinalizer: null,
+            runCancellationService: cancellationService);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.True(branchProvider.SetFailedCalled);
+        Assert.Equal([(42L, "OUT_OF_CREDITS")], cancellationService.Requests);
     }
 
     [Fact]
@@ -737,6 +784,52 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task EngineFault_transitions_run_to_Faulted_and_drains_the_branch_slot()
+    {
+        // Arrange: an EngineFaultException is a terminal engine-level failure - the run goes
+        // Faulted immediately, and this branch's slot must be drained (SetFailed + decrement)
+        // directly since the finalizer is never invoked for the Faulted path (2.1).
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "engine-fault",
+            null,
+            true,
+            [new TestNode { NodeId = nodeId, Name = "fault", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var counters = new StubRunCountersProvider();
+        var runProvider = new StubRunProvider();
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = new BranchLoop(
+            branchProvider,
+            runProvider,
+            counters,
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new FaultingExecutor()),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await Assert.ThrowsAsync<EngineFaultException>(() => loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None));
+
+        // Assert
+        Assert.Equal("Faulted", runProvider.Status);
+        Assert.True(branchProvider.SetFailedCalled);
+        Assert.Equal([-1], counters.DecrementCalls);
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "RunFaulted");
+    }
+
+    [Fact]
     public async Task RunAsync_leaves_branch_untouched_when_host_token_cancels_mid_node_execution()
     {
         // Arrange: host shutdown (not run cancellation) interrupts a provider call mid-node.
@@ -755,13 +848,12 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var branchProvider = new RecordingBranchProvider(nodeId);
-        var counters = new StubRunCountersProvider();
         var historyProvider = new RecordingHistoryEventProvider();
         using var hostCts = new CancellationTokenSource();
-        var runProvider = new HostShutdownRunProvider(hostCts);
+        var counters = new HostShutdownRunCountersProvider(hostCts);
         var loop = new BranchLoop(
             branchProvider,
-            runProvider,
+            new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
             historyProvider,
@@ -1095,6 +1187,19 @@ public sealed class BranchLoopTests
         public INodeExecutor For(string kind) => executor;
     }
 
+    private sealed class RecordingRunCancellationService : IRunCancellationService
+    {
+        public List<(long RunId, string Reason)> Requests { get; } = [];
+
+        public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
+        {
+            Requests.Add((runId, reason));
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => Task.FromResult(false);
+    }
+
     private sealed class ThrowingExecutor : INodeExecutor
     {
         public string Kind => "test";
@@ -1105,40 +1210,41 @@ public sealed class BranchLoopTests
         }
     }
 
-    /// <summary>
-    /// Simulates a host shutdown interrupting a provider call mid-node: the first GetByIdAsync
-    /// call (BranchLoop's initial run fetch) succeeds, the second (RetryExecutor's credit check)
-    /// cancels the host token and throws, as a real ADO.NET call would when its command is cancelled.
-    /// </summary>
-    private sealed class HostShutdownRunProvider(CancellationTokenSource hostCts) : IRunProvider
+    private sealed class FaultingExecutor : INodeExecutor
     {
-        private readonly StubRunProvider _inner = new();
-        private int _calls;
+        public string Kind => "test";
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-
-        public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
-            _calls++;
-            if (_calls == 1)
-            {
-                return _inner.GetByIdAsync(runId, ct);
-            }
+            throw new EngineFaultException("engine fault");
+        }
+    }
 
+    /// <summary>
+    /// Simulates a host shutdown interrupting a provider call mid-node: RetryExecutor's credit
+    /// charge (the only provider call between the initial branch/run fetch and the executor
+    /// running) cancels the host token and throws, as a real ADO.NET call would when its command
+    /// is cancelled.
+    /// </summary>
+    private sealed class HostShutdownRunCountersProvider(CancellationTokenSource hostCts) : IRunCountersProvider
+    {
+        public List<int> IncrementCalls { get; } = [];
+
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+        {
+            IncrementCalls.Add(delta);
+            return Task.FromResult(0);
+        }
+        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+        {
             hostCts.Cancel();
             throw new OperationCanceledException("host shutdown");
         }
-
-        public Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
     /// <summary>Returns a normal result but cancels the host token first, simulating shutdown racing with node completion.</summary>
@@ -1308,7 +1414,7 @@ public sealed class BranchLoopTests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
             TransitionRequests.Add((runId, fromStatus, toStatus));
             if (!string.Equals(Status, fromStatus, StringComparison.Ordinal))
@@ -1358,6 +1464,7 @@ public sealed class BranchLoopTests
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
     }
 
     private sealed class RecordingBookmarkProvider : IBookmarkProvider

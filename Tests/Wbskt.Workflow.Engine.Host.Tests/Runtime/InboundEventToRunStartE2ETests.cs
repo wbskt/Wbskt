@@ -221,7 +221,7 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => Task.FromResult((long)Runs.Values.Count(run => run.Status == status));
 
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
             RunRow run = Runs[runId];
             if (!string.Equals(run.Status, fromStatus, StringComparison.Ordinal))
@@ -229,7 +229,12 @@ public sealed class InboundEventToRunStartE2ETests
                 return Task.FromResult(false);
             }
 
-            Runs[runId] = run with { Status = toStatus };
+            Runs[runId] = run with
+            {
+                Status = toStatus,
+                CancellationRequestedAt = cancellationRequestedAt ?? run.CancellationRequestedAt,
+                CancellationReason = cancellationReason ?? run.CancellationReason
+            };
             return Task.FromResult(true);
         }
 
@@ -295,6 +300,7 @@ public sealed class InboundEventToRunStartE2ETests
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(_activeBranches.Values.Sum(value => (long)value));
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
         {

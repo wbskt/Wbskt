@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
@@ -55,6 +57,42 @@ public sealed class RunStarterTests
         Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), branchProvider.CreatedBranch!.RefId);
         Assert.Contains("\"trigger\"", branchProvider.CreatedBranch.LocalJson, StringComparison.Ordinal);
         Assert.Equal("RunStarted", historyProvider.Events.Single().EventKind);
+        Assert.Equal(new WorkflowEngineOptions().DefaultCreditBudgetPerRun, runProvider.CreatedRun.CreditBudget);
+    }
+
+    [Fact]
+    public async Task Start_uses_configured_credit_budget_instead_of_default()
+    {
+        // Arrange
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        var starter = new RunStarter(
+            runProvider,
+            new RecordingRunCountersProvider(operations),
+            new RecordingBranchProvider(operations),
+            new RecordingHistoryEventProvider(operations),
+            new RecordingWorkflowDefinitionProvider(),
+            new CorrelationKeyResolver(),
+            new NullRunStartedPublisher(),
+            new FixedClock(),
+            new SequenceIdGenerator(),
+            Options.Create(new WorkflowEngineOptions { DefaultCreditBudgetPerRun = 250m }));
+        InboundEvent triggerEvent = new(
+            "client",
+            [],
+            "evt-1",
+            new Dictionary<string, JsonElement>
+            {
+                ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1"),
+                ["messageType"] = JsonSerializer.SerializeToElement("telemetry")
+            },
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+
+        // Act
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(250m, runProvider.CreatedRun!.CreditBudget);
     }
 
     private sealed class RecordingRunProvider(List<string> operations) : IRunProvider
@@ -78,7 +116,7 @@ public sealed class RunStarterTests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
@@ -96,6 +134,7 @@ public sealed class RunStarterTests
         public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
     }
 

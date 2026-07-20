@@ -58,7 +58,7 @@ public sealed class ErrorModelE2ETests
         var cache = new StaticWorkflowDefinitionCache(definition);
         var providers = new NoOpProviderComposite();
         var orchestrator = new CompensationOrchestrator(runProvider, branchProvider, historyEventProvider, cache, registry, providers, state.Clock);
-        var finalizer = new RunFinalizer(runProvider, runCountersProvider, branchProvider, historyEventProvider, new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock);
+        var finalizer = new RunFinalizer(runProvider, branchProvider, historyEventProvider, new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock);
         var branchLoop = new BranchLoop(branchProvider, runProvider, runCountersProvider, bookmarkProvider, historyEventProvider, cache, registry, runDispatcher, providers, state.Clock, new SequenceIdGenerator(), finalizer, new NoOpRunCancellationService(), orchestrator);
 
         await branchLoop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -275,7 +275,7 @@ public sealed class ErrorModelE2ETests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => Task.FromResult(false);
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => Task.FromResult(false);
 
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
@@ -312,6 +312,7 @@ public sealed class ErrorModelE2ETests
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(0m);
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
     }
 
     private sealed class InMemoryBookmarkProvider(InMemoryState state) : IBookmarkProvider

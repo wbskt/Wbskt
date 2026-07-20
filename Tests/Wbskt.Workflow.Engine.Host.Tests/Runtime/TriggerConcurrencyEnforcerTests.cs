@@ -20,7 +20,7 @@ public sealed class TriggerConcurrencyEnforcerTests
 
         // Assert
         Assert.Equal(TriggerConcurrencyOutcome.Dropped, decision.Outcome);
-        Assert.Null(decision.RunIdToCancel);
+        Assert.Empty(decision.RunIdsToCancel);
     }
 
     [Fact]
@@ -52,7 +52,22 @@ public sealed class TriggerConcurrencyEnforcerTests
 
         // Assert
         Assert.Equal(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, decision.Outcome);
-        Assert.Equal(55L, decision.RunIdToCancel);
+        Assert.Equal([55L], decision.RunIdsToCancel);
+    }
+
+    [Fact]
+    public async Task Evaluate_returns_all_active_runs_to_cancel_when_multiple_runs_match_correlation()
+    {
+        // Arrange: CancelExisting must cancel every matching active run, not just the first (2.3).
+        var registration = CreateRegistration("CancelExisting");
+        var enforcer = CreateEnforcer(activeRuns: [CreateRun(55), CreateRun(56), CreateRun(57)]);
+
+        // Act
+        TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, decision.Outcome);
+        Assert.Equal([55L, 56L, 57L], decision.RunIdsToCancel);
     }
 
     [Fact]
@@ -68,7 +83,7 @@ public sealed class TriggerConcurrencyEnforcerTests
 
         // Assert
         Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
-        Assert.Null(decision.RunIdToCancel);
+        Assert.Empty(decision.RunIdsToCancel);
     }
 
     [Fact]
@@ -83,7 +98,7 @@ public sealed class TriggerConcurrencyEnforcerTests
 
         // Assert
         Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
-        Assert.Null(decision.RunIdToCancel);
+        Assert.Empty(decision.RunIdsToCancel);
     }
 
     private static TriggerConcurrencyEnforcer CreateEnforcer(
@@ -164,7 +179,7 @@ public sealed class TriggerConcurrencyEnforcerTests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 

@@ -144,7 +144,6 @@ internal sealed class BranchLoop : IBranchLoop
                         new NodeExecutionServices(_providerComposite),
                         _clock,
                         linkedToken,
-                        _runProvider,
                         _runCountersProvider,
                         _creditCostCalculator,
                         workflowMetrics: _workflowMetrics);
@@ -153,11 +152,14 @@ internal sealed class BranchLoop : IBranchLoop
                 {
                     _logger?.LogError(ex, "Engine fault occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
                     outcome = "Failed";
-                    // [RJ]: TODO: "Faulted" is not a valid status as per the table definition "dbo.Run"
-                    // [RJ]: EDIT: it was just the valued to be indexed. not the actual allowed statuses
-                    await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", ct);
+                    await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", null, null, ct);
                     string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);
+                    // Faulted is terminal for the run (the Run_SetTerminal guard now protects it from being
+                    // overwritten by sibling completions), so drain this branch's slot directly instead of
+                    // going through the finalizer.
+                    await _branchProvider.SetFailedAsync(branchId, faultJson, ct);
+                    await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
                     throw;
                 }
                 catch (Exception ex)
@@ -332,7 +334,7 @@ internal sealed class BranchLoop : IBranchLoop
                     if (outcome == ErrorOutcome.FailRun)
                     {
                         await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
-                        await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", ct);
+                        await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", null, null, ct);
                         await _runCancellationService.RequestCancellationAsync(runRow.Id, $"FailRun cascade triggered by node {node.NodeId}", ct);
                     }
                     else if (shouldCompensate)
@@ -349,8 +351,15 @@ internal sealed class BranchLoop : IBranchLoop
                         await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
                         if (definition.FailFast)
                         {
-                            await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", ct);
+                            await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", null, null, ct);
                         }
+                    }
+
+                    if (string.Equals(fail.ErrorCode, "OUT_OF_CREDITS", StringComparison.Ordinal))
+                    {
+                        // Credit exhaustion is a run-wide constraint - cascade cancellation so sibling
+                        // branches stop instead of continuing to burn (already-exhausted) budget.
+                        await _runCancellationService.RequestCancellationAsync(runRow.Id, "OUT_OF_CREDITS", ct);
                     }
 
                     int postDecrementCount = await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);

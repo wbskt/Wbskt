@@ -4,6 +4,6 @@ BEGIN
     DELETE TOP (1000) b
     FROM dbo.Bookmarks b
     INNER JOIN dbo.Runs r ON r.Id = b.RunId
-    WHERE r.Status IN ('Succeeded', 'Failed', 'Cancelled', 'PartiallyFailed');
+    WHERE r.Status IN ('Succeeded', 'Failed', 'Cancelled', 'PartiallyFailed', 'OutOfCredits');
 END;
 GO

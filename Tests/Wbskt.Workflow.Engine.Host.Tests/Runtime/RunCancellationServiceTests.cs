@@ -132,12 +132,17 @@ public sealed class RunCancellationServiceTests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct)
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
             TransitionRequest = (runId, fromStatus, toStatus);
             if (transitionResult)
             {
-                UpdatedRun = UpdatedRun with { Status = toStatus };
+                UpdatedRun = UpdatedRun with
+                {
+                    Status = toStatus,
+                    CancellationRequestedAt = cancellationRequestedAt ?? UpdatedRun.CancellationRequestedAt,
+                    CancellationReason = cancellationReason ?? UpdatedRun.CancellationReason
+                };
             }
 
             return Task.FromResult(transitionResult);
@@ -226,7 +231,7 @@ public sealed class RunCancellationServiceTests
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
@@ -303,6 +308,7 @@ public sealed class RunCancellationServiceTests
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingBookmarkProvider : IBookmarkProvider

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -18,6 +20,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IRunStartedPublisher _runStartedPublisher;
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
+    private readonly decimal _defaultCreditBudgetPerRun;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<RunStarter>? _logger;
 
@@ -31,6 +34,7 @@ internal sealed class RunStarter : IRunStarter
         IRunStartedPublisher runStartedPublisher,
         IClock clock,
         IIdGenerator idGenerator,
+        IOptions<WorkflowEngineOptions>? options = null,
         WorkflowMetrics? workflowMetrics = null,
         ILogger<RunStarter>? logger = null)
     {
@@ -43,6 +47,7 @@ internal sealed class RunStarter : IRunStarter
         _runStartedPublisher = runStartedPublisher;
         _clock = clock;
         _idGenerator = idGenerator;
+        _defaultCreditBudgetPerRun = options?.Value.DefaultCreditBudgetPerRun ?? new WorkflowEngineOptions().DefaultCreditBudgetPerRun;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }
@@ -70,7 +75,7 @@ internal sealed class RunStarter : IRunStarter
             CompletedAt = null,
             CancellationRequestedAt = null,
             CancellationReason = null,
-            CreditBudget = 100m,
+            CreditBudget = _defaultCreditBudgetPerRun,
             CreatedAt = nowUtc
         }, ct);
 

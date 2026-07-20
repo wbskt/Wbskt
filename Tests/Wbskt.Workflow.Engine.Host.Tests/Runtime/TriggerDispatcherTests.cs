@@ -73,7 +73,7 @@ public sealed class TriggerDispatcherTests
         var registration = CreateRegistration("DropIfRunning");
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
-            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Dropped, null)));
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Dropped, [])));
 
         // Act
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
@@ -89,7 +89,7 @@ public sealed class TriggerDispatcherTests
         var registration = CreateRegistration("Queue");
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
-            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, null)));
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, [])));
 
         // Act
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
@@ -106,7 +106,7 @@ public sealed class TriggerDispatcherTests
         var cancellationService = new RecordingRunCancellationService();
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
-            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, 55)),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [55L])),
             runCancellationService: cancellationService);
 
         // Act
@@ -115,6 +115,27 @@ public sealed class TriggerDispatcherTests
         // Assert
         Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
         Assert.Equal([(55L, "Trigger-cancel-policy")], cancellationService.Requests);
+    }
+
+    [Fact]
+    public async Task Dispatch_cancels_every_matching_run_when_ProceedAfterCancellingActive_has_multiple_run_ids()
+    {
+        // Arrange: CancelExisting must cancel all matches, not just the first (2.3).
+        var registration = CreateRegistration("CancelExisting");
+        var cancellationService = new RecordingRunCancellationService();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [55L, 56L, 57L])),
+            runCancellationService: cancellationService);
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal(
+            [(55L, "Trigger-cancel-policy"), (56L, "Trigger-cancel-policy"), (57L, "Trigger-cancel-policy")],
+            cancellationService.Requests);
     }
 
     [Fact]
@@ -152,7 +173,7 @@ public sealed class TriggerDispatcherTests
             new CorrelationKeyResolver(),
             bookmarkResumer ?? new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false)),
             triggerRegistrationProvider ?? new RecordingTriggerRegistrationProvider(),
-            concurrencyEnforcer ?? new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, null)),
+            concurrencyEnforcer ?? new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, [])),
             runCancellationService ?? new RecordingRunCancellationService(),
             runStarter ?? new RecordingRunStarter([]),
             runDispatcher ?? new RecordingRunDispatcher([]),

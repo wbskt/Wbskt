@@ -15,6 +15,6 @@ public interface IRunProvider
     Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
     Task<long> CountByStatusAsync(string status, CancellationToken ct);
-    Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct);
+    Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct);
     Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct);
 }

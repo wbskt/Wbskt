@@ -68,6 +68,20 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
         );
     }
 
+    public async Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+    {
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.RunCounters_TryCharge",
+            p =>
+            {
+                p.AddWithValue("@RunId", runId);
+                p.AddWithValue("@Cost", cost);
+            },
+            ct
+        );
+        return result is decimal;
+    }
+
     public async Task<long> SumActiveBranchesAsync(CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

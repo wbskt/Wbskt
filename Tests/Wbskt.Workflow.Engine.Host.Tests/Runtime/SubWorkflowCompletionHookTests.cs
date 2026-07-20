@@ -52,7 +52,6 @@ public sealed class SubWorkflowCompletionHookTests
         var hook = new RecordingCompletionHook(bookmarkProvider);
         var finalizer = new RunFinalizer(
             new RecordingRunProvider(),
-            new StubRunCountersProvider(),
             new StubBranchProvider(),
             new RecordingHistoryEventProvider(),
             new RecordingPendingTriggerEventDrainer(),
@@ -121,17 +120,8 @@ public sealed class SubWorkflowCompletionHookTests
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => Task.FromResult((true, _run with { Status = status, CompletedAt = completedAt }));
-    }
-
-    private sealed class StubRunCountersProvider : IRunCountersProvider
-    {
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult(new RunCountersRow { RunId = runId, ActiveBranchCount = 0, CreditsConsumed = 0m, UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc) });
-        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubBranchProvider : IBranchProvider

@@ -10,7 +10,6 @@ namespace Wbskt.Workflow.Runtime;
 internal sealed class RunFinalizer : IRunFinalizer
 {
     private readonly IRunProvider _runProvider;
-    private readonly IRunCountersProvider _runCountersProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IHistoryEventProvider _historyEventProvider;
     private readonly IPendingTriggerEventDrainer _pendingTriggerEventDrainer;
@@ -24,7 +23,6 @@ internal sealed class RunFinalizer : IRunFinalizer
 
     public RunFinalizer(
         IRunProvider runProvider,
-        IRunCountersProvider runCountersProvider,
         IBranchProvider branchProvider,
         IHistoryEventProvider historyEventProvider,
         IPendingTriggerEventDrainer pendingTriggerEventDrainer,
@@ -37,7 +35,6 @@ internal sealed class RunFinalizer : IRunFinalizer
         ILogger<RunFinalizer>? logger = null)
     {
         _runProvider = runProvider;
-        _runCountersProvider = runCountersProvider;
         _branchProvider = branchProvider;
         _historyEventProvider = historyEventProvider;
         _pendingTriggerEventDrainer = pendingTriggerEventDrainer;
@@ -53,10 +50,8 @@ internal sealed class RunFinalizer : IRunFinalizer
     public async Task FinalizeAsync(long runId, CancellationToken ct)
     {
         RunRow run = await _runProvider.GetByIdAsync(runId, ct);
-        RunCountersRow counters = await _runCountersProvider.GetByRunIdAsync(run.Id, ct);
-        _ = counters;
         IReadOnlyCollection<BranchRow> branches = await _branchProvider.GetAllByRunIdAsync(run.Id, ct);
-        string terminalStatus = DetermineTerminalStatus(run.Status, branches);
+        string terminalStatus = DetermineTerminalStatus(run, branches);
         DateTime completedAt = _clock.UtcNow;
 
         (bool transitioned, RunRow updatedRun) = await _runProvider.SetTerminalAsync(runId, terminalStatus, completedAt, ct);
@@ -95,14 +90,25 @@ internal sealed class RunFinalizer : IRunFinalizer
         }
     }
 
-    private static string DetermineTerminalStatus(string currentStatus, IReadOnlyCollection<BranchRow> branches)
+    private static string DetermineTerminalStatus(RunRow run, IReadOnlyCollection<BranchRow> branches)
     {
-        if (string.Equals(currentStatus, "Cancelling", StringComparison.Ordinal))
+        if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal))
         {
-            return "Cancelled";
+            if (string.Equals(run.CancellationReason, "OUT_OF_CREDITS", StringComparison.Ordinal))
+            {
+                return "OutOfCredits";
+            }
+
+            // §5.4: a branch that actually completed despite the cancellation request means the
+            // run only partially made it out - anything else (nothing completed, whether branches
+            // were cancelled, failed, or the request simply beat every branch to the punch) is a
+            // clean Cancelled.
+            bool hasCancelledBranch = branches.Any(branch => string.Equals(branch.Status, "Cancelled", StringComparison.Ordinal));
+            bool hasCompletedDespiteCancellation = branches.Any(branch => string.Equals(branch.Status, "Completed", StringComparison.Ordinal));
+            return hasCancelledBranch && hasCompletedDespiteCancellation ? "PartiallyFailed" : "Cancelled";
         }
 
-        if (string.Equals(currentStatus, "Failing", StringComparison.Ordinal))
+        if (string.Equals(run.Status, "Failing", StringComparison.Ordinal))
         {
             return "Failed";
         }
@@ -127,7 +133,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     {
         return terminalStatus switch
         {
-            "Failed" or "PartiallyFailed" => "Warn",
+            "Failed" or "PartiallyFailed" or "OutOfCredits" => "Warn",
             _ => "Info"
         };
     }
