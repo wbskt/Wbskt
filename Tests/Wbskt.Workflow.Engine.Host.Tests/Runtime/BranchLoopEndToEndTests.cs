@@ -173,11 +173,11 @@ public sealed class BranchLoopEndToEndTests
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => Task.FromResult((long)Runs.Values.Count(run => run.Status == status));
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
             RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
             Runs[runId] = updated;
-            return Task.FromResult(updated);
+            return Task.FromResult((true, updated));
         }
  
         public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
@@ -211,7 +211,8 @@ public sealed class BranchLoopEndToEndTests
         Task<BookmarkRow> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAsync(CancellationToken ct) => Task.FromResult(0L);

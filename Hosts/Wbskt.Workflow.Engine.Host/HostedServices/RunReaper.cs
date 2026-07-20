@@ -34,10 +34,11 @@ public sealed class RunReaper : BackgroundService
         ILeaseHolder leaseHolder,
         IRunProvider runProvider,
         IRunCancellationService runCancellationService,
+        IRunFinalizer runFinalizer,
         ILogger<RunReaper> logger,
         TimeSpan? pollInterval = null,
         TimeSpan? stuckThreshold = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(runProvider, runCancellationService), logger, pollInterval, stuckThreshold)
+        : this(clock, leaseHolder, new StaticScopeFactory(runProvider, runCancellationService, runFinalizer), logger, pollInterval, stuckThreshold)
     {
     }
 
@@ -67,11 +68,15 @@ public sealed class RunReaper : BackgroundService
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var runProvider = scope.ServiceProvider.GetRequiredService<IRunProvider>();
         var runCancellationService = scope.ServiceProvider.GetRequiredService<IRunCancellationService>();
+        var runFinalizer = scope.ServiceProvider.GetRequiredService<IRunFinalizer>();
         DateTime cutoffUtc = _clock.UtcNow - _stuckThreshold;
         IReadOnlyCollection<RunRow> stuckRuns = await runProvider.GetStuckRunsAsync(cutoffUtc, BatchSize, ct);
         foreach (RunRow run in stuckRuns)
         {
             await runCancellationService.RequestCancellationAsync(run.Id, "REAPER_TIMEOUT", ct);
+            // A stuck run (by Run_GetStuck's definition) has no bookmark and no live branch left to drive
+            // finalization itself, so the reaper must finalize it directly. Safe because RunFinalizer is idempotent.
+            await runFinalizer.FinalizeAsync(run.Id, ct);
         }
     }
 
@@ -102,17 +107,17 @@ public sealed class RunReaper : BackgroundService
         }
     }
 
-    private sealed class StaticScopeFactory(IRunProvider runProvider, IRunCancellationService runCancellationService) : IServiceScopeFactory
+    private sealed class StaticScopeFactory(IRunProvider runProvider, IRunCancellationService runCancellationService, IRunFinalizer runFinalizer) : IServiceScopeFactory
     {
         public IServiceScope CreateScope()
         {
-            return new StaticServiceScope(runProvider, runCancellationService);
+            return new StaticServiceScope(runProvider, runCancellationService, runFinalizer);
         }
     }
 
-    private sealed class StaticServiceScope(IRunProvider runProvider, IRunCancellationService runCancellationService) : IServiceScope, IAsyncDisposable
+    private sealed class StaticServiceScope(IRunProvider runProvider, IRunCancellationService runCancellationService, IRunFinalizer runFinalizer) : IServiceScope, IAsyncDisposable
     {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(runProvider, runCancellationService);
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(runProvider, runCancellationService, runFinalizer);
 
         public void Dispose()
         {
@@ -124,7 +129,7 @@ public sealed class RunReaper : BackgroundService
         }
     }
 
-    private sealed class StaticServiceProvider(IRunProvider runProvider, IRunCancellationService runCancellationService) : IServiceProvider
+    private sealed class StaticServiceProvider(IRunProvider runProvider, IRunCancellationService runCancellationService, IRunFinalizer runFinalizer) : IServiceProvider
     {
         public object? GetService(Type serviceType)
         {
@@ -136,6 +141,11 @@ public sealed class RunReaper : BackgroundService
             if (serviceType == typeof(IRunCancellationService))
             {
                 return runCancellationService;
+            }
+
+            if (serviceType == typeof(IRunFinalizer))
+            {
+                return runFinalizer;
             }
 
             return null;

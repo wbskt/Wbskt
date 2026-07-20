@@ -134,6 +134,7 @@ internal sealed class BranchLoop : IBranchLoop
                 INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
                 System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 string outcome = "Succeeded";
+                bool hostShutdownInterrupted = false;
                 try
                 {
                     result = await RetryExecutor.RunWithRetryAsync(
@@ -167,6 +168,14 @@ internal sealed class BranchLoop : IBranchLoop
                         outcome = "Cancelled";
                         result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
                     }
+                    else if (ex is OperationCanceledException && ct.IsCancellationRequested)
+                    {
+                        // Host shutdown (not a run-level cancellation) interrupted the executor. Leave the branch
+                        // Active and untouched - RunRecoveryService re-dispatches it on the next startup (see 1.1).
+                        outcome = "Interrupted";
+                        hostShutdownInterrupted = true;
+                        _logger?.LogInformation("Host shutdown interrupted node {NodeId} in branch {BranchId} for run {RunId}; leaving branch Active for recovery.", branchRow.NodeId, branchId, runId);
+                    }
                     else
                     {
                         _logger?.LogError(ex, "Exception occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
@@ -184,6 +193,11 @@ internal sealed class BranchLoop : IBranchLoop
                     _workflowMetrics?.RecordNodeDuration(node.Kind, outcome, stopwatch.Elapsed.TotalMilliseconds);
                 }
 
+                if (hostShutdownInterrupted || result is null)
+                {
+                    return;
+                }
+
                 string? eventPayload = result switch
                 {
                     NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
@@ -195,10 +209,20 @@ internal sealed class BranchLoop : IBranchLoop
                 await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
             }
 
-            if (linkedToken.IsCancellationRequested && result is not NodeExecutionResult.Terminal)
+            if (result is not NodeExecutionResult.Terminal)
             {
-                _logger?.LogInformation("Execution cancelled for node {NodeId} in branch {BranchId} for run {RunId} after executor returned", branchRow.NodeId, branchId, runId);
-                result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
+                if (runToken.IsCancellationRequested)
+                {
+                    _logger?.LogInformation("Execution cancelled for node {NodeId} in branch {BranchId} for run {RunId} after executor returned", branchRow.NodeId, branchId, runId);
+                    result = new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled);
+                }
+                else if (ct.IsCancellationRequested)
+                {
+                    // Host shutdown fired after the executor returned a non-terminal result. Don't persist it as
+                    // Cancelled/Failed - leave the branch Active so recovery re-dispatches it on next startup.
+                    _logger?.LogInformation("Host shutdown interrupted branch {BranchId} for run {RunId} after node {NodeId} returned; leaving branch Active for recovery.", branchId, runId, branchRow.NodeId);
+                    return;
+                }
             }
 
             switch (result)
@@ -273,19 +297,12 @@ internal sealed class BranchLoop : IBranchLoop
                     branchRow = await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Waiting", localJson, branchRow.LastOutputJson, ct);
                     await AppendEventAsync(runRow.Id, branchRow.RefId, branchRow.NodeId, "BranchParked", ct);
 
+                    // Single-row model (design §3.5): one bookmark row per wait. A TTL, if present,
+                    // lives on the same row (ExpiresAt/TtlPort) rather than a separate companion timer
+                    // row - whichever side (signal/http/child match vs. TTL expiry) claims the row
+                    // first wins; the loser's claim is a no-op.
                     DateTime nowUtc = _clock.UtcNow;
                     await _bookmarkProvider.CreateAsync(CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, wait.Condition, nowUtc), ct);
-
-                    if (wait.Condition.Ttl is TimeSpan ttl)
-                    {
-                        var companionCondition = new TimerWakeCondition(nowUtc + ttl)
-                        {
-                            TtlPort = wait.Condition.TtlPort
-                        };
-                        await _bookmarkProvider.CreateAsync(
-                            CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, companionCondition, nowUtc),
-                            ct);
-                    }
 
                     return;
                 }
@@ -462,7 +479,7 @@ internal sealed class BranchLoop : IBranchLoop
         return JsonSerializer.Serialize(localState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
-    private BookmarkRow CreateBookmarkRow(int runId, Guid branchRefId, Guid nodeId, WakeCondition condition, DateTime createdAt)
+    private BookmarkRow CreateBookmarkRow(int runId, Guid branchRefId, Guid nodeId, WakeCondition condition, DateTime nowUtc)
     {
         return new BookmarkRow
         {
@@ -474,18 +491,18 @@ internal sealed class BranchLoop : IBranchLoop
             WakeConditionKind = GetWakeConditionKind(condition),
             MatchKey = GetWakeConditionMatchKey(condition),
             WakeConditionJson = JsonSerializer.Serialize(condition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-            ExpiresAt = GetWakeConditionExpiresAt(condition),
+            ExpiresAt = GetWakeConditionExpiresAt(condition, nowUtc),
             TtlPort = condition.TtlPort,
-            CreatedAt = createdAt
+            CreatedAt = nowUtc
         };
     }
 
-    private static DateTime? GetWakeConditionExpiresAt(WakeCondition condition)
+    private static DateTime? GetWakeConditionExpiresAt(WakeCondition condition, DateTime nowUtc)
     {
         return condition switch
         {
             TimerWakeCondition timer => timer.At,
-            _ => null
+            _ => condition.Ttl is TimeSpan ttl ? nowUtc + ttl : null
         };
     }
 
@@ -509,7 +526,8 @@ internal sealed class BranchLoop : IBranchLoop
         // for the corresponding inbound channel, so an inbound event can find this bookmark.
         return condition switch
         {
-            TimerWakeCondition timer => timer.At.ToString("O"),
+            // Timers aren't matched by an inbound event key — they're woken by ExpiresAt alone.
+            TimerWakeCondition => string.Empty,
             SignalWakeCondition signal => $"signal:{signal.Name}:{signal.Correlation}",
             InboundWakeCondition inbound => $"{inbound.DeviceRefId}:{inbound.PropertyName}",
             HttpWakeCondition http => $"http-wake:{http.Token}",

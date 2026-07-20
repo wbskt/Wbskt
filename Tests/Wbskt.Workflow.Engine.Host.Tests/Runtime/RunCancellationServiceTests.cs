@@ -143,7 +143,7 @@ public sealed class RunCancellationServiceTests
             return Task.FromResult(transitionResult);
         }
 
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
 
         private static RunRow CreateRun(string status)
         {
@@ -227,7 +227,7 @@ public sealed class RunCancellationServiceTests
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
@@ -312,9 +312,9 @@ public sealed class RunCancellationServiceTests
         public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
@@ -394,9 +394,9 @@ public sealed class RunCancellationServiceTests
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotImplementedException();
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotImplementedException();
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotImplementedException();
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotImplementedException();
         public Task<long> CountAsync(CancellationToken ct) => throw new NotImplementedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => throw new NotImplementedException();
     }

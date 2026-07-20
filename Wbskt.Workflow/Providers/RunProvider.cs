@@ -167,7 +167,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         return result is int rowsAffected && rowsAffected > 0;
     }
 
-    public async Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+    public async Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Run_SetTerminal",
@@ -177,7 +177,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@Status", status);
                 p.AddWithValue("@CompletedAt", completedAt);
             },
-            Map,
+            reader => (reader.GetBoolean(reader.GetOrdinal("Transitioned")), Map(reader)),
             new KeyNotFoundException($"Run with Id={runId} not found."),
             ct
         );

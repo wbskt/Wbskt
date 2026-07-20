@@ -67,26 +67,46 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {
-            _logger?.LogInformation("Event {EventId} dropped as idempotent (lost idempotency claim race)", evt.InboundEventId);
-            return new BookmarkMatchResult(false, null, true);
+            if (string.Equals(claim.Status, "Failed", StringComparison.Ordinal))
+            {
+                // The previous claimant crashed or threw mid-resume without ever delivering the
+                // event (see the catch below), leaving a wedged 'Failed' claim. Reclaim it instead
+                // of permanently dropping every redelivery of this event as a duplicate.
+                claim = await _idempotencyKeyProvider.ReclaimFailedAsync(idempotencyKey, claimToken, ct);
+            }
+
+            if (claim.BranchRefId != claimToken)
+            {
+                _logger?.LogInformation("Event {EventId} dropped as idempotent (lost idempotency claim race)", evt.InboundEventId);
+                return new BookmarkMatchResult(false, null, true);
+            }
+
+            _logger?.LogInformation("Event {EventId} reclaimed a stale Failed idempotency claim", evt.InboundEventId);
         }
 
         _logger?.LogDebug("Event {EventId} acquired idempotency claim", evt.InboundEventId);
 
-        var bookmarks = await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct);
-        if (bookmarks.Count == 0)
+        try
         {
-            _logger?.LogDebug("No matching bookmark found for event {EventId} using match keys", evt.InboundEventId);
-            return new BookmarkMatchResult(false, null, false, claim.KeyValue);
-        }
-
-        foreach (var bookmark in bookmarks)
-        {
-            try
+            var bookmarks = await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct);
+            if (bookmarks.Count == 0)
             {
+                _logger?.LogDebug("No matching bookmark found for event {EventId} using match keys", evt.InboundEventId);
+                return new BookmarkMatchResult(false, null, false, claim.KeyValue);
+            }
+
+            foreach (var bookmark in bookmarks)
+            {
+                // Single-row model: claim (delete) the bookmark before touching anything else. If a
+                // concurrent TTL expiry already claimed it, we lost the race and must not resume it.
+                if (!await _bookmarkProvider.TryClaimAsync(bookmark.RefId, ct))
+                {
+                    _logger?.LogDebug("Bookmark {BookmarkId} for event {EventId} already claimed (lost race with TTL/another matcher)", bookmark.Id, evt.InboundEventId);
+                    continue;
+                }
+
                 _logger?.LogInformation("Event {EventId} matched bookmark {BookmarkId} for run {RunId}", evt.InboundEventId, bookmark.Id, bookmark.RunId);
 
-                await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
                 var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
 
                 // Deliver the wake payload to the resumed branch under the reserved "__wake" key so the
@@ -99,63 +119,25 @@ internal sealed class BookmarkResumer : IBookmarkResumer
                     await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
                 }
 
+                // Dispatch is the last step - the branch is only resumed once the bookmark is
+                // irrevocably claimed and any wake payload is durably merged.
                 await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-                await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
             }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to resume bookmark for event {EventId}", evt.InboundEventId);
-                throw;
-            }
+
+            // We mark the idempotency key as succeeded now that all resumes have been dispatched
+            await _idempotencyKeyProvider.MarkSucceededAsync(claim.KeyValue, "{}", ct);
+
+            return new BookmarkMatchResult(true, bookmarks.First().Id, false);
         }
-
-        // We mark the idempotency key as succeeded now that all resumes have been dispatched
-        await _idempotencyKeyProvider.MarkSucceededAsync(claim.KeyValue, "{}", ct);
-
-        return new BookmarkMatchResult(true, bookmarks.First().Id, false);
-    }
-
-    
-    // [RJ]: TODO: remove this. remnant of old plan
-    /*
-     * Here is why:
-
-       If you look at the V3 Design Document (Section 3.4.2), there is a pseudo-code function defined as  function ResumeViaBookmark(bookmark, payload, takingPort) . The idea was to have a single, unified method that would do the actual database work of
-       deleting the bookmark, updating the branch state, and dispatching the run to the  IRunDispatcher .
-
-       However, during implementation, the workflow engine ended up with two distinct "resume" paths that required slightly different behavior, and the resume logic got inlined into both of them rather than calling a shared method:
-
-       1. Signal-driven resumes ( BookmarkResumer.MatchInboundAsync ): When an HTTP or MQTT event wakes a bookmark, it needs to merge the  evt.Payload  into the branch's local state so the workflow has access to the event data. It handles all the DB
-       operations and dispatching directly.
-       2. Timer-driven resumes ( BookmarkScheduler.ProcessDueBookmarksAsync ): When a TTL/companion timer expires, a background service leases the due bookmark from the database. It needs to set the  PendingTakePort  to the  TtlPort  (so the workflow skips
-       execution and jumps straight to the timeout edge), and it also does all the DB deletion and dispatching inline.
-
-       Because both paths had specialized logic (Payload merging vs. TTL port overriding), the developers just inlined the core "delete bookmark -> update branch -> dispatch" operations into those two methods.  ResumeViaBookmarkAsync  was left behind in
-       the interface (and is only used in a couple of unit tests that invoke it manually) but it serves no purpose in the actual engine anymore.
-     */
-    public async Task ResumeViaBookmarkAsync(long bookmarkId, IReadOnlyDictionary<string, JsonElement> wakePayload, CancellationToken ct)
-    {
-        BookmarkRow bookmark;
-        try
+        catch (Exception ex)
         {
-            bookmark = await _bookmarkProvider.GetByIdAsync(bookmarkId, ct);
+            _logger?.LogError(ex, "Failed to resume bookmark for event {EventId}", evt.InboundEventId);
+            // Release the claim so a redelivery of this event (or the next PendingTriggerEventDrainer
+            // pass) isn't permanently dropped as a duplicate of a resume that never actually happened.
+            string errorJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            await _idempotencyKeyProvider.MarkFailedAsync(claim.KeyValue, errorJson, ct);
+            throw;
         }
-        catch (KeyNotFoundException)
-        {
-            return;
-        }
-
-        await _bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
-        var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
-
-        if (wakePayload.Count > 0)
-        {
-            string mergedLocalJson = MergeWakePayload(branch.LocalJson, wakePayload);
-            await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
-        }
-
-        await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-        await _bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
     }
 
     private static string MergeWakePayload(string localJson, IReadOnlyDictionary<string, JsonElement> wakePayload)

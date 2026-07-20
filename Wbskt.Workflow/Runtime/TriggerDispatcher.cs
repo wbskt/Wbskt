@@ -66,6 +66,13 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         if (registrations.Count == 0)
         {
             _logger?.LogWarning("No active trigger registrations found for channel {ChannelKind} and keys {MatchKeys}", resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
+            if (bookmarkMatch.ClaimKey != null)
+            {
+                // Otherwise this claim stays 'Pending' forever - a later redelivery of the same
+                // event would then wait on a claim nobody will ever complete.
+                _logger?.LogDebug("Marking idempotency claim key {ClaimKey} as succeeded", bookmarkMatch.ClaimKey);
+                await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
+            }
             return new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, defaultCorrelation);
         }
 

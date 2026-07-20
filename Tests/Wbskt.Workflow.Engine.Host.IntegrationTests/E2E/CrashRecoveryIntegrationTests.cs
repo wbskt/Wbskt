@@ -142,6 +142,120 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         mockDispatcher.DispatchedBranches[0].BranchId.Should().Be(createdBranch.Id);
         mockDispatcher.DispatchedBranches[0].Reason.Should().Be(Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
     }
+
+    [Fact]
+    public async Task StartupRecoveryService_RecoversOrphanedCompensatingBranch_AndDispatchesIt()
+    {
+        if (!fixture.IsAvailable) return;
+
+        var services = new ServiceCollection();
+        IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
+        services.AddSingleton(config);
+        services.AddWorkflowEngine(config);
+        services.AddLogging();
+
+        await using ServiceProvider sp = services.BuildServiceProvider();
+
+        var definitionProvider = sp.GetRequiredService<IWorkflowDefinitionProvider>();
+        var runProvider = sp.GetRequiredService<IRunProvider>();
+        var branchProvider = sp.GetRequiredService<IBranchProvider>();
+
+        var workflowRefId = Guid.NewGuid();
+        string dummyJson = $$"""
+        {
+            "workflowRefId": "{{workflowRefId}}",
+            "version": 1,
+            "workspaceId": 1,
+            "name": "CrashRecoveryCompensating",
+            "nodes": [
+                {
+                    "nodeId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "kind": "trigger:manual",
+                    "name": "Start",
+                    "ports": [{"portId": "out", "direction": "Output", "label": "Out"}],
+                    "config": {}
+                }
+            ],
+            "edges": [],
+            "sharedVariableSchema": [],
+            "createdAt": "2026-01-01T00:00:00Z",
+            "publishedBy": 1,
+            "failFast": false,
+            "runCompensationOnFailure": false
+        }
+        """;
+
+        WorkflowDefinitionRow wd = await definitionProvider.InsertAsync(new WorkflowDefinitionRow
+        {
+            Id = 0,
+            RefId = workflowRefId,
+            Version = 1,
+            WorkspaceId = 1,
+            Name = "CrashRecoveryCompensating",
+            Description = null,
+            IsEnabled = true,
+            DefinitionJson = dummyJson,
+            PublishedBy = 1,
+            CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+
+        Guid runRefId = Guid.NewGuid();
+        Guid branchRefId = Guid.NewGuid();
+
+        var run = new RunRow
+        {
+            Id = 0,
+            RefId = runRefId,
+            WorkflowDefinitionId = wd.Id,
+            WorkflowRefId = wd.RefId,
+            WorkflowVersion = wd.Version,
+            Status = "Failing",
+            TriggerNodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            CorrelationKey = null,
+            StartedAt = DateTime.UtcNow,
+            CompletedAt = null,
+            CancellationRequestedAt = null,
+            CancellationReason = null,
+            CreditBudget = 1000m,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var createdRun = await runProvider.CreateAsync(run, CancellationToken.None);
+
+        var branch = new BranchRow
+        {
+            Id = 0,
+            RefId = branchRefId,
+            RunId = createdRun.Id,
+            ParentBranchId = null,
+            ForkCohortId = null,
+            NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            Status = "Compensating",
+            PendingTakePort = null,
+            LocalJson = "{}",
+            LastOutputJson = null,
+            CompensationStackJson = null,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            RowVersion = Array.Empty<byte>()
+        };
+
+        var createdBranch = await branchProvider.CreateAsync(branch, CancellationToken.None);
+
+        var mockDispatcher = new RecordingRunDispatcher();
+        var mockScopeFactory = new MockServiceScopeFactory(branchProvider, runProvider, null);
+        var recoveryService = new RunRecoveryService(
+            mockScopeFactory,
+            mockDispatcher,
+            NullLogger<RunRecoveryService>.Instance);
+
+        await recoveryService.StartAsync(CancellationToken.None);
+
+        mockDispatcher.DispatchedBranches.Should().ContainSingle();
+        mockDispatcher.DispatchedBranches[0].RunId.Should().Be(createdRun.Id);
+        mockDispatcher.DispatchedBranches[0].BranchId.Should().Be(createdBranch.Id);
+        mockDispatcher.DispatchedBranches[0].Reason.Should().Be(Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
+    }
 }
 
 public sealed class MockServiceScopeFactory : IServiceScopeFactory

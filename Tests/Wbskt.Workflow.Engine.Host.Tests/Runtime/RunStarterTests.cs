@@ -79,7 +79,7 @@ public sealed class RunStarterTests
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingRunCountersProvider(List<string> operations) : IRunCountersProvider

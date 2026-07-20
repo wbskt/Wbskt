@@ -9,7 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.HostedServices;
 public sealed class BookmarkSchedulerTests
 {
     [Fact]
-    public async Task Tick_leases_due_bookmarks_and_dispatches_each()
+    public async Task Tick_claims_due_bookmarks_and_dispatches_each()
     {
         // Arrange
         var first = CreateBookmark(11, 101, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
@@ -27,15 +27,13 @@ public sealed class BookmarkSchedulerTests
         Assert.Equal((11L, 101L, BranchExecutionReason.BookmarkResumed), dispatcher.Requests[0]);
         Assert.Equal((12L, 102L, BranchExecutionReason.BookmarkResumed), dispatcher.Requests[1]);
         Assert.Equal(64, provider.LastBatchSize);
-        Assert.Equal("host-1", provider.LastHostId);
-        Assert.Equal(TimeSpan.FromMinutes(2), provider.LastLeaseDuration);
     }
 
     [Fact]
-    public async Task Tick_deletes_bookmark_after_successful_dispatch()
+    public async Task Tick_sets_PendingTakePort_when_TtlPort_present_on_a_non_timer_bookmark()
     {
-        // Arrange
-        var bookmark = CreateBookmark(33, 201, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1"), Guid.Parse("33333333-3333-3333-3333-333333333333"));
+        // Arrange: a signal/http wait that timed out via its TTL must jump to the timeout edge.
+        var bookmark = CreateBookmark(33, 201, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1"), Guid.Parse("33333333-3333-3333-3333-333333333333"), wakeConditionKind: "signal", ttlPort: "timeout");
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
         var dispatcher = new RecordingRunDispatcher();
@@ -45,28 +43,45 @@ public sealed class BookmarkSchedulerTests
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal([bookmark.RefId], provider.DeletedRefIds);
+        BranchRow updated = Assert.Single(branchProvider.Upserted);
+        Assert.Equal("timeout", updated.PendingTakePort);
     }
 
     [Fact]
-    public async Task Tick_does_not_delete_when_dispatch_throws()
+    public async Task Tick_does_not_set_PendingTakePort_for_a_pure_timer_bookmark()
     {
-        // Arrange
-        var bookmark = CreateBookmark(33, 201, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1"), Guid.Parse("33333333-3333-3333-3333-333333333333"));
+        // Arrange: a plain Delay node bookmark - resumes at its own node, no take-port.
+        var bookmark = CreateBookmark(34, 202, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2"), Guid.Parse("44444444-4444-4444-4444-444444444444"), wakeConditionKind: "timer", ttlPort: null);
         var provider = new RecordingBookmarkProvider([bookmark]);
-        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
-        var dispatcher = new RecordingRunDispatcher { ExceptionToThrow = new InvalidOperationException("boom") };
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 202));
+        var dispatcher = new RecordingRunDispatcher();
         var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
 
         // Assert
-        Assert.Empty(provider.DeletedRefIds);
+        Assert.Empty(branchProvider.Upserted);
+        Assert.Single(dispatcher.Requests);
     }
 
     [Fact]
-    public async Task Empty_lease_result_does_not_call_dispatcher()
+    public async Task Tick_does_not_throw_when_dispatch_fails_for_one_bookmark()
+    {
+        // Arrange: claim-by-delete already happened by the time we dispatch (no rollback possible),
+        // so a dispatch failure must be logged and swallowed, not crash the whole tick.
+        var bookmark = CreateBookmark(33, 201, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1"), Guid.Parse("33333333-3333-3333-3333-333333333333"));
+        var provider = new RecordingBookmarkProvider([bookmark]);
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
+        var dispatcher = new RecordingRunDispatcher { ExceptionToThrow = new InvalidOperationException("boom") };
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+
+        // Act / Assert (must not throw)
+        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Empty_claim_result_does_not_call_dispatcher()
     {
         // Arrange
         var provider = new RecordingBookmarkProvider([]);
@@ -78,10 +93,9 @@ public sealed class BookmarkSchedulerTests
 
         // Assert
         Assert.Empty(dispatcher.Requests);
-        Assert.Empty(provider.DeletedRefIds);
     }
 
-    private static BookmarkRow CreateBookmark(int runId, int branchId, Guid branchRefId, Guid refId)
+    private static BookmarkRow CreateBookmark(int runId, int branchId, Guid branchRefId, Guid refId, string wakeConditionKind = "timer", string? ttlPort = null)
     {
         _ = branchId;
 
@@ -92,11 +106,11 @@ public sealed class BookmarkSchedulerTests
             RunId = runId,
             BranchRefId = branchRefId,
             NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            WakeConditionKind = "Timer",
+            WakeConditionKind = wakeConditionKind,
             MatchKey = string.Empty,
             WakeConditionJson = "{}",
             ExpiresAt = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc),
-            TtlPort = null,
+            TtlPort = ttlPort,
             CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
         };
     }
@@ -151,8 +165,15 @@ public sealed class BookmarkSchedulerTests
                 RowVersion = [1]
             });
 
+        public List<BranchRow> Upserted { get; } = [];
+
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
+        {
+            _rows[row.RefId] = row;
+            Upserted.Add(row);
+            return Task.FromResult(row);
+        }
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_rows[refId]);
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
@@ -168,30 +189,20 @@ public sealed class BookmarkSchedulerTests
     {
         public DateTime? LastNowUtc { get; private set; }
         public int LastBatchSize { get; private set; }
-        public string? LastHostId { get; private set; }
-        public TimeSpan? LastLeaseDuration { get; private set; }
-        public List<Guid> DeletedRefIds { get; } = [];
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct)
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
         {
             LastNowUtc = nowUtc;
             LastBatchSize = batchSize;
-            LastHostId = hostId;
-            LastLeaseDuration = leaseDuration;
             return Task.FromResult(dueBookmarks);
         }
-        public Task DeleteAsync(Guid refId, CancellationToken ct)
-        {
-            DeletedRefIds.Add(refId);
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => Task.CompletedTask;
+        public Task DeleteAsync(Guid refId, CancellationToken ct) => Task.CompletedTask;
         public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();

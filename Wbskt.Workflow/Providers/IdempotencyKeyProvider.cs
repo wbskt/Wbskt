@@ -71,6 +71,21 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
         );
     }
 
+    public async Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.IdempotencyKey_ReclaimFailed",
+            p =>
+            {
+                p.AddWithValue("@KeyValue", keyValue);
+                p.AddWithValue("@NewBranchRefId", newBranchRefId);
+            },
+            Map,
+            new KeyNotFoundException($"IdempotencyKey with KeyValue={keyValue} not found."),
+            ct
+        );
+    }
+
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

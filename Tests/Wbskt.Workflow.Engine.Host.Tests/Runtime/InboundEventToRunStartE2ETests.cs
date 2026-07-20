@@ -233,11 +233,11 @@ public sealed class InboundEventToRunStartE2ETests
             return Task.FromResult(true);
         }
 
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
             RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
             Runs[runId] = updated;
-            return Task.FromResult(updated);
+            return Task.FromResult((true, updated));
         }
  
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
@@ -307,13 +307,25 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.MatchKey == matchKey).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => matchKeys.Contains(bookmark.MatchKey)).ToArray());
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.RunId == runId).ToArray());
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Array.Empty<BookmarkRow>());
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
+        {
+            int removed = Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
+            return Task.FromResult(removed > 0);
+        }
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
+        {
+            var due = Bookmarks.Where(bookmark => bookmark.ExpiresAt <= nowUtc).Take(batchSize).ToArray();
+            foreach (var bookmark in due)
+            {
+                Bookmarks.Remove(bookmark);
+            }
+            return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
+        }
         public Task DeleteAsync(Guid refId, CancellationToken ct)
         {
             Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
             return Task.CompletedTask;
         }
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => Task.CompletedTask;
         public Task<long> CountAsync(CancellationToken ct) => Task.FromResult((long)Bookmarks.Count);
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct)
@@ -387,6 +399,7 @@ public sealed class InboundEventToRunStartE2ETests
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => Task.FromResult<PendingTriggerEventRow?>(null);

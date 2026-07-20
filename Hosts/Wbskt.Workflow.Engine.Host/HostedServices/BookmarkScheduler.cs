@@ -91,32 +91,38 @@ public sealed class BookmarkScheduler : BackgroundService
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
         var bookmarkProvider = scope.ServiceProvider.GetRequiredService<IBookmarkProvider>();
-        IReadOnlyCollection<Abstraction.Entities.BookmarkRow> leasedBookmarks =
-            await bookmarkProvider.LeaseDueAsync(_clock.UtcNow, _batchSize, _hostIdentity.HostId, _leaseDuration, ct);
+        // Claim-by-delete: rows returned here are already removed from the table, no separate
+        // delete step needed (and no lease/host-id bookkeeping - the DELETE itself is the claim).
+        IReadOnlyCollection<Abstraction.Entities.BookmarkRow> claimedBookmarks =
+            await bookmarkProvider.ClaimDueAsync(_clock.UtcNow, _batchSize, ct);
 
-        if (leasedBookmarks.Count > 0)
+        if (claimedBookmarks.Count > 0)
         {
-            _logger.LogInformation("Leased {Count} due bookmarks for processing", leasedBookmarks.Count);
+            _logger.LogInformation("Claimed {Count} due bookmarks for processing", claimedBookmarks.Count);
         }
 
-        foreach (var bookmark in leasedBookmarks)
+        foreach (var bookmark in claimedBookmarks)
         {
             try
             {
                 var branch = await branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
-                if (!string.IsNullOrEmpty(bookmark.TtlPort))
+
+                // A TtlPort on a non-timer bookmark means the primary wait (signal/http/child) timed
+                // out via its TTL rather than being matched - take the timeout edge. A pure timer
+                // wait (a Delay node) has no take-port; it just resumes at its own node.
+                bool isTtlFiring = !string.IsNullOrEmpty(bookmark.TtlPort) && !string.Equals(bookmark.WakeConditionKind, "timer", StringComparison.OrdinalIgnoreCase);
+                if (isTtlFiring)
                 {
                     branch = branch with { PendingTakePort = bookmark.TtlPort };
                     await branchProvider.UpsertAsync(branch, ct);
                 }
+
                 _logger.LogInformation("Resuming bookmark {BookmarkId} (Timer Due) for run {RunId} on branch {BranchId}", bookmark.Id, bookmark.RunId, branch.Id);
                 await _runDispatcher.DispatchAsync(new BranchExecutionRequest(bookmark.RunId, branch.Id, BranchExecutionReason.BookmarkResumed), ct);
-                await bookmarkProvider.DeleteAsync(bookmark.RefId, ct);
-                await bookmarkProvider.DeleteSiblingsAsync(bookmark.RunId, branch.Id, bookmark.Id, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to process leased bookmark {BookmarkId} for run {RunId}", bookmark.Id, bookmark.RunId);
+                _logger.LogError(ex, "Failed to process claimed bookmark {BookmarkId} for run {RunId}", bookmark.Id, bookmark.RunId);
             }
         }
     }

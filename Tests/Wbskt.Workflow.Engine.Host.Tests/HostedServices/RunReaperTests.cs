@@ -16,7 +16,8 @@ public sealed class RunReaperTests
         var leaseHolder = new RecordingLeaseHolder(isHeld: false);
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
-        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, NullLogger<RunReaper>.Instance);
+        var finalizer = new RecordingRunFinalizer();
+        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
 
         // Act
         await reaper.ProcessStuckRunsAsync(CancellationToken.None);
@@ -25,10 +26,11 @@ public sealed class RunReaperTests
         Assert.Equal(["run-reaper"], leaseHolder.IsHeldCalls);
         Assert.Equal(0, runProvider.GetStuckRunsCalls);
         Assert.Empty(cancellationService.Requests);
+        Assert.Empty(finalizer.FinalizedRunIds);
     }
 
     [Fact]
-    public async Task Tick_requests_cancellation_for_each_stuck_run()
+    public async Task Tick_requests_cancellation_and_finalizes_each_stuck_run()
     {
         // Arrange
         var runs = new[]
@@ -39,7 +41,8 @@ public sealed class RunReaperTests
         var leaseHolder = new RecordingLeaseHolder(isHeld: true);
         var runProvider = new RecordingRunProvider(runs);
         var cancellationService = new RecordingRunCancellationService();
-        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, NullLogger<RunReaper>.Instance);
+        var finalizer = new RecordingRunFinalizer();
+        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
 
         // Act
         await reaper.ProcessStuckRunsAsync(CancellationToken.None);
@@ -48,6 +51,7 @@ public sealed class RunReaperTests
         Assert.Equal(1, runProvider.GetStuckRunsCalls);
         Assert.Equal((new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc), 100), runProvider.LastRequest);
         Assert.Equal([(51L, "REAPER_TIMEOUT"), (52L, "REAPER_TIMEOUT")], cancellationService.Requests);
+        Assert.Equal([51L, 52L], finalizer.FinalizedRunIds);
     }
 
     [Fact]
@@ -57,13 +61,15 @@ public sealed class RunReaperTests
         var leaseHolder = new RecordingLeaseHolder(isHeld: true);
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
-        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, NullLogger<RunReaper>.Instance);
+        var finalizer = new RecordingRunFinalizer();
+        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
 
         // Act
         await reaper.ProcessStuckRunsAsync(CancellationToken.None);
 
         // Assert
         Assert.Empty(cancellationService.Requests);
+        Assert.Empty(finalizer.FinalizedRunIds);
     }
 
     private static RunRow CreateRun(int id)
@@ -122,7 +128,7 @@ public sealed class RunReaperTests
         public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         {
@@ -145,6 +151,17 @@ public sealed class RunReaperTests
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
         {
             return Task.FromResult(false);
+        }
+    }
+
+    private sealed class RecordingRunFinalizer : IRunFinalizer
+    {
+        public List<long> FinalizedRunIds { get; } = [];
+
+        public Task FinalizeAsync(long runId, CancellationToken ct)
+        {
+            FinalizedRunIds.Add(runId);
+            return Task.CompletedTask;
         }
     }
 }

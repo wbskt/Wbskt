@@ -11,9 +11,14 @@ public interface IBookmarkProvider
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Array.Empty<BookmarkRow>());
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);
-    Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct);
+
+    /// <summary>Atomically claims (deletes) the bookmark by RefId. Returns false if it was already claimed/gone - the caller lost the race.</summary>
+    Task<bool> TryClaimAsync(Guid refId, CancellationToken ct);
+
+    /// <summary>Atomically claims (deletes) up to <paramref name="batchSize"/> due bookmarks and returns the claimed rows.</summary>
+    Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct);
+
     Task DeleteAsync(Guid refId, CancellationToken ct);
-    Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct);
     Task<long> CountAsync(CancellationToken ct);
     Task<int> DeleteOrphansAsync(CancellationToken ct);
     Task DeleteAllByRunIdAsync(int runId, CancellationToken ct);

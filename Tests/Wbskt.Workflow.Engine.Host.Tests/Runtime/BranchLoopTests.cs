@@ -737,6 +737,99 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_leaves_branch_untouched_when_host_token_cancels_mid_node_execution()
+    {
+        // Arrange: host shutdown (not run cancellation) interrupts a provider call mid-node.
+        // The branch must stay Active, untouched, so RunRecoveryService can re-dispatch it later.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "host-shutdown-mid-node",
+            null,
+            true,
+            [new TestNode { NodeId = nodeId, Name = "act", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var counters = new StubRunCountersProvider();
+        var historyProvider = new RecordingHistoryEventProvider();
+        using var hostCts = new CancellationTokenSource();
+        var runProvider = new HostShutdownRunProvider(hostCts);
+        var loop = new BranchLoop(
+            branchProvider,
+            runProvider,
+            counters,
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, hostCts.Token);
+
+        // Assert
+        Assert.False(branchProvider.SetCompletedCalled);
+        Assert.False(branchProvider.SetFailedCalled);
+        Assert.Empty(branchProvider.PointerUpdates);
+        Assert.Equal("Active", branchProvider.CurrentBranch.Status);
+        Assert.Empty(counters.IncrementCalls);
+        Assert.DoesNotContain(historyProvider.Events, evt => evt.EventKind is "NodeFailed" or "NodeCompleted" or "BranchCompleted");
+    }
+
+    [Fact]
+    public async Task RunAsync_leaves_branch_untouched_when_host_token_cancels_after_node_returns()
+    {
+        // Arrange: the executor returns a normal (non-terminal) result, but host shutdown fired
+        // while it was running. The branch must not be persisted as if the node had completed.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "host-shutdown-after-node",
+            null,
+            true,
+            [new TestNode { NodeId = nodeId, Name = "act", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var counters = new StubRunCountersProvider();
+        var historyProvider = new RecordingHistoryEventProvider();
+        using var hostCts = new CancellationTokenSource();
+        var executor = new CancelAfterReturnExecutor(hostCts, new NodeExecutionResult.Continue("next", CreatePatch("step", 1)));
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(executor),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, hostCts.Token);
+
+        // Assert
+        Assert.Empty(branchProvider.PointerUpdates);
+        Assert.False(branchProvider.SetCompletedCalled);
+        Assert.Equal("Active", branchProvider.CurrentBranch.Status);
+    }
+
+    [Fact]
     public async Task Terminal_calls_Branch_SetCompleted_and_decrements_counter()
     {
         // Arrange
@@ -1012,6 +1105,54 @@ public sealed class BranchLoopTests
         }
     }
 
+    /// <summary>
+    /// Simulates a host shutdown interrupting a provider call mid-node: the first GetByIdAsync
+    /// call (BranchLoop's initial run fetch) succeeds, the second (RetryExecutor's credit check)
+    /// cancels the host token and throws, as a real ADO.NET call would when its command is cancelled.
+    /// </summary>
+    private sealed class HostShutdownRunProvider(CancellationTokenSource hostCts) : IRunProvider
+    {
+        private readonly StubRunProvider _inner = new();
+        private int _calls;
+
+        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct)
+        {
+            _calls++;
+            if (_calls == 1)
+            {
+                return _inner.GetByIdAsync(runId, ct);
+            }
+
+            hostCts.Cancel();
+            throw new OperationCanceledException("host shutdown");
+        }
+
+        public Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    /// <summary>Returns a normal result but cancels the host token first, simulating shutdown racing with node completion.</summary>
+    private sealed class CancelAfterReturnExecutor(CancellationTokenSource hostCts, NodeExecutionResult result) : INodeExecutor
+    {
+        public string Kind => "test";
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            hostCts.Cancel();
+            return Task.FromResult(result);
+        }
+    }
+
     private sealed class StubWorkflowDefinitionCache(WorkflowDefinition definition) : IWorkflowDefinitionCache
     {
         public Task<WorkflowDefinition> GetAsync(int workflowDefinitionId, CancellationToken ct) => Task.FromResult(definition);
@@ -1179,7 +1320,7 @@ public sealed class BranchLoopTests
             return Task.FromResult(true);
         }
 
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubRunCountersProvider(List<string>? operationLog = null, IReadOnlyCollection<int>? incrementResults = null) : IRunCountersProvider
@@ -1233,7 +1374,8 @@ public sealed class BranchLoopTests
         public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();

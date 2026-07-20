@@ -190,11 +190,11 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => Task.FromResult((long)Runs.Values.Count(run => run.Status == status));
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
             RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
             Runs[runId] = updated;
-            return Task.FromResult(updated);
+            return Task.FromResult((true, updated));
         }
 
         public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
@@ -233,16 +233,25 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.MatchKey == matchKey).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => matchKeys.Contains(bookmark.MatchKey)).ToArray());
         Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.RunId == runId).ToArray());
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.ExpiresAt <= nowUtc).ToArray());
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
+        {
+            int removed = Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
+            return Task.FromResult(removed > 0);
+        }
+
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
+        {
+            var due = Bookmarks.Where(bookmark => bookmark.ExpiresAt <= nowUtc).Take(batchSize).ToArray();
+            foreach (var bookmark in due)
+            {
+                Bookmarks.Remove(bookmark);
+            }
+            return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
+        }
+
         public Task DeleteAsync(Guid refId, CancellationToken ct)
         {
             Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct)
-        {
-            Bookmarks.RemoveAll(bookmark => bookmark.RunId == runId && bookmark.Id != excludeBookmarkId);
             return Task.CompletedTask;
         }
 
@@ -303,6 +312,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => Task.FromResult(IdempotencyKeys[keyValue]);
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 

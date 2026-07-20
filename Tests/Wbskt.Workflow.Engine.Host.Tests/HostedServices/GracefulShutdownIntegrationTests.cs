@@ -60,7 +60,7 @@ public sealed class GracefulShutdownIntegrationTests
     private static IBookmarkProvider CreateBookmarkProvider()
     {
         var mock = new Mock<IBookmarkProvider>(MockBehavior.Strict);
-        mock.Setup(x => x.LeaseDueAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        mock.Setup(x => x.ClaimDueAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<BookmarkRow>());
         mock.Setup(x => x.DeleteOrphansAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);

@@ -46,7 +46,7 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
-    public async Task MatchInbound_deletes_bookmark_before_dispatching_branch()
+    public async Task MatchInbound_claims_bookmark_before_dispatching_branch()
     {
         // Arrange
         var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
@@ -64,7 +64,7 @@ public sealed class BookmarkResumerTests
         Assert.True(result.Matched);
         Assert.Equal(77L, result.BookmarkId);
         Assert.False(result.Idempotent);
-        Assert.Equal(["delete", "dispatch"], operationLog);
+        Assert.Equal(["claim", "dispatch"], operationLog);
     }
 
     [Fact]
@@ -83,7 +83,28 @@ public sealed class BookmarkResumerTests
 
         // Assert
         Assert.Equal([(42L, 1001L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
-        Assert.Equal([bookmark.RefId], bookmarkProvider.DeletedRefIds);
+        Assert.Equal([bookmark.RefId], bookmarkProvider.ClaimedRefIds);
+    }
+
+    [Fact]
+    public async Task MatchInbound_skips_bookmark_when_claim_lost_to_concurrent_ttl_expiry()
+    {
+        // Arrange: the bookmark row is already gone by the time this caller tries to claim it
+        // (e.g. BookmarkScheduler's TTL claim won the race first).
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark, claimAlwaysFails: true);
+        var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
+
+        // Act
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert: the event still counts as "matched" (it was for a bookmark, not a fresh trigger),
+        // but since the claim was lost, this caller must not resume the branch itself.
+        Assert.True(result.Matched);
+        Assert.Empty(dispatcher.Requests);
     }
 
     [Fact]
@@ -127,37 +148,60 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
-    public async Task ResumeByBookmarkId_dispatches_branch()
+    public async Task MatchInbound_reclaims_stale_failed_claim_and_resumes()
     {
-        // Arrange
-        var bookmark = CreateBookmark(88, 42, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), Guid.Parse("44444444-4444-4444-4444-444444444444"));
+        // Arrange: the claim row is 'Failed' (a prior claimant crashed mid-resume). This caller
+        // should reclaim it rather than treat the redelivery as an already-handled duplicate.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
         var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
-        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 2001));
+        var idempotency = RecordingIdempotencyKeyProvider.FailedClaim_ReclaimSucceeds();
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
         var dispatcher = new RecordingRunDispatcher();
-        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, dispatcher);
+        var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
 
         // Act
-        await resumer.ResumeViaBookmarkAsync(88, new Dictionary<string, JsonElement>(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
 
         // Assert
-        Assert.Equal([bookmark.RefId], bookmarkProvider.DeletedRefIds);
-        Assert.Equal([(42L, 2001L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
+        Assert.True(result.Matched);
+        Assert.False(result.Idempotent);
+        Assert.Single(idempotency.ReclaimCalls);
+        Assert.Equal([(42L, 1001L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
     }
 
     [Fact]
-    public async Task ResumeByBookmarkId_is_idempotent_when_bookmark_already_deleted()
+    public async Task MatchInbound_drops_as_idempotent_when_reclaim_loses_race()
     {
-        // Arrange
+        // Arrange: two callers race to reclaim the same stale 'Failed' claim; only one can win.
         var bookmarkProvider = new RecordingBookmarkProvider();
-        var dispatcher = new RecordingRunDispatcher();
-        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), new RecordingBranchProvider(), dispatcher);
+        var idempotency = RecordingIdempotencyKeyProvider.FailedClaim_ReclaimLosesRace();
+        var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
 
         // Act
-        await resumer.ResumeViaBookmarkAsync(999, new Dictionary<string, JsonElement>(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
 
         // Assert
-        Assert.Empty(bookmarkProvider.DeletedRefIds);
-        Assert.Empty(dispatcher.Requests);
+        Assert.False(result.Matched);
+        Assert.True(result.Idempotent);
+        Assert.Single(idempotency.ReclaimCalls);
+    }
+
+    [Fact]
+    public async Task MatchInbound_marks_claim_failed_when_resume_throws()
+    {
+        // Arrange: a real failure mid-resume must release the claim (mark it Failed) so a
+        // redelivery of the same event isn't wedged behind a claim nobody will ever complete.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
+        var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
+        var dispatcher = new ThrowingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
+
+        // Act / Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(() => resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None));
+        Assert.Single(idempotency.MarkFailedCalls);
+        Assert.Equal("inbound-event:event-1", idempotency.MarkFailedCalls[0].KeyValue);
     }
 
     private static InboundEvent CreateInboundEvent()
@@ -188,10 +232,10 @@ public sealed class BookmarkResumerTests
         };
     }
 
-    private sealed class RecordingBookmarkProvider(BookmarkRow? bookmark = null, List<string>? operationLog = null) : IBookmarkProvider
+    private sealed class RecordingBookmarkProvider(BookmarkRow? bookmark = null, List<string>? operationLog = null, bool claimAlwaysFails = false) : IBookmarkProvider
     {
         public string? LastMatchKey { get; private set; }
-        public List<Guid> DeletedRefIds { get; } = [];
+        public List<Guid> ClaimedRefIds { get; } = [];
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
@@ -217,15 +261,20 @@ public sealed class BookmarkResumerTests
         }
 
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteAsync(Guid refId, CancellationToken ct)
+
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
         {
-            operationLog?.Add("delete");
-            DeletedRefIds.Add(refId);
-            return Task.CompletedTask;
+            if (claimAlwaysFails || bookmark is null || bookmark.RefId != refId || ClaimedRefIds.Contains(refId))
+            {
+                return Task.FromResult(false);
+            }
+            operationLog?.Add("claim");
+            ClaimedRefIds.Add(refId);
+            return Task.FromResult(true);
         }
 
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => Task.CompletedTask;
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
@@ -234,13 +283,17 @@ public sealed class BookmarkResumerTests
     private sealed class RecordingIdempotencyKeyProvider : IIdempotencyKeyProvider
     {
         private readonly Func<string, int, Guid, Guid, int, IdempotencyKeyRow> _factory;
+        private readonly Func<string, Guid, IdempotencyKeyRow>? _reclaimFactory;
 
-        private RecordingIdempotencyKeyProvider(Func<string, int, Guid, Guid, int, IdempotencyKeyRow> factory)
+        private RecordingIdempotencyKeyProvider(Func<string, int, Guid, Guid, int, IdempotencyKeyRow> factory, Func<string, Guid, IdempotencyKeyRow>? reclaimFactory = null)
         {
             _factory = factory;
+            _reclaimFactory = reclaimFactory;
         }
 
         public string? LastKeyValue { get; private set; }
+        public List<(string KeyValue, string ErrorJson)> MarkFailedCalls { get; } = [];
+        public List<(string KeyValue, Guid NewBranchRefId)> ReclaimCalls { get; } = [];
 
         public static RecordingIdempotencyKeyProvider NewClaim()
         {
@@ -278,6 +331,75 @@ public sealed class BookmarkResumerTests
             });
         }
 
+        /// <summary>A stale 'Failed' claim from a crashed prior resume, which this caller successfully reclaims.</summary>
+        public static RecordingIdempotencyKeyProvider FailedClaim_ReclaimSucceeds()
+        {
+            return new RecordingIdempotencyKeyProvider(
+                (key, _, _, _, _) => new IdempotencyKeyRow
+                {
+                    Id = 1,
+                    KeyValue = key,
+                    RunId = 0,
+                    BranchRefId = Guid.Parse("99999999-9999-9999-9999-999999999999"),
+                    NodeId = Guid.Empty,
+                    Attempt = 0,
+                    Status = "Failed",
+                    ResultJson = null,
+                    ErrorJson = "boom",
+                    CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                    CompletedAt = null
+                },
+                reclaimFactory: (key, newBranchRefId) => new IdempotencyKeyRow
+                {
+                    Id = 1,
+                    KeyValue = key,
+                    RunId = 0,
+                    BranchRefId = newBranchRefId,
+                    NodeId = Guid.Empty,
+                    Attempt = 0,
+                    Status = "Pending",
+                    ResultJson = null,
+                    ErrorJson = null,
+                    CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                    CompletedAt = null
+                });
+        }
+
+        /// <summary>A stale 'Failed' claim where a concurrent caller wins the reclaim race first.</summary>
+        public static RecordingIdempotencyKeyProvider FailedClaim_ReclaimLosesRace()
+        {
+            Guid winner = Guid.Parse("88888888-8888-8888-8888-888888888888");
+            return new RecordingIdempotencyKeyProvider(
+                (key, _, _, _, _) => new IdempotencyKeyRow
+                {
+                    Id = 1,
+                    KeyValue = key,
+                    RunId = 0,
+                    BranchRefId = Guid.Parse("99999999-9999-9999-9999-999999999999"),
+                    NodeId = Guid.Empty,
+                    Attempt = 0,
+                    Status = "Failed",
+                    ResultJson = null,
+                    ErrorJson = "boom",
+                    CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                    CompletedAt = null
+                },
+                reclaimFactory: (key, _) => new IdempotencyKeyRow
+                {
+                    Id = 1,
+                    KeyValue = key,
+                    RunId = 0,
+                    BranchRefId = winner,
+                    NodeId = Guid.Empty,
+                    Attempt = 0,
+                    Status = "Pending",
+                    ResultJson = null,
+                    ErrorJson = null,
+                    CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                    CompletedAt = null
+                });
+        }
+
         public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct)
         {
             LastKeyValue = keyValue;
@@ -286,7 +408,23 @@ public sealed class BookmarkResumerTests
 
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
-        public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct)
+        {
+            MarkFailedCalls.Add((keyValue, errorJson));
+            return Task.FromResult<IdempotencyKeyRow>(null!);
+        }
+
+        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct)
+        {
+            ReclaimCalls.Add((keyValue, newBranchRefId));
+            if (_reclaimFactory is null)
+            {
+                throw new NotSupportedException();
+            }
+            return Task.FromResult(_reclaimFactory(keyValue, newBranchRefId));
+        }
+
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
@@ -339,6 +477,14 @@ public sealed class BookmarkResumerTests
             operationLog?.Add("dispatch");
             Requests.Add((request.RunId, request.BranchId, request.Reason));
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingRunDispatcher : IRunDispatcher
+    {
+        public ValueTask DispatchAsync(BranchExecutionRequest request, CancellationToken ct)
+        {
+            throw new InvalidOperationException("dispatch crashed");
         }
     }
 }

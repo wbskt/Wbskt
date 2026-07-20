@@ -69,6 +69,35 @@ public sealed class RunFinalizerTests
         Assert.Equal([42], harness.BookmarkProvider.DeletedRunIds);
     }
 
+    [Fact]
+    public async Task FinalizeAsync_is_idempotent_when_run_already_terminal()
+    {
+        var harness = new RunFinalizerHarness("Running", [CreateBranch("Completed")]);
+        harness.RunProvider.Transitions = false;
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal(1, harness.RunProvider.SetTerminalCallCount);
+        Assert.Null(harness.RunProvider.TerminalStatus);
+        Assert.Empty(harness.HistoryProvider.Events);
+        Assert.Empty(harness.Drainer.Requests);
+        Assert.Empty(harness.Publisher.RunIds);
+        Assert.Empty(harness.BookmarkProvider.DeletedRunIds);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_called_twice_only_publishes_once()
+    {
+        var harness = new RunFinalizerHarness("Running", [CreateBranch("Completed")]);
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+        // Second finalize sees the run already Succeeded and must no-op.
+        harness.RunProvider.Transitions = false;
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Single(harness.Publisher.RunIds);
+    }
+
     private static BranchRow CreateBranch(string status)
     {
         return new BranchRow
@@ -137,6 +166,8 @@ public sealed class RunFinalizerTests
         };
 
         public string? TerminalStatus { get; private set; }
+        public bool Transitions { get; set; } = true;
+        public int SetTerminalCallCount { get; private set; }
 
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
@@ -151,11 +182,17 @@ public sealed class RunFinalizerTests
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
         {
+            SetTerminalCallCount++;
+            if (!Transitions)
+            {
+                return Task.FromResult((false, _run));
+            }
+
             TerminalStatus = status;
             _run = _run with { Status = status, CompletedAt = completedAt };
-            return Task.FromResult(_run);
+            return Task.FromResult((true, _run));
         }
     }
 
@@ -239,7 +276,8 @@ public sealed class RunFinalizerTests
         public Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();

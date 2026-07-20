@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -19,6 +20,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly IClock _clock;
     private readonly IRunCancellationService? _runCancellationService;
     private readonly WorkflowMetrics? _workflowMetrics;
+    private readonly ILogger<RunFinalizer>? _logger;
 
     public RunFinalizer(
         IRunProvider runProvider,
@@ -31,7 +33,8 @@ internal sealed class RunFinalizer : IRunFinalizer
         ISubWorkflowCompletionHook completionHook,
         IClock clock,
         IRunCancellationService? runCancellationService = null,
-        WorkflowMetrics? workflowMetrics = null)
+        WorkflowMetrics? workflowMetrics = null,
+        ILogger<RunFinalizer>? logger = null)
     {
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
@@ -44,6 +47,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         _clock = clock;
         _workflowMetrics = workflowMetrics;
         _runCancellationService = runCancellationService;
+        _logger = logger;
     }
 
     public async Task FinalizeAsync(long runId, CancellationToken ct)
@@ -55,7 +59,13 @@ internal sealed class RunFinalizer : IRunFinalizer
         string terminalStatus = DetermineTerminalStatus(run.Status, branches);
         DateTime completedAt = _clock.UtcNow;
 
-        RunRow updatedRun = await _runProvider.SetTerminalAsync(runId, terminalStatus, completedAt, ct);
+        (bool transitioned, RunRow updatedRun) = await _runProvider.SetTerminalAsync(runId, terminalStatus, completedAt, ct);
+        if (!transitioned)
+        {
+            _logger?.LogDebug("Run {RunId} was already terminal ({Status}); skipping finalize side effects.", runId, updatedRun.Status);
+            return;
+        }
+
         _workflowMetrics?.RecordRunCompleted(updatedRun.WorkflowRefId.ToString(), terminalStatus);
         await _historyEventProvider.InsertBatchAsync(
         [

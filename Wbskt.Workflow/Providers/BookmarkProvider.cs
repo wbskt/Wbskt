@@ -104,10 +104,20 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct)
+    public async Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
+    {
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Bookmark_ClaimByRefId",
+            p => p.AddWithValue("@RefId", refId),
+            ct
+        );
+        return result is int;
+    }
+
+    public async Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
-            "dbo.Bookmark_GetDue",
+            "dbo.Bookmark_ClaimDue",
             p =>
             {
                 p.AddWithValue("@Now", nowUtc);
@@ -123,20 +133,6 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         await ExecuteNonQueryAsync(
             "dbo.Bookmark_Delete",
             p => p.AddWithValue("@RefId", refId),
-            ct
-        );
-    }
-
-    public async Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct)
-    {
-        await ExecuteNonQueryAsync(
-            "dbo.Bookmark_DeleteSiblings",
-            p =>
-            {
-                p.AddWithValue("@RunId", checked((int)runId));
-                p.AddWithValue("@BranchId", checked((int)branchId));
-                p.AddWithValue("@ExcludeId", checked((int)excludeBookmarkId));
-            },
             ct
         );
     }

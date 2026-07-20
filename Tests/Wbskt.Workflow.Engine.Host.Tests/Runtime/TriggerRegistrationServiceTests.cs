@@ -48,6 +48,28 @@ public sealed class TriggerRegistrationServiceTests
     }
 
     [Fact]
+    public async Task OnPublished_with_6field_cron_computes_next_fire_time()
+    {
+        // Arrange: a 6-field cron (leading seconds) must parse at publish time too, not just at tick time.
+        var definition = CreateDefinition() with
+        {
+            Nodes =
+            [
+                new ScheduleTriggerNode { NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "schedule", Ports = [], Config = new ScheduleTriggerConfig { Cron = "0 */5 * * * *" } }
+            ]
+        };
+        var scheduledFireProvider = new RecordingScheduledFireProvider();
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, new FixedClock());
+
+        // Act
+        await service.OnPublishedAsync(42, CancellationToken.None);
+
+        // Assert
+        Assert.Single(scheduledFireProvider.InsertCalls);
+        Assert.Equal(new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc), scheduledFireProvider.InsertCalls.Single().NextFireAt);
+    }
+
+    [Fact]
     public async Task OnDeprecated_deactivates_registrations_and_deletes_scheduled_fires()
     {
         // Arrange

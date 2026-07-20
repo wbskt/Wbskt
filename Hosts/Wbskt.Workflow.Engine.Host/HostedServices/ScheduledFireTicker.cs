@@ -113,7 +113,13 @@ public sealed class ScheduledFireTicker : BackgroundService
                 _logger.LogInformation("Dispatching scheduled fire {FireId} for workflow {WorkflowRefId}", fire.Id, fire.WorkflowRefId);
                 await inboundHub.HandleAsync(inboundEvent, ct);
 
-                DateTime? nextOccurrence = ComputeNextOccurrence(fire);
+                (bool parseFailed, DateTime? nextOccurrence) = ComputeNextOccurrence(fire);
+                if (parseFailed)
+                {
+                    _logger.LogError("Scheduled fire {FireId} has an unparseable cron expression '{Cron}'; leaving it in place for investigation.", fire.Id, fire.CronOrInterval);
+                    continue;
+                }
+
                 if (nextOccurrence.HasValue)
                 {
                     _logger.LogDebug("Advancing scheduled fire {FireId} to {NextOccurrence}", fire.Id, nextOccurrence.Value);
@@ -167,22 +173,25 @@ public sealed class ScheduledFireTicker : BackgroundService
         }
     }
 
-    private static DateTime? ComputeNextOccurrence(ScheduledFireRow fire)
+    /// <summary>
+    /// Returns (ParseFailed, Next). ParseFailed means the cron expression itself is unparseable
+    /// (a bug worth surfacing, not a reason to delete the schedule). A null Next with ParseFailed
+    /// false means the expression parsed but legitimately has no further occurrences (or is blank) —
+    /// a one-time schedule that should be deleted.
+    /// </summary>
+    private static (bool ParseFailed, DateTime? Next) ComputeNextOccurrence(ScheduledFireRow fire)
     {
         if (string.IsNullOrWhiteSpace(fire.CronOrInterval))
         {
-            return null;
+            return (false, null);
         }
 
-        try
+        if (!CronParser.TryParse(fire.CronOrInterval, out CronExpression? cron))
         {
-            CronExpression cron = CronExpression.Parse(fire.CronOrInterval, CronFormat.IncludeSeconds);
-            return cron.GetNextOccurrence(fire.NextFireAt, TimeZoneInfo.Utc);
+            return (true, null);
         }
-        catch (CronFormatException)
-        {
-            return null;
-        }
+
+        return (false, cron!.GetNextOccurrence(fire.NextFireAt, TimeZoneInfo.Utc));
     }
 
     private sealed class StaticScopeFactory(IScheduledFireProvider scheduledFireProvider, IInboundHub inboundHub) : IServiceScopeFactory

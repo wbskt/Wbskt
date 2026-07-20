@@ -39,10 +39,28 @@ public sealed class PendingTriggerEventDrainerTests
         // Act
         await drainer.DrainAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "client:serial-1:telemetry", CancellationToken.None);
 
-        // Assert
+        // Assert: exactly one dequeue - draining is one-event-per-run-terminal, not a loop - and the
+        // replayed event carries a re-minted id so BookmarkResumer's idempotency claim doesn't treat
+        // it as a duplicate of the original (already-Succeeded) delivery.
         Assert.Single(inboundHub.Events);
-        Assert.Equal("evt-1", inboundHub.Events.Single().InboundEventId);
-        Assert.Equal(2, provider.DequeueCalls);
+        Assert.Equal("evt-1:drain:1", inboundHub.Events.Single().InboundEventId);
+        Assert.Equal(1, provider.DequeueCalls);
+    }
+
+    [Fact]
+    public async Task Drain_does_nothing_when_queue_is_empty()
+    {
+        // Arrange
+        var provider = new RecordingPendingTriggerEventProvider(new Queue<PendingTriggerEventRow>());
+        var inboundHub = new RecordingInboundHub();
+        var drainer = new PendingTriggerEventDrainer(provider, inboundHub);
+
+        // Act
+        await drainer.DrainAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "client:serial-1:telemetry", CancellationToken.None);
+
+        // Assert
+        Assert.Empty(inboundHub.Events);
+        Assert.Equal(1, provider.DequeueCalls);
     }
 
     private sealed class RecordingPendingTriggerEventProvider(Queue<PendingTriggerEventRow> rows) : IPendingTriggerEventProvider

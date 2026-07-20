@@ -11,10 +11,15 @@ using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
+/// <summary>
+/// Phase 1.4 — bookmarks use a single-row model (design §3.5): a wait with a TTL carries
+/// ExpiresAt/TtlPort on the same row as the primary wake condition, rather than a separate
+/// companion timer row. Whichever side claims (deletes) the row first wins.
+/// </summary>
 public sealed class BookmarkCompanionTimerTests
 {
     [Fact]
-    public async Task WaitForBookmark_with_Ttl_inserts_two_bookmarks_primary_and_companion()
+    public async Task WaitForBookmark_with_Ttl_inserts_a_single_row_carrying_ExpiresAt_and_TtlPort()
     {
         // Arrange
         Guid nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -28,7 +33,7 @@ public sealed class BookmarkCompanionTimerTests
             new RecordingHistoryEventProvider(),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.WaitForBookmark(
-                new SignalWakeCondition("operator-ack", "corr-42") { Ttl = TimeSpan.FromMinutes(5) },
+                new SignalWakeCondition("operator-ack", "corr-42") { Ttl = TimeSpan.FromMinutes(5), TtlPort = "timeout" },
                 new Dictionary<string, JsonElement>()))),
             new RecordingRunDispatcher(),
             new StubProviderComposite(),
@@ -38,46 +43,48 @@ public sealed class BookmarkCompanionTimerTests
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
-        // Assert
-        Assert.Equal(2, bookmarkProvider.Bookmarks.Count);
-        Assert.Contains(bookmarkProvider.Bookmarks, bookmark => bookmark.WakeConditionKind == "signal");
-        Assert.Contains(bookmarkProvider.Bookmarks, bookmark => bookmark.WakeConditionKind == "timer" && bookmark.ExpiresAt == new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
+        // Assert: exactly one row, carrying both the primary wake condition and the TTL fields.
+        BookmarkRow row = Assert.Single(bookmarkProvider.Bookmarks);
+        Assert.Equal("signal", row.WakeConditionKind);
+        Assert.Equal(new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc), row.ExpiresAt);
+        Assert.Equal("timeout", row.TtlPort);
     }
 
     [Fact]
-    public async Task Inbound_match_wins_deletes_companion_timer()
+    public async Task Inbound_match_claims_and_removes_the_single_bookmark_row()
     {
         // Arrange
         Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "client-1", null);
-        var companion = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
-        var bookmarkProvider = new RecordingBookmarkProvider(primary, companion);
+        var bookmark = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "client-1", expiresAt: new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc), ttlPort: "timeout");
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var dispatcher = new RecordingRunDispatcher();
         var resumer = new BookmarkResumer(
             bookmarkProvider,
             RecordingIdempotencyKeyProvider.NewClaim(),
             new RecordingBranchProvider(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), branchRefId, 1001),
-            new RecordingRunDispatcher());
+            dispatcher);
 
         // Act
-        await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["client-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["client-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
 
         // Assert
+        Assert.True(result.Matched);
         Assert.Empty(bookmarkProvider.Bookmarks);
-        Assert.Equal((42L, 1001L, 77L), bookmarkProvider.LastSiblingDeleteCall);
+        Assert.Single(dispatcher.Requests);
     }
 
     [Fact]
-    public async Task Timer_wakes_first_deletes_primary_inbound_bookmark()
+    public async Task Ttl_expiry_claims_the_single_bookmark_row_via_scheduler()
     {
         // Arrange
         Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var primary = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:client-1", null);
-        var timer = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
-        var bookmarkProvider = new RecordingBookmarkProvider(primary, timer) { DueBookmarks = [timer] };
+        var bookmark = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "inbound", "mqtt:client-1", expiresAt: new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc), ttlPort: "timeout");
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark) { DueBookmarks = [bookmark] };
+        var branchProvider = new RecordingBranchProvider(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), branchRefId, 1001);
         var scheduler = new BookmarkScheduler(
             new FixedClock(),
             new FixedHostIdentity(),
-            new RecordingBranchProvider(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), branchRefId, 1001),
+            branchProvider,
             bookmarkProvider,
             new RecordingRunDispatcher(),
             NullLogger<BookmarkScheduler>.Instance);
@@ -85,26 +92,28 @@ public sealed class BookmarkCompanionTimerTests
         // Act
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
 
-        // Assert
+        // Assert: the TTL claim removed the row (claim-by-delete) and took the TtlPort edge.
         Assert.Empty(bookmarkProvider.Bookmarks);
-        Assert.Equal((42L, 1001L, 78L), bookmarkProvider.LastSiblingDeleteCall);
+        BranchRow branch = await branchProvider.GetByRefIdAsync(branchRefId, CancellationToken.None);
+        Assert.Equal("timeout", branch.PendingTakePort);
     }
 
     [Fact]
-    public async Task Sibling_delete_excludes_the_winner_bookmark_id()
+    public async Task Second_claim_attempt_on_an_already_claimed_bookmark_loses_the_race()
     {
-        // Arrange
-        Guid branchRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var winner = CreateBookmark(77, Guid.Parse("11111111-1111-1111-1111-111111111111"), 42, branchRefId, "inbound", "mqtt:client-1", null);
-        var sibling = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "timer", string.Empty, new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc));
-        var bookmarkProvider = new RecordingBookmarkProvider(winner, sibling);
+        // Arrange: models the signal-vs-TTL race - whichever claims (deletes) first wins;
+        // the second claimant on the same RefId must observe failure, not double-resume.
+        Guid refId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var bookmark = CreateBookmark(77, refId, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "signal", "signal:approve:corr-42", expiresAt: null, ttlPort: null);
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
 
         // Act
-        await bookmarkProvider.DeleteSiblingsAsync(42, 1001, 77, CancellationToken.None);
+        bool firstClaim = await bookmarkProvider.TryClaimAsync(refId, CancellationToken.None);
+        bool secondClaim = await bookmarkProvider.TryClaimAsync(refId, CancellationToken.None);
 
         // Assert
-        Assert.Single(bookmarkProvider.Bookmarks);
-        Assert.Equal(77, bookmarkProvider.Bookmarks.Single().Id);
+        Assert.True(firstClaim);
+        Assert.False(secondClaim);
     }
 
     private static WorkflowDefinition CreateDefinition(Guid nodeId)
@@ -113,7 +122,7 @@ public sealed class BookmarkCompanionTimerTests
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
             1,
             9,
-            "ttl-companion",
+            "ttl-single-row",
             null,
             true,
             [new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
@@ -123,7 +132,7 @@ public sealed class BookmarkCompanionTimerTests
             7);
     }
 
-    private static BookmarkRow CreateBookmark(int id, Guid refId, int runId, Guid branchRefId, string kind, string matchKey, DateTime? expiresAt)
+    private static BookmarkRow CreateBookmark(int id, Guid refId, int runId, Guid branchRefId, string kind, string matchKey, DateTime? expiresAt, string? ttlPort)
     {
         return new BookmarkRow
         {
@@ -136,7 +145,7 @@ public sealed class BookmarkCompanionTimerTests
             MatchKey = matchKey,
             WakeConditionJson = "{}",
             ExpiresAt = expiresAt,
-            TtlPort = null,
+            TtlPort = ttlPort,
             CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
         };
     }
@@ -185,7 +194,11 @@ public sealed class BookmarkCompanionTimerTests
         };
 
         public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
+        {
+            _byRefId[row.RefId] = row;
+            return Task.FromResult(row);
+        }
         public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => Task.FromResult(_byRefId.Values.Single(row => row.Id == branchId));
         public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(_byRefId[refId]);
         public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(_byRefId.Values.ToArray());
@@ -237,7 +250,7 @@ public sealed class BookmarkCompanionTimerTests
 
         public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, CancellationToken ct) => throw new NotSupportedException();
-        public Task<RunRow> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class StubRunCountersProvider : IRunCountersProvider
@@ -265,7 +278,6 @@ public sealed class BookmarkCompanionTimerTests
 
         public IReadOnlyList<BookmarkRow> Bookmarks => _bookmarks;
         public IReadOnlyCollection<BookmarkRow> DueBookmarks { get; init; } = Array.Empty<BookmarkRow>();
-        public (long RunId, long BranchId, long ExcludeBookmarkId)? LastSiblingDeleteCall { get; private set; }
 
         public Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct)
         {
@@ -278,7 +290,23 @@ public sealed class BookmarkCompanionTimerTests
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.MatchKey == matchKey).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => matchKeys.Contains(row.MatchKey)).ToArray());
         public Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(_bookmarks.Where(row => row.RunId == runId).ToArray());
-        public Task<IReadOnlyCollection<BookmarkRow>> LeaseDueAsync(DateTime nowUtc, int batchSize, string hostId, TimeSpan leaseDuration, CancellationToken ct) => Task.FromResult(DueBookmarks);
+
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
+        {
+            int removed = _bookmarks.RemoveAll(row => row.RefId == refId);
+            return Task.FromResult(removed > 0);
+        }
+
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
+        {
+            var due = DueBookmarks.Take(batchSize).ToArray();
+            foreach (var row in due)
+            {
+                _bookmarks.RemoveAll(b => b.RefId == row.RefId);
+            }
+            return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
+        }
+
         public Task DeleteAsync(Guid refId, CancellationToken ct)
         {
             _bookmarks.RemoveAll(row => row.RefId == refId);
@@ -288,12 +316,6 @@ public sealed class BookmarkCompanionTimerTests
         public Task<long> CountAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task DeleteSiblingsAsync(long runId, long branchId, long excludeBookmarkId, CancellationToken ct)
-        {
-            LastSiblingDeleteCall = (runId, branchId, excludeBookmarkId);
-            _bookmarks.RemoveAll(row => row.RunId == runId && row.Id != excludeBookmarkId);
-            return Task.CompletedTask;
-        }
     }
 
     private sealed class RecordingHistoryEventProvider : IHistoryEventProvider
@@ -339,6 +361,7 @@ public sealed class BookmarkCompanionTimerTests
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
@@ -372,9 +395,3 @@ public sealed class BookmarkCompanionTimerTests
         public string HostId => "host-1";
     }
 }
-
-
-
-
-
-

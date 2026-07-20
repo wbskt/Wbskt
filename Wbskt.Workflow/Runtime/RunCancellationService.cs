@@ -140,7 +140,7 @@ internal sealed class RunCancellationService : IRunCancellationService
                     }
                     else
                     {
-                        await _runProvider.SetTerminalAsync(runId, "Cancelled", _clock.UtcNow, ct);
+                        _ = await _runProvider.SetTerminalAsync(runId, "Cancelled", _clock.UtcNow, ct);
                     }
                 }
             }

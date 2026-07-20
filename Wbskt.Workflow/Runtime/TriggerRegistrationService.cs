@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Cronos;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
@@ -61,9 +60,10 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
 
     private async Task<TriggerRegistrationRow> CreateScheduleRegistrationAsync(WorkflowDefinitionRow definitionRow, ScheduleTriggerNode scheduleTrigger, CancellationToken ct)
     {
-        CronExpression cron = CronExpression.Parse(scheduleTrigger.Config.Cron);
-        DateTime nextFireAt = cron.GetNextOccurrence(_clock.UtcNow, TimeZoneInfo.Utc)
-            ?? throw new InvalidOperationException($"Schedule trigger '{scheduleTrigger.NodeId}' did not produce a next fire time.");
+        if (!CronParser.TryGetNextOccurrence(scheduleTrigger.Config.Cron, _clock.UtcNow, out DateTime nextFireAt))
+        {
+            throw new InvalidOperationException($"Schedule trigger '{scheduleTrigger.NodeId}' has an invalid cron expression '{scheduleTrigger.Config.Cron}'.");
+        }
         ScheduledFireRow scheduledFire = await _scheduledFireProvider.InsertAsync(scheduleTrigger.NodeId, definitionRow.Id, definitionRow.RefId, scheduleTrigger.Config.Cron, nextFireAt, ct);
 
         return CreateRegistration(definitionRow, scheduleTrigger.NodeId, "schedule", $"schedule:{scheduledFire.Id}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null);

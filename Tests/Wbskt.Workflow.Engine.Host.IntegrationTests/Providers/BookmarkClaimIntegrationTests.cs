@@ -4,11 +4,12 @@ using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
-/// Task 13.4 — Bookmark_GetDue: verifies UPDLOCK + READPAST means concurrent callers
-/// receive disjoint sets of due bookmarks.
+/// Phase 1.4 — Bookmark_ClaimDue / Bookmark_ClaimByRefId: claim-by-delete is atomic, so concurrent
+/// callers must never observe the same bookmark row twice, whether claiming a due batch or racing
+/// on a single RefId (the signal-vs-TTL race the single-row bookmark model relies on).
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class BookmarkLeaseIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
 {
     private async Task<int> SeedRunAsync()
     {
@@ -35,17 +36,17 @@ public sealed class BookmarkLeaseIntegrationTests(SqlEdgeFixture fixture, ITestO
         return run.Id;
     }
 
-    private static BookmarkRow BuildBookmark(int runId, DateTime expiresAt) => new()
+    private static BookmarkRow BuildBookmark(int runId, DateTime? expiresAt) => new()
     {
         Id = 0, RefId = Guid.NewGuid(), RunId = runId, BranchRefId = Guid.NewGuid(),
         NodeId = Guid.NewGuid(), WakeConditionKind = "timer",
-        MatchKey = expiresAt.ToString("O"),
+        MatchKey = string.Empty,
         WakeConditionJson = """{"kind":"timer","at":"2000-01-01T00:00:00Z"}""",
         ExpiresAt = expiresAt, TtlPort = null, CreatedAt = DateTime.UtcNow
     };
 
     [Fact]
-    public async Task LeaseDue_returns_due_bookmarks()
+    public async Task ClaimDue_returns_and_removes_due_bookmarks()
     {
         if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
 
@@ -54,20 +55,22 @@ public sealed class BookmarkLeaseIntegrationTests(SqlEdgeFixture fixture, ITestO
 
         DateTime pastTime = DateTime.UtcNow.AddHours(-1);
 
-        // Insert 5 due bookmarks
         for (int i = 0; i < 5; i++)
         {
             await bookmarkProvider.CreateAsync(BuildBookmark(runId, pastTime.AddMinutes(i)), CancellationToken.None);
         }
 
-        var due = await bookmarkProvider.LeaseDueAsync(
-            DateTime.UtcNow, 10, $"host-{Guid.NewGuid():N}", TimeSpan.FromMinutes(1), CancellationToken.None);
+        var due = await bookmarkProvider.ClaimDueAsync(DateTime.UtcNow, 10, CancellationToken.None);
 
         due.Should().HaveCountGreaterOrEqualTo(5);
+
+        // Claim-by-delete: a second claim attempt must not see the same rows again.
+        var second = await bookmarkProvider.ClaimDueAsync(DateTime.UtcNow, 10, CancellationToken.None);
+        second.Select(b => b.RefId).Should().NotIntersectWith(due.Select(b => b.RefId));
     }
 
     [Fact]
-    public async Task LeaseDue_with_concurrent_callers_returns_disjoint_sets()
+    public async Task ClaimDue_with_concurrent_callers_returns_disjoint_sets()
     {
         if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
 
@@ -76,14 +79,13 @@ public sealed class BookmarkLeaseIntegrationTests(SqlEdgeFixture fixture, ITestO
         const int batchSize = 10;
 
         int runId = await SeedRunAsync();
-        var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
 
         DateTime pastTime = DateTime.UtcNow.AddHours(-2);
 
+        var seedProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
         for (int i = 0; i < totalBookmarks; i++)
         {
-            await bookmarkProvider.CreateAsync(
-                BuildBookmark(runId, pastTime.AddSeconds(i)), CancellationToken.None);
+            await seedProvider.CreateAsync(BuildBookmark(runId, pastTime.AddSeconds(i)), CancellationToken.None);
         }
 
         DateTime nowUtc = DateTime.UtcNow;
@@ -95,21 +97,21 @@ public sealed class BookmarkLeaseIntegrationTests(SqlEdgeFixture fixture, ITestO
             async (i, ct) =>
             {
                 var p = ProviderFactory.Bookmark(fixture.ConnectionString);
-                var batch = await p.LeaseDueAsync(nowUtc, batchSize, $"caller-{i}", TimeSpan.FromMinutes(5), ct);
+                var batch = await p.ClaimDueAsync(nowUtc, batchSize, ct);
                 foreach (var b in batch)
                 {
                     allResults.Add(b.RefId);
                 }
             });
 
-        // No duplicate RefIds across concurrent callers (READPAST ensures disjoint sets)
+        // Claim-by-delete guarantees disjoint sets — no RefId can be claimed twice.
         int distinctCount = allResults.Distinct().Count();
         distinctCount.Should().Be(allResults.Count,
-            "UPDLOCK+READPAST should give each caller distinct rows — no RefId duplicates");
+            "claim-by-delete should give each caller distinct rows — no RefId duplicates");
     }
 
     [Fact]
-    public async Task LeaseDue_returns_empty_when_no_due_bookmarks()
+    public async Task ClaimDue_returns_empty_when_no_due_bookmarks()
     {
         if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
 
@@ -118,9 +120,36 @@ public sealed class BookmarkLeaseIntegrationTests(SqlEdgeFixture fixture, ITestO
         // Query far in the past — no bookmarks should be "due" relative to 1970
         DateTime longAgo = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var due = await bookmarkProvider.LeaseDueAsync(
-            longAgo, 100, "host-test", TimeSpan.FromMinutes(1), CancellationToken.None);
+        var due = await bookmarkProvider.ClaimDueAsync(longAgo, 100, CancellationToken.None);
 
         due.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TryClaimAsync_concurrent_calls_on_same_RefId_exactly_one_wins()
+    {
+        // The single-row bookmark model relies on this: a signal/http match and a TTL expiry
+        // racing on the same bookmark row must never both succeed.
+        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+
+        int runId = await SeedRunAsync();
+        var seedProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
+        BookmarkRow bookmark = await seedProvider.CreateAsync(BuildBookmark(runId, DateTime.UtcNow.AddMinutes(-1)), CancellationToken.None);
+
+        const int callerCount = 10;
+        var results = new System.Collections.Concurrent.ConcurrentBag<bool>();
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, callerCount),
+            new ParallelOptions { MaxDegreeOfParallelism = callerCount },
+            async (_, ct) =>
+            {
+                var p = ProviderFactory.Bookmark(fixture.ConnectionString);
+                bool claimed = await p.TryClaimAsync(bookmark.RefId, ct);
+                results.Add(claimed);
+            });
+
+        results.Count(claimed => claimed).Should().Be(1, "exactly one concurrent claimant should win the race");
+        results.Count(claimed => !claimed).Should().Be(callerCount - 1);
     }
 }

@@ -71,6 +71,44 @@ public sealed class ScheduledFireTickerTests
     }
 
     [Fact]
+    public async Task Tick_advances_recurring_fire_with_5field_cron()
+    {
+        // Arrange: a standard 5-field cron (no seconds) must keep firing after the first tick,
+        // not be treated as unparseable and deleted.
+        var fire = CreateFire(44, "*/5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var provider = new RecordingScheduledFireProvider([fire]);
+        var inboundHub = new RecordingInboundHub();
+        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+
+        // Act
+        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal([(44, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
+        Assert.Empty(provider.DeletedFireIds);
+    }
+
+    [Fact]
+    public async Task Tick_leaves_row_in_place_when_cron_is_unparseable()
+    {
+        // Arrange: a genuinely malformed cron must not be silently deleted (that hides the bug) —
+        // it should be left alone so it's visible and recoverable.
+        var fire = CreateFire(45, "not a cron expression", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
+        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var provider = new RecordingScheduledFireProvider([fire]);
+        var inboundHub = new RecordingInboundHub();
+        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+
+        // Act
+        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Empty(provider.AdvancedFires);
+        Assert.Empty(provider.DeletedFireIds);
+    }
+
+    [Fact]
     public async Task Tick_deletes_one_shot_fire()
     {
         // Arrange

@@ -10,4 +10,8 @@
       <ProjectReference Include="..\Models\Wbskt.Models\Wbskt.Models.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Cronos" />
+    </ItemGroup>
+
 </Project>

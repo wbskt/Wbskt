@@ -3,6 +3,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Branches are persisted as 'Active' while executing (never 'Running' - see BranchLoop.ActiveStatus).
+    -- 'Compensating' branches are also mid-execution and need re-dispatch after a crash.
     SELECT
         Id,
         RefId,
@@ -19,6 +21,6 @@ BEGIN
         UpdatedAt,
         RowVersion
     FROM dbo.Branches
-    WHERE Status = N'Running';
+    WHERE Status IN (N'Active', N'Compensating');
 END;
 GO
