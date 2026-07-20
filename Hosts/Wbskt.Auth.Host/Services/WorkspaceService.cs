@@ -3,6 +3,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;
+using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Services;
@@ -35,7 +36,16 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         try
         {
-            var refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, cancellationToken);
+            // TODO(arch): multi-tenant users will need an explicit tenant choice; today a user has exactly one tenant.
+            var tenants = await _authProvider.GetTenantsForUserAsync(ownerId, cancellationToken);
+            var tenant = tenants.FirstOrDefault();
+            if (tenant is null)
+            {
+                _logger.LogWarning("Workspace creation failed: User ID {OwnerId} does not belong to any tenant", ownerId);
+                return Result<WorkspaceResponse>.Failure(Error.Validation("TENANT_REQUIRED", "User does not belong to any tenant."));
+            }
+
+            var refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, cancellationToken);
             _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);
             return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow));
         }
@@ -69,7 +79,20 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> AddUserToWorkspaceAsync(int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Adding user {UserEmail} to workspace ID: {WorkspaceId} (Role: {Role})", request.Email, workspaceId, request.Role);
+        _logger.LogInformation("Adding user {UserEmail} to workspace ID: {WorkspaceId}", request.Email, workspaceId);
+
+        // Caller must hold users.manage in this workspace
+        var accessResult = await ResolveAccessAsync(workspaceId, cancellationToken);
+        if (accessResult.IsFailure)
+        {
+            return Result.Failure(accessResult.Error);
+        }
+
+        if (!accessResult.Value.Contains(Permissions.UsersManage))
+        {
+            _logger.LogWarning("Add member denied: caller lacks '{Permission}' in workspace ID: {WorkspaceId}", Permissions.UsersManage, workspaceId);
+            return Result.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {Permissions.UsersManage}"));
+        }
 
         try
         {
@@ -85,8 +108,8 @@ internal sealed class WorkspaceService : IWorkspaceService
                 return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
             }
 
-            await _workspaceProvider.AddUserToWorkspaceAsync(workspaceId, user.Id, request.Role, cancellationToken);
-            _logger.LogInformation("Successfully added user ID {UserId} ({UserEmail}) to workspace ID: {WorkspaceId} (Role: {Role})", user.Id, request.Email, workspaceId, request.Role);
+            await _workspaceProvider.AddUserToWorkspaceAsync(workspaceId, user.Id, cancellationToken);
+            _logger.LogInformation("Successfully added user ID {UserId} ({UserEmail}) to workspace ID: {WorkspaceId}", user.Id, request.Email, workspaceId);
             return Result.Success();
         }
         catch (Exception ex)
@@ -96,42 +119,46 @@ internal sealed class WorkspaceService : IWorkspaceService
             return Result.Failure(Error.Failure("WORKSPACE_MEMBER_ERROR", ex.Message));
         }
     }
-    
-    public async Task<Result> AuthorizeAsync(int workspaceId, string requiredPermission, CancellationToken cancellationToken = default)
+
+    public async Task<Result<IReadOnlyCollection<string>>> ResolveAccessAsync(int workspaceId, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Authorizing permission '{RequiredPermission}' for workspace ID: {WorkspaceId}", requiredPermission, workspaceId);
+        _logger.LogDebug("Resolving access for workspace ID: {WorkspaceId}", workspaceId);
 
         var currentUserIdResult = GetCurrentUserId();
         if (currentUserIdResult.IsFailure)
         {
-            _logger.LogWarning("Workspace authorization failed: User not authenticated. WorkspaceId: {WorkspaceId}", workspaceId);
-            _metrics.RecordPermissionCheck(requiredPermission, "unauthorized");
-            return Result.Failure(currentUserIdResult.Error);
+            _logger.LogWarning("Workspace access resolution failed: User not authenticated. WorkspaceId: {WorkspaceId}", workspaceId);
+            _metrics.RecordPermissionCheck("effective-set", "unauthorized");
+            return Result<IReadOnlyCollection<string>>.Failure(currentUserIdResult.Error);
         }
 
         var userId = currentUserIdResult.Value;
 
-        // 1. Verify Membership
-        var role = await _workspaceProvider.VerifyWorkspaceMembershipAsync(userId, workspaceId, cancellationToken);
-        if (!role.HasValue)
+        try
         {
-            _logger.LogWarning("Workspace authorization failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, workspaceId);
-            _metrics.RecordPermissionCheck(requiredPermission, "unauthorized");
-            return Result.Failure(Error.Unauthorized("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
-        }
+            // 1. Verify Membership (hard gate before any permission evaluation)
+            var isMember = await _workspaceProvider.VerifyWorkspaceMembershipAsync(userId, workspaceId, cancellationToken);
+            if (!isMember)
+            {
+                _logger.LogWarning("Workspace access resolution failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, workspaceId);
+                _metrics.RecordPermissionCheck("effective-set", "unauthorized");
+                return Result<IReadOnlyCollection<string>>.Failure(Error.Unauthorized("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
+            }
 
-        // 2. Verify Permission
-        var hasPermission = await _authProvider.VerifyPermissionAsync(userId, requiredPermission, cancellationToken);
-        if (!hasPermission)
-        {
-            _logger.LogWarning("Workspace authorization failed: User ID {UserId} lacks permission '{RequiredPermission}' in workspace ID: {WorkspaceId}", userId, requiredPermission, workspaceId);
-            _metrics.RecordPermissionCheck(requiredPermission, "denied");
-            return Result.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {requiredPermission}"));
+            // 2. Compute the effective permission set (an empty set is still a successful resolution)
+            var permissions = await _authProvider.GetEffectivePermissionsAsync(userId, workspaceId, cancellationToken);
+
+            _logger.LogInformation("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, permissions.Count, workspaceId);
+            _metrics.RecordPermissionCheck("effective-set", "resolved");
+            return Result<IReadOnlyCollection<string>>.Success(permissions);
         }
-        
-        _logger.LogInformation("User ID {UserId} successfully authorized with permission '{RequiredPermission}' in workspace ID: {WorkspaceId}", userId, requiredPermission, workspaceId);
-        _metrics.RecordPermissionCheck(requiredPermission, "allowed");
-        return Result.Success();
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to resolve access for user ID {UserId} in workspace ID: {WorkspaceId}. Error: {Message}", userId, workspaceId, ex.Message);
+            _logger.LogTrace(ex, "ResolveAccess failure stack trace for user ID {UserId} in workspace ID {WorkspaceId}", userId, workspaceId);
+            _metrics.RecordPermissionCheck("effective-set", "error");
+            return Result<IReadOnlyCollection<string>>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
+        }
     }
     
     private Result<int> GetCurrentUserId()

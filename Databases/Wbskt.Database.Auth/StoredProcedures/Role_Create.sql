@@ -1,16 +1,19 @@
 CREATE PROCEDURE dbo.Role_Create
     @Name NVARCHAR(100),
-    @Description NVARCHAR(255)
+    @Description NVARCHAR(255),
+    @TenantId INT
 AS
 BEGIN
     SET NOCOUNT ON;
 
 INSERT INTO dbo.Roles (
-        Name, 
+        TenantId,
+        Name,
         Description
     )
     VALUES (
-        @Name, 
+        @TenantId,
+        @Name,
         @Description
     );
 END

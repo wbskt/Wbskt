@@ -17,13 +17,14 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateWorkspaceAsync(string name, string description, int ownerId, int tenantId, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Workspace_Create", p =>
         {
             p.AddWithValue("@Name", name);
             p.AddWithValue("@Description", description);
             p.AddWithValue("@OwnerUserId", ownerId);
+            p.AddWithValue("@TenantId", tenantId);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         }, cancellationToken);
 
@@ -40,19 +41,18 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         );
     }
 
-    public async Task AddUserToWorkspaceAsync(int workspaceId, int userId, byte role, CancellationToken cancellationToken = default)
+    public async Task AddUserToWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.WorkspaceMember_Add", p =>
         {
             p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@UserId", userId);
-            p.AddWithValue("@Role", role);
         }, cancellationToken);
     }
 
-    public async Task<byte?> VerifyWorkspaceMembershipAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
+    public async Task<bool> VerifyWorkspaceMembershipAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<byte?>("dbo.WorkspaceMember_Verify", p =>
+        return await ExecuteScalarAsync<bool>("dbo.WorkspaceMember_Verify", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@WorkspaceId", workspaceId);

@@ -32,16 +32,16 @@ public class WorkspacesController : ControllerBase
     }
 
     /// <summary>
-    /// Resolves a workspace reference and verifies if the user has the required permission within that workspace.
+    /// Resolves a workspace reference and returns the caller's effective permission set within that workspace.
     /// </summary>
-    /// <param name="request">The resolution request containing the workspace reference and required permission.</param>
+    /// <param name="request">The resolution request containing the workspace reference.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A response containing the internal workspace ID if authorized.</returns>
+    /// <returns>A response containing the internal workspace ID and the caller's effective permissions.</returns>
     [HttpPost("resolve")]
     public async Task<ActionResult<ResolvedWorkspaceResponse>> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}', Permission: '{RequiredPermission}'", request.WorkspaceRef, request.RequiredPermission);
-        
+        _logger.LogInformation("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}'", request.WorkspaceRef);
+
         var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(request.WorkspaceRef, cancellationToken);
         if (workspaceId <= 0)
         {
@@ -49,13 +49,13 @@ public class WorkspacesController : ControllerBase
             _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "not_found");
             return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
         }
-        
-        var result = await _workspaceService.AuthorizeAsync(workspaceId, request.RequiredPermission, cancellationToken);
+
+        var result = await _workspaceService.ResolveAccessAsync(workspaceId, cancellationToken);
         if (result.IsSuccess)
         {
-            _logger.LogInformation("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId})", request.WorkspaceRef, workspaceId);
+            _logger.LogInformation("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId}, Permissions: {PermissionCount})", request.WorkspaceRef, workspaceId, result.Value.Count);
             _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "success");
-            return Ok(new ResolvedWorkspaceResponse(workspaceId));
+            return Ok(new ResolvedWorkspaceResponse(workspaceId, result.Value.ToArray()));
         }
         
         if (result.Error.Type == ErrorType.Unauthorized)
@@ -112,16 +112,16 @@ public class WorkspacesController : ControllerBase
     }
 
     /// <summary>
-    /// Adds a new member to an existing workspace.
+    /// Adds a new member to an existing workspace. Requires the users.manage permission in that workspace.
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
-    /// <param name="request">The member invitation details (email and role).</param>
+    /// <param name="request">The member invitation details (email).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{workspaceRef:guid}/members")]
     public async Task<IActionResult> AddMember(Guid workspaceRef, [FromBody] AddMemberRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: AddMember requested for WorkspaceRef: '{WorkspaceRef}', Member: '{MemberEmail}' (Role: '{MemberRole}')", workspaceRef, request.Email, request.Role);
+        _logger.LogInformation("API: AddMember requested for WorkspaceRef: '{WorkspaceRef}', Member: '{MemberEmail}'", workspaceRef, request.Email);
         
         var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(workspaceRef, cancellationToken);
         if (workspaceId <= 0)

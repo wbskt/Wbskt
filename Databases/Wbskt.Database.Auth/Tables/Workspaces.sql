@@ -1,12 +1,14 @@
 CREATE TABLE dbo.Workspaces (
     Id INT IDENTITY(1, 1) NOT NULL,
     RefId UNIQUEIDENTIFIER NOT NULL,
+    TenantId INT NOT NULL CONSTRAINT DF_Workspaces_TenantId DEFAULT (1),
     Name NVARCHAR(100) NOT NULL,
     Description NVARCHAR(500) NULL,
     OwnerUserId INT NOT NULL,
     CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_Workspaces PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_Workspaces_RefId UNIQUE (RefId),
+    CONSTRAINT FK_Workspaces_Tenants FOREIGN KEY (TenantId) REFERENCES dbo.Tenants(Id),
     CONSTRAINT FK_Workspaces_Users FOREIGN KEY (OwnerUserId) REFERENCES dbo.Users(Id)
 );
 GO

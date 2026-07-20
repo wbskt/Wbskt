@@ -5,6 +5,20 @@ Post-Deployment Script Template
 --------------------------------------------------------------------------------------
 */
 
+-- DEFAULT Tenant (WITH enforced ID) - must exist before Roles/Groups/Workspaces (TenantId default = 1)
+SET IDENTITY_INSERT dbo.Tenants ON;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Tenants WHERE Id = 1)
+BEGIN
+    INSERT INTO dbo.Tenants (Id, RefId, Name, Description)
+    VALUES (1, NEWID(), 'Default Tenant', 'Default tenant for the primary administrator.');
+END
+GO
+
+SET IDENTITY_INSERT dbo.Tenants OFF;
+GO
+
 -- Roles
 IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'Admin')
 BEGIN
@@ -140,13 +154,20 @@ GO
 SET IDENTITY_INSERT dbo.Users OFF;
 GO
 
--- UserRoles (Root is Admin)
+-- TenantMembers (Root belongs to the default tenant)
+IF EXISTS (SELECT 1 FROM dbo.Users WHERE Id = 1) AND NOT EXISTS (SELECT 1 FROM dbo.TenantMembers WHERE TenantId = 1 AND UserId = 1)
+BEGIN
+    INSERT INTO dbo.TenantMembers (TenantId, UserId) VALUES (1, 1);
+END
+GO
+
+-- UserRoles (Root is tenant-wide Admin in the default tenant)
 IF EXISTS (SELECT 1 FROM dbo.Users WHERE Id = 1)
 BEGIN
-    DECLARE @AdminRoleId_UR INT = (SELECT Id FROM dbo.Roles WHERE Name = 'Admin');
-    IF @AdminRoleId_UR IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.UserRoles WHERE UserId = 1 AND RoleId = @AdminRoleId_UR)
+    DECLARE @AdminRoleId_UR INT = (SELECT Id FROM dbo.Roles WHERE TenantId = 1 AND Name = 'Admin');
+    IF @AdminRoleId_UR IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.UserRoles WHERE UserId = 1 AND RoleId = @AdminRoleId_UR AND TenantId = 1 AND WorkspaceId IS NULL)
     BEGIN
-        INSERT INTO dbo.UserRoles (UserId, RoleId) VALUES (1, @AdminRoleId_UR);
+        INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId) VALUES (1, @AdminRoleId_UR, 1, NULL);
     END
 END
 GO
@@ -157,8 +178,8 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM dbo.Workspaces WHERE Id = 1)
 BEGIN
-    INSERT INTO dbo.Workspaces (Id, RefId, Name, Description, OwnerUserId)
-    VALUES (1, NEWID(), 'Default Workspace', 'Default workspace for the primary administrator.', 1);
+    INSERT INTO dbo.Workspaces (Id, RefId, TenantId, Name, Description, OwnerUserId)
+    VALUES (1, NEWID(), 1, 'Default Workspace', 'Default workspace for the primary administrator.', 1);
 END
 GO
 
@@ -168,7 +189,7 @@ GO
 -- DEFAULT Workspace Member
 IF NOT EXISTS (SELECT 1 FROM dbo.WorkspaceMembers WHERE WorkspaceId = 1 AND UserId = 1)
 BEGIN
-    INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId, Role)
-    VALUES (1, 1, 2); -- Role 2 = Admin
+    INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId)
+    VALUES (1, 1);
 END
 GO

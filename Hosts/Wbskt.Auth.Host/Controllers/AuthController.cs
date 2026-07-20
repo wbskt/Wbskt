@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Infrastructure;
+using Wbskt.Primitives;
 
 namespace Wbskt.Auth.Host.Controllers;
 
@@ -12,11 +13,16 @@ namespace Wbskt.Auth.Host.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IReferenceMapper _workspaceMapper;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(
+        IAuthService authService,
+        [FromKeyedServices(ReferenceType.Workspace)] IReferenceMapper workspaceMapper,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
+        _workspaceMapper = workspaceMapper;
         _logger = logger;
     }
 
@@ -66,22 +72,48 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Checks if the currently authenticated user has a specific permission.
+    /// Without a workspace reference only tenant-wide assignments are considered;
+    /// with one, workspace-scoped assignments count as well.
     /// </summary>
     /// <param name="permissionSlug">The unique slug of the permission to check.</param>
+    /// <param name="workspaceRef">Optional workspace reference to scope the check to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A response indicating if the permission is granted.</returns>
     [Authorize]
     [HttpGet("check-permission/{permissionSlug}")]
-    public async Task<ActionResult<PermissionCheckResponse>> CheckPermission(string permissionSlug, CancellationToken cancellationToken)
+    public async Task<ActionResult<PermissionCheckResponse>> CheckPermission(string permissionSlug, Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: CheckPermission requested for slug: '{PermissionSlug}'", permissionSlug);
+        _logger.LogDebug("API: CheckPermission requested for slug: '{PermissionSlug}' (WorkspaceRef: {WorkspaceRef})", permissionSlug, workspaceRef);
         var userIdResult = GetCurrentUserId();
         if (userIdResult.IsFailure)
         {
             return MapResult(Result.Failure(userIdResult.Error));
         }
 
-        var result = await _authService.VerifyPermissionAsync(userIdResult.Value, permissionSlug, cancellationToken);
+        var tenantsResult = await _authService.GetTenantsForUserAsync(userIdResult.Value, cancellationToken);
+        if (tenantsResult.IsFailure)
+        {
+            return MapResult(Result.Failure(tenantsResult.Error));
+        }
+
+        var tenant = tenantsResult.Value.FirstOrDefault();
+        if (tenant is null)
+        {
+            return MapResult(Result.Failure(Error.Validation("TENANT_REQUIRED", "User does not belong to any tenant.")));
+        }
+
+        int? workspaceId = null;
+        if (workspaceRef.HasValue)
+        {
+            var id = await _workspaceMapper.FindIdByRefIdAsync(workspaceRef.Value, cancellationToken);
+            if (id <= 0)
+            {
+                return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
+            }
+            workspaceId = id;
+        }
+
+        var result = await _authService.VerifyPermissionAsync(userIdResult.Value, tenant.Id, workspaceId, permissionSlug, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result.Failure(result.Error));

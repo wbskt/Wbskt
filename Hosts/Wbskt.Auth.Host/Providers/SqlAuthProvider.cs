@@ -78,11 +78,13 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task<bool> VerifyPermissionAsync(int userId, string permissionSlug, CancellationToken cancellationToken = default)
+    public async Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default)
     {
         var result = await ExecuteScalarAsync<object>("dbo.Permission_Verify", p =>
         {
             p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
             p.AddWithValue("@PermissionSlug", permissionSlug);
         }, cancellationToken);
 
@@ -93,6 +95,46 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             int i => i == 1,
             _ => false
         };
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetEffectivePermissionsAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Permission_EffectiveSet",
+            p =>
+            {
+                p.AddWithValue("@UserId", userId);
+                p.AddWithValue("@WorkspaceId", workspaceId);
+            },
+            r => r.GetString(r.GetOrdinal("Slug")),
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyCollection<Tenant>> GetTenantsForUserAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Tenant_GetForUser",
+            p => p.AddWithValue("@UserId", userId),
+            r => new Tenant
+            {
+                Id = r.GetInt32(r.GetOrdinal("Id")),
+                RefId = r.GetGuid(r.GetOrdinal("RefId")),
+                Name = r.GetString(r.GetOrdinal("Name")),
+                Description = r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description")),
+                CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt"))
+            },
+            cancellationToken
+        );
+    }
+
+    public async Task InsertTenantMemberAsync(int tenantId, int userId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.TenantMember_Insert", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@UserId", userId);
+        }, cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync(CancellationToken cancellationToken = default)
@@ -108,11 +150,11 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync(int tenantId, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Role_GetAll",
-            null,
+            p => p.AddWithValue("@TenantId", tenantId),
             r => new RoleResponse(
                 r.GetInt32(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("Name")),
@@ -122,11 +164,11 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync(int tenantId, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.Group_GetAll",
-            null,
+            p => p.AddWithValue("@TenantId", tenantId),
             r => new GroupResponse(
                 r.GetInt32(r.GetOrdinal("Id")),
                 r.GetString(r.GetOrdinal("Name")),
@@ -136,30 +178,33 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task InsertRoleAsync(string name, string description, CancellationToken cancellationToken = default)
+    public async Task InsertRoleAsync(string name, string description, int tenantId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Role_Create", p =>
         {
             p.AddWithValue("@Name", name);
             p.AddWithValue("@Description", description ?? (object)DBNull.Value);
+            p.AddWithValue("@TenantId", tenantId);
         }, cancellationToken);
     }
 
-    public async Task InsertGroupAsync(string name, int? parentGroupId, CancellationToken cancellationToken = default)
+    public async Task InsertGroupAsync(string name, int? parentGroupId, int tenantId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Group_Create", p =>
         {
             p.AddWithValue("@Name", name);
+            p.AddWithValue("@TenantId", tenantId);
             p.AddWithValue("@ParentGroupId", parentGroupId ?? (object)DBNull.Value);
         }, cancellationToken);
     }
 
-    public async Task InsertUserGroupAsync(int userId, int groupId, CancellationToken cancellationToken = default)
+    public async Task InsertUserGroupAsync(int userId, int groupId, int tenantId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.UserGroup_Insert", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@GroupId", groupId);
+            p.AddWithValue("@TenantId", tenantId);
         }, cancellationToken);
     }
 
@@ -172,23 +217,70 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
 
-    public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
+    public async Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, int tenantId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.RolePermission_Grant", p =>
         {
             p.AddWithValue("@RoleId", roleId);
             p.AddWithValue("@PermissionSlug", permissionSlug);
             p.AddWithValue("@IsDeny", isDeny);
+            p.AddWithValue("@TenantId", tenantId);
         }, cancellationToken);
     }
 
-    public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
+    public async Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.UserPermission_Grant", p =>
         {
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@PermissionSlug", permissionSlug);
             p.AddWithValue("@IsDeny", isDeny);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task AssignUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.UserRole_Assign", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task RemoveUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.UserRole_Remove", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task AssignGroupRoleAsync(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.GroupRole_Assign", p =>
+        {
+            p.AddWithValue("@GroupId", groupId);
+            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task RemoveGroupRoleAsync(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.GroupRole_Remove", p =>
+        {
+            p.AddWithValue("@GroupId", groupId);
+            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
         }, cancellationToken);
     }
     

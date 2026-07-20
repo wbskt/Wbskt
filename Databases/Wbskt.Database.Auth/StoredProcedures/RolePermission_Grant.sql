@@ -1,17 +1,22 @@
 CREATE PROCEDURE dbo.RolePermission_Grant
     @RoleId INT,
     @PermissionSlug NVARCHAR(100),
-    @IsDeny BIT
+    @IsDeny BIT,
+    @TenantId INT
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Id = @RoleId AND TenantId = @TenantId)
+    BEGIN
+        THROW 50001, 'Role does not belong to the specified tenant.', 1;
+    END
 
 DECLARE @PermissionId INT;
     SELECT @PermissionId = Id FROM dbo.Permissions WHERE Slug = @PermissionSlug;
 
     IF @PermissionId IS NOT NULL
     BEGIN
-    SET NOCOUNT ON;
 
 MERGE dbo.RolePermissions AS target
         USING (SELECT @RoleId AS RoleId, @PermissionId AS PermissionId) AS source
@@ -20,13 +25,13 @@ MERGE dbo.RolePermissions AS target
             UPDATE SET IsDeny = @IsDeny
         WHEN NOT MATCHED THEN
             INSERT (
-                RoleId, 
-                PermissionId, 
+                RoleId,
+                PermissionId,
                 IsDeny
             )
             VALUES (
-                @RoleId, 
-                @PermissionId, 
+                @RoleId,
+                @PermissionId,
                 @IsDeny
             );
     END

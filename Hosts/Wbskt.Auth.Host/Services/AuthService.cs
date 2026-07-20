@@ -16,6 +16,8 @@ namespace Wbskt.Auth.Host.Services;
 
 internal sealed class AuthService : IAuthService
 {
+    private const int DefaultTenantId = 1;
+
     private readonly IAuthProvider _provider;
     private readonly IJwtService _jwtService;
     private readonly IEventBus _eventBus;
@@ -174,13 +176,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result<bool>> VerifyPermissionAsync(int userId, string permissionSlug, CancellationToken cancellationToken = default)
+    public async Task<Result<bool>> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Verifying permission '{PermissionSlug}' for user ID: {UserId}", permissionSlug, userId);
+        _logger.LogDebug("Verifying permission '{PermissionSlug}' for user ID: {UserId} (Tenant: {TenantId}, Workspace: {WorkspaceId})", permissionSlug, userId, tenantId, workspaceId);
 
         try
         {
-            var isAllowed = await _provider.VerifyPermissionAsync(userId, permissionSlug, cancellationToken);
+            var isAllowed = await _provider.VerifyPermissionAsync(userId, tenantId, workspaceId, permissionSlug, cancellationToken);
             _logger.LogTrace("Permission '{PermissionSlug}' verification result for user ID {UserId}: {IsAllowed}", permissionSlug, userId, isAllowed);
             _metrics.RecordPermissionCheck(permissionSlug, isAllowed ? "allowed" : "denied");
             return Result<bool>.Success(isAllowed);
@@ -191,6 +193,25 @@ internal sealed class AuthService : IAuthService
             _logger.LogTrace(ex, "VerifyPermission stack trace for user {UserId}", userId);
             _metrics.RecordPermissionCheck(permissionSlug, "error");
             return Result<bool>.Failure(Error.Failure("AUTH_PERMISSION_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyCollection<TenantResponse>>> GetTenantsForUserAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying tenants for user ID: {UserId}", userId);
+
+        try
+        {
+            var tenants = await _provider.GetTenantsForUserAsync(userId, cancellationToken);
+            _logger.LogTrace("Retrieved {Count} tenants for user ID: {UserId}", tenants.Count, userId);
+            var items = tenants.Select(t => new TenantResponse(t.Id, t.RefId, t.Name)).ToList() as IReadOnlyCollection<TenantResponse>;
+            return Result<IReadOnlyCollection<TenantResponse>>.Success(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query tenants for user ID: {UserId}. Error: {Message}", userId, ex.Message);
+            _logger.LogTrace(ex, "GetTenantsForUser stack trace for user {UserId}", userId);
+            return Result<IReadOnlyCollection<TenantResponse>>.Failure(Error.Failure("AUTH_QUERY_ERROR", ex.Message));
         }
     }
 
@@ -212,13 +233,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result<IReadOnlyCollection<RoleResponse>>> GetRolesAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<RoleResponse>>> GetRolesAsync(int tenantId, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying all system roles");
+        _logger.LogDebug("Querying all roles for tenant ID: {TenantId}", tenantId);
 
         try
         {
-            var roles = await _provider.GetRolesAsync(cancellationToken);
+            var roles = await _provider.GetRolesAsync(tenantId, cancellationToken);
             _logger.LogTrace("Retrieved {Count} roles from database", roles.Count);
             return Result<IReadOnlyCollection<RoleResponse>>.Success(roles);
         }
@@ -230,13 +251,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result<IReadOnlyCollection<GroupResponse>>> GetGroupsAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<GroupResponse>>> GetGroupsAsync(int tenantId, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying all system user groups");
+        _logger.LogDebug("Querying all user groups for tenant ID: {TenantId}", tenantId);
 
         try
         {
-            var groups = await _provider.GetGroupsAsync(cancellationToken);
+            var groups = await _provider.GetGroupsAsync(tenantId, cancellationToken);
             _logger.LogTrace("Retrieved {Count} user groups from database", groups.Count);
             return Result<IReadOnlyCollection<GroupResponse>>.Success(groups);
         }
@@ -264,7 +285,10 @@ internal sealed class AuthService : IAuthService
 
             var userId = await _provider.InsertUserAsync(user, cancellationToken);
             _logger.LogDebug("User record inserted with database ID: {UserId}", userId);
-            
+
+            // TODO(arch): multi-tenant sign-up flow. For now every new user joins the default tenant.
+            await _provider.InsertTenantMemberAsync(DefaultTenantId, userId, cancellationToken);
+
             user = await _provider.GetByIdAsync(userId, cancellationToken);
 
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
@@ -289,13 +313,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> CreateRoleAsync(string name, string description, CancellationToken cancellationToken = default)
+    public async Task<Result> CreateRoleAsync(string name, string description, int tenantId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Creating role: {RoleName}", name);
+        _logger.LogInformation("Creating role: {RoleName} in tenant ID: {TenantId}", name, tenantId);
 
         try
         {
-            await _provider.InsertRoleAsync(name, description, cancellationToken);
+            await _provider.InsertRoleAsync(name, description, tenantId, cancellationToken);
             _logger.LogInformation("Role {RoleName} created successfully", name);
             return Result.Success();
         }
@@ -313,13 +337,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> CreateGroupAsync(string name, int? parentGroupId, CancellationToken cancellationToken = default)
+    public async Task<Result> CreateGroupAsync(string name, int? parentGroupId, int tenantId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Creating group: {GroupName} (Parent ID: {ParentGroupId})", name, parentGroupId);
+        _logger.LogInformation("Creating group: {GroupName} (Parent ID: {ParentGroupId}) in tenant ID: {TenantId}", name, parentGroupId, tenantId);
 
         try
         {
-            await _provider.InsertGroupAsync(name, parentGroupId, cancellationToken);
+            await _provider.InsertGroupAsync(name, parentGroupId, tenantId, cancellationToken);
             _logger.LogInformation("Group {GroupName} created successfully", name);
             return Result.Success();
         }
@@ -337,13 +361,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> AddUserToGroupAsync(int userId, int groupId, CancellationToken cancellationToken = default)
+    public async Task<Result> AddUserToGroupAsync(int userId, int groupId, int tenantId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Adding user ID {UserId} to group ID {GroupId}", userId, groupId);
+        _logger.LogInformation("Adding user ID {UserId} to group ID {GroupId} (Tenant: {TenantId})", userId, groupId, tenantId);
 
         try
         {
-            await _provider.InsertUserGroupAsync(userId, groupId, cancellationToken);
+            await _provider.InsertUserGroupAsync(userId, groupId, tenantId, cancellationToken);
             _logger.LogInformation("User ID {UserId} successfully added to group ID {GroupId}", userId, groupId);
             return Result.Success();
         }
@@ -379,13 +403,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
+    public async Task<Result> GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, int tenantId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Granting permission '{PermissionSlug}' to role ID {RoleId} (IsDeny: {IsDeny})", permissionSlug, roleId, isDeny);
+        _logger.LogInformation("Granting permission '{PermissionSlug}' to role ID {RoleId} (IsDeny: {IsDeny}, Tenant: {TenantId})", permissionSlug, roleId, isDeny, tenantId);
 
         try
         {
-            await _provider.GrantRolePermissionAsync(roleId, permissionSlug, isDeny, cancellationToken);
+            await _provider.GrantRolePermissionAsync(roleId, permissionSlug, isDeny, tenantId, cancellationToken);
             await _eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
             _logger.LogInformation("Permission '{PermissionSlug}' successfully configured for role ID {RoleId}", permissionSlug, roleId);
             return Result.Success();
@@ -398,13 +422,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, CancellationToken cancellationToken = default)
+    public async Task<Result> GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Granting permission '{PermissionSlug}' directly to user ID {UserId} (IsDeny: {IsDeny})", permissionSlug, userId, isDeny);
+        _logger.LogInformation("Granting permission '{PermissionSlug}' directly to user ID {UserId} (IsDeny: {IsDeny}, Tenant: {TenantId}, Workspace: {WorkspaceId})", permissionSlug, userId, isDeny, tenantId, workspaceId);
 
         try
         {
-            await _provider.GrantUserPermissionAsync(userId, permissionSlug, isDeny, cancellationToken);
+            await _provider.GrantUserPermissionAsync(userId, permissionSlug, isDeny, tenantId, workspaceId, cancellationToken);
             var user = await _provider.GetByIdAsync(userId, cancellationToken);
             await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId, user.RefId), cancellationToken);
             _logger.LogInformation("Permission '{PermissionSlug}' successfully configured directly for user ID {UserId}", permissionSlug, userId);
@@ -415,6 +439,84 @@ internal sealed class AuthService : IAuthService
             _logger.LogError("Failed to configure permission '{PermissionSlug}' directly for user ID {UserId}. Error: {Message}", permissionSlug, userId, ex.Message);
             _logger.LogTrace(ex, "GrantUserPermission failure stack trace for UserId {UserId}, Permission {PermissionSlug}", userId, permissionSlug);
             return Result.Failure(Error.Failure("AUTH_GRANT_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> AssignUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Assigning role ID {RoleId} to user ID {UserId} (Tenant: {TenantId}, Workspace: {WorkspaceId})", roleId, userId, tenantId, workspaceId);
+
+        try
+        {
+            await _provider.AssignUserRoleAsync(userId, roleId, tenantId, workspaceId, cancellationToken);
+            var user = await _provider.GetByIdAsync(userId, cancellationToken);
+            await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId, user.RefId), cancellationToken);
+            _logger.LogInformation("Role ID {RoleId} successfully assigned to user ID {UserId}", roleId, userId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to assign role ID {RoleId} to user ID {UserId}. Error: {Message}", roleId, userId, ex.Message);
+            _logger.LogTrace(ex, "AssignUserRole failure stack trace for UserId {UserId}, RoleId {RoleId}", userId, roleId);
+            return Result.Failure(Error.Failure("AUTH_ROLE_ASSIGN_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> RemoveUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Removing role ID {RoleId} from user ID {UserId} (Tenant: {TenantId}, Workspace: {WorkspaceId})", roleId, userId, tenantId, workspaceId);
+
+        try
+        {
+            await _provider.RemoveUserRoleAsync(userId, roleId, tenantId, workspaceId, cancellationToken);
+            var user = await _provider.GetByIdAsync(userId, cancellationToken);
+            await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId, user.RefId), cancellationToken);
+            _logger.LogInformation("Role ID {RoleId} successfully removed from user ID {UserId}", roleId, userId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to remove role ID {RoleId} from user ID {UserId}. Error: {Message}", roleId, userId, ex.Message);
+            _logger.LogTrace(ex, "RemoveUserRole failure stack trace for UserId {UserId}, RoleId {RoleId}", userId, roleId);
+            return Result.Failure(Error.Failure("AUTH_ROLE_ASSIGN_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> AssignGroupRoleAsync(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Assigning role ID {RoleId} to group ID {GroupId} (Tenant: {TenantId}, Workspace: {WorkspaceId})", roleId, groupId, tenantId, workspaceId);
+
+        try
+        {
+            await _provider.AssignGroupRoleAsync(groupId, roleId, tenantId, workspaceId, cancellationToken);
+            await _eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
+            _logger.LogInformation("Role ID {RoleId} successfully assigned to group ID {GroupId}", roleId, groupId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to assign role ID {RoleId} to group ID {GroupId}. Error: {Message}", roleId, groupId, ex.Message);
+            _logger.LogTrace(ex, "AssignGroupRole failure stack trace for GroupId {GroupId}, RoleId {RoleId}", groupId, roleId);
+            return Result.Failure(Error.Failure("AUTH_ROLE_ASSIGN_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> RemoveGroupRoleAsync(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Removing role ID {RoleId} from group ID {GroupId} (Tenant: {TenantId}, Workspace: {WorkspaceId})", roleId, groupId, tenantId, workspaceId);
+
+        try
+        {
+            await _provider.RemoveGroupRoleAsync(groupId, roleId, tenantId, workspaceId, cancellationToken);
+            await _eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
+            _logger.LogInformation("Role ID {RoleId} successfully removed from group ID {GroupId}", roleId, groupId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to remove role ID {RoleId} from group ID {GroupId}. Error: {Message}", roleId, groupId, ex.Message);
+            _logger.LogTrace(ex, "RemoveGroupRole failure stack trace for GroupId {GroupId}, RoleId {RoleId}", groupId, roleId);
+            return Result.Failure(Error.Failure("AUTH_ROLE_ASSIGN_ERROR", ex.Message));
         }
     }
 
