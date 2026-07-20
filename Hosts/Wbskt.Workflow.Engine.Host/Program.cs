@@ -5,9 +5,11 @@ using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
+using Wbskt.Infrastructure.Mappers;
 using Wbskt.Workflow.Engine.Host.Extensions;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
+using Wbskt.Workflow.Engine.Host.Providers;
 using Wbskt.Workflow.Extensions;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -37,6 +39,8 @@ public static class Program
         builder.Services.AddHttpClient();
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration);
+        builder.Services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
+        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
         builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();

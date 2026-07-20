@@ -6,10 +6,9 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
 /// <summary>
-/// Sends a client command. Wraps the side effect in an idempotency reservation keyed by
-/// (run, node) so the command is delivered at most once even if the node re-executes
-/// (e.g. crash recovery or a branch re-dispatch). The claim-token CAS distinguishes the
-/// first execution from a replay: if a prior execution already succeeded, the publish is skipped.
+/// Sends a client command. The target client comes from the node config: ClientRef must be
+/// the client's reference id (a Guid string). The internal client id is resolved by the
+/// host-side publisher so the emitted event can be attributed to the client in event logs.
 /// </summary>
 internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : INodeExecutor
 {
@@ -22,7 +21,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
         {
             return new NodeExecutionResult.Fail(
                 "CLIENT_MESSAGE_NO_TARGET",
-                "ClientMessage node could not resolve target client from trigger payload.",
+                $"ClientMessage node config has an invalid client reference id: '{node.Config.ClientRef}'.",
                 false,
                 null);
         }
@@ -32,8 +31,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
 
         try
         {
-            // [RJ]: TODO: do we need clientId for the event?
-            await publisher.PublishCommandAsync(clientRefId, 0 /* Skip this for now */, workspaceId, command, payload, ct);
+            await publisher.PublishCommandAsync(clientRefId, workspaceId, command, payload, ct);
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());
         }
         catch (Exception ex)
