@@ -16,7 +16,7 @@ public sealed class WbsktClient : IWbsktClient
     private string? _resolvedSecret;
     private ClientCapabilities? _lastCapabilities;
 
-    public event Action<string, object?>? OnMessageReceived;
+    public event Action<string, object?, string?>? OnMessageReceived;
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
@@ -28,7 +28,7 @@ public sealed class WbsktClient : IWbsktClient
         _socket = new SocketClient(config.BaseSocketUrl);
 
         // Forward internal events to public surface
-        _socket.OnMessageReceived += (type, payload) => OnMessageReceived?.Invoke(type, payload);
+        _socket.OnMessageReceived += (type, payload, commandId) => OnMessageReceived?.Invoke(type, payload, commandId);
         _socket.OnConnected += HandleConnected;
         _socket.OnDisconnected += HandleDisconnect;
     }
@@ -68,12 +68,31 @@ public sealed class WbsktClient : IWbsktClient
     private void HandleConnected()
     {
         OnConnected?.Invoke();
-        
-        // Auto-broadcast capabilities on every successful connection
-        if (_lastCapabilities != null)
+
+        // Always advertise SDK metadata (merged with any app-declared commands) on every successful connection
+        _ = AnnounceCapabilitiesAsync();
+    }
+
+    private async Task AnnounceCapabilitiesAsync()
+    {
+        try
         {
-            _ = UpdateCapabilitiesAsync(_lastCapabilities);
+            await SendAsync("capabilities", BuildEffectiveCapabilities());
         }
+        catch (Exception)
+        {
+            // Connection may have dropped mid-handshake; the reconnect monitor will retry and re-announce.
+        }
+    }
+
+    private ClientCapabilities BuildEffectiveCapabilities()
+    {
+        // Auto-detected SDK metadata; app-supplied values win when explicitly set.
+        var app = _lastCapabilities;
+        var agent = app is { Agent.Length: > 0 } ? app.Agent : SdkInfo.AgentName;
+        var version = app is { Version.Length: > 0 } ? app.Version : SdkInfo.Version;
+        var os = app is { OS.Length: > 0 } ? app.OS : SdkInfo.Platform;
+        return new ClientCapabilities(agent, version, os, app?.Capabilities ?? []);
     }
 
     private void HandleDisconnect()
@@ -112,16 +131,22 @@ public sealed class WbsktClient : IWbsktClient
     public async Task UpdateCapabilitiesAsync(ClientCapabilities capabilities)
     {
         _lastCapabilities = capabilities;
-        
+
         if (_socket.IsConnected)
         {
-            await SendAsync("capabilities", capabilities);
+            await SendAsync("capabilities", BuildEffectiveCapabilities());
         }
     }
 
     public async Task SendAsync(string type, object payload)
     {
         await _socket.SendAsync(new SocketMessage(type, payload));
+    }
+
+    public async Task ReportStateAsync(IReadOnlyDictionary<string, object?> patch)
+    {
+        // Partial update: only the reported variables change; the platform keeps the rest.
+        await SendAsync("state.report", patch);
     }
 
     private async Task<(Guid RefId, string Secret)> ResolveCredentialsAsync()

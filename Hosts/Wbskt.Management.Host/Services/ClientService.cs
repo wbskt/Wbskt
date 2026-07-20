@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
@@ -138,6 +139,123 @@ internal sealed class ClientService : IClientService
         }
     }
 
+    public async Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying client detail for RefId: {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+
+        try
+        {
+            ClientDetail detail;
+            try
+            {
+                detail = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Client detail lookup failed for RefId: {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+                return Result<ClientDetailResponse>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            }
+
+            if (detail.WorkspaceId != workspaceId)
+            {
+                _logger.LogWarning("Client detail rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+                return Result<ClientDetailResponse>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+            }
+
+            return Result<ClientDetailResponse>.Success(MapToDetailResponse(detail));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query client detail for RefId: {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "GetDetailAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
+            return Result<ClientDetailResponse>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> RenameAsync(int workspaceId, int id, string name, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Renaming client ID {ClientId} in WorkspaceId: {WorkspaceId}", id, workspaceId);
+
+        try
+        {
+            Client client;
+            try
+            {
+                client = await _clientProvider.GetByIdAsync(id, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to rename client: Client ID {ClientId} not found. Error: {Message}", id, ex.Message);
+                return Result.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            }
+
+            if (client.WorkspaceId != workspaceId)
+            {
+                _logger.LogWarning("Client rename rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
+                return Result.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+            }
+
+            var oldName = client.Name;
+            if (oldName == name)
+            {
+                _logger.LogDebug("Client ID {ClientId} is already named '{Name}'. Skipping update.", id, name);
+                return Result.Success();
+            }
+
+            await _clientProvider.UpdateNameAsync(id, name, cancellationToken);
+            _logger.LogInformation("Successfully renamed client ID {ClientId} from '{OldName}' to '{NewName}'", id, oldName, name);
+
+            await _eventBus.PublishAsync(new ClientRenamedEvent(client.RefId, client.Id, client.WorkspaceId, oldName, name), cancellationToken);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error renaming client ID {ClientId}. Error: {Message}", id, ex.Message);
+            _logger.LogTrace(ex, "RenameAsync exception stack trace for ClientId {ClientId}", id);
+            return Result.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying state variables for client ID {ClientId} in WorkspaceId: {WorkspaceId}", id, workspaceId);
+
+        try
+        {
+            Client client;
+            try
+            {
+                client = await _clientProvider.GetByIdAsync(id, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("State query failed: Client ID {ClientId} not found. Error: {Message}", id, ex.Message);
+                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            }
+
+            if (client.WorkspaceId != workspaceId)
+            {
+                _logger.LogWarning("State query rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
+                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+            }
+
+            var variables = await _clientProvider.GetStateVariablesAsync(id, cancellationToken);
+            IReadOnlyCollection<ClientStateVariableResponse> response = variables
+                .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt))
+                .ToList()
+                .AsReadOnly();
+
+            return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Success(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query state variables for client ID {ClientId}. Error: {Message}", id, ex.Message);
+            _logger.LogTrace(ex, "GetStateAsync exception stack trace for ClientId {ClientId}", id);
+            return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
+        }
+    }
+
     private static ClientResponse MapToResponse(Client c)
     {
         return new ClientResponse(
@@ -146,8 +264,46 @@ internal sealed class ClientService : IClientService
             c.Name,
             c.Status,
             c.IsConnected,
+            c.ConnectedAt,
             c.LastActivityAt,
+            c.LastRttMs,
             c.CreatedAt
+        );
+    }
+
+    private static ClientDetailResponse MapToDetailResponse(ClientDetail d)
+    {
+        IReadOnlyList<CommandCapability>? capabilities = null;
+        if (!string.IsNullOrEmpty(d.CapabilitiesJson))
+        {
+            try
+            {
+                capabilities = JsonSerializer.Deserialize<List<CommandCapability>>(
+                    d.CapabilitiesJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException)
+            {
+                // Stored blob is unreadable; surface the client without capabilities rather than failing the page.
+            }
+        }
+
+        return new ClientDetailResponse(
+            d.RefId,
+            d.PolicyRefId,
+            d.PolicyName,
+            d.Name,
+            d.Status,
+            d.IsConnected,
+            d.ConnectedAt,
+            d.LastActivityAt,
+            d.LastRttMs,
+            d.RttMeasuredAt,
+            d.AgentName,
+            d.AgentVersion,
+            d.Platform,
+            capabilities,
+            d.CreatedAt
         );
     }
 }

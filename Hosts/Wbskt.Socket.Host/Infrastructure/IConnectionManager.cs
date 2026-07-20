@@ -4,8 +4,9 @@ namespace Wbskt.Socket.Host.Infrastructure;
 
 public interface IConnectionManager
 {
-    bool TryAddConnection(Guid clientRefId, WebSocket socket);
-    Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default);
-    WebSocket? GetConnection(Guid clientRefId);
+    bool TryAddConnection(Guid clientRefId, ClientConnection connection);
+    Task RemoveConnectionAsync(Guid clientRefId, WebSocketCloseStatus closeStatus = WebSocketCloseStatus.NormalClosure,
+        string closeDescription = "Closed by manager", CancellationToken cancellationToken = default);
+    ClientConnection? GetConnection(Guid clientRefId);
     IReadOnlyCollection<Guid> GetConnectedClients();
 }

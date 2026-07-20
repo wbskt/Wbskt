@@ -14,7 +14,10 @@ BEGIN
         c.Secret,
         c.Status,
         c.IsConnected,
+        c.ConnectedAt,
         c.LastActivityAt,
+        c.LastRttMs,
+        c.RttMeasuredAt,
         c.CreatedAt
     FROM dbo.Clients c
     INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id

@@ -11,10 +11,17 @@ public interface IEventProvider
     Task<IPagedList<EventLogResponse>> GetLogsAsync(
         int workspaceId,
         string? eventName,
-        EventCriticality? criticality, 
+        EventCriticality? criticality,
         int? policyId,
         int? clientId,
         int? workflowId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default);
+    Task<IPagedList<EventLogResponse>> GetClientCommsAsync(
+        int workspaceId,
+        int clientId,
+        string? direction,
         int skip,
         int take,
         CancellationToken cancellationToken = default);

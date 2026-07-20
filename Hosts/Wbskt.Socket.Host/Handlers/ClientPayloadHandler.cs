@@ -1,6 +1,4 @@
 using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
 using MassTransit;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
@@ -24,8 +22,8 @@ public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
 
     public async Task Consume(ConsumeContext<ClientCommandEvent> context)
     {
-        var socket = _connectionManager.GetConnection(context.Message.ClientRefId);
-        if (socket?.State != WebSocketState.Open)
+        var connection = _connectionManager.GetConnection(context.Message.ClientRefId);
+        if (connection?.Socket.State != WebSocketState.Open)
         {
             _logger.LogDebug("Received command for {ClientRefId} but it is not connected or open.", context.Message.ClientRefId);
             return;
@@ -33,8 +31,8 @@ public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
 
         try
         {
-            await HandleCommandAsync(socket, context.Message, context.CancellationToken);
-            await _eventBus.PublishAsync(new ClientCommandDeliveredEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.Type, context.Message.Payload), context.CancellationToken);
+            await HandleCommandAsync(connection, context.Message, context.CancellationToken);
+            await _eventBus.PublishAsync(new ClientCommandDeliveredEvent(context.Message.ClientRefId, context.Message.ClientId, context.Message.WorkspaceId, context.Message.Type, context.Message.Payload, context.Message.CommandId), context.CancellationToken);
         }
         catch (Exception ex)
         {
@@ -42,15 +40,12 @@ public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
         }
     }
 
-    private async Task HandleCommandAsync(WebSocket socket, ClientCommandEvent command, CancellationToken ct)
+    private async Task HandleCommandAsync(ClientConnection connection, ClientCommandEvent command, CancellationToken ct)
     {
         _logger.LogInformation("Sending command {Type} to client {ClientRefId}.", command.Type, command.ClientRefId);
 
-        // [RJ]: TODO: command id will be used to do ack from the client
-        var message = new SocketMessage(command.Type, command.Payload /*, command.CommandId */);
-        var json = JsonSerializer.Serialize(message);
-        var bytes = Encoding.UTF8.GetBytes(json);
-
-        await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+        // The SDK auto-acks frames carrying a commandId with sys.ack.
+        var message = new SocketMessage(command.Type, command.Payload, command.CommandId?.ToString());
+        await connection.SendAsync(message, ct);
     }
 }

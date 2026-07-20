@@ -16,18 +16,24 @@ public interface ISocketHandler
 
 internal sealed class SocketHandler : ISocketHandler
 {
+    // Messages are assembled across frames up to this cap; larger senders are disconnected.
+    private const int MaxMessageBytes = 64 * 1024;
+
     private readonly IConnectionManager _connectionManager;
+    private readonly IRevocationCache _revocationCache;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
 
     public SocketHandler(
         IConnectionManager connectionManager,
+        IRevocationCache revocationCache,
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime,
         IEventBus eventBus)
     {
         _connectionManager = connectionManager;
+        _revocationCache = revocationCache;
         _logger = logger;
         _appLifetime = appLifetime;
         _eventBus = eventBus;
@@ -43,7 +49,7 @@ internal sealed class SocketHandler : ISocketHandler
 
         // Create a linked token that triggers if the client leaves OR the server stops
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            context.RequestAborted, 
+            context.RequestAborted,
             _appLifetime.ApplicationStopping
         );
 
@@ -56,21 +62,36 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
+        // A revoked client's JWT stays valid for up to an hour; the deny-list closes that window.
+        if (_revocationCache.IsRevoked(clientRefId))
+        {
+            _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-        if (!_connectionManager.TryAddConnection(clientRefId, webSocket))
+        var connection = new ClientConnection
+        {
+            Socket = webSocket,
+            ClientId = clientId,
+            WorkspaceId = workspaceId
+        };
+
+        if (!_connectionManager.TryAddConnection(clientRefId, connection))
         {
             _logger.LogWarning("Rejecting duplicate websocket for client {ClientRefId}", clientRefId);
             await webSocket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Multiple concurrent connections are not allowed.", CancellationToken.None);
             return;
         }
-        
+
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
         await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId), cts.Token);
 
         try
         {
             // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
-            await ReceiveLoopAsync(clientRefId, clientId, webSocket, workspaceId, cts.Token);
+            await ReceiveLoopAsync(clientRefId, connection, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -86,48 +107,133 @@ internal sealed class SocketHandler : ISocketHandler
         }
         finally
         {
-            await _connectionManager.RemoveConnectionAsync(clientRefId, CancellationToken.None);
+            await _connectionManager.RemoveConnectionAsync(clientRefId, cancellationToken: CancellationToken.None);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
             await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, "Socket closed"), CancellationToken.None);
         }
     }
 
-    private async Task ReceiveLoopAsync(Guid clientRefId, int clientId, WebSocket webSocket, int workspaceId,
-        CancellationToken cancellationToken)
+    private async Task ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, CancellationToken cancellationToken)
     {
+        var webSocket = connection.Socket;
         var buffer = new byte[1024 * 4];
+        using var messageBuffer = new MemoryStream();
 
         while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
         {
-            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-
-            if (result.MessageType == WebSocketMessageType.Close)
+            // A logical message can span multiple frames; assemble until EndOfMessage.
+            messageBuffer.SetLength(0);
+            WebSocketReceiveResult result;
+            do
             {
-                _logger.LogInformation("Client {ClientRefId} initiated close.", clientRefId);
-                await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
-                break;
+                result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    _logger.LogInformation("Client {ClientRefId} initiated close.", clientRefId);
+                    await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
+                    return;
+                }
+
+                if (messageBuffer.Length + result.Count > MaxMessageBytes)
+                {
+                    _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
+                    await webSocket.CloseAsync(WebSocketCloseStatus.MessageTooBig, $"Messages are limited to {MaxMessageBytes} bytes.", cancellationToken);
+                    return;
+                }
+
+                messageBuffer.Write(buffer, 0, result.Count);
+            } while (!result.EndOfMessage);
+
+            if (result.MessageType != WebSocketMessageType.Text)
+            {
+                continue;
             }
 
-            if (result.MessageType == WebSocketMessageType.Text)
-            {
-                // [RJ]: TODO: make this serialisation/deserialisation efficient
-                var messageJson = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, messageJson);
+            var messageJson = Encoding.UTF8.GetString(messageBuffer.GetBuffer(), 0, (int)messageBuffer.Length);
+            _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, messageJson);
 
-                try
+            try
+            {
+                var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
+                if (message == null)
                 {
-                    var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
-                    if (message != null)
-                    {
-                        var payload = JsonSerializer.Serialize(message.Payload);
-                        await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, clientId, workspaceId, message.Type, payload), cancellationToken);
-                    }
+                    continue;
                 }
-                catch (JsonException ex)
+
+                // Reserved protocol messages never reach the generic pipeline (workflow triggers, event log).
+                if (message.Type.StartsWith("sys.", StringComparison.Ordinal))
                 {
-                    _logger.LogWarning("Invalid JSON received from client {ClientRefId}: {Error}", clientRefId, ex.Message);
+                    await HandleSystemMessageAsync(clientRefId, connection, message, cancellationToken);
+                    continue;
                 }
+
+                var payload = JsonSerializer.Serialize(message.Payload);
+                await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, message.Type, payload), cancellationToken);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning("Invalid JSON received from client {ClientRefId}: {Error}", clientRefId, ex.Message);
             }
         }
+    }
+
+    private async Task HandleSystemMessageAsync(Guid clientRefId, ClientConnection connection, SocketMessage message, CancellationToken cancellationToken)
+    {
+        switch (message.Type)
+        {
+            case "sys.pong":
+                // RTT is measured here, on the socket, so bus hops never inflate the number.
+                var originalPingTime = TryGetOriginalTimestamp(message.Payload) ?? connection.LastPingSentAt;
+                if (originalPingTime == null)
+                {
+                    _logger.LogDebug("Received sys.pong from {ClientRefId} without a matching ping.", clientRefId);
+                    return;
+                }
+
+                var roundTripMs = (DateTime.UtcNow - originalPingTime.Value).TotalMilliseconds;
+                await _eventBus.PublishAsync(new ClientPongEvent(clientRefId, connection.ClientId, connection.WorkspaceId, originalPingTime.Value), cancellationToken);
+                await _eventBus.PublishAsync(new ClientLatencyMeasuredEvent(clientRefId, connection.ClientId, connection.WorkspaceId, roundTripMs), cancellationToken);
+                break;
+            case "sys.ack":
+                if (TryGetCommandId(message.Payload, out var commandId))
+                {
+                    await _eventBus.PublishAsync(new ClientCommandAckedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, commandId), cancellationToken);
+                }
+                else
+                {
+                    _logger.LogDebug("Received sys.ack from {ClientRefId} without a command id.", clientRefId);
+                }
+                break;
+            default:
+                _logger.LogDebug("Ignoring unknown system message '{Type}' from {ClientRefId}.", message.Type, clientRefId);
+                break;
+        }
+    }
+
+    private static bool TryGetCommandId(object payload, out Guid commandId)
+    {
+        commandId = Guid.Empty;
+        return payload is JsonElement element
+            && element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("commandId", out var id)
+            && id.ValueKind == JsonValueKind.String
+            && id.TryGetGuid(out commandId);
+    }
+
+    private static DateTime? TryGetOriginalTimestamp(object payload)
+    {
+        // The client echoes the server's own sys.ping timestamp back as 'originalTimestamp',
+        // so the round trip is computed entirely on this host's clock.
+        if (payload is JsonElement element
+            && element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("originalTimestamp", out var timestamp)
+            && timestamp.ValueKind == JsonValueKind.String
+            && timestamp.TryGetDateTime(out var parsed))
+        {
+            return parsed.ToUniversalTime();
+        }
+
+        return null;
     }
 }

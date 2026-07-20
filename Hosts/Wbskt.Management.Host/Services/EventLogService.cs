@@ -35,4 +35,22 @@ internal sealed class EventLogService : IEventLogService
             return Result<IPagedList<EventLogResponse>>.Failure(Error.Failure("EVENT_LOG_QUERY_ERROR", ex.Message));
         }
     }
+
+    public async Task<Result<IPagedList<EventLogResponse>>> GetClientCommsAsync(int workspaceId, int clientId, string? direction, int skip, int take,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying comms log for client ID {ClientId} in WorkspaceId: {WorkspaceId}", clientId, workspaceId);
+
+        try
+        {
+            var logs = await _eventProvider.GetClientCommsAsync(workspaceId, clientId, direction, skip, take, cancellationToken);
+            return Result<IPagedList<EventLogResponse>>.Success(logs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query comms log for client ID {ClientId}. Error: {Message}", clientId, ex.Message);
+            _logger.LogTrace(ex, "GetClientCommsAsync exception stack trace for ClientId {ClientId}", clientId);
+            return Result<IPagedList<EventLogResponse>>.Failure(Error.Failure("EVENT_LOG_QUERY_ERROR", ex.Message));
+        }
+    }
 }

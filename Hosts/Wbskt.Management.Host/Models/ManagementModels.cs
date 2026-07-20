@@ -1,3 +1,5 @@
+using Wbskt.Models;
+
 namespace Wbskt.Management.Host.Models;
 
 public enum ClientStatus : byte
@@ -15,13 +17,15 @@ public record RegistrationPolicyRequest(
 );
 
 public record RegistrationPolicyResponse(
-    Guid RefId, 
-    string Pin, 
-    string Name, 
-    int? MaxClients, 
+    Guid RefId,
+    string Pin,
+    string Name,
+    int? MaxClients,
     bool AutoApproval,
     bool IsEnabled,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    int RegisteredClientCount,
+    int ConnectedClientCount
 );
 
 public record UpdateRegistrationPolicyRequest(
@@ -45,8 +49,52 @@ public record ClientResponse(
     string Name,
     ClientStatus Status,
     bool IsConnected,
+    DateTime? ConnectedAt,
     DateTime? LastActivityAt,
+    int? LastRttMs,
     DateTime CreatedAt
+);
+
+public record ClientDetailResponse(
+    Guid ClientRefId,
+    Guid PolicyRefId,
+    string PolicyName,
+    string Name,
+    ClientStatus Status,
+    bool IsConnected,
+    DateTime? ConnectedAt,
+    DateTime? LastActivityAt,
+    int? LastRttMs,
+    DateTime? RttMeasuredAt,
+    string? AgentName,
+    string? AgentVersion,
+    string? Platform,
+    IReadOnlyList<CommandCapability>? Capabilities,
+    DateTime CreatedAt
+);
+
+public record ClientStateVariableResponse(
+    string Name,
+    string DataType,
+    string Value,
+    DateTime UpdatedAt
+);
+
+public record MessageTemplateRequest(
+    string Name,
+    string MessageType,
+    string PayloadJson,
+    Guid? PolicyRefId
+);
+
+public record MessageTemplateResponse(
+    Guid RefId,
+    string Name,
+    string MessageType,
+    string PayloadJson,
+    Guid? PolicyRefId,
+    DateTime CreatedAt,
+    DateTime UpdatedAt
 );
 
 public record ClientLoginRequest(Guid ClientRefId, string Secret);

@@ -48,7 +48,7 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         var commandTcs = new TaskCompletionSource<(string Action, string? Payload)>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
+        wbsktClient.OnMessageReceived += (action, payload, _) => commandTcs.TrySetResult((action, payload?.ToString()));
         await wbsktClient.StartAsync();
 
         await wbsktClient.SendAsync("telemetry", new { sensor = "http-test", value = 1 });

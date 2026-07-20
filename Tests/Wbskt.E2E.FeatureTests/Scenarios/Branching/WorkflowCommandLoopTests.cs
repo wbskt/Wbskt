@@ -77,7 +77,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, payload) =>
+        wbsktClient.OnMessageReceived += (action, payload, _) =>
         {
             commandTcs.TrySetResult((action, payload?.ToString()));
         };

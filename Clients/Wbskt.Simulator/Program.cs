@@ -30,10 +30,10 @@ client.OnDisconnected += () =>
     Console.ResetColor();
 };
 
-client.OnMessageReceived += (action, payload) => 
+client.OnMessageReceived += (action, payload, commandId) =>
 {
     Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine($"[COMMAND] Action: {action}, Payload: {payload}");
+    Console.WriteLine($"[COMMAND] Action: {action}, Payload: {payload}, CommandId: {commandId ?? "-"}");
     Console.ResetColor();
 };
 

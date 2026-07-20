@@ -7,9 +7,11 @@ BEGIN
     SET NOCOUNT ON;
 
     UPDATE dbo.Clients
-    SET 
+    SET
         IsConnected = @IsConnected,
-        LastActivityAt = @LastActivityAt
+        LastActivityAt = @LastActivityAt,
+        -- ConnectedAt anchors uptime: set on connect, cleared on disconnect
+        ConnectedAt = CASE WHEN @IsConnected = 1 THEN @LastActivityAt ELSE NULL END
     WHERE Id = @Id;
 END
 GO

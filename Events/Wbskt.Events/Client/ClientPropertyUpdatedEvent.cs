@@ -6,4 +6,4 @@ namespace Wbskt.Events.Client;
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientPropertyUpdatedEvent")]
 public sealed record ClientPropertyUpdatedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string PropertyName,
-    string NewValue) : BaseEvent, IClientContext;
+    string? OldValue, string NewValue) : BaseEvent, IClientContext;

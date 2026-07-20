@@ -53,6 +53,8 @@ public static class Program
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+        builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
+        builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
         builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddSingleton<WorkflowValidator>();

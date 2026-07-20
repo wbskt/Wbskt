@@ -116,7 +116,9 @@ public class RegistrationPoliciesController : ControllerBase
             result.Value.MaxClients,
             result.Value.AutoApproval,
             result.Value.IsEnabled,
-            result.Value.CreatedAt
+            result.Value.CreatedAt,
+            result.Value.RegisteredClientCount,
+            result.Value.ConnectedClientCount
         ));
     }
 

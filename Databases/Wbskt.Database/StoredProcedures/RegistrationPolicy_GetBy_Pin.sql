@@ -13,8 +13,10 @@ BEGIN
         MaxClients,
         AutoApproval,
         IsEnabled,
-        CreatedAt
-    FROM dbo.RegistrationPolicies
+        CreatedAt,
+        (SELECT COUNT(*) FROM dbo.Clients c WHERE c.PolicyId = rp.Id AND c.Status = 1) AS RegisteredClientCount,
+        (SELECT COUNT(*) FROM dbo.Clients c WHERE c.PolicyId = rp.Id AND c.IsConnected = 1) AS ConnectedClientCount
+    FROM dbo.RegistrationPolicies rp
     WHERE Pin = @Pin;
 END
 GO

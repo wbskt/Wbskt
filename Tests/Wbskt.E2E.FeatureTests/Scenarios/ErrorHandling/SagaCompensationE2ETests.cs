@@ -61,7 +61,7 @@ public sealed class SagaCompensationE2ETests(ServicesFixture fixture)
         var messageTypes = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (messageType, _) =>
+        wbsktClient.OnMessageReceived += (messageType, _, _) =>
         {
             lock (messageLock)
             {

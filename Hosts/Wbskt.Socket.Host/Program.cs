@@ -7,6 +7,7 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Socket.Host.Extensions;
+using Wbskt.Socket.Host.HostedServices;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Middleware;
 using Wbskt.Socket.Host.Services;
@@ -34,11 +35,16 @@ public static class Program
         
         // Add services to the container.
         builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
+        builder.Services.AddSingleton<IRevocationCache, RevocationCache>();
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
 
         // Event Bus
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
+
+        // Background services (registered after the bus so it starts first)
+        builder.Services.AddHostedService<StartupPresenceResetPublisher>();
+        builder.Services.AddHostedService<PingSampler>();
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

@@ -37,7 +37,7 @@ public sealed class LogicGateRoutingE2ETests(ServicesFixture fixture)
         var messageTypesReceived = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (type, _) =>
+        wbsktClient.OnMessageReceived += (type, _, _) =>
         {
             lock (messageLock)
             {

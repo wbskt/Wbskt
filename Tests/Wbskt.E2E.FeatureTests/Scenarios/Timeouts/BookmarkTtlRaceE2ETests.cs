@@ -46,7 +46,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _, _) =>
         {
             lock (commandLock)
             {
@@ -112,7 +112,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _, _) =>
         {
             lock (commandLock)
             {
@@ -183,7 +183,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
         var commandLock = new object();
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _, _) =>
         {
             lock (commandLock)
             {

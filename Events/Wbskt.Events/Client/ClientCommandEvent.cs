@@ -10,5 +10,6 @@ public sealed record ClientCommandEvent(
     int ClientId,
     int WorkspaceId,
     string Type,
-    string Payload
+    string Payload,
+    Guid? CommandId = null
 ) : BaseEvent, IClientContext;

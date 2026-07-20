@@ -7,7 +7,10 @@ CREATE TABLE dbo.Clients (
     Secret         NVARCHAR(255)    NOT NULL,
     Status         TINYINT          NOT NULL           DEFAULT 0, -- 0: Pending, 1: Registered, 2: Revoked
     IsConnected    BIT              NOT NULL           DEFAULT 0,
+    ConnectedAt    DATETIME2(3)     NULL, -- set on connect, cleared on disconnect; uptime = now - ConnectedAt
     LastActivityAt DATETIME2(3)     NULL,
+    LastRttMs      INT              NULL, -- last measured socket round-trip
+    RttMeasuredAt  DATETIME2(3)     NULL,
     CreatedAt      DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
 
     -- Constraints

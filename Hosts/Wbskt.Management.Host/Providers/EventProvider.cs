@@ -53,6 +53,23 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             cancellationToken);
     }
 
+    public async Task<IPagedList<EventLogResponse>> GetClientCommsAsync(int workspaceId, int clientId, string? direction, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await ExecutePagedCollectionAsync(
+            "dbo.EventLog_GetCommsBy_Client",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@ClientId", clientId);
+                p.AddWithValue("@Direction", (object?)direction ?? DBNull.Value);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            MapEventLog,
+            cancellationToken);
+    }
+
     private static EventLogResponse MapEventLog(SqlDataReader reader)
     {
         return new EventLogResponse(

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
@@ -13,6 +14,7 @@ namespace Wbskt.Management.Host.Controllers;
 
 [Route("api/workspaces/{workspaceRef:guid}/clients")]
 [ApiController]
+[Authorize]
 public class ClientsController : ControllerBase
 {
     private readonly IClientService _clientService;
@@ -21,15 +23,17 @@ public class ClientsController : ControllerBase
     private readonly IEventBus _eventBus;
     private readonly IReferenceMapper _policyMapper;
     private readonly IRegistrationPolicyService _policyService;
+    private readonly IEventLogService _eventLogService;
     private readonly ILogger<ClientsController> _logger;
 
     public ClientsController(
         IClientService clientService,
         [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper,
-        IAuthServiceClient authClient, 
+        IAuthServiceClient authClient,
         IEventBus eventBus,
         [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
         IRegistrationPolicyService policyService,
+        IEventLogService eventLogService,
         ILogger<ClientsController> logger)
     {
         _clientService = clientService;
@@ -38,6 +42,7 @@ public class ClientsController : ControllerBase
         _eventBus = eventBus;
         _policyMapper = policyMapper;
         _policyService = policyService;
+        _eventLogService = eventLogService;
         _logger = logger;
     }
 
@@ -144,6 +149,29 @@ public class ClientsController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves the full detail of a single client: presence, uptime anchor, latency,
+    /// self-reported SDK metadata and command capabilities.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The client detail.</returns>
+    [HttpGet("{clientRefId:guid}")]
+    public async Task<ActionResult<ClientDetailResponse>> GetDetail(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GetDetail requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ClientDetailResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.GetDetailAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
     /// Updates the status of a specific client (e.g., Revoking or Approving a client).
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
@@ -173,17 +201,99 @@ public class ClientsController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves the last-known state variables self-reported by a specific client.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The client's state variables.</returns>
+    [HttpGet("{clientRefId:guid}/state")]
+    public async Task<ActionResult<ListResponse<ClientStateVariableResponse>>> GetState(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GetState requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(workspaceIdResult.Error));
+        }
+
+        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        if (id <= 0)
+        {
+            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        var result = await _clientService.GetStateAsync(workspaceIdResult.Value, id, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(result.Error));
+        }
+
+        return Ok(new ListResponse<ClientStateVariableResponse> { Items = result.Value });
+    }
+
+    /// <summary>
+    /// Renames a specific client.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client to rename.</param>
+    /// <param name="request">The new name.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [HttpPatch("{clientRefId:guid}/name")]
+    public async Task<IActionResult> Rename(Guid workspaceRef, Guid clientRefId, UpdateClientNameRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: Rename requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 100)
+        {
+            return BadRequest(Error.Validation("CLIENT_NAME_INVALID", "Client name must be 1-100 characters."));
+        }
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
+
+        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        if (id <= 0)
+        {
+            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        var result = await _clientService.RenameAsync(workspaceIdResult.Value, id, request.Name.Trim(), cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
     /// Sends an asynchronous command payload to a specific registered client.
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
     /// <param name="clientRefId">The unique reference ID of the target client.</param>
     /// <param name="request">The command name and payload data.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <returns>The command id, for correlating the delivery/ack events that follow.</returns>
     [HttpPost("{clientRefId:guid}/command")]
     public async Task<IActionResult> SendCommand(Guid workspaceRef, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: SendCommand requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        if (string.IsNullOrWhiteSpace(request.Type) || request.Type.Length > 100)
+        {
+            return BadRequest(Error.Validation("COMMAND_TYPE_INVALID", "Command type must be 1-100 characters."));
+        }
+
+        if (ReservedMessageTypes.IsReserved(request.Type))
+        {
+            return BadRequest(Error.Validation("COMMAND_TYPE_RESERVED", "Command type is reserved for the platform protocol."));
+        }
+
+        if (request.Payload is { Length: > 32 * 1024 })
+        {
+            return BadRequest(Error.Validation("COMMAND_PAYLOAD_TOO_LARGE", "Command payload is limited to 32768 characters."));
+        }
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -197,9 +307,59 @@ public class ClientsController : ControllerBase
             return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
         }
 
-        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceIdResult.Value, request.Type, request.Payload), cancellationToken);
-        _logger.LogInformation("Successfully published client command event for ClientRefId: '{ClientRefId}'", clientRefId);
-        return NoContent();
+        var commandId = Guid.NewGuid();
+        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceIdResult.Value, request.Type, request.Payload, commandId), cancellationToken);
+        _logger.LogInformation("Successfully published client command event '{CommandId}' for ClientRefId: '{ClientRefId}'", commandId, clientRefId);
+        return Accepted(new ClientCommandResponse(commandId));
+    }
+
+    /// <summary>
+    /// Retrieves the recent in/out communication history for a specific client
+    /// (backfill for the Live Comms panel before the realtime stream attaches).
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client.</param>
+    /// <param name="direction">Optional direction filter: "in" or "out". Omit for both (plus connect/disconnect rows).</param>
+    /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A paginated list of comms event-log entries, newest first.</returns>
+    [HttpGet("{clientRefId:guid}/comms")]
+    public async Task<ActionResult<ListResponse<EventLogResponse>>> GetComms(
+        Guid workspaceRef,
+        Guid clientRefId,
+        [FromQuery] string? direction,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetComms requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        if (direction is not (null or "in" or "out"))
+        {
+            return BadRequest(Error.Validation("DIRECTION_INVALID", "Direction must be 'in', 'out', or omitted."));
+        }
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(workspaceIdResult.Error));
+        }
+
+        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
+        if (id <= 0)
+        {
+            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        var result = await _eventLogService.GetClientCommsAsync(workspaceIdResult.Value, id, direction, skip, take, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(result.Error));
+        }
+
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
+        return Ok(new ListResponse<EventLogResponse> { Items = result.Value });
     }
 
     /// <summary>
@@ -267,4 +427,8 @@ public class ClientsController : ControllerBase
 
 public record UpdateClientStatusRequest(ClientStatus Status);
 
+public record UpdateClientNameRequest(string Name);
+
 public record ClientCommandRequest(string Type, string Payload);
+
+public record ClientCommandResponse(Guid CommandId);

@@ -42,7 +42,7 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
         int commandCount = 0;
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _, _) =>
         {
             if (action == "ReachEnd")
             {

@@ -6,16 +6,16 @@ namespace Wbskt.Socket.Host.Infrastructure;
 internal sealed class ConnectionManager : IConnectionManager
 {
     private readonly ILogger<ConnectionManager> _logger;
-    private readonly ConcurrentDictionary<Guid, WebSocket> _connections = new();
+    private readonly ConcurrentDictionary<Guid, ClientConnection> _connections = new();
 
     public ConnectionManager(ILogger<ConnectionManager> logger)
     {
         _logger = logger;
     }
 
-    public bool TryAddConnection(Guid clientRefId, WebSocket socket)
+    public bool TryAddConnection(Guid clientRefId, ClientConnection connection)
     {
-        if (!_connections.TryAdd(clientRefId, socket))
+        if (!_connections.TryAdd(clientRefId, connection))
         {
             _logger.LogWarning("Connection attempt rejected. Client {ClientRefId} is already connected.", clientRefId);
             return false;
@@ -23,15 +23,17 @@ internal sealed class ConnectionManager : IConnectionManager
         return true;
     }
 
-    public async Task RemoveConnectionAsync(Guid clientRefId, CancellationToken cancellationToken = default)
+    public async Task RemoveConnectionAsync(Guid clientRefId, WebSocketCloseStatus closeStatus = WebSocketCloseStatus.NormalClosure,
+        string closeDescription = "Closed by manager", CancellationToken cancellationToken = default)
     {
-        if (_connections.TryRemove(clientRefId, out var socket))
+        if (_connections.TryRemove(clientRefId, out var connection))
         {
+            var socket = connection.Socket;
             if (socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived)
             {
                 try
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by manager", cancellationToken);
+                    await socket.CloseAsync(closeStatus, closeDescription, cancellationToken);
                 }
                 catch
                 {
@@ -39,13 +41,14 @@ internal sealed class ConnectionManager : IConnectionManager
                 }
             }
             socket.Dispose();
+            connection.Dispose();
         }
     }
 
-    public WebSocket? GetConnection(Guid clientRefId)
+    public ClientConnection? GetConnection(Guid clientRefId)
     {
-        _connections.TryGetValue(clientRefId, out var socket);
-        return socket;
+        _connections.TryGetValue(clientRefId, out var connection);
+        return connection;
     }
 
     public IReadOnlyCollection<Guid> GetConnectedClients()

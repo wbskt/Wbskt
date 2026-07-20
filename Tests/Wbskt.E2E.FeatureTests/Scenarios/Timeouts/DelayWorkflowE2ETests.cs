@@ -69,7 +69,7 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, payload) => commandTcs.TrySetResult((action, payload?.ToString()));
+        wbsktClient.OnMessageReceived += (action, payload, _) => commandTcs.TrySetResult((action, payload?.ToString()));
 
         await wbsktClient.StartAsync();
 

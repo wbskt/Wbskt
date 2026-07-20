@@ -11,7 +11,7 @@ internal sealed class SocketClient : IAsyncDisposable
     private CancellationTokenSource _cts = new();
     private readonly string _baseUrl;
 
-    public event Action<string, object?>? OnMessageReceived;
+    public event Action<string, object?, string?>? OnMessageReceived;
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
@@ -68,40 +68,66 @@ internal sealed class SocketClient : IAsyncDisposable
         }
     }
 
+    private const int MaxMessageBytes = 64 * 1024;
+
     private async Task ReceiveLoopAsync()
     {
         var buffer = new byte[1024 * 4];
+        using var messageBuffer = new MemoryStream();
         try
         {
             while (_webSocket.State == WebSocketState.Open && !_cts.Token.IsCancellationRequested)
             {
-                var result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
-                
-                if (result.MessageType == WebSocketMessageType.Close)
+                // A logical message can span multiple frames; assemble until EndOfMessage.
+                messageBuffer.SetLength(0);
+                WebSocketReceiveResult result;
+                do
                 {
-                    await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", _cts.Token);
-                    break;
-                }
+                    result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
+
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", _cts.Token);
+                        return;
+                    }
+
+                    if (messageBuffer.Length + result.Count > MaxMessageBytes)
+                    {
+                        // Oversized message; drop the connection and let the reconnect monitor recover.
+                        return;
+                    }
+
+                    messageBuffer.Write(buffer, 0, result.Count);
+                } while (!result.EndOfMessage);
 
                 if (result.MessageType != WebSocketMessageType.Text)
                 {
                     continue;
                 }
 
-                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                var doc = JsonDocument.Parse(json);
+                var json = Encoding.UTF8.GetString(messageBuffer.GetBuffer(), 0, (int)messageBuffer.Length);
+                using var doc = JsonDocument.Parse(json);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
                 switch (type)
                 {
-                    // [RJ]: TODO: this ping-pong system does not work. need to revise this.
                     case "sys.ping":
                         var ts = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime();
                         await SendAsync(new SocketMessage("sys.pong", new { originalTimestamp = ts }));
                         break;
                     default:
-                        var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p : null;
-                        OnMessageReceived?.Invoke(type ?? "unknown", payload);
+                        var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p.Clone() : null;
+                        var commandId = doc.RootElement.TryGetProperty("commandId", out var c) && c.ValueKind == JsonValueKind.String
+                            ? c.GetString()
+                            : null;
+
+                        if (commandId != null)
+                        {
+                            // Transport-level delivery ack; app-level acks are ordinary messages.
+                            await SendAsync(new SocketMessage("sys.ack", new { commandId }));
+                        }
+
+                        OnMessageReceived?.Invoke(type ?? "unknown", payload, commandId);
                         break;
                 }
             }

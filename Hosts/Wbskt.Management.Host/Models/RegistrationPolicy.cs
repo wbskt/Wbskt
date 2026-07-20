@@ -11,4 +11,6 @@ public class RegistrationPolicy
     public bool AutoApproval { get; set; }
     public bool IsEnabled { get; set; }
     public DateTime CreatedAt { get; set; }
+    public int RegisteredClientCount { get; set; }
+    public int ConnectedClientCount { get; set; }
 }

@@ -223,7 +223,9 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             p.MaxClients,
             p.AutoApproval,
             p.IsEnabled,
-            p.CreatedAt
+            p.CreatedAt,
+            p.RegisteredClientCount,
+            p.ConnectedClientCount
         );
     }
 }

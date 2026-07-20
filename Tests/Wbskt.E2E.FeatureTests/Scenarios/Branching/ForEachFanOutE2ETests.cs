@@ -69,7 +69,7 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
         var commands = new List<string>();
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _) =>
+        wbsktClient.OnMessageReceived += (action, _, _) =>
         {
             lock (commandLock)
             {

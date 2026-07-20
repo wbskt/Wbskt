@@ -57,7 +57,7 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
 
         var commandTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _) => commandTcs.TrySetResult(action);
+        wbsktClient.OnMessageReceived += (action, _, _) => commandTcs.TrySetResult(action);
         await wbsktClient.StartAsync();
 
         var stopwatch = Stopwatch.StartNew();

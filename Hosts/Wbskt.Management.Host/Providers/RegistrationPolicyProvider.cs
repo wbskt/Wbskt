@@ -125,7 +125,9 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
             MaxClients = reader.IsDBNull(reader.GetOrdinal("MaxClients")) ? null : reader.GetInt32(reader.GetOrdinal("MaxClients")),
             AutoApproval = reader.GetBoolean(reader.GetOrdinal("AutoApproval")),
             IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            RegisteredClientCount = reader.GetInt32(reader.GetOrdinal("RegisteredClientCount")),
+            ConnectedClientCount = reader.GetInt32(reader.GetOrdinal("ConnectedClientCount"))
         };
     }
 }
