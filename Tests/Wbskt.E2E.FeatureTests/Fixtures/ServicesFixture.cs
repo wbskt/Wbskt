@@ -21,7 +21,21 @@ public sealed class ServicesFixture : IDisposable
     // Shared cert-ignoring HttpClient for all REST calls inside the fixture helpers.
     private readonly HttpClient _http;
 
+    /// <summary>
+    /// The three public-facing hosts (auth, management, socket) are reachable. This is the gate for
+    /// the bulk of the suite; every engine interaction the tests need goes through Management
+    /// (manual runs, signals, and the http-wake callback relay), so the engine's own reachability
+    /// is not required here.
+    /// </summary>
     public bool HostsAvailable { get; }
+
+    /// <summary>
+    /// The engine host is *directly* reachable at WorkflowBaseUrl. In a real deployment the engine
+    /// is backend-network-only with no public route, so this is false; tests that hit an engine
+    /// inbound endpoint directly (currently only the webhook trigger) gate on this and skip when the
+    /// engine can't be reached, instead of failing.
+    /// </summary>
+    public bool EngineAvailable { get; }
 
     public ServicesFixture()
     {
@@ -31,40 +45,48 @@ public sealed class ServicesFixture : IDisposable
         };
         _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
 
-        HostsAvailable = ProbeAllHostsAsync().GetAwaiter().GetResult();
+        HostsAvailable = ProbePublicHostsAsync().GetAwaiter().GetResult();
+        EngineAvailable = ProbeHostAsync(E2EConfig.WorkflowBaseUrl).GetAwaiter().GetResult();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Health probe
     // ─────────────────────────────────────────────────────────────────────────
 
-    private async Task<bool> ProbeAllHostsAsync()
+    private async Task<bool> ProbePublicHostsAsync()
     {
         var urls = new[]
         {
             E2EConfig.AuthBaseUrl,
             E2EConfig.ManagementBaseUrl,
-            E2EConfig.SocketHttpBaseUrl,
-            E2EConfig.WorkflowBaseUrl
+            E2EConfig.SocketHttpBaseUrl
         };
 
         foreach (var url in urls)
         {
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                var response = await _http.GetAsync(url, cts.Token);
-
-                // Any HTTP response (even 404 / 401) means the host is up.
-                // Only treat a connection-level failure as "unavailable".
-            }
-            catch
+            if (!await ProbeHostAsync(url))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private async Task<bool> ProbeHostAsync(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            // Any HTTP response (even 404 / 401) means the host is up.
+            // Only a connection-level failure counts as "unavailable".
+            await _http.GetAsync(url, cts.Token);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -296,17 +318,38 @@ public sealed class ServicesFixture : IDisposable
         resp.EnsureSuccessStatusCode();
     }
 
-    /// <summary>POSTs to the Engine Host's public http-wake callback to resume a parked WaitForHttp branch.</summary>
-    public async Task<bool> SendHttpWakeAsync(Guid token, object? payload = null)
+    /// <summary>
+    /// POSTs to Management's public (anonymous) http-wake callback to resume a parked WaitForHttp
+    /// branch. Management relays to the backend-only engine with the shared api-key; the token is
+    /// the one the workflow author pinned at design time (WaitForHttpConfig.Token).
+    /// </summary>
+    public async Task<bool> SendHttpWakeAsync(string token, object? payload = null)
     {
         var resp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.WorkflowBaseUrl}/api/inbound/wake/{token}",
+            $"{E2EConfig.ManagementBaseUrl}/api/callbacks/wake/{Uri.EscapeDataString(token)}",
             payload ?? new { });
         resp.EnsureSuccessStatusCode();
 
         var result = await resp.Content.ReadFromJsonAsync<WakeDto>(JsonOptions)
             ?? throw new InvalidOperationException("Wake returned empty response.");
         return result.Matched;
+    }
+
+    /// <summary>
+    /// POSTs to Management's public (anonymous) webhook callback, which relays to the backend-only
+    /// engine with the shared api-key. Mirrors an external system firing a webhook trigger.
+    /// Returns the engine's outcome and the started run's RefId (when a run started).
+    /// </summary>
+    public async Task<(string Outcome, Guid? RunRefId)> SendWebhookAsync(string path, object? payload = null)
+    {
+        var resp = await _http.PostAsJsonAsync(
+            $"{E2EConfig.ManagementBaseUrl}/api/callbacks/webhook/{Uri.EscapeDataString(path)}",
+            payload ?? new { });
+        resp.EnsureSuccessStatusCode();
+
+        var result = await resp.Content.ReadFromJsonAsync<WebhookDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Webhook returned empty response.");
+        return (result.Outcome, result.RunId);
     }
 
     /// <summary>Sends a named signal to a parked run via the workspace-scoped management endpoint.</summary>
@@ -490,6 +533,7 @@ public sealed class ServicesFixture : IDisposable
     // ─────────────────────────────────────────────────────────────────────────
 
     private record LoginDto(string AccessToken, string RefreshToken);
+    private record WebhookDto(string Outcome, Guid? RunId);
     private record WorkspaceDto(Guid RefId, string Name, string? Description, DateTime CreatedAt);
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);

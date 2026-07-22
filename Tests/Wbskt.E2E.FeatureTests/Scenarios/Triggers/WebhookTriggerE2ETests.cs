@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.Client.Sdk;
@@ -8,8 +7,6 @@ using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
-
-public sealed record InboundWebhookResponse(string Outcome, Guid? RunId);
 
 [Collection(E2ECollection.Name)]
 public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
@@ -45,24 +42,20 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
         // Give the client time to connect
         await Task.Delay(500);
 
-        // Send HTTP POST to the webhook endpoint (retry in case registration is delayed)
-        using var http = new HttpClient();
-        InboundWebhookResponse? webhookResp = null;
-        
+        // Fire the webhook via Management's public callback (retry in case registration is delayed).
+        (string Outcome, Guid? RunRefId) webhookResp = default;
+
         await ServicesFixture.PollAsync(async () =>
         {
-            var resp = await http.PostAsJsonAsync($"{E2EConfig.WorkflowBaseUrl}/api/inbound/webhook/{path}", new { test = "payload" });
-            resp.EnsureSuccessStatusCode();
-            webhookResp = await resp.Content.ReadFromJsonAsync<InboundWebhookResponse>(JsonOpts);
-            return webhookResp?.Outcome == "StartedRun";
+            webhookResp = await fixture.SendWebhookAsync(path, new { test = "payload" });
+            return webhookResp.Outcome == "StartedRun";
         }, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1));
-        
+
         // 4. Assert the run succeeds
-        webhookResp.Should().NotBeNull();
-        webhookResp!.Outcome.Should().Be("StartedRun");
-        webhookResp.RunId.Should().NotBeNull();
-        
-        var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, webhookResp.RunId!.Value, TimeSpan.FromSeconds(30));
+        webhookResp.Outcome.Should().Be("StartedRun");
+        webhookResp.RunRefId.Should().NotBeNull();
+
+        var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, webhookResp.RunRefId!.Value, TimeSpan.FromSeconds(30));
         summary.Should().NotBeNull();
         summary!.Status.Should().Be("Succeeded");
     }

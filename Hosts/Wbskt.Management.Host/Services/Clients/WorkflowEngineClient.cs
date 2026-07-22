@@ -50,7 +50,37 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new SignalResponse(engineResponse?.Matched ?? false, engineResponse?.Outcome ?? string.Empty);
     }
 
+    public async Task<WakeResponse> WakeAsync(string token, JsonElement payload, CancellationToken ct)
+    {
+        // The token is a path segment (author-defined string, or a run RefId); escape it. The
+        // engine's /api/inbound/wake is backend-only and api-key gated - WorkflowEngineApiKeyHandler
+        // adds the shared key, so this relays the public callback inward without exposing the engine.
+        var response = await _httpClient.PostAsJsonAsync($"api/inbound/wake/{Uri.EscapeDataString(token)}", payload, SerializerOptions, ct);
+        response.EnsureSuccessStatusCode();
+
+        EngineWakeResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineWakeResponse>(SerializerOptions, ct);
+
+        return new WakeResponse(engineResponse?.Matched ?? false, engineResponse?.Outcome ?? string.Empty);
+    }
+
+    public async Task<WebhookResponse> WebhookAsync(string path, JsonElement payload, CancellationToken ct)
+    {
+        // Same relay shape as WakeAsync: the engine's /api/inbound/webhook is backend-only and
+        // api-key gated (WorkflowEngineApiKeyHandler adds the key), so this fronts an external
+        // webhook publicly without exposing the engine. The path segment is caller-supplied; escape it.
+        var response = await _httpClient.PostAsJsonAsync($"api/inbound/webhook/{Uri.EscapeDataString(path)}", payload, SerializerOptions, ct);
+        response.EnsureSuccessStatusCode();
+
+        EngineWebhookResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineWebhookResponse>(SerializerOptions, ct);
+
+        return new WebhookResponse(engineResponse?.Outcome ?? string.Empty, engineResponse?.RunId);
+    }
+
     private sealed record EngineManualResponse(string Outcome, Guid? RunRefId, long? RunId);
 
     private sealed record EngineSignalResponse(string Outcome, bool Matched);
+
+    private sealed record EngineWakeResponse(string Outcome, bool Matched);
+
+    private sealed record EngineWebhookResponse(string Outcome, Guid? RunId);
 }

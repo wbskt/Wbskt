@@ -36,7 +36,10 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
 
         var workflowRefId = Guid.NewGuid();
-        var definition = BuildHttpWaitDefinition(workflowRefId, clientRefId.ToString());
+        // The author pins the wake token at design time; the external caller (this test) uses the
+        // same value to hit the public callback. High-entropy so it stands in for a real secret.
+        var wakeToken = Guid.NewGuid().ToString("N");
+        var definition = BuildHttpWaitDefinition(workflowRefId, clientRefId.ToString(), wakeToken);
         new WorkflowValidator().Validate(definition).IsValid.Should().BeTrue();
 
         var publishedRef = await fixture.PublishWorkflowAsync(
@@ -69,8 +72,8 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         var leaked = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
         leaked.Should().NotBe(commandTcs.Task, "the command must not fire before the http-wake callback");
 
-        // External callback resumes the parked branch.
-        bool matched = await fixture.SendHttpWakeAsync(runRefId, new { approved = true });
+        // External callback resumes the parked branch, using the design-time wake token.
+        bool matched = await fixture.SendHttpWakeAsync(wakeToken, new { approved = true });
         matched.Should().BeTrue("the wake callback should resume the parked http bookmark");
 
         var resumed = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(30)));
@@ -78,14 +81,14 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         (await commandTcs.Task).Action.Should().Be("OpenVent");
     }
 
-    private static WorkflowDefinition BuildHttpWaitDefinition(Guid workflowRefId, string clientRef)
+    private static WorkflowDefinition BuildHttpWaitDefinition(Guid workflowRefId, string clientRef, string wakeToken)
     {
         var builder = new WorkflowBuilder($"E2E-Http-{workflowRefId:N}", workflowRefId)
             .AddClientTrigger(clientRef, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
-            .AddWaitForHttp(TimeSpan.FromMinutes(15), timeout => 
+            .AddWaitForHttp(TimeSpan.FromMinutes(15), timeout =>
             {
                 timeout.OnSuccess(b => b.AddClientMessage(clientRef, "OpenVent"));
-            });
+            }, token: wakeToken);
 
         return builder.BuildAndValidate();
     }

@@ -10,10 +10,11 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// <summary>
 /// Parks a branch until an external system POSTs to the wake callback (the inbound "http-wake"
 /// channel), or until the TTL elapses. The bookmark match key is "http-wake:{token}", matching
-/// CorrelationKeyResolver. For testability the token is the run's RefId, so the callback is
-/// POST /api/inbound/wake/{runRefId}; production would mint a random secret per park and deliver
-/// it in an outbound callback URL. First-visit vs resume is distinguished by a local-state marker;
-/// a TTL resume leaves via the timeout port.
+/// CorrelationKeyResolver. The token is author-defined (WaitForHttpConfig.Token) so the callback
+/// URL is known at design time and can be handed to the external caller as a shared secret; when
+/// the author leaves it unset it defaults to the run's RefId, which scopes the wake per-run but is
+/// not a secret (it also appears in run-list APIs and logs). First-visit vs resume is distinguished
+/// by a local-state marker; a TTL resume leaves via the timeout port.
 /// </summary>
 internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
 {
@@ -57,8 +58,10 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : INodeExecutor
             return Continue(DefaultPort);
         }
 
-        // First visit: park on an http-wake callback scoped to this run.
-        string token = ctx.Branch.RunRefId.ToString();
+        // First visit: park on an http-wake callback. The author may pin the token at design time
+        // (config.Token) so the callback URL is known up front; otherwise default to the run's RefId
+        // so the wake is scoped per-run automatically.
+        string token = string.IsNullOrWhiteSpace(config.Token) ? ctx.Branch.RunRefId.ToString() : config.Token;
         var condition = new HttpWakeCondition(token)
         {
             Ttl = config.Ttl,

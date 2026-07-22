@@ -32,6 +32,19 @@ public sealed class WaitForHttpNodeExecutorTests
     }
 
     [Fact]
+    public async Task First_visit_with_author_token_parks_on_that_token()
+    {
+        var executor = new WaitForHttpNodeExecutor(new MutableClock(T0));
+        var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15), Token = "author-secret-123" } };
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>());
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        var http = Assert.IsType<HttpWakeCondition>(wait.Condition);
+        Assert.Equal("author-secret-123", http.Token);
+        Assert.Equal("author-secret-123", wait.LocalStatePatch[ParkedKey].GetString());
+    }
+
+    [Fact]
     public async Task Resume_by_wake_continues_default()
     {
         var executor = new WaitForHttpNodeExecutor(new MutableClock(T0.AddMinutes(1)));

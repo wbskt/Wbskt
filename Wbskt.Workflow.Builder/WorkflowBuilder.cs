@@ -510,7 +510,7 @@ public sealed class WorkflowBuilder
         }
         return this;
     }
-    public WorkflowBuilder AddWaitForHttp(TimeSpan ttl, out Guid nodeId)
+    public WorkflowBuilder AddWaitForHttp(TimeSpan ttl, out Guid nodeId, string? token = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -522,16 +522,16 @@ public sealed class WorkflowBuilder
                 new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" },
                 new PortDefinition { PortId = PortNames.Timeout, Direction = PortDirection.Output, Label = "Timeout" }
             ],
-            Config = new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpConfig { Ttl = ttl } });
+            Config = new Wbskt.Workflow.Abstraction.Models.Nodes.Controls.WaitForHttpConfig { Ttl = ttl, Token = token } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
         return this;
     }
 
-    public WorkflowBuilder AddWaitForHttp(TimeSpan ttl, Action<TimeoutScope> branches, JoinMode? joinMode = null)
+    public WorkflowBuilder AddWaitForHttp(TimeSpan ttl, Action<TimeoutScope> branches, JoinMode? joinMode = null, string? token = null)
     {
-        AddWaitForHttp(ttl, out var waitId);
+        AddWaitForHttp(ttl, out var waitId, token);
         var scope = new TimeoutScope(this, waitId, true);
         branches(scope);
         
