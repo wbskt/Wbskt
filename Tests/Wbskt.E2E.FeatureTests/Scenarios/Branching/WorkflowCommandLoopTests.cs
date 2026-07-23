@@ -143,7 +143,7 @@ public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
     /// Builds the minimal DeviceTrigger → action:clientMessage workflow definition.
     ///
     /// Port conventions:
-    ///   - Trigger output port id = "default"  (matches DeviceTriggerExecutor.Continue("default", …))
+    ///   - Trigger output port id = "default"  (matches PassthroughTriggerExecutor.Continue("default", …))
     ///   - Action input  port id = "in"
     ///   - Action output port id = "out"
     ///

@@ -159,10 +159,10 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.IsType<NullRunStartedPublisher>(runStartedPublisher1);
         Assert.IsType<SubWorkflowCompletionHook>(completionHook1);
         Assert.NotSame(completionHook1, completionHook2);
-        Assert.Contains(executors1, executor => executor.GetType().Name == "DeviceTriggerExecutor");
-        Assert.Contains(executors1, executor => executor.GetType().Name == "ScheduleTriggerExecutor");
-        Assert.Contains(executors1, executor => executor.GetType().Name == "WebhookTriggerExecutor");
-        Assert.Contains(executors1, executor => executor.GetType().Name == "ManualTriggerExecutor");
+        Assert.Contains(executors1, executor => executor.Kind == NodeKind.TriggerClient);
+        Assert.Contains(executors1, executor => executor.Kind == NodeKind.TriggerSchedule);
+        Assert.Contains(executors1, executor => executor.Kind == NodeKind.TriggerWebhook);
+        Assert.Contains(executors1, executor => executor.Kind == NodeKind.TriggerManual);
         Assert.Contains(executors1, executor => executor is LogicNodeExecutor);
         Assert.Contains(executors1, executor => executor is VariableNodeExecutor);
         Assert.Contains(executors1, executor => executor is ForEachNodeExecutor);

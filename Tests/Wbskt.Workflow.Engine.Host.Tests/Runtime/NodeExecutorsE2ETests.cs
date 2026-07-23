@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
@@ -60,7 +61,7 @@ public sealed class NodeExecutorsE2ETests
             providers,
             new StubWorkflowDefinitionCache(definition),
             new NodeExecutorRegistry([
-                new ManualTriggerExecutor(new FixedClock()),
+                new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock()),
                 new LogicNodeExecutor(new ExpressionEvaluator()),
                 new VariableNodeExecutor(new NoOpSharedVariableProvider(), new ExpressionEvaluator()),
                 new ForEachNodeExecutor(new ExpressionEvaluator())

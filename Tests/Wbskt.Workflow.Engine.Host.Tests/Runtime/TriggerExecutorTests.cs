@@ -13,30 +13,30 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class TriggerExecutorTests
 {
     [Fact]
-    public async Task DeviceTriggerExecutor_returns_default_port_and_trigger_patch()
+    public async Task Client_trigger_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new DeviceTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ClientTriggerNode { NodeId = Guid.NewGuid(), Name = "client", Ports = CreatePorts(), Config = new ClientTriggerConfig { ClientRef = "client-1", Type = "telemetry" } }), CancellationToken.None);
+        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerClient, new FixedClock()).ExecuteAsync(CreateContext(new ClientTriggerNode { NodeId = Guid.NewGuid(), Name = "client", Ports = CreatePorts(), Config = new ClientTriggerConfig { ClientRef = "client-1", Type = "telemetry" } }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
     [Fact]
-    public async Task ScheduleTriggerExecutor_returns_default_port_and_trigger_patch()
+    public async Task Schedule_trigger_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new ScheduleTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ScheduleTriggerNode { NodeId = Guid.NewGuid(), Name = "schedule", Ports = CreatePorts(), Config = new ScheduleTriggerConfig { Cron = "* * * * *" } }), CancellationToken.None);
+        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerSchedule, new FixedClock()).ExecuteAsync(CreateContext(new ScheduleTriggerNode { NodeId = Guid.NewGuid(), Name = "schedule", Ports = CreatePorts(), Config = new ScheduleTriggerConfig { Cron = "* * * * *" } }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
     [Fact]
-    public async Task WebhookTriggerExecutor_returns_default_port_and_trigger_patch()
+    public async Task Webhook_trigger_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new WebhookTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "webhook", Ports = CreatePorts(), Config = new WebhookTriggerConfig { Path = "/hook", Method = "POST" } }), CancellationToken.None);
+        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerWebhook, new FixedClock()).ExecuteAsync(CreateContext(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "webhook", Ports = CreatePorts(), Config = new WebhookTriggerConfig { Path = "/hook", Method = "POST" } }), CancellationToken.None);
         AssertContinueResult(result);
     }
 
     [Fact]
-    public async Task ManualTriggerExecutor_returns_default_port_and_trigger_patch()
+    public async Task Manual_trigger_returns_default_port_and_trigger_patch()
     {
-        NodeExecutionResult result = await new ManualTriggerExecutor(new FixedClock()).ExecuteAsync(CreateContext(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "manual", Ports = CreatePorts(), Config = new ManualTriggerConfig { Description = "start" } }), CancellationToken.None);
+        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock()).ExecuteAsync(CreateContext(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "manual", Ports = CreatePorts(), Config = new ManualTriggerConfig { Description = "start" } }), CancellationToken.None);
         AssertContinueResult(result);
     }
 

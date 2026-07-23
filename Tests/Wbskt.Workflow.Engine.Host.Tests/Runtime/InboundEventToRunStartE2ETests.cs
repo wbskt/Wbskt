@@ -43,7 +43,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new WorkflowDefinitionCache(new MemoryCache(new MemoryCacheOptions()), providers),
             new NodeExecutorRegistry([
-                new DeviceTriggerExecutor(new FixedClock()),
+                new PassthroughTriggerExecutor(NodeKind.TriggerClient, new FixedClock()),
                 new LogicPassThroughExecutor()
             ]),
             runDispatcher,

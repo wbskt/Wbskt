@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine;
@@ -83,10 +84,12 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         services.AddSingleton<ICorrelationKeyResolver, CorrelationKeyResolver>();
         services.AddSingleton<IExpressionEvaluator, ExpressionEvaluator>();
-        services.AddScoped<INodeExecutor, DeviceTriggerExecutor>();
-        services.AddScoped<INodeExecutor, ScheduleTriggerExecutor>();
-        services.AddScoped<INodeExecutor, WebhookTriggerExecutor>();
-        services.AddScoped<INodeExecutor, ManualTriggerExecutor>();
+        // The client/schedule/webhook/manual triggers all just record the payload and continue via
+        // "default", so a single PassthroughTriggerExecutor serves them - one instance per kind.
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClient, sp.GetRequiredService<IClock>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerSchedule, sp.GetRequiredService<IClock>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerWebhook, sp.GetRequiredService<IClock>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerManual, sp.GetRequiredService<IClock>()));
         services.AddScoped<INodeExecutor, LogicNodeExecutor>();
         services.AddScoped<INodeExecutor, VariableNodeExecutor>();
         services.AddScoped<INodeExecutor, ForEachNodeExecutor>();
