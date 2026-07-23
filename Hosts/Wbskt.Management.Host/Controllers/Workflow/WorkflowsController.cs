@@ -41,7 +41,7 @@ public sealed class WorkflowsController : ControllerBase
             return MapResult(Result<WorkflowPublishResponse>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _service.PublishAsync(workspaceIdResult.Value, request, ct);
+        var result = await _service.PublishAsync(workspaceIdResult.Value, workspaceRef, request, ct);
         return MapResult(result);
     }
 

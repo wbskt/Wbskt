@@ -1,11 +1,17 @@
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 
 namespace Wbskt.Workflow.Abstraction.Validation;
 
 public sealed class WorkflowValidator
 {
+    // A WaitForHttp wake token is the sole secret gating an anonymous public callback, so it must be
+    // long enough not to be brute-forceable. 24 characters ~= 128 bits when random (e.g. a GUID "N"
+    // form or a base64 nonce).
+    private const int MinWakeTokenLength = 24;
+
     public ValidationResult Validate(WorkflowDefinition? definition)
     {
         var issues = new List<ValidationIssue>();
@@ -18,9 +24,29 @@ public sealed class WorkflowValidator
         ValidateDuplicateNodeIds(definition, issues);
         ValidateEdges(definition, issues);
         ValidatePorts(definition, issues);
+        ValidateNodeConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
         return new ValidationResult(issues);
+    }
+
+    private static void ValidateNodeConfigs(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            if (node is WaitForHttpNode waitForHttp)
+            {
+                string? token = waitForHttp.Config?.Token?.Trim();
+                if (string.IsNullOrEmpty(token) || token.Length < MinWakeTokenLength)
+                {
+                    issues.Add(new ValidationIssue(
+                        ValidationSeverity.Error,
+                        "WAITFORHTTP_WEAK_TOKEN",
+                        $"WaitForHttp node '{node.NodeId}' must define a 'token' of at least {MinWakeTokenLength} characters; it is the only secret gating the public wake callback.",
+                        node.NodeId));
+                }
+            }
+        }
     }
 
     private static void ValidateShape(WorkflowDefinition def, List<ValidationIssue> issues)

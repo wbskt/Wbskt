@@ -17,18 +17,28 @@ public sealed class WaitForHttpNodeExecutorTests
     private static readonly Guid RunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
 
     [Fact]
-    public async Task First_visit_parks_with_http_wake_scoped_to_run_and_ttl()
+    public async Task First_visit_parks_with_http_wake_on_author_token_and_ttl()
+    {
+        var executor = new WaitForHttpNodeExecutor(new MutableClock(T0));
+        var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15), Token = "author-secret-token-1234567890" } };
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>());
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        var http = Assert.IsType<HttpWakeCondition>(wait.Condition);
+        Assert.Equal("author-secret-token-1234567890", http.Token);
+        Assert.Equal(TimeSpan.FromMinutes(15), http.Ttl);
+        Assert.Equal("author-secret-token-1234567890", wait.LocalStatePatch[ParkedKey].GetString());
+        Assert.Equal(T0.AddMinutes(15).ToString("O"), wait.LocalStatePatch[DeadlineKey].GetString());
+    }
+
+    [Fact]
+    public async Task First_visit_without_token_faults()
     {
         var executor = new WaitForHttpNodeExecutor(new MutableClock(T0));
         var node = new WaitForHttpNode { NodeId = Guid.NewGuid(), Name = "wait-http", Ports = Ports(), Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(15) } };
         NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>());
 
-        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
-        var http = Assert.IsType<HttpWakeCondition>(wait.Condition);
-        Assert.Equal(RunRefId.ToString(), http.Token);
-        Assert.Equal(TimeSpan.FromMinutes(15), http.Ttl);
-        Assert.Equal(RunRefId.ToString(), wait.LocalStatePatch[ParkedKey].GetString());
-        Assert.Equal(T0.AddMinutes(15).ToString("O"), wait.LocalStatePatch[DeadlineKey].GetString());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(ctx, CancellationToken.None));
     }
 
     [Fact]

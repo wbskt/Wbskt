@@ -10,16 +10,19 @@ namespace Wbskt.Workflow.Engine.Host.Controllers;
 [InboundEndpoint]
 public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abstraction.Providers.IRunProvider runProvider, ILogger<InboundWebhookController>? logger = null) : ControllerBase
 {
-    [HttpPost("{channelKind}")]
-    public async Task<InboundWebhookResponse> Post(string channelKind, [FromBody] JsonElement payload, CancellationToken ct)
+    [HttpPost("{workspaceRef:guid}/{channelKind}")]
+    public async Task<InboundWebhookResponse> Post(Guid workspaceRef, string channelKind, [FromBody] JsonElement payload, CancellationToken ct)
     {
-        logger?.LogInformation("Received webhook request for channel {ChannelKind}", channelKind);
+        logger?.LogInformation("Received webhook request for workspace {WorkspaceRef} channel {ChannelKind}", workspaceRef, channelKind);
+        // The key is workspace-scoped (webhook:{workspaceRef}:{path}) and must match both the
+        // registration minted by TriggerRegistrationService and CorrelationKeyResolver's webhook key.
         InboundEvent inboundEvent = new(
             "webhook",
-            [$"webhook:{channelKind}"],
-            $"webhook:{channelKind}:{Guid.NewGuid()}",
+            [$"webhook:{workspaceRef}:{channelKind}"],
+            $"webhook:{workspaceRef}:{channelKind}:{Guid.NewGuid()}",
             new Dictionary<string, JsonElement>
             {
+                ["workspaceRefId"] = JsonSerializer.SerializeToElement(workspaceRef.ToString()),
                 ["webhookPath"] = JsonSerializer.SerializeToElement(channelKind),
                 ["body"] = payload
             },

@@ -70,6 +70,49 @@ public class WorkflowValidatorTests
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "INVALID_VERSION");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("too-short-token")]
+    public void Validate_returns_error_when_waitforhttp_token_missing_or_weak(string? token)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var waitNode = new WaitForHttpNode
+        {
+            NodeId = new Guid("aaaaaaaa-0000-0000-0000-00000000009a"),
+            Name = "wait",
+            Ports =
+            [
+                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" },
+                new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }
+            ],
+            Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(5), Token = token }
+        };
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, waitNode] });
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "WAITFORHTTP_WEAK_TOKEN");
+    }
+
+    [Fact]
+    public void Validate_allows_waitforhttp_with_strong_token()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var waitNode = new WaitForHttpNode
+        {
+            NodeId = new Guid("aaaaaaaa-0000-0000-0000-00000000009b"),
+            Name = "wait",
+            Ports =
+            [
+                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" },
+                new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }
+            ],
+            Config = new WaitForHttpConfig { Ttl = TimeSpan.FromMinutes(5), Token = Guid.NewGuid().ToString("N") }
+        };
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, waitNode] });
+        Assert.DoesNotContain(result.Issues, i => i.Code == "WAITFORHTTP_WEAK_TOKEN");
+    }
+
     [Fact]
     public void Validate_returns_warning_when_no_trigger_nodes()
     {

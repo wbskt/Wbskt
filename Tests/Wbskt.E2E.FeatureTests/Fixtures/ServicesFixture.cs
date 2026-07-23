@@ -321,35 +321,30 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>
     /// POSTs to Management's public (anonymous) http-wake callback to resume a parked WaitForHttp
     /// branch. Management relays to the backend-only engine with the shared api-key; the token is
-    /// the one the workflow author pinned at design time (WaitForHttpConfig.Token).
+    /// the one the workflow author pinned at design time (WaitForHttpConfig.Token). The callback is
+    /// deliberately opaque (uniform 202, no match/run details), so callers observe the resume via
+    /// its side effects rather than the response body.
     /// </summary>
-    public async Task<bool> SendHttpWakeAsync(string token, object? payload = null)
+    public async Task SendHttpWakeAsync(string token, object? payload = null)
     {
         var resp = await _http.PostAsJsonAsync(
             $"{E2EConfig.ManagementBaseUrl}/api/callbacks/wake/{Uri.EscapeDataString(token)}",
             payload ?? new { });
         resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<WakeDto>(JsonOptions)
-            ?? throw new InvalidOperationException("Wake returned empty response.");
-        return result.Matched;
     }
 
     /// <summary>
-    /// POSTs to Management's public (anonymous) webhook callback, which relays to the backend-only
-    /// engine with the shared api-key. Mirrors an external system firing a webhook trigger.
-    /// Returns the engine's outcome and the started run's RefId (when a run started).
+    /// POSTs to Management's public (anonymous) workspace-scoped webhook callback, which relays to
+    /// the backend-only engine with the shared api-key. Mirrors an external system firing a webhook
+    /// trigger. The callback is opaque (uniform 202), so callers observe the started run via the
+    /// runs API rather than the response body.
     /// </summary>
-    public async Task<(string Outcome, Guid? RunRefId)> SendWebhookAsync(string path, object? payload = null)
+    public async Task SendWebhookAsync(Guid workspaceRef, string path, object? payload = null)
     {
         var resp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.ManagementBaseUrl}/api/callbacks/webhook/{Uri.EscapeDataString(path)}",
+            $"{E2EConfig.ManagementBaseUrl}/api/callbacks/webhook/{workspaceRef}/{Uri.EscapeDataString(path)}",
             payload ?? new { });
         resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<WebhookDto>(JsonOptions)
-            ?? throw new InvalidOperationException("Webhook returned empty response.");
-        return (result.Outcome, result.RunId);
     }
 
     /// <summary>Sends a named signal to a parked run via the workspace-scoped management endpoint.</summary>
@@ -533,13 +528,11 @@ public sealed class ServicesFixture : IDisposable
     // ─────────────────────────────────────────────────────────────────────────
 
     private record LoginDto(string AccessToken, string RefreshToken);
-    private record WebhookDto(string Outcome, Guid? RunId);
     private record WorkspaceDto(Guid RefId, string Name, string? Description, DateTime CreatedAt);
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
     private record ClientLoginDto(string AccessToken, int ExpiresIn);
     private record SignalDto(bool Matched, string Outcome);
-    private record WakeDto(string Outcome, bool Matched);
     private record EventLogListDto(IReadOnlyList<EventLogItemDto> Items);
 }
 

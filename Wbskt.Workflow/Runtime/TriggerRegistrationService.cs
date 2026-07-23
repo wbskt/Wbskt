@@ -28,7 +28,7 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         _clock = clock;
     }
 
-    public async Task OnPublishedAsync(int workflowDefinitionId, CancellationToken ct)
+    public async Task OnPublishedAsync(int workflowDefinitionId, Guid workspaceRef, CancellationToken ct)
     {
         WorkflowDefinitionRow definitionRow = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
         WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(definitionRow.DefinitionJson, new JsonSerializerOptions(JsonSerializerDefaults.Web))
@@ -39,7 +39,9 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
             TriggerRegistrationRow? registration = node switch
             {
                 ClientTriggerNode clientTrigger => CreateRegistration(definitionRow, clientTrigger.NodeId, "client", $"client:{clientTrigger.Config.ClientRef}:{clientTrigger.Config.Type}", clientTrigger.Config.ConcurrencyPolicy.ToString(), clientTrigger.Config.CorrelationKey),
-                WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey),
+                // Webhook keys are workspace-scoped so an author-chosen path is unique per workspace
+                // and the anonymous public callback for one workspace can never fire another's trigger.
+                WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{workspaceRef}:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey),
                 ManualTriggerNode manualTrigger => CreateRegistration(definitionRow, manualTrigger.NodeId, "manual", $"manual:{definitionRow.RefId}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null),
                 ScheduleTriggerNode scheduleTrigger => await CreateScheduleRegistrationAsync(definitionRow, scheduleTrigger, ct),
                 _ => null

@@ -20,14 +20,16 @@ public sealed class InboundWebhookControllerTests
             .ReturnsAsync(new RunRow { Id = 42, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
         var controller = new InboundWebhookController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
+        var workspaceRef = Guid.Parse("99999999-9999-9999-9999-999999999999");
 
-        await controller.Post("alerts", payload, CancellationToken.None);
+        await controller.Post(workspaceRef, "alerts", payload, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e =>
                 e.ChannelKind == "webhook"
-                && e.MatchKeys.Contains("webhook:alerts")
-                && e.InboundEventId.StartsWith("webhook:alerts:", StringComparison.Ordinal)
+                && e.MatchKeys.Contains($"webhook:{workspaceRef}:alerts")
+                && e.InboundEventId.StartsWith($"webhook:{workspaceRef}:alerts:", StringComparison.Ordinal)
+                && e.Payload["workspaceRefId"].GetString() == workspaceRef.ToString()
                 && e.Payload["body"].GetProperty("value").GetInt32() == 1),
             CancellationToken.None), Times.Once);
     }
@@ -45,7 +47,7 @@ public sealed class InboundWebhookControllerTests
         var controller = new InboundWebhookController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        InboundWebhookResponse response = await controller.Post("alerts", payload, CancellationToken.None);
+        InboundWebhookResponse response = await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
 
         Assert.Equal("StartedRun", response.Outcome);
         Assert.Equal(testRef, response.RunId);

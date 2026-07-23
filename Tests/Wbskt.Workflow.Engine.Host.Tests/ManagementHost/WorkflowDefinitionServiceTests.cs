@@ -36,12 +36,12 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 11 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         Assert.Equal(1, response.Value.Version);
         Assert.Equal("Published", response.Value.Status);
-        triggerService.Verify(x => x.OnPublishedAsync(11, It.IsAny<CancellationToken>()), Times.Once);
+        triggerService.Verify(x => x.OnPublishedAsync(11, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         cache.Verify(x => x.Invalidate(11), Times.Once);
     }
@@ -62,7 +62,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { inserted = row; return row with { Id = 21 }; });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        await service.PublishAsync(42, request, CancellationToken.None);
+        await service.PublishAsync(42, Guid.NewGuid(), request, CancellationToken.None);
 
         Assert.NotNull(inserted);
         Assert.Equal(42, inserted!.WorkspaceId);
@@ -83,13 +83,13 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         Assert.Equal(2, response.Value.Version);
         workflowProvider.Verify(x => x.DeprecateAsync(5, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnDeprecatedAsync(5, It.IsAny<CancellationToken>()), Times.Once);
-        triggerService.Verify(x => x.OnPublishedAsync(6, It.IsAny<CancellationToken>()), Times.Once);
+        triggerService.Verify(x => x.OnPublishedAsync(6, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
         cache.Verify(x => x.Invalidate(5), Times.Once);
         cache.Verify(x => x.Invalidate(6), Times.Once);
     }
@@ -107,7 +107,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var response = await service.PublishAsync(WorkspaceId + 99, request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId + 99, Guid.NewGuid(), request, CancellationToken.None);
         
         Assert.True(response.IsFailure);
         Assert.Equal(ErrorType.Unauthorized, response.Error.Type);
@@ -212,10 +212,10 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 17 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
-        triggerService.Verify(x => x.OnPublishedAsync(17, It.IsAny<CancellationToken>()), Times.Once);
+        triggerService.Verify(x => x.OnPublishedAsync(17, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
         cache.Verify(x => x.Invalidate(17), Times.Once);
     }
 
@@ -230,7 +230,7 @@ public sealed class WorkflowDefinitionServiceTests
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, null!);
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
-        var response = await service.PublishAsync(WorkspaceId, request, CancellationToken.None);
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
         
         Assert.True(response.IsFailure);
         Assert.Equal(ErrorType.Validation, response.Error.Type);

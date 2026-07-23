@@ -42,20 +42,22 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
         // Give the client time to connect
         await Task.Delay(500);
 
-        // Fire the webhook via Management's public callback (retry in case registration is delayed).
-        (string Outcome, Guid? RunRefId) webhookResp = default;
-
-        await ServicesFixture.PollAsync(async () =>
+        // Fire the workspace-scoped webhook via Management's public callback. The callback is opaque
+        // (202), so we retry firing until a run appears (registration may be momentarily delayed) and
+        // observe the started run via the runs API rather than the response body.
+        Guid runRefId = Guid.Empty;
+        var runStarted = await ServicesFixture.PollAsync(async () =>
         {
-            webhookResp = await fixture.SendWebhookAsync(path, new { test = "payload" });
-            return webhookResp.Outcome == "StartedRun";
-        }, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1));
+            await fixture.SendWebhookAsync(workspaceRef, path, new { test = "payload" });
+            var runs = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);
+            if (runs.Count > 0) { runRefId = runs[0].RefId; return true; }
+            return false;
+        }, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(1));
 
         // 4. Assert the run succeeds
-        webhookResp.Outcome.Should().Be("StartedRun");
-        webhookResp.RunRefId.Should().NotBeNull();
+        runStarted.Should().BeTrue("the webhook callback should have started a run");
 
-        var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, webhookResp.RunRefId!.Value, TimeSpan.FromSeconds(30));
+        var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
         summary.Should().NotBeNull();
         summary!.Status.Should().Be("Succeeded");
     }

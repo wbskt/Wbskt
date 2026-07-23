@@ -28,9 +28,16 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : AwaitInboundNodeEx
         WaitForHttpConfig config = node.Config
             ?? throw new InvalidOperationException($"WaitForHttp node {node.NodeId} is missing config.");
 
-        // The author may pin the token at design time (config.Token) so the callback URL is known up
-        // front; otherwise default to the run's RefId so the wake is scoped per-run automatically.
-        string token = string.IsNullOrWhiteSpace(config.Token) ? ctx.Branch.RunRefId.ToString() : config.Token;
+        // The token is a required author-defined secret: it is the only thing gating the public wake
+        // callback, so there is no fallback to the run's RefId (which is not secret - it appears in
+        // run-list APIs and logs). WorkflowValidator rejects a WaitForHttp node without a strong token
+        // at publish time; this guard defends against a definition that bypassed validation.
+        if (string.IsNullOrWhiteSpace(config.Token))
+        {
+            throw new InvalidOperationException($"WaitForHttp node {node.NodeId} requires a 'token'.");
+        }
+
+        string token = config.Token;
         var condition = new HttpWakeCondition(token)
         {
             Ttl = config.Ttl,

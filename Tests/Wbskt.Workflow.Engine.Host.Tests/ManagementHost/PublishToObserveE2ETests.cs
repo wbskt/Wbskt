@@ -29,8 +29,8 @@ public sealed class PublishToObserveE2ETests
         var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
-        var v1 = await service.PublishAsync(1, request, CancellationToken.None);
-        var v2 = await service.PublishAsync(1, request, CancellationToken.None);
+        var v1 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
+        var v2 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
         var deprecateResult = await service.DeprecateAsync(1, request.RefId, CancellationToken.None);
 
         Assert.True(v1.IsSuccess);
@@ -52,8 +52,8 @@ public sealed class PublishToObserveE2ETests
         var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
-        var first = await service.PublishAsync(1, request, CancellationToken.None);
-        var second = await service.PublishAsync(1, request, CancellationToken.None);
+        var first = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
+        var second = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
         var current = await service.GetCurrentAsync(1, request.RefId, CancellationToken.None);
 
         Assert.True(first.IsSuccess);
@@ -142,7 +142,7 @@ public sealed class PublishToObserveE2ETests
         public List<int> PublishedWorkflowDefinitionIds { get; } = [];
         public List<int> DeprecatedWorkflowDefinitionIds { get; } = [];
 
-        public Task OnPublishedAsync(int workflowDefinitionId, CancellationToken ct)
+        public Task OnPublishedAsync(int workflowDefinitionId, Guid workspaceRef, CancellationToken ct)
         {
             PublishedWorkflowDefinitionIds.Add(workflowDefinitionId);
             return Task.CompletedTask;

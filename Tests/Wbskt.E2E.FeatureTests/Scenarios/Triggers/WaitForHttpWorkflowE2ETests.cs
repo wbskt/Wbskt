@@ -15,9 +15,9 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// Topology:
 ///   DeviceTrigger (event="telemetry") ─► WaitForHttp(ttl=15m) ─► action:clientMessage (OpenVent)
 ///
-/// Telemetry starts the run, which parks on an http-wake bookmark keyed "http-wake:{runRefId}".
-/// The command must NOT fire yet. An external caller POSTs /api/inbound/wake/{runRefId}, which the
-/// engine maps to the same key, resumes the branch, and sends the command.
+/// Telemetry starts the run, which parks on an http-wake bookmark keyed to the author-defined wake
+/// token. The command must NOT fire yet. An external caller POSTs the public wake callback with that
+/// token, which the engine maps to the same key, resumes the branch, and sends the command.
 /// </summary>
 [Collection(E2ECollection.Name)]
 public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
@@ -56,14 +56,12 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
 
         await wbsktClient.SendAsync("telemetry", new { sensor = "http-test", value = 1 });
 
-        // Wait until the run exists (parked at WaitForHttp); the run RefId is the wake token.
-        Guid runRefId = Guid.Empty;
+        // Wait until the run exists (parked at WaitForHttp on the author-defined wake token).
         var runAppeared = await ServicesFixture.PollAsync(
             async () =>
             {
                 var runs = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);
-                if (runs.Count > 0) { runRefId = runs[0].RefId; return true; }
-                return false;
+                return runs.Count > 0;
             },
             timeout: TimeSpan.FromSeconds(30), interval: TimeSpan.FromSeconds(1));
         runAppeared.Should().BeTrue("telemetry should have started a run that parks on the http-wait");
@@ -72,9 +70,9 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
         var leaked = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
         leaked.Should().NotBe(commandTcs.Task, "the command must not fire before the http-wake callback");
 
-        // External callback resumes the parked branch, using the design-time wake token.
-        bool matched = await fixture.SendHttpWakeAsync(wakeToken, new { approved = true });
-        matched.Should().BeTrue("the wake callback should resume the parked http bookmark");
+        // External callback resumes the parked branch, using the design-time wake token. The callback
+        // is opaque (202), so the resume is observed via the command firing below, not the response.
+        await fixture.SendHttpWakeAsync(wakeToken, new { approved = true });
 
         var resumed = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(30)));
         resumed.Should().Be(commandTcs.Task, "the resumed branch must send the command");

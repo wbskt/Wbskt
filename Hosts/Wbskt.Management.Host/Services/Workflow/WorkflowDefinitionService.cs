@@ -38,7 +38,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         _logger = logger;
     }
 
-    public async Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, WorkflowPublishRequest request, CancellationToken ct)
+    public async Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
     {
         _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}", request.Name, request.RefId, workspaceId);
 
@@ -93,7 +93,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 _cache.Invalidate(existing.Id);
             }
 
-            await _triggerRegistrationService.OnPublishedAsync(inserted.Id, ct);
+            await _triggerRegistrationService.OnPublishedAsync(inserted.Id, workspaceRef, ct);
             _cache.Invalidate(inserted.Id);
 
             _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, nextVersion);

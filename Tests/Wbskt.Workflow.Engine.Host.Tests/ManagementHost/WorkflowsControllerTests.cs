@@ -32,7 +32,7 @@ public sealed class WorkflowsControllerTests
         var authClient = AuthClientFor(Permissions.WorkflowsCreate);
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!);
         var expected = new WorkflowPublishResponse(request.RefId, 1, "Published");
-        service.Setup(x => x.PublishAsync(WorkspaceId, request, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowPublishResponse>.Success(expected));
+        service.Setup(x => x.PublishAsync(WorkspaceId, WorkspaceRef, request, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowPublishResponse>.Success(expected));
         var controller = new WorkflowsController(service.Object, engineClient.Object, authClient.Object, Mock.Of<ILogger<WorkflowsController>>());
 
         var actual = await controller.Publish(WorkspaceRef, request, CancellationToken.None);
@@ -40,7 +40,7 @@ public sealed class WorkflowsControllerTests
         var okResult = Assert.IsType<OkObjectResult>(actual.Result);
         Assert.Equal(expected, okResult.Value);
         authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsCreate, It.IsAny<CancellationToken>()), Times.Once);
-        service.Verify(x => x.PublishAsync(WorkspaceId, request, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(x => x.PublishAsync(WorkspaceId, WorkspaceRef, request, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

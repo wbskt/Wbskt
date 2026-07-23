@@ -55,14 +55,14 @@ public sealed class PublicCallbackController : ControllerBase
         }
     }
 
-    [HttpPost("api/callbacks/webhook/{path}")]
-    public async Task<IActionResult> Webhook(string path, [FromBody] JsonElement payload, CancellationToken ct)
+    [HttpPost("api/callbacks/webhook/{workspaceRef:guid}/{path}")]
+    public async Task<IActionResult> Webhook(Guid workspaceRef, string path, [FromBody] JsonElement payload, CancellationToken ct)
     {
         _logger.LogInformation("API: Public webhook callback received.");
 
         try
         {
-            WebhookResponse response = await _engineClient.WebhookAsync(path, payload, ct);
+            WebhookResponse response = await _engineClient.WebhookAsync(workspaceRef, path, payload, ct);
             // Outcome/RunId logged for operators only; the anonymous caller gets an opaque 202 so the
             // response reveals nothing about whether the path matched a registered trigger.
             _logger.LogInformation("Public webhook callback outcome {Outcome} (runId={RunId}).", response.Outcome, response.RunId);

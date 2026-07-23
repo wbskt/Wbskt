@@ -12,6 +12,8 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
 public sealed class TriggerRegistrationServiceTests
 {
+    private static readonly Guid WorkspaceRef = Guid.Parse("99999999-9999-9999-9999-999999999999");
+
     [Fact]
     public async Task OnPublished_inserts_one_registration_per_trigger_node()
     {
@@ -21,12 +23,12 @@ public sealed class TriggerRegistrationServiceTests
         var service = new TriggerRegistrationService(workflowDefinitionProvider, triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
 
         // Act
-        await service.OnPublishedAsync(42, CancellationToken.None);
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 
         // Assert
         Assert.Equal(4, triggerRegistrationProvider.Rows.Count);
         Assert.Contains(triggerRegistrationProvider.Rows, row => row.TriggerKind == "client" && row.TriggerKey == "client:client-serial-1:telemetry");
-        Assert.Contains(triggerRegistrationProvider.Rows, row => row.TriggerKind == "webhook" && row.TriggerKey == "webhook:/hooks/intake");
+        Assert.Contains(triggerRegistrationProvider.Rows, row => row.TriggerKind == "webhook" && row.TriggerKey == $"webhook:{WorkspaceRef}:/hooks/intake");
         Assert.Contains(triggerRegistrationProvider.Rows, row => row.TriggerKind == "manual" && row.TriggerKey == "manual:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         Assert.Contains(triggerRegistrationProvider.Rows, row => row.TriggerKind == "schedule" && row.TriggerKey == "schedule:1");
     }
@@ -39,7 +41,7 @@ public sealed class TriggerRegistrationServiceTests
         var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, new FixedClock());
 
         // Act
-        await service.OnPublishedAsync(42, CancellationToken.None);
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 
         // Assert
         Assert.Single(scheduledFireProvider.InsertCalls);
@@ -62,7 +64,7 @@ public sealed class TriggerRegistrationServiceTests
         var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, new FixedClock());
 
         // Act
-        await service.OnPublishedAsync(42, CancellationToken.None);
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 
         // Assert
         Assert.Single(scheduledFireProvider.InsertCalls);

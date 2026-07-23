@@ -63,12 +63,13 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new WakeResponse(engineResponse?.Matched ?? false, engineResponse?.Outcome ?? string.Empty);
     }
 
-    public async Task<WebhookResponse> WebhookAsync(string path, JsonElement payload, CancellationToken ct)
+    public async Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, CancellationToken ct)
     {
         // Same relay shape as WakeAsync: the engine's /api/inbound/webhook is backend-only and
         // api-key gated (WorkflowEngineApiKeyHandler adds the key), so this fronts an external
-        // webhook publicly without exposing the engine. The path segment is caller-supplied; escape it.
-        var response = await _httpClient.PostAsJsonAsync($"api/inbound/webhook/{Uri.EscapeDataString(path)}", payload, SerializerOptions, ct);
+        // webhook publicly without exposing the engine. The webhook is workspace-scoped so a path is
+        // unique per workspace; the caller-supplied path segment is escaped.
+        var response = await _httpClient.PostAsJsonAsync($"api/inbound/webhook/{workspaceRef}/{Uri.EscapeDataString(path)}", payload, SerializerOptions, ct);
         response.EnsureSuccessStatusCode();
 
         EngineWebhookResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineWebhookResponse>(SerializerOptions, ct);

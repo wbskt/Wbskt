@@ -11,7 +11,7 @@ internal sealed class CorrelationKeyResolver : ICorrelationKeyResolver
         {
             "client" => $"client:{GetRequiredString(evt, "clientRefId")}:{GetRequiredString(evt, "messageType")}",
             "schedule" => $"schedule:{GetRequiredString(evt, "scheduledFireId")}",
-            "webhook" => $"webhook:{GetRequiredString(evt, "webhookPath")}",
+            "webhook" => $"webhook:{GetRequiredString(evt, "workspaceRefId")}:{GetRequiredString(evt, "webhookPath")}",
             "manual" => $"manual:{GetRequiredString(evt, "workflowDefinitionRefId")}",
             "signal" => $"signal:{GetRequiredString(evt, "signalName")}:{GetRequiredString(evt, "scopeRunRefId")}",
             "child-completed" => $"child-completed:{GetRequiredString(evt, "childRunRefId")}",
