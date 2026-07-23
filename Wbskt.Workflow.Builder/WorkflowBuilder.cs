@@ -17,6 +17,7 @@ public sealed class WorkflowBuilder
     private readonly List<Edge> _edges = [];
     private (Guid NodeId, string PortId)? _head;
     private bool _runCompensationOnFailure;
+    private decimal? _creditBudget;
 
     public WorkflowBuilder(string name, Guid? workflowRefId = null)
     {
@@ -29,6 +30,13 @@ public sealed class WorkflowBuilder
     public WorkflowBuilder EnableCompensationOnFailure(bool enable = true)
     {
         _runCompensationOnFailure = enable;
+        return this;
+    }
+
+    /// <summary>Caps the compute a single run of this workflow may consume before it goes OutOfCredits.</summary>
+    public WorkflowBuilder WithCreditBudget(decimal creditBudget)
+    {
+        _creditBudget = creditBudget;
         return this;
     }
 
@@ -46,7 +54,8 @@ public sealed class WorkflowBuilder
             SharedVariableSchema: [],
             CreatedAt: DateTime.UtcNow,
             PublishedBy: 1,
-            RunCompensationOnFailure: _runCompensationOnFailure);
+            RunCompensationOnFailure: _runCompensationOnFailure,
+            CreditBudget: _creditBudget);
     }
 
     public WorkflowBuilder SetHead(Guid nodeId, string portId)

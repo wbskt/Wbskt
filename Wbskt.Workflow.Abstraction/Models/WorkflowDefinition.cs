@@ -17,5 +17,9 @@ public sealed record WorkflowDefinition(
     [property: JsonPropertyName("createdAt")] DateTime CreatedAt,
     [property: JsonIgnore] int PublishedBy, // will be 0 by default and be replaced in the service
     [property: JsonPropertyName("runCompensationOnFailure")] bool RunCompensationOnFailure = false,
-    [property: JsonPropertyName("failFast")] bool FailFast = false
+    [property: JsonPropertyName("failFast")] bool FailFast = false,
+    // Optional per-run credit budget. When null (or non-positive) the engine falls back to
+    // WorkflowEngine:DefaultCreditBudgetPerRun. Lets an author cap the compute a single run may
+    // consume (e.g. to bound an accidental infinite loop).
+    [property: JsonPropertyName("creditBudget")] decimal? CreditBudget = null
 );

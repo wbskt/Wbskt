@@ -31,9 +31,12 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
         var workflowRefId = Guid.NewGuid();
         var deviceRefStr = clientRefId.ToString();
         var builder = new WorkflowBuilder($"E2E-CreditBudget-{workflowRefId:N}", workflowRefId)
+            // A small per-run budget so the infinite loop exhausts credits in a handful of node
+            // executions - deterministic and fast, rather than burning the 10k default for minutes.
+            .WithCreditBudget(25)
             .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
-        builder.AddLogicGate("true", logic => 
+        builder.AddLogicGate("true", logic =>
         {
             // Loop the "true" port right back to the LogicGate!
             builder.Connect(logic.GateId, PortNames.True, logic.GateId, PortNames.In);

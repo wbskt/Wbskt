@@ -58,6 +58,7 @@ internal sealed class RunStarter : IRunStarter
         {
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
             _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind);
+            decimal creditBudget = ResolveCreditBudget(definition.DefinitionJson);
             DateTime nowUtc = _clock.UtcNow;
         string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent); // [RJ]: we actually will always have c-key in the trigger event at this point. don't need to use resolver.
 
@@ -75,7 +76,7 @@ internal sealed class RunStarter : IRunStarter
             CompletedAt = null,
             CancellationRequestedAt = null,
             CancellationReason = null,
-            CreditBudget = _defaultCreditBudgetPerRun,
+            CreditBudget = creditBudget,
             CreatedAt = nowUtc
         }, ct);
 
@@ -137,5 +138,28 @@ internal sealed class RunStarter : IRunStarter
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;
         }
+    }
+
+    // Reads the optional per-workflow "creditBudget" from the definition JSON (a cheap property peek,
+    // not a full node deserialize), falling back to the configured default when unset or non-positive.
+    private decimal ResolveCreditBudget(string definitionJson)
+    {
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(definitionJson);
+            if (doc.RootElement.TryGetProperty("creditBudget", out JsonElement creditBudget)
+                && creditBudget.ValueKind == JsonValueKind.Number
+                && creditBudget.TryGetDecimal(out decimal budget)
+                && budget > 0)
+            {
+                return budget;
+            }
+        }
+        catch (JsonException)
+        {
+            // A malformed definition would already fail the branch loop; fall back to the default here.
+        }
+
+        return _defaultCreditBudgetPerRun;
     }
 }
