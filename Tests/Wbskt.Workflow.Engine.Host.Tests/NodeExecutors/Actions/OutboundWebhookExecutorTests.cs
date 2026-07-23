@@ -4,11 +4,40 @@ using Moq;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.NodeExecutors.Actions;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.NodeExecutors.Actions;
 
 public sealed class OutboundWebhookExecutorTests
 {
+    [Fact]
+    public async Task Returns_fail_non_retryable_when_address_guard_blocks_target()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var executor = CreateExecutor(handler, new StubAddressGuard(OutboundAddressDecision.Block("blocked (10.0.0.5)")));
+
+        NodeExecutionResult result = await executor.ExecuteAsync(BuildContext("http://10.0.0.5/webhook", "POST"), CancellationToken.None);
+
+        var failure = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal("WEBHOOK_BLOCKED_TARGET", failure.ErrorCode);
+        Assert.False(failure.Retryable);
+        Assert.Null(handler.LastRequestUri); // guard runs before any request is sent
+    }
+
+    [Fact]
+    public async Task Returns_fail_non_retryable_on_invalid_url()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var executor = CreateExecutor(handler);
+
+        NodeExecutionResult result = await executor.ExecuteAsync(BuildContext("not-a-url", "POST"), CancellationToken.None);
+
+        var failure = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal("WEBHOOK_INVALID_URL", failure.ErrorCode);
+        Assert.False(failure.Retryable);
+        Assert.Null(handler.LastRequestUri);
+    }
+
     [Fact]
     public async Task Posts_to_configured_url_with_body()
     {
@@ -93,12 +122,17 @@ public sealed class OutboundWebhookExecutorTests
         Assert.IsType<HttpRequestException>(failure.Cause);
     }
 
-    private static WebhookNodeExecutor CreateExecutor(FakeHttpMessageHandler handler)
+    private static WebhookNodeExecutor CreateExecutor(FakeHttpMessageHandler handler, IOutboundAddressGuard? guard = null)
     {
         var client = new HttpClient(handler);
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient("workflow-webhook")).Returns(client);
-        return new WebhookNodeExecutor(factory.Object);
+        return new WebhookNodeExecutor(factory.Object, guard ?? new StubAddressGuard(OutboundAddressDecision.Allow()));
+    }
+
+    private sealed class StubAddressGuard(OutboundAddressDecision decision) : IOutboundAddressGuard
+    {
+        public ValueTask<OutboundAddressDecision> EvaluateAsync(Uri uri, CancellationToken ct) => ValueTask.FromResult(decision);
     }
 
     private static NodeContext BuildContext(string url, string method, JsonElement? body = null)

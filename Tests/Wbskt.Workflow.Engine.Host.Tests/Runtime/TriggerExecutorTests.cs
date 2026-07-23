@@ -12,31 +12,18 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
 public sealed class TriggerExecutorTests
 {
-    [Fact]
-    public async Task Client_trigger_returns_default_port_and_trigger_patch()
+    // PassthroughTriggerExecutor is kind-agnostic: it records the trigger payload and continues via
+    // "default" regardless of which trigger kind it serves. One Theory covers every kind it is
+    // registered for.
+    [Theory]
+    [InlineData(NodeKind.TriggerClient)]
+    [InlineData(NodeKind.TriggerSchedule)]
+    [InlineData(NodeKind.TriggerWebhook)]
+    [InlineData(NodeKind.TriggerManual)]
+    public async Task Passthrough_trigger_returns_default_port_and_trigger_patch(string kind)
     {
-        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerClient, new FixedClock()).ExecuteAsync(CreateContext(new ClientTriggerNode { NodeId = Guid.NewGuid(), Name = "client", Ports = CreatePorts(), Config = new ClientTriggerConfig { ClientRef = "client-1", Type = "telemetry" } }), CancellationToken.None);
-        AssertContinueResult(result);
-    }
-
-    [Fact]
-    public async Task Schedule_trigger_returns_default_port_and_trigger_patch()
-    {
-        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerSchedule, new FixedClock()).ExecuteAsync(CreateContext(new ScheduleTriggerNode { NodeId = Guid.NewGuid(), Name = "schedule", Ports = CreatePorts(), Config = new ScheduleTriggerConfig { Cron = "* * * * *" } }), CancellationToken.None);
-        AssertContinueResult(result);
-    }
-
-    [Fact]
-    public async Task Webhook_trigger_returns_default_port_and_trigger_patch()
-    {
-        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerWebhook, new FixedClock()).ExecuteAsync(CreateContext(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "webhook", Ports = CreatePorts(), Config = new WebhookTriggerConfig { Path = "/hook", Method = "POST" } }), CancellationToken.None);
-        AssertContinueResult(result);
-    }
-
-    [Fact]
-    public async Task Manual_trigger_returns_default_port_and_trigger_patch()
-    {
-        NodeExecutionResult result = await new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock()).ExecuteAsync(CreateContext(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "manual", Ports = CreatePorts(), Config = new ManualTriggerConfig { Description = "start" } }), CancellationToken.None);
+        var node = new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "trigger", Ports = CreatePorts(), Config = new ManualTriggerConfig() };
+        NodeExecutionResult result = await new PassthroughTriggerExecutor(kind, new FixedClock()).ExecuteAsync(CreateContext(node), CancellationToken.None);
         AssertContinueResult(result);
     }
 

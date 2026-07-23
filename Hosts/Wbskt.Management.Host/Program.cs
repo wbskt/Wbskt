@@ -1,8 +1,11 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Serialization.Metadata;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -14,6 +17,7 @@ using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
 using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Providers;
@@ -140,7 +144,29 @@ public static class Program
             };
         });
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            // Default-deny: every endpoint requires an authenticated user unless it explicitly opts
+            // out with [AllowAnonymous] (health checks, client login/registration, and the public
+            // workflow callbacks). This makes the anonymous surface an explicit, auditable choice
+            // rather than the default that any [Authorize]-less controller silently inherits.
+            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+        });
+
+        // Per-IP throttle for the anonymous public callback edge (see PublicCallbackController).
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy(PublicCallbackPolicy.RateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = PublicCallbackPolicy.PermitsPerWindow,
+                        Window = TimeSpan.FromSeconds(PublicCallbackPolicy.RateLimitWindowSeconds),
+                        QueueLimit = 0
+                    }));
+        });
 
         builder.Services.AddCors(options =>
         {
@@ -200,9 +226,14 @@ public static class Program
 
         app.UseCors("AllowAll");
 
+        // Reject anonymous callback floods before they reach auth or the engine relay. Placed after
+        // UseForwardedHeaders so the partition key is the real client IP behind Traefik.
+        app.UseRateLimiter();
+
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi();
+            // Dev-only API docs are exempt from the default-deny fallback policy.
+            app.MapOpenApi().AllowAnonymous();
 
             app.MapCustomScalarApiReference();
         }

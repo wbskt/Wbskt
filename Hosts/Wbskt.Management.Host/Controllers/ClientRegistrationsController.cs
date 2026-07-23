@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
@@ -5,8 +6,11 @@ using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Controllers;
 
+// Pre-auth device flow (registration happens before a client has credentials), so this is
+// deliberately anonymous.
 [Route("api/client-registrations")]
 [ApiController]
+[AllowAnonymous]
 [ApiExplorerSettings(IgnoreApi = true)]
 public class ClientRegistrationsController : ControllerBase
 {

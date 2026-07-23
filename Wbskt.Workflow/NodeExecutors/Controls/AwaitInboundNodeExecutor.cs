@@ -18,8 +18,8 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 internal abstract class AwaitInboundNodeExecutor : INodeExecutor
 {
     // Reserved key the resumer writes the inbound payload under; shared across all await executors.
-    protected const string WakeKey = "__wake";
-    protected const string DefaultPort = "default";
+    private const string WakeKey = "__wake";
+    private const string DefaultPort = "default";
     protected const string DefaultTimeoutPort = "timeout"; // edges map the port to the target node
 
     protected AwaitInboundNodeExecutor(IClock clock)

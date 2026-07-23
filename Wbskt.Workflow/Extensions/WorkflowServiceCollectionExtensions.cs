@@ -84,6 +84,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         services.AddSingleton<ICorrelationKeyResolver, CorrelationKeyResolver>();
         services.AddSingleton<IExpressionEvaluator, ExpressionEvaluator>();
+        services.AddSingleton<IOutboundAddressGuard, OutboundAddressGuard>();
         // The client/schedule/webhook/manual triggers all just record the payload and continue via
         // "default", so a single PassthroughTriggerExecutor serves them - one instance per kind.
         services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClient, sp.GetRequiredService<IClock>()));

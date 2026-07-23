@@ -16,13 +16,11 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// </summary>
 internal sealed class WaitForHttpNodeExecutor(IClock clock) : AwaitInboundNodeExecutor(clock)
 {
-    internal const string WakePayloadStateKey = "wakePayload";
-
     public override string Kind => NodeKind.ControlWaitForHttp;
 
     protected override string ParkedKey => "__http_wait";
     protected override string DeadlineKey => "__http_deadline";
-    protected override string WakePayloadKey => WakePayloadStateKey;
+    protected override string WakePayloadKey => "wakePayload";
 
     protected override ParkPlan CreateParkPlan(NodeContext ctx)
     {

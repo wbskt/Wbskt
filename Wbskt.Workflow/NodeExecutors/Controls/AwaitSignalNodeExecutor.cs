@@ -14,13 +14,11 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// </summary>
 internal sealed class AwaitSignalNodeExecutor(IClock clock) : AwaitInboundNodeExecutor(clock)
 {
-    internal const string SignalPayloadKey = "signalPayload";
-
     public override string Kind => NodeKind.ControlAwaitSignal;
 
     protected override string ParkedKey => "__await_signal";
     protected override string DeadlineKey => "__await_signal_until";
-    protected override string WakePayloadKey => SignalPayloadKey;
+    protected override string WakePayloadKey => "signalPayload";
 
     protected override ParkPlan CreateParkPlan(NodeContext ctx)
     {

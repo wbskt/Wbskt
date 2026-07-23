@@ -39,6 +39,10 @@ public static class Program
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         builder.Services.AddHttpClient();
+        // Outbound WebhookNotification client: don't follow redirects, so a 3xx to an internal
+        // address can't sidestep the OutboundAddressGuard SSRF check on the original target.
+        builder.Services.AddHttpClient("workflow-webhook")
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration);
         // Re-registers ILeaseHolder (AddWorkflowEngine defaults to AlwaysHoldsLeaseHolder for
