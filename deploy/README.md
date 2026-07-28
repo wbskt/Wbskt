@@ -64,7 +64,7 @@ The backend deploy is a manual dispatch of the **Deploy** workflow with the tag 
 |---|---|
 | `tag` | `sha-abc1234` — also determines the commit the VM checkout is reset to |
 | `services` | blank for all four hosts, or e.g. `auth management` |
-| `run_migrations` | runs the *incremental* migrator first (never `MIGRATE_FRESH`) |
+| `skip_migrations` | leave unchecked. Migrations run by **default** — the incremental publish is idempotent, so skipping is what needs justifying |
 
 Rollback is just dispatching an older tag. Because the tag encodes the commit, the VM's
 `docker-compose.yml` and `config/` roll back with it.
@@ -161,17 +161,44 @@ docker compose pull console && docker compose up -d --no-build console
 ## Incremental deployment (already running, you've changed something)
 
 Normally: push to `master`, wait for **Build images**, then dispatch **Deploy** with that run's
-`sha-<short>` tag. Tick `run_migrations` if a DACPAC or SQL script changed — it's the incremental
-path, which is always safe to rerun.
+`sha-<short>` tag. Leave `skip_migrations` unchecked — the migrator runs by default, and the
+incremental path is a no-op when the schema already matches.
 
 The console needs nothing here — pushing to the Dashboard repo builds and deploys it on its own.
 
 To do the same by hand on the VM (equivalent, and what the workflows end up executing):
 
 ```bash
-deploy/scripts/deploy.sh --tag sha-abc1234 --services "auth management" --migrate
+deploy/scripts/deploy.sh --tag sha-abc1234 --services "auth management"
 deploy/scripts/deploy.sh --console-tag sha-def5678
 ```
+
+## Network changes
+
+`deploy.sh` will refuse to run — before stopping anything — if the `networks:` block in
+`docker-compose.yml` no longer matches the live Docker networks:
+
+```
+deploy: the network definitions changed, so Compose would tear the networks down and rebuild them.
+```
+
+This is not a bug to work around. Compose reconciles networks *before* containers, and changing a
+subnet, `ip_range`, or driver option forces a remove-and-recreate. That cannot happen while any
+container is still attached — and `--no-deps`, which is what stops a deploy from recycling
+Traefik/SQL/RabbitMQ, guarantees Traefik *is* still attached. Compose only discovers the conflict
+after it has stopped the hosts, so the failure mode is a stack that is down and unroutable, with
+the deploy aborted halfway.
+
+A network change therefore needs a maintenance window, not an incremental deploy:
+
+```bash
+docker compose down && docker compose up -d --no-build
+```
+
+`down` without `-v` keeps every named volume, so SQL data and the Let's Encrypt `acme.json` both
+survive. Note that Traefik pins itself to `x.x.x.2` on both networks, so the `ipam.config.ip_range`
+entries must keep the dynamic pool clear of those addresses — otherwise whichever container starts
+first takes `.2` and Traefik dies with `Address already in use`.
 
 `--console-tag` is a separate mode: it moves only `CONSOLE_IMAGE_TAG` and never touches the
 checkout, because the tag names a Dashboard commit that means nothing to this repo. It is also the
