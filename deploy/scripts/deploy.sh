@@ -40,23 +40,25 @@ TAG=""
 CONSOLE_TAG=""
 REF=""
 SERVICES=()
-RUN_MIGRATIONS=false
+SKIP_MIGRATIONS=false
 
 usage() {
     cat <<'EOF'
-usage: deploy.sh --tag <image-tag> [--services "<a b c>"] [--ref <git-ref>] [--migrate]
+usage: deploy.sh --tag <image-tag> [--services "<a b c>"] [--ref <git-ref>] [--skip-migrations]
        deploy.sh --console-tag <image-tag>
 
-  --tag          Backend image tag, e.g. sha-abc1234. Also selects the commit this checkout
-                 is reset to.
-  --services     Space-separated subset of: auth management socket engine.
-                 Defaults to all four.
-  --ref          Git ref to reset the checkout to. Defaults to the commit embedded in a
-                 sha-<commit> tag; required for any other tag shape.
-  --migrate      Run the incremental database migrator before starting the hosts.
+  --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
+                     checkout is reset to.
+  --services         Space-separated subset of: auth management socket engine.
+                     Defaults to all four.
+  --ref              Git ref to reset the checkout to. Defaults to the commit embedded in a
+                     sha-<commit> tag; required for any other tag shape.
+  --skip-migrations  Don't run the migrator. Migrations run by DEFAULT - the incremental
+                     publish is idempotent and refuses data loss, so skipping is the choice
+                     that needs justifying, not running.
 
-  --console-tag  Console image tag from the Dashboard repo. Deploys only the console and
-                 leaves this checkout alone. Not combinable with the options above.
+  --console-tag      Console image tag from the Dashboard repo. Deploys only the console and
+                     leaves this checkout alone. Not combinable with the options above.
 EOF
 }
 
@@ -74,7 +76,7 @@ parse_args() {
             --ref)         REF="${2:-}"; [[ -n "$REF" ]] || die "--ref needs a value"; shift 2 ;;
             --services)    [[ -n "${2:-}" ]] || die "--services needs a value"
                            read -r -a SERVICES <<< "$2"; shift 2 ;;
-            --migrate)     RUN_MIGRATIONS=true; shift ;;
+            --skip-migrations) SKIP_MIGRATIONS=true; shift ;;
             -h|--help)     usage; exit 0 ;;
             *)             usage >&2; die "unknown argument: $1" ;;
         esac
@@ -120,8 +122,8 @@ validate_backend() {
 }
 
 validate_console() {
-    if [[ -n "$TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$RUN_MIGRATIONS" == true ]]; then
-        die "--console-tag is its own mode; it cannot be combined with --tag/--ref/--services/--migrate"
+    if [[ -n "$TAG" || -n "$REF" || ${#SERVICES[@]} -gt 0 || "$SKIP_MIGRATIONS" == true ]]; then
+        die "--console-tag is its own mode; it cannot be combined with --tag/--ref/--services/--skip-migrations"
     fi
     validate_tag "$CONSOLE_TAG"
     require_env_file
@@ -158,6 +160,27 @@ set_env_var() {
         sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
     else
         printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+
+# Compose reconciles networks before containers. If a network's definition changed, it removes and
+# recreates it - which it CANNOT do while a container outside our --no-deps set (traefik) is still
+# attached. Compose discovers that only after it has already stopped the hosts, so the deploy dies
+# with the stack down and unroutable. Ask Compose what it intends to do before letting it start.
+#
+# Only Removing/Removed is fatal. A bare "Creating" is a first-ever bring-up, which is fine.
+assert_no_network_recreation() {
+    local plan
+    plan=$(docker compose --dry-run up -d --no-build --no-deps "${SERVICES[@]}" 2>&1 || true)
+    if grep -qE 'Network [^[:space:]]+ +(Removing|Removed)' <<< "$plan"; then
+        echo "--- what Compose planned to do ---" >&2
+        grep -E 'Network ' <<< "$plan" >&2
+        echo "----------------------------------" >&2
+        die "the network definitions changed, so Compose would tear the networks down and rebuild
+them. That cannot happen while Traefik is attached, and attempting it leaves the stack stopped
+and off the network. This needs a maintenance window, not an incremental deploy:
+    docker compose down && docker compose up -d --no-build
+See the 'Network changes' section of deploy/README.md."
     fi
 }
 
@@ -219,13 +242,20 @@ deploy_backend() {
 
     cd "$COMPOSE_DIR"
 
+    # Before anything is stopped or pulled: refuse deploys Compose cannot complete.
+    assert_no_network_recreation
+
     echo "==> pulling ${SERVICES[*]} at $TAG"
     docker compose pull "${SERVICES[@]}"
 
-    if [[ "$RUN_MIGRATIONS" == true ]]; then
-        # Incremental only. MIGRATE_FRESH and MIGRATE_ALLOW_DATA_LOSS are intentionally not
-        # reachable from here - both destroy data with no confirmation, so they stay a deliberate
-        # manual act on the box. See deploy/README.md.
+    if [[ "$SKIP_MIGRATIONS" == true ]]; then
+        echo "==> SKIPPING migrations (--skip-migrations)"
+    else
+        # Runs by default. sqlpackage's incremental publish is idempotent - a no-op when the
+        # schema already matches - so the cost of running it needlessly is seconds, while the cost
+        # of forgetting it is new code against an old schema. Opt-out beats opt-in here.
+        # MIGRATE_FRESH and MIGRATE_ALLOW_DATA_LOSS stay unreachable from this path: both destroy
+        # data with no confirmation, so they remain a deliberate manual act. See deploy/README.md.
         echo "==> running incremental database migration"
         docker compose --profile migrate pull migrator
         docker compose --profile migrate run --rm migrator

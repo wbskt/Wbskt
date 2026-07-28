@@ -17,8 +17,8 @@ on:
         description: Space-separated services to update; blank deploys all four hosts
         required: false
         default: ""
-      run_migrations:
-        description: Run the incremental database migrator before starting the hosts
+      skip_migrations:
+        description: "SKIP the database migrator (leave unchecked: migrations run by default)"
         type: boolean
         default: false
 
@@ -63,7 +63,7 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
           SERVICES: ${{ inputs.services }}
-          RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+          SKIP_MIGRATIONS: ${{ inputs.skip_migrations }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
@@ -72,9 +72,10 @@ jobs:
           if [[ -n "$SERVICES" ]]; then
             args+=(--services "$SERVICES")
           fi
-          if [[ "$RUN_MIGRATIONS" == "true" ]]; then
-            args+=(--migrate)
+          if [[ "$SKIP_MIGRATIONS" == "true" ]]; then
+            args+=(--skip-migrations)
           fi
+          echo "deploy.sh ${args[*]}"
           ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
             "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}"
