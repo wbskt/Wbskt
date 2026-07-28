@@ -3,14 +3,20 @@ name: wbskt
 networks:
   # Fixed subnets so auth/management can pin ForwardedHeadersOptions.KnownProxies to Traefik's
   # own address instead of trusting X-Forwarded-For/Proto from any container on the network.
+  # ip_range confines Docker's automatic allocation to the upper half of each subnet. Without it
+  # the allocator hands out .2 upward to whichever container starts first, and Traefik - which
+  # starts last, since everything else is a dependency - finds its pinned .2 already taken and
+  # dies with "Address already in use". Static pins must sit outside the dynamic pool.
   edge:
     ipam:
       config:
         - subnet: 172.28.0.0/24
+          ip_range: 172.28.0.128/25
   backend:
     ipam:
       config:
         - subnet: 172.28.1.0/24
+          ip_range: 172.28.1.128/25
 
 volumes:
   sql-data:
