@@ -71,8 +71,10 @@ services:
     restart: unless-stopped
 
   console:
-    build:
-      context: ../console
+    # No build: key - the console is an artifact of the Dashboard repo, which owns its Dockerfile
+    # and publishes this image itself. Deploy it with `deploy.sh --console-tag <tag>`, which moves
+    # CONSOLE_IMAGE_TAG independently of the backend's IMAGE_TAG.
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-console:${CONSOLE_IMAGE_TAG:-latest}
     container_name: wbskt-console
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
@@ -89,6 +91,10 @@ services:
       - traefik.http.services.console.loadbalancer.server.port=80
 
   auth:
+    # Backend services carry both image: and build:. On the VM, deploy/scripts/deploy.sh pulls the
+    # tag CI published and passes --no-build; locally, `docker compose build` still works and just
+    # tags the result under the same name.
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-auth:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
@@ -123,6 +129,7 @@ services:
       - traefik.http.services.auth.loadbalancer.server.port=8080
 
   management:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-management:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
@@ -169,6 +176,7 @@ services:
       - traefik.http.services.management.loadbalancer.sticky.cookie.httpOnly=true
 
   socket:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-socket:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
@@ -201,6 +209,7 @@ services:
       # to any client it doesn't hold, and WebSocket upgrade pins the TCP connection natively.
 
   engine:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-engine:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
@@ -288,6 +297,7 @@ services:
     restart: unless-stopped
 
   migrator:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-migrator:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.migrator

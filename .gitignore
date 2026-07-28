@@ -369,6 +369,9 @@ FodyWeavers.xsd
 *appsettings.Production.json
 .aider*
 .DS_Store
+
+# Real deployment secrets live here on the VM; only .env.example is tracked.
+deploy/compose/.env
 /.agents/mcp.json
 /.agents/mcp_config.json
 /class_metadata.json
