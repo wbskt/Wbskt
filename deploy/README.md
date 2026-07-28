@@ -183,17 +183,29 @@ set `MIGRATE_FRESH` or `MIGRATE_ALLOW_DATA_LOSS` — both destroy data with no c
 stay a deliberate manual act on the box.
 
 Under the hood it uses `--no-deps`, which stops Compose from also restarting things `auth` depends
-on that haven't changed.
-For a scaled tier (`socket`, `engine`), `docker compose up -d --scale socket=3 socket` recreates
-*all* replicas at once — plain Compose has no rolling-update primitive like Swarm/K8s, so there's
-brief downtime for that tier unless you script "bring up one new, remove one old, repeat"
-manually. Traefik's Docker provider watches for label changes on its own, so it only needs a
-restart if you changed Traefik's *own* static config (entrypoints, ACME settings, etc.), not for
-routine host redeploys.
+on that haven't changed. Redeploying a scaled tier recreates *all* its replicas at once — plain
+Compose has no rolling-update primitive like Swarm/K8s, so there's brief downtime for that tier
+unless you script "bring up one new, remove one old, repeat" manually. Traefik's Docker provider
+watches for label changes on its own, so it only needs a restart if you changed Traefik's *own*
+static config (entrypoints, ACME settings, etc.), not for routine host redeploys.
 
-Scale a tier with `docker compose up -d --scale socket=3` (Phase 1) or `--scale engine=2`
-(Phase 4, after the remediation prerequisite). Engine/RabbitMQ/Redis/SQL are backend-network-only
-and are never published by Traefik.
+## Scaling
+
+Replica counts are declared in `.env` (`SOCKET_REPLICAS`, `MANAGEMENT_REPLICAS`,
+`ENGINE_REPLICAS`), not passed as `--scale` on the command line:
+
+```bash
+SOCKET_REPLICAS=3    # Phase 1
+MANAGEMENT_REPLICAS=2 # Phase 3
+ENGINE_REPLICAS=1    # Phase 4 - needs the remediation prerequisite before going above 1
+```
+
+This is load-bearing, not a style preference. `docker compose up -d socket` converges to the
+count declared in the compose file, so a tier scaled with a one-off `--scale` flag silently drops
+back to a single replica the next time anything redeploys it. Declaring it in `.env` means the
+deploy script preserves the scale without needing to know about it.
+
+Engine/RabbitMQ/Redis/SQL are backend-network-only and are never published by Traefik.
 
 ## Database migrations
 
