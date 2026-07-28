@@ -164,6 +164,8 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    deploy:
+      replicas: ${MANAGEMENT_REPLICAS:-1}
     labels:
       - traefik.enable=true
       - traefik.http.routers.management.rule=Host(`api.${DOMAIN}`)
@@ -199,6 +201,11 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    # Declared rather than left to `--scale`, because `docker compose up -d socket` converges to
+    # whatever is declared here - a deploy that omitted --scale would silently drop a 3-replica
+    # tier back to 1.
+    deploy:
+      replicas: ${SOCKET_REPLICAS:-1}
     labels:
       - traefik.enable=true
       - traefik.http.routers.socket.rule=Host(`ws.${DOMAIN}`)
@@ -235,6 +242,9 @@ services:
         condition: service_healthy
     networks: [backend]
     restart: unless-stopped
+    # Keep at 1 until the engine remediation prerequisite lands (Docs\Workflow.Engine.V3.Remediation.Plan.md).
+    deploy:
+      replicas: ${ENGINE_REPLICAS:-1}
     labels:
       - traefik.enable=true
       - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`)
