@@ -77,7 +77,9 @@ On the VM:
 git clone https://github.com/wbskt/Wbskt.git ~/Wbskt
 cd ~/Wbskt/deploy/compose && cp .env.example .env    # then fill it in
 
-# Read-only registry access. Use a fine-grained PAT with read:packages and nothing else.
+# Read-only registry access. ghcr.io wants a *classic* PAT - fine-grained tokens have
+# historically not worked against the container registry - scoped to read:packages and nothing
+# else. Not needed at all if you make the packages public.
 echo "$GHCR_PAT" | docker login ghcr.io -u <github-user> --password-stdin
 ```
 
