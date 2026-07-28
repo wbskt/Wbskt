@@ -1,0 +1,106 @@
+name: Build images
+
+# Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
+# deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests build without
+# pushing, so a broken Dockerfile is caught before it reaches master.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      prefix: ${{ steps.v.outputs.prefix }}
+    steps:
+      # GHCR rejects uppercase in image names, and github.repository_owner preserves the case the
+      # org was registered with, so normalise rather than assuming it is already lowercase.
+      - id: v
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
+
+  hosts:
+    needs: meta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth
+            project: Hosts/Wbskt.Auth.Host/Wbskt.Auth.Host.csproj
+            dll: Wbskt.Auth.Host.dll
+          - service: management
+            project: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
+            dll: Wbskt.Management.Host.dll
+          - service: socket
+            project: Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj
+            dll: Wbskt.Socket.Host.dll
+          - service: engine
+            project: Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj
+            dll: Wbskt.Workflow.Engine.Host.dll
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          build-args: |
+            HOST_PROJECT=${{ matrix.project }}
+            HOST_DLL=${{ matrix.dll }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ needs.meta.outputs.prefix }}-${{ matrix.service }}:${{ needs.meta.outputs.tag }}
+            ${{ needs.meta.outputs.prefix }}-${{ matrix.service }}:latest
+          # Scoped per service so the four parallel jobs don't evict each other's cache.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  migrator:
+    needs: meta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.migrator
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ needs.meta.outputs.prefix }}-migrator:${{ needs.meta.outputs.tag }}
+            ${{ needs.meta.outputs.prefix }}-migrator:latest
+          cache-from: type=gha,scope=migrator
+          cache-to: type=gha,mode=max,scope=migrator

@@ -1,0 +1,80 @@
+name: Deploy
+
+# Push-based deploy: SSHes into the VM and runs deploy/scripts/deploy.sh there. Nothing inbound
+# listens on the VM, so there is no always-on control plane to defend - the SSH key is the only
+# credential, and it should be locked to a forced command (see deploy/README.md).
+#
+# Deliberately manual. Chain it off "Build images" with a workflow_run trigger if you later want
+# every master push to land on the VM automatically.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to deploy, e.g. sha-abc1234 (see the Build images run)
+        required: true
+      services:
+        description: Space-separated services to update; blank deploys all four hosts
+        required: false
+        default: ""
+      run_migrations:
+        description: Run the incremental database migrator before starting the hosts
+        type: boolean
+        default: false
+
+# Never let two deploys interleave on the same box; queue instead of cancelling, since cancelling
+# mid-deploy would leave a half-updated stack.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
+    environment: production
+    steps:
+      # Inputs and secrets are passed through env, never interpolated into the script body - a
+      # ${{ }} expansion inside `run:` is substituted as raw text and would let a crafted input
+      # string execute arbitrary commands on the runner.
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
+
+      - name: Validate inputs
+        env:
+          TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+        run: |
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::invalid tag '$TAG'" && exit 1
+          fi
+          if [[ -n "$SERVICES" && ! "$SERVICES" =~ ^[a-z][a-z\ ]*$ ]]; then
+            echo "::error::invalid services '$SERVICES'" && exit 1
+          fi
+
+      - name: Deploy
+        env:
+          TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+          RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          args=(--tag "$TAG")
+          if [[ -n "$SERVICES" ]]; then
+            args+=(--services "$SERVICES")
+          fi
+          if [[ "$RUN_MIGRATIONS" == "true" ]]; then
+            args+=(--migrate)
+          fi
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}"
