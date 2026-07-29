@@ -218,6 +218,19 @@ wait_for_health() {
     done
 
     docker compose ps
+
+    # The reason is almost always in the container's own log - a missing environment variable, a
+    # failed connection, a crash loop. Printing it here turns "timed out waiting for: console"
+    # into an actionable failure instead of the start of a debugging session.
+    # Deduplicated: a scaled tier contributes one entry to $pending per unhealthy replica, and the
+    # logs are per service.
+    for svc in $(tr ' ' '\n' <<< "$pending" | sort -u); do
+        echo >&2
+        echo "--- last 20 log lines: $svc ---" >&2
+        docker compose logs --tail 20 "$svc" 2>&1 | tail -20 >&2
+    done
+    echo >&2
+
     die "timed out after ${HEALTH_TIMEOUT_SECONDS}s waiting for:$pending"
 }
 
