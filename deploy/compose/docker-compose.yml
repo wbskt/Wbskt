@@ -82,6 +82,14 @@ services:
     # CONSOLE_IMAGE_TAG independently of the backend's IMAGE_TAG.
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-console:${CONSOLE_IMAGE_TAG:-latest}
     container_name: wbskt-console
+    # The console image ships no URLs of its own; its entrypoint writes these into a config.json
+    # the Angular app fetches before bootstrapping. They are browser-facing, so they must be the
+    # public hostnames - not the internal service names the backend containers use to reach
+    # each other.
+    environment:
+      AUTH_URL: https://auth.${DOMAIN}
+      WORKSPACE_URL: https://api.${DOMAIN}
+      NOTIFICATIONS_URL: https://api.${DOMAIN}/hubs/notifications
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
       interval: 10s
