@@ -91,7 +91,12 @@ services:
       WORKSPACE_URL: https://api.${DOMAIN}
       NOTIFICATIONS_URL: https://api.${DOMAIN}/hubs/notifications
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      # 127.0.0.1, not localhost: the container's /etc/hosts maps localhost to both 127.0.0.1 and
+      # ::1, busybox wget tries ::1 first, and nginx only listens on IPv4 - so `localhost` fails
+      # even though the server is fine. That marks the container unhealthy, and Traefik silently
+      # drops unhealthy containers from its routing table, which surfaces as a 404 on the site
+      # and no certificate ever being requested.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
       interval: 10s
       timeout: 5s
       retries: 5
