@@ -12,7 +12,7 @@ namespace Wbskt.Auth.Host.Controllers;
 [Route("api/workspaces")]
 [ApiController]
 [Authorize]
-public class WorkspacesController : ControllerBase
+public class WorkspacesController : ApiControllerBase
 {
     private readonly IWorkspaceService _workspaceService;
     private readonly IReferenceMapper _workspaceMapper;
@@ -42,30 +42,29 @@ public class WorkspacesController : ControllerBase
     {
         _logger.LogInformation("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}'", request.WorkspaceRef);
 
+        var userIdResult = CurrentUserId();
+        if (userIdResult.IsFailure)
+        {
+            return MapError(userIdResult.Error);
+        }
+
         var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(request.WorkspaceRef, cancellationToken);
         if (workspaceId <= 0)
         {
             _logger.LogWarning("API: Resolve failed - Workspace with RefId: '{WorkspaceRef}' not found", request.WorkspaceRef);
-            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "not_found");
+            _metrics.RecordWorkspaceResolution("not_found");
             return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
         }
 
-        var result = await _workspaceService.ResolveAccessAsync(workspaceId, cancellationToken);
+        var result = await _workspaceService.ResolveAccessAsync(userIdResult.Value, workspaceId, cancellationToken);
         if (result.IsSuccess)
         {
             _logger.LogInformation("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId}, Permissions: {PermissionCount})", request.WorkspaceRef, workspaceId, result.Value.Count);
-            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "success");
+            _metrics.RecordWorkspaceResolution("success");
             return Ok(new ResolvedWorkspaceResponse(workspaceId, result.Value.ToArray()));
         }
-        
-        if (result.Error.Type == ErrorType.Unauthorized)
-        {
-            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "unauthorized");
-        }
-        else
-        {
-            _metrics.RecordWorkspaceResolution(request.WorkspaceRef.ToString(), "error");
-        }
+
+        _metrics.RecordWorkspaceResolution(result.Error.Type == ErrorType.Forbidden ? "forbidden" : "error");
 
         return MapError(result.Error);
     }
@@ -80,7 +79,7 @@ public class WorkspacesController : ControllerBase
     {
         _logger.LogInformation("API: GetWorkspaces requested");
         
-        var userIdResult = GetCurrentUserId();
+        var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
             return MapResult(Result.Failure(userIdResult.Error));
@@ -101,7 +100,7 @@ public class WorkspacesController : ControllerBase
     {
         _logger.LogInformation("API: CreateWorkspace requested (Name: '{WorkspaceName}')", request.Name);
         
-        var userIdResult = GetCurrentUserId();
+        var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
             return MapResult(Result.Failure(userIdResult.Error));
@@ -122,58 +121,25 @@ public class WorkspacesController : ControllerBase
     public async Task<IActionResult> AddMember(Guid workspaceRef, [FromBody] AddMemberRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: AddMember requested for WorkspaceRef: '{WorkspaceRef}', Member: '{MemberEmail}'", workspaceRef, request.Email);
-        
+
+        var userIdResult = CurrentUserId();
+        if (userIdResult.IsFailure)
+        {
+            return MapError(userIdResult.Error);
+        }
+
         var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(workspaceRef, cancellationToken);
         if (workspaceId <= 0)
         {
             _logger.LogWarning("API: AddMember failed - Workspace with RefId: '{WorkspaceRef}' not found", workspaceRef);
             return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
         }
-        
-        var result = await _workspaceService.AddUserToWorkspaceAsync(workspaceId, request, cancellationToken);
+
+        var result = await _workspaceService.AddUserToWorkspaceAsync(userIdResult.Value, workspaceId, request, cancellationToken);
         return MapResult(result);
     }
 
-    private Result<int> GetCurrentUserId()
-    {
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
-        {
-            return Result<int>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
-        }
-        return Result<int>.Success(userId);
-    }
 
-    private ActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

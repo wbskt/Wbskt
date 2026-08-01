@@ -12,7 +12,7 @@ namespace Wbskt.Management.Host.Controllers;
 [Route("api/workspaces/{workspaceRef:guid}/message-templates")]
 [ApiController]
 [Authorize]
-public sealed class MessageTemplatesController : ControllerBase
+public sealed class MessageTemplatesController : ApiControllerBase
 {
     private readonly IMessageTemplateService _templateService;
     private readonly IAuthServiceClient _authClient;
@@ -130,36 +130,6 @@ public sealed class MessageTemplatesController : ControllerBase
         return MapResult(result);
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

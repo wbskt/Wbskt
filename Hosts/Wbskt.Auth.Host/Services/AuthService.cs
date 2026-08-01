@@ -128,9 +128,27 @@ internal sealed class AuthService : IAuthService
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_TOKEN", "Invalid refresh token."));
             }
 
+            // A token we already retired is being presented again. The legitimate client moved on to
+            // its replacement, so whoever sent this either kept a copy or intercepted one. Treat the
+            // whole session family as compromised rather than just refusing this one request.
+            if (existingToken.Revoked is not null)
+            {
+                _logger.LogWarning("Token refresh failed: Replay of a revoked token for user ID {UserId}. Revoking all sessions. IP: {IpAddress}", existingToken.UserId, ipAddress);
+                await _provider.RevokeAllRefreshTokensForUserAsync(existingToken.UserId, ipAddress, cancellationToken);
+                _metrics.RecordRefresh("token_replayed");
+
+                await _eventBus.PublishAsync(new SecurityAlertEvent(
+                    "RefreshTokenReplay",
+                    $"A revoked refresh token was replayed for user ID {existingToken.UserId}; all sessions revoked.",
+                    ipAddress,
+                    $"UserId: {existingToken.UserId}"), cancellationToken);
+
+                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
+            }
+
             if (!existingToken.IsActive)
             {
-                _logger.LogWarning("Token refresh failed: Provided token for user ID {UserId} is inactive. IP: {IpAddress}", existingToken.UserId, ipAddress);
+                _logger.LogWarning("Token refresh failed: Provided token for user ID {UserId} has expired. IP: {IpAddress}", existingToken.UserId, ipAddress);
                 _metrics.RecordRefresh("token_inactive");
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
             }
@@ -161,6 +179,12 @@ internal sealed class AuthService : IAuthService
             var newRefreshToken = GenerateRefreshToken(user.Id);
 
             await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
+
+            // Retire the presented token now that its replacement exists. Without this the old token
+            // stays usable for its full lifetime, so a leaked one could be replayed indefinitely
+            // alongside the real session.
+            await _provider.RevokeRefreshTokenAsync(token, ipAddress, newRefreshToken.Token, cancellationToken);
+
             await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
             _logger.LogInformation("Token refreshed successfully for user: {Username}. IP: {IpAddress}", user.Username, ipAddress);
@@ -173,6 +197,82 @@ internal sealed class AuthService : IAuthService
             _logger.LogTrace(ex, "Token refresh exception stack trace");
             _metrics.RecordRefresh("error");
             return Result<LoginResponse>.Failure(Error.Failure("AUTH_REFRESH_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> LogoutAsync(string token, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Attempting logout from IP: {IpAddress}", ipAddress);
+
+        try
+        {
+            // Deliberately not reporting whether the token existed: logout is unauthenticated by
+            // necessity, and a distinguishable response would turn it into a token oracle.
+            var revoked = await _provider.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
+            _logger.LogInformation("Logout revoked {RevokedCount} refresh token(s). IP: {IpAddress}", revoked, ipAddress);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error during logout from IP: {IpAddress}. Error: {Message}", ipAddress, ex.Message);
+            _logger.LogTrace(ex, "Logout exception stack trace");
+            return Result.Failure(Error.Failure("AUTH_LOGOUT_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> LogoutAllAsync(int userId, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Attempting to revoke all sessions for user ID: {UserId} from IP: {IpAddress}", userId, ipAddress);
+
+        try
+        {
+            var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
+            _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error revoking sessions for user ID: {UserId}. Error: {Message}", userId, ex.Message);
+            _logger.LogTrace(ex, "LogoutAll exception stack trace for user {UserId}", userId);
+            return Result.Failure(Error.Failure("AUTH_LOGOUT_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> SetUserActiveAsync(int userId, bool isActive, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Setting IsActive={IsActive} for user ID: {UserId}", isActive, userId);
+
+        try
+        {
+            var user = await _provider.GetByIdAsync(userId, cancellationToken);
+            await _provider.SetUserActiveAsync(userId, isActive, cancellationToken);
+
+            // The access token stays valid until it expires, so deactivation only fully takes hold
+            // once the refresh tokens are gone and the current access token lapses.
+            if (!isActive)
+            {
+                var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
+                _logger.LogInformation("Deactivated user ID {UserId} and revoked {RevokedCount} refresh token(s)", userId, revoked);
+
+                await _eventBus.PublishAsync(new SecurityAlertEvent(
+                    "UserDeactivated",
+                    $"User ID {userId} ({user.Username}) was deactivated and all sessions revoked.",
+                    ipAddress,
+                    $"UserId: {userId}"), cancellationToken);
+            }
+
+            return Result.Success();
+        }
+        catch (SecurityException ex)
+        {
+            _logger.LogWarning("Cannot set active state: user ID {UserId} not found. Error: {Message}", userId, ex.Message);
+            return Result.Failure(Error.NotFound("AUTH_USER_NOT_FOUND", "User not found."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to set active state for user ID: {UserId}. Error: {Message}", userId, ex.Message);
+            _logger.LogTrace(ex, "SetUserActive failure stack trace for user {UserId}", userId);
+            return Result.Failure(Error.Failure("AUTH_USER_STATE_ERROR", ex.Message));
         }
     }
 
@@ -299,7 +399,7 @@ internal sealed class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            if (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") || (ex is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627)))
+            if (ex is SqlException { Number: 2601 or 2627 })
             {
                 _logger.LogWarning("User registration failed: Conflict on Username={Username} or Email={Email}. Error: {Message}", username, email, ex.Message);
                 _logger.LogTrace(ex, "User registration conflict stack trace for {Username}", username);
@@ -325,7 +425,7 @@ internal sealed class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            if (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") || ex is SqlException { Number: 2601 or 2627 })
+            if (ex is SqlException { Number: 2601 or 2627 })
             {
                 _logger.LogWarning("Role creation failed: Conflict on name={RoleName}. Error: {Message}", name, ex.Message);
                 _logger.LogTrace(ex, "Role creation conflict stack trace for {RoleName}", name);
@@ -349,7 +449,7 @@ internal sealed class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            if (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") || ex is SqlException { Number: 2601 or 2627 })
+            if (ex is SqlException { Number: 2601 or 2627 })
             {
                 _logger.LogWarning("Group creation failed: Conflict on name={GroupName}. Error: {Message}", name, ex.Message);
                 _logger.LogTrace(ex, "Group creation conflict stack trace for {GroupName}", name);
@@ -376,30 +476,6 @@ internal sealed class AuthService : IAuthService
             _logger.LogError("Failed to add user ID {UserId} to group ID {GroupId}. Error: {Message}", userId, groupId, ex.Message);
             _logger.LogTrace(ex, "AddUserToGroup failure stack trace for UserId {UserId}, GroupId {GroupId}", userId, groupId);
             return Result.Failure(Error.Failure("AUTH_USER_GROUP_ERROR", ex.Message));
-        }
-    }
-
-    public async Task<Result> CreatePermissionAsync(string slug, string description, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Creating permission: {PermissionSlug}", slug);
-
-        try
-        {
-            await _provider.InsertPermissionAsync(slug, description, cancellationToken);
-            _logger.LogInformation("Permission {PermissionSlug} created successfully", slug);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            if (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") || ex is SqlException { Number: 2601 or 2627 })
-            {
-                _logger.LogWarning("Permission creation failed: Conflict on slug={PermissionSlug}. Error: {Message}", slug, ex.Message);
-                _logger.LogTrace(ex, "Permission creation conflict stack trace for {PermissionSlug}", slug);
-                return Result.Failure(Error.Conflict("AUTH_PERMISSION_CONFLICT", "Permission already exists."));
-            }
-            _logger.LogError("Failed to create permission: {PermissionSlug}. Error: {Message}", slug, ex.Message);
-            _logger.LogTrace(ex, "Permission creation failure stack trace for {PermissionSlug}", slug);
-            return Result.Failure(Error.Failure("AUTH_PERMISSION_ERROR", ex.Message));
         }
     }
 

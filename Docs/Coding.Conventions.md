@@ -3,7 +3,11 @@
 ## 1. Architectural & Library Principles
 
 *   **Native First:** Always prefer native .NET and ASP.NET Core alternatives over third-party libraries for fundamental features. Examples include using `PasswordHasher<T>` instead of `BCrypt.Net`, `System.Text.Json` instead of `Newtonsoft.Json`, and the built-in Dependency Injection container.
-*   **Error Handling:** Failure responses and HTTP status codes for errors are managed exclusively by the global exception handler. Controllers should focus on the "Happy Path" and throw descriptive exceptions.
+*   **Error Handling:** Expected failures travel as `Result` / `Result<T>` carrying an `Error`. Services return them; controllers inherit `ApiControllerBase` and call `MapResult`/`MapError`, which is the single place a status code is chosen. `GlobalExceptionMiddleware` is a safety net for what escapes as an exception, not the primary path.
+    *   Never hand-roll `MapResult`/`MapError`/`GetCurrentUserId` in a controller — they live on `ApiControllerBase`.
+    *   Pick the `Error` factory by the status you want: `Validation` → 400, `Unauthorized` → 401, `Forbidden` → 403, `NotFound` → 404, `Conflict` → 409, `Failure` → 500.
+    *   `Unauthorized` means "we cannot identify the caller". A caller who is known but lacks a permission is `Forbidden`. Using 401 there makes clients that redirect to login on 401 sign the user out over a missing permission.
+    *   A `Failure` message is assumed to be internal detail (exception text). It is logged and replaced with a generic message before it reaches the client, so never rely on it being visible.
 
 ---
 
@@ -33,7 +37,7 @@
 ### The ID Boundary
 *   **RefId vs. Id:** Public APIs must only expose **`RefId` (GUID)**. The **`Id` (Int)** is strictly for internal database relations.
 *   **Mapping Responsibility:** The **Controller** is responsible for mapping a public `RefId` to an internal `Id`. This is achieved using the **Reference Mapping Pattern**.
-*   **Security:** If a `RefId` fails to resolve to an internal `Id` in a Controller, it should throw a `SecurityException` (resulting in a 403/Forbidden) rather than a `NotFoundException` to prevent resource enumeration.
+*   **Security:** If a `RefId` fails to resolve to an internal `Id` in a Controller, prefer `Error.Forbidden` (403) over `Error.NotFound` to prevent resource enumeration. `SecurityException` reaching `GlobalExceptionMiddleware` also maps to 403.
 
 ### Reference Mapping Pattern
 To decouple public GUIDs from internal integer IDs without polluting every service with lookup logic:

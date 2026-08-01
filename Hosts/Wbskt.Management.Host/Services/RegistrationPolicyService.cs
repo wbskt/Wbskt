@@ -135,7 +135,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             if (policy.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Policy update rejected: Policy ID {PolicyId} does not belong to WorkspaceId: {WorkspaceId}", policyId, workspaceId);
-                return Result.Failure(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
+                return Result.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
             }
 
             if (request.MaxClients.HasValue)
@@ -196,7 +196,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             if (policy.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Policy disable rejected: Policy ID {PolicyId} does not belong to WorkspaceId: {WorkspaceId}", policyId, workspaceId);
-                return Result.Failure(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
+                return Result.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
             }
 
             await _provider.DisableAsync(workspaceId, policyId, cancellationToken);

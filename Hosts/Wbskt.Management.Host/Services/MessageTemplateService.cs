@@ -148,7 +148,7 @@ internal sealed class MessageTemplateService : IMessageTemplateService
         if (template.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Template access rejected: '{RefId}' does not belong to WorkspaceId: {WorkspaceId}", refId, workspaceId);
-            return Result<MessageTemplate>.Failure(Error.Unauthorized("TEMPLATE_UNAUTHORIZED", "Template does not belong to this workspace."));
+            return Result<MessageTemplate>.Failure(Error.Forbidden("TEMPLATE_UNAUTHORIZED", "Template does not belong to this workspace."));
         }
 
         return Result<MessageTemplate>.Success(template);
@@ -201,7 +201,7 @@ internal sealed class MessageTemplateService : IMessageTemplateService
 
             if (policy.WorkspaceId != workspaceId)
             {
-                return (Result.Failure(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace.")), null);
+                return (Result.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace.")), null);
             }
 
             policyId = policy.Id;

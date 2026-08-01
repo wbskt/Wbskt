@@ -78,6 +78,34 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
+    public async Task<int> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.RefreshToken_Revoke", p =>
+        {
+            p.AddWithValue("@Token", token);
+            p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
+            p.AddWithValue("@ReplacedByToken", replacedByToken ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task<int> RevokeAllRefreshTokensForUserAsync(int userId, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.RefreshToken_RevokeAllForUser", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task SetUserActiveAsync(int userId, bool isActive, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.User_SetActive", p =>
+        {
+            p.AddWithValue("@Id", userId);
+            p.AddWithValue("@IsActive", isActive);
+        }, cancellationToken);
+    }
+
     public async Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default)
     {
         var result = await ExecuteScalarAsync<object>("dbo.Permission_Verify", p =>
@@ -205,15 +233,6 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@GroupId", groupId);
             p.AddWithValue("@TenantId", tenantId);
-        }, cancellationToken);
-    }
-
-    public async Task InsertPermissionAsync(string slug, string description, CancellationToken cancellationToken = default)
-    {
-        await ExecuteNonQueryAsync("dbo.Permission_Create", p =>
-        {
-            p.AddWithValue("@Slug", slug);
-            p.AddWithValue("@Description", description ?? (object)DBNull.Value);
         }, cancellationToken);
     }
 

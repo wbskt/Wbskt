@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using Serilog;
@@ -101,6 +103,24 @@ public static class Program
             });
         });
 
+        // Partitioned on the caller's IP, which UseForwardedHeaders has already resolved to the real
+        // client address rather than Traefik's. Unauthenticated endpoints have no better partition
+        // key available, so this is a brake on bulk attempts rather than per-account lockout.
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            options.AddPolicy(RateLimitPolicies.Authentication, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = builder.Configuration.GetValue("RateLimiting:Authentication:PermitLimit", 10),
+                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Authentication:WindowMinutes", 1)),
+                        QueueLimit = 0
+                    }));
+        });
+
         builder.Services.AddControllers();
 
         builder.Services.AddCustomOpenApi();
@@ -138,6 +158,9 @@ public static class Program
         app.UseAuthentication();
         app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
+
+        // After UseForwardedHeaders so the partition key is the real client IP, not the proxy's.
+        app.UseRateLimiter();
 
         // Auth is publicly routed (auth.<domain>), so an anonymous /metrics would be scrapeable
         // from the internet. Nothing in the stack scrapes it today; a future in-network Prometheus

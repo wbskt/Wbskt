@@ -13,7 +13,7 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 [Route("api/workspaces/{workspaceRef:guid}/workflows/{workflowRefId:guid}/variables")]
 [ApiController]
 [Authorize]
-public sealed class SharedVariablesController : ControllerBase
+public sealed class SharedVariablesController : ApiControllerBase
 {
     private readonly ISharedVariableProvider _variableProvider;
     private readonly IWorkflowDefinitionService _workflowService;
@@ -97,36 +97,6 @@ public sealed class SharedVariablesController : ControllerBase
         return new SharedVariableDto(row.WorkflowRefId, row.VarName, row.VarType, row.ValueJson, row.UpdatedAt);
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

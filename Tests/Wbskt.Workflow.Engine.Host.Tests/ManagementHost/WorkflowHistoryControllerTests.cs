@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -81,12 +82,12 @@ public sealed class WorkflowHistoryControllerTests
         var authClient = AuthClient();
         var runRefId = Guid.NewGuid();
         runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<int>.Failure(Error.Unauthorized("RUN_UNAUTHORIZED", "denied")));
+            .ReturnsAsync(Result<int>.Failure(Error.Forbidden("RUN_UNAUTHORIZED", "denied")));
         var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, authClient.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
 
         var response = await controller.List(WorkspaceRef, runRefId, 0, 200, CancellationToken.None);
         
-        Assert.IsType<UnauthorizedObjectResult>(response.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(response.Result).StatusCode);
     }
 
     private static HistoryEventRow CreateEvent(long id, int runId, string kind)

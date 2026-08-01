@@ -11,7 +11,7 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 [Route("api/workspaces/{workspaceRef:guid}")]
 [ApiController]
 [Authorize]
-public sealed class WorkflowRunsController : ControllerBase
+public sealed class WorkflowRunsController : ApiControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
     private readonly IWorkflowEngineClient _engineClient;
@@ -106,36 +106,6 @@ public sealed class WorkflowRunsController : ControllerBase
         }
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

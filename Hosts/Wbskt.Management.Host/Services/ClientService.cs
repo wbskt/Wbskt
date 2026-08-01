@@ -90,7 +90,7 @@ internal sealed class ClientService : IClientService
             if (client.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Client status update rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
-                return Result.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+                return Result.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
             }
             
             var oldStatus = client.Status;
@@ -159,7 +159,7 @@ internal sealed class ClientService : IClientService
             if (detail.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Client detail rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-                return Result<ClientDetailResponse>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+                return Result<ClientDetailResponse>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
             }
 
             return Result<ClientDetailResponse>.Success(MapToDetailResponse(detail));
@@ -192,7 +192,7 @@ internal sealed class ClientService : IClientService
             if (client.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Client rename rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
-                return Result.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+                return Result.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
             }
 
             var oldName = client.Name;
@@ -237,7 +237,7 @@ internal sealed class ClientService : IClientService
             if (client.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("State query rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
-                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
             }
 
             var variables = await _clientProvider.GetStateVariablesAsync(id, cancellationToken);

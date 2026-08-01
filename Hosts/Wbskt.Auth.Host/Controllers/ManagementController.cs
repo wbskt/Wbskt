@@ -12,7 +12,7 @@ namespace Wbskt.Auth.Host.Controllers;
 [Route("api/management")]
 [ApiController]
 [Authorize]
-public class ManagementController : ControllerBase
+public class ManagementController : ApiControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ILogger<ManagementController> _logger;
@@ -32,7 +32,7 @@ public class ManagementController : ControllerBase
     public async Task<ActionResult<IReadOnlyCollection<TenantResponse>>> GetTenants(CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: GetTenants requested");
-        var userIdResult = GetCurrentUserId();
+        var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
             return MapError(userIdResult.Error);
@@ -169,24 +169,26 @@ public class ManagementController : ControllerBase
     }
 
     /// <summary>
-    /// Defines a new permission in the system.
+    /// Enables or disables a user account. Disabling also revokes every refresh token the user
+    /// holds; any access token already issued stays valid until it expires.
     /// </summary>
-    /// <param name="slug">The unique slug representing the permission (e.g., 'users.read').</param>
-    /// <param name="description">A description of what the permission allows.</param>
+    /// <param name="userId">The ID of the user.</param>
     /// <param name="tenantId">The ID of the tenant used for the permission check.</param>
+    /// <param name="request">The desired active state.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("permissions")]
-    public async Task<IActionResult> CreatePermission(string slug, string description, int tenantId, CancellationToken cancellationToken)
+    [HttpPut("users/{userId}/active")]
+    public async Task<IActionResult> SetUserActive(int userId, int tenantId, [FromBody] SetUserActiveRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: CreatePermission requested (Slug: '{PermissionSlug}', TenantId: {TenantId})", slug, tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
+        _logger.LogInformation("API: SetUserActive requested for UserId {UserId} (IsActive: {IsActive}, TenantId: {TenantId})", userId, request.IsActive, tenantId);
+        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.UsersManage, cancellationToken);
         if (gate.IsFailure)
         {
             return MapError(gate.Error);
         }
 
-        var result = await _authService.CreatePermissionAsync(slug, description, cancellationToken);
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var result = await _authService.SetUserActiveAsync(userId, request.IsActive, ipAddress, cancellationToken);
         return MapResult(result);
     }
 
@@ -340,7 +342,7 @@ public class ManagementController : ControllerBase
     /// </summary>
     private async Task<Result> EnsureTenantPermissionAsync(int tenantId, PermissionSlug permission, CancellationToken cancellationToken)
     {
-        var userIdResult = GetCurrentUserId();
+        var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
             return Result.Failure(userIdResult.Error);
@@ -355,52 +357,13 @@ public class ManagementController : ControllerBase
         if (!verifyResult.Value)
         {
             _logger.LogWarning("Management operation denied: UserId {UserId} lacks tenant-wide '{Permission}' in TenantId {TenantId}", userIdResult.Value, permission, tenantId);
-            return Result.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {permission}"));
+            return Result.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {permission}"));
         }
 
         return Result.Success();
     }
 
-    private Result<int> GetCurrentUserId()
-    {
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
-        {
-            return Result<int>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
-        }
-        return Result<int>.Success(userId);
-    }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

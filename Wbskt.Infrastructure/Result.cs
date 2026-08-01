@@ -1,6 +1,8 @@
 namespace Wbskt.Infrastructure;
 
-public enum ErrorType { Failure, Validation, NotFound, Conflict, Unauthorized }
+// Appended-to only: Error.Type is serialized as its numeric value in error responses,
+// so reordering these would silently change the wire format for existing clients.
+public enum ErrorType { Failure, Validation, NotFound, Conflict, Unauthorized, Forbidden }
 
 public sealed record Error(string Code, string Message, ErrorType Type)
 {
@@ -13,7 +15,13 @@ public sealed record Error(string Code, string Message, ErrorType Type)
     public static Error Validation(string code, string message) => new(code, message, ErrorType.Validation);
     public static Error NotFound(string code, string message) => new(code, message, ErrorType.NotFound);
     public static Error Conflict(string code, string message) => new(code, message, ErrorType.Conflict);
+
+    /// <summary>The caller could not be identified at all — no token, or a token we cannot parse. Maps to 401.</summary>
     public static Error Unauthorized(string code, string message) => new(code, message, ErrorType.Unauthorized);
+
+    /// <summary>The caller is known but lacks the required permission. Maps to 403 — never 401, or clients
+    /// that redirect to login on 401 will sign the user out over a missing permission.</summary>
+    public static Error Forbidden(string code, string message) => new(code, message, ErrorType.Forbidden);
 }
 
 public class Result

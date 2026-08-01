@@ -10,6 +10,12 @@ internal interface IAuthProvider : IReferenceProvider
     Task<int> InsertUserAsync(User user, CancellationToken cancellationToken = default);
     Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress, CancellationToken cancellationToken = default);
     Task<RefreshToken> GetRefreshTokenAsync(string token, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns the number of rows revoked — 0 means the token was already revoked.</summary>
+    Task<int> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default);
+
+    Task<int> RevokeAllRefreshTokensForUserAsync(int userId, string ipAddress, CancellationToken cancellationToken = default);
+    Task SetUserActiveAsync(int userId, bool isActive, CancellationToken cancellationToken = default);
     Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<string>> GetEffectivePermissionsAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Tenant>> GetTenantsForUserAsync(int userId, CancellationToken cancellationToken = default);
@@ -20,7 +26,6 @@ internal interface IAuthProvider : IReferenceProvider
     Task InsertRoleAsync(string name, string description, int tenantId, CancellationToken cancellationToken = default);
     Task InsertGroupAsync(string name, int? parentGroupId, int tenantId, CancellationToken cancellationToken = default);
     Task InsertUserGroupAsync(int userId, int groupId, int tenantId, CancellationToken cancellationToken = default);
-    Task InsertPermissionAsync(string slug, string description, CancellationToken cancellationToken = default);
     Task GrantRolePermissionAsync(int roleId, string permissionSlug, bool isDeny, int tenantId, CancellationToken cancellationToken = default);
     Task GrantUserPermissionAsync(int userId, string permissionSlug, bool isDeny, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);
     Task AssignUserRoleAsync(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken = default);

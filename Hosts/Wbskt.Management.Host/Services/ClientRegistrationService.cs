@@ -54,7 +54,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             {
                 _logger.LogWarning("Client registration failed: Policy '{PolicyName}' is disabled", policy.Name);
                 await _eventBus.PublishAsync(new PolicyRegistrationAttemptedOnDisabledEvent(policy.RefId, policy.Id, policy.WorkspaceId, request.Name), cancellationToken);
-                return Result<ClientRegistrationResponse>.Failure(Error.Unauthorized("POLICY_DISABLED", "This registration policy is currently disabled."));
+                return Result<ClientRegistrationResponse>.Failure(Error.Forbidden("POLICY_DISABLED", "This registration policy is currently disabled."));
             }
 
             if (policy.MaxClients.HasValue)
