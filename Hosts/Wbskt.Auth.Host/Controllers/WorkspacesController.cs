@@ -5,6 +5,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 using Wbskt.Primitives;
 
 namespace Wbskt.Auth.Host.Controllers;
@@ -14,6 +15,8 @@ namespace Wbskt.Auth.Host.Controllers;
 [Authorize]
 public class WorkspacesController : ApiControllerBase
 {
+    private const int MaxPageSize = 200;
+
     private readonly IWorkspaceService _workspaceService;
     private readonly IReferenceMapper _workspaceMapper;
     private readonly ILogger<WorkspacesController> _logger;
@@ -137,6 +140,105 @@ public class WorkspacesController : ApiControllerBase
 
         var result = await _workspaceService.AddUserToWorkspaceAsync(userIdResult.Value, workspaceId, request, cancellationToken);
         return MapResult(result);
+    }
+
+    /// <summary>
+    /// Lists the members of a workspace. Requires the users.read permission in that workspace.
+    /// </summary>
+    [HttpGet("{workspaceRef:guid}/members")]
+    public async Task<ActionResult<ListResponse<TenantMemberResponse>>> GetMembers(Guid workspaceRef, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetMembers requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var resolved = await ResolveAsync(workspaceRef, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return MapError(resolved.Error);
+        }
+
+        // Clamped rather than rejected, so an out-of-range page size does not fail a read.
+        var result = await _workspaceService.GetMembersAsync(
+            resolved.Value.CallerId, resolved.Value.WorkspaceId, Math.Max(0, skip), Math.Clamp(take, 1, MaxPageSize), cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return MapError(result.Error);
+        }
+
+        return Ok(new ListResponse<TenantMemberResponse> { Items = result.Value });
+    }
+
+    /// <summary>
+    /// Removes a member from a workspace, along with any assignments scoped to it. The owner cannot
+    /// be removed. Requires the users.manage permission in that workspace.
+    /// </summary>
+    [HttpDelete("{workspaceRef:guid}/members/{userRef:guid}")]
+    public async Task<IActionResult> RemoveMember(Guid workspaceRef, Guid userRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RemoveMember requested for WorkspaceRef: '{WorkspaceRef}', UserRef: '{UserRef}'", workspaceRef, userRef);
+
+        var resolved = await ResolveAsync(workspaceRef, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return MapError(resolved.Error);
+        }
+
+        return MapResult(await _workspaceService.RemoveUserFromWorkspaceAsync(resolved.Value.CallerId, resolved.Value.WorkspaceId, userRef, cancellationToken));
+    }
+
+    /// <summary>
+    /// Renames a workspace or changes its description. Requires users.manage in that workspace.
+    /// </summary>
+    [HttpPut("{workspaceRef:guid}")]
+    public async Task<IActionResult> UpdateWorkspace(Guid workspaceRef, [FromBody] CreateWorkspaceRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: UpdateWorkspace requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var resolved = await ResolveAsync(workspaceRef, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return MapError(resolved.Error);
+        }
+
+        return MapResult(await _workspaceService.UpdateWorkspaceAsync(resolved.Value.CallerId, resolved.Value.WorkspaceId, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// Deletes a workspace and every assignment scoped to it. Resources owned by other services
+    /// (clients, policies, workflows) are not removed — their workspace reference simply stops
+    /// resolving. Requires users.manage in that workspace.
+    /// </summary>
+    [HttpDelete("{workspaceRef:guid}")]
+    public async Task<IActionResult> DeleteWorkspace(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: DeleteWorkspace requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var resolved = await ResolveAsync(workspaceRef, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return MapError(resolved.Error);
+        }
+
+        return MapResult(await _workspaceService.DeleteWorkspaceAsync(resolved.Value.CallerId, resolved.Value.WorkspaceId, cancellationToken));
+    }
+
+    /// <summary>Resolves the caller and the workspace reference together, as every scoped operation needs both.</summary>
+    private async Task<Result<(int CallerId, int WorkspaceId)>> ResolveAsync(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        var userIdResult = CurrentUserId();
+        if (userIdResult.IsFailure)
+        {
+            return Result<(int, int)>.Failure(userIdResult.Error);
+        }
+
+        var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(workspaceRef, cancellationToken);
+        if (workspaceId <= 0)
+        {
+            _logger.LogWarning("Workspace with RefId: '{WorkspaceRef}' not found", workspaceRef);
+            return Result<(int, int)>.Failure(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
+        }
+
+        return Result<(int, int)>.Success((userIdResult.Value, workspaceId));
     }
 
 

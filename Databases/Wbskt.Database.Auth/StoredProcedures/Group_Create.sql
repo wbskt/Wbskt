@@ -1,7 +1,8 @@
 CREATE PROCEDURE dbo.Group_Create
     @Name NVARCHAR(100),
     @TenantId INT,
-    @ParentGroupId INT = NULL
+    @ParentGroupId INT = NULL,
+    @RefId UNIQUEIDENTIFIER OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -11,12 +12,16 @@ BEGIN
         THROW 50003, 'Parent group does not belong to the specified tenant.', 1;
     END
 
-INSERT INTO dbo.Groups (
+    SET @RefId = NEWID();
+
+    INSERT INTO dbo.Groups (
+        RefId,
         TenantId,
         Name,
         ParentGroupId
     )
     VALUES (
+        @RefId,
         @TenantId,
         @Name,
         @ParentGroupId

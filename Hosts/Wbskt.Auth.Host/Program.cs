@@ -47,6 +47,7 @@ public static class Program
         builder.Services.AddScoped<IJwtService, JwtService>();
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
+        builder.Services.AddScoped<IManagementService, ManagementService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
         builder.Services.AddHttpContextAccessor();

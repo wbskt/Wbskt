@@ -4,9 +4,13 @@ namespace Wbskt.Primitives.Constants;
 
 public static class Permissions
 {
+    // Read/manage split, matching the other groups below. Without the read slugs a console that only
+    // needs to display roles or members has to be granted the permission to rewrite them.
+    public static readonly PermissionSlug UsersRead = PermissionSlug.CreateInternal("users.read");
     public static readonly PermissionSlug UsersManage = PermissionSlug.CreateInternal("users.manage");
+    public static readonly PermissionSlug RolesRead = PermissionSlug.CreateInternal("roles.read");
     public static readonly PermissionSlug RolesManage = PermissionSlug.CreateInternal("roles.manage");
-    
+
     public static readonly PermissionSlug PoliciesRead = PermissionSlug.CreateInternal("policies.read");
     public static readonly PermissionSlug PoliciesManage = PermissionSlug.CreateInternal("policies.manage");
     

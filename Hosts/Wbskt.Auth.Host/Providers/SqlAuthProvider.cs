@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -165,11 +166,69 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<PermissionResponse>> GetPermissionsAsync(CancellationToken cancellationToken = default)
+    public async Task<int> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteCollectionAsync(
+        return await ExecuteScalarAsync<int>("dbo.Tenant_FindBy_RefIdForUser", p =>
+        {
+            p.AddWithValue("@RefId", tenantRef);
+            p.AddWithValue("@UserId", userId);
+        }, cancellationToken);
+    }
+
+    public async Task<int> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.Role_FindBy_RefId", p =>
+        {
+            p.AddWithValue("@RefId", roleRef);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task<int> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.Group_FindBy_RefId", p =>
+        {
+            p.AddWithValue("@RefId", groupRef);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task<int> FindUserIdByRefIdInTenantAsync(Guid userRef, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.User_FindBy_RefIdInTenant", p =>
+        {
+            p.AddWithValue("@RefId", userRef);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task<IPagedList<TenantMemberResponse>> GetTenantMembersAsync(int tenantId, string? search, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await ExecutePagedCollectionAsync(
+            "dbo.TenantMember_GetAll",
+            p =>
+            {
+                p.AddWithValue("@TenantId", tenantId);
+                p.AddWithValue("@Search", string.IsNullOrWhiteSpace(search) ? DBNull.Value : search);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            MapTenantMember,
+            cancellationToken
+        );
+    }
+
+    public async Task<IPagedList<PermissionResponse>> GetPermissionsAsync(int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await ExecutePagedCollectionAsync(
             "dbo.Permission_GetAll",
-            null,
+            p =>
+            {
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
             r => new PermissionResponse(
                 r.GetString(r.GetOrdinal("Slug")),
                 r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description"))
@@ -178,13 +237,19 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<RoleResponse>> GetRolesAsync(int tenantId, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<RoleResponse>> GetRolesAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
     {
-        return await ExecuteCollectionAsync(
+        return await ExecutePagedCollectionAsync(
             "dbo.Role_GetAll",
-            p => p.AddWithValue("@TenantId", tenantId),
+            p =>
+            {
+                p.AddWithValue("@TenantId", tenantId);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
             r => new RoleResponse(
-                r.GetInt32(r.GetOrdinal("Id")),
+                r.GetGuid(r.GetOrdinal("RefId")),
                 r.GetString(r.GetOrdinal("Name")),
                 r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description"))
             ),
@@ -192,37 +257,88 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<GroupResponse>> GetGroupsAsync(int tenantId, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<GroupResponse>> GetGroupsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
     {
-        return await ExecuteCollectionAsync(
+        return await ExecutePagedCollectionAsync(
             "dbo.Group_GetAll",
-            p => p.AddWithValue("@TenantId", tenantId),
+            p =>
+            {
+                p.AddWithValue("@TenantId", tenantId);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
             r => new GroupResponse(
-                r.GetInt32(r.GetOrdinal("Id")),
+                r.GetGuid(r.GetOrdinal("RefId")),
                 r.GetString(r.GetOrdinal("Name")),
-                r.IsDBNull(r.GetOrdinal("ParentGroupId")) ? null : r.GetInt32(r.GetOrdinal("ParentGroupId"))
+                r.IsDBNull(r.GetOrdinal("ParentGroupRefId")) ? null : r.GetGuid(r.GetOrdinal("ParentGroupRefId"))
             ),
             cancellationToken
         );
     }
 
-    public async Task InsertRoleAsync(string name, string description, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<Guid> InsertRoleAsync(string name, string? description, int tenantId, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.Role_Create", p =>
+        var parameters = await ExecuteNonQueryAsync("dbo.Role_Create", p =>
         {
             p.AddWithValue("@Name", name);
             p.AddWithValue("@Description", description ?? (object)DBNull.Value);
             p.AddWithValue("@TenantId", tenantId);
+            p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+        }, cancellationToken);
+
+        return (Guid)parameters["@RefId"].Value;
+    }
+
+    public async Task UpdateRoleAsync(int roleId, int tenantId, string name, string? description, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Role_Update", p =>
+        {
+            p.AddWithValue("@Id", roleId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Name", name);
+            p.AddWithValue("@Description", description ?? (object)DBNull.Value);
         }, cancellationToken);
     }
 
-    public async Task InsertGroupAsync(string name, int? parentGroupId, int tenantId, CancellationToken cancellationToken = default)
+    public async Task DeleteRoleAsync(int roleId, int tenantId, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.Group_Create", p =>
+        await ExecuteNonQueryAsync("dbo.Role_Delete", p =>
+        {
+            p.AddWithValue("@Id", roleId);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task<Guid> InsertGroupAsync(string name, int? parentGroupId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        var parameters = await ExecuteNonQueryAsync("dbo.Group_Create", p =>
         {
             p.AddWithValue("@Name", name);
             p.AddWithValue("@TenantId", tenantId);
             p.AddWithValue("@ParentGroupId", parentGroupId ?? (object)DBNull.Value);
+            p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+        }, cancellationToken);
+
+        return (Guid)parameters["@RefId"].Value;
+    }
+
+    public async Task UpdateGroupAsync(int groupId, int tenantId, string name, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Group_Update", p =>
+        {
+            p.AddWithValue("@Id", groupId);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Name", name);
+        }, cancellationToken);
+    }
+
+    public async Task DeleteGroupAsync(int groupId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Group_Delete", p =>
+        {
+            p.AddWithValue("@Id", groupId);
+            p.AddWithValue("@TenantId", tenantId);
         }, cancellationToken);
     }
 
@@ -303,6 +419,132 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
     
+    public async Task RemoveUserGroupAsync(int userId, int groupId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.UserGroup_Remove", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@GroupId", groupId);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task RemoveRolePermissionAsync(int roleId, string permissionSlug, int tenantId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.RolePermission_Remove", p =>
+        {
+            p.AddWithValue("@RoleId", roleId);
+            p.AddWithValue("@PermissionSlug", permissionSlug);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task RemoveUserPermissionAsync(int userId, string permissionSlug, int tenantId, int? workspaceId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.UserPermission_Remove", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@PermissionSlug", permissionSlug);
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@WorkspaceId", workspaceId ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<RoleAssignmentResponse>> GetUserRolesAsync(int userId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.UserRole_GetAllForUser",
+            p =>
+            {
+                p.AddWithValue("@UserId", userId);
+                p.AddWithValue("@TenantId", tenantId);
+            },
+            MapRoleAssignment,
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyCollection<UserPermissionAssignmentResponse>> GetUserPermissionsAsync(int userId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.UserPermission_GetAllForUser",
+            p =>
+            {
+                p.AddWithValue("@UserId", userId);
+                p.AddWithValue("@TenantId", tenantId);
+            },
+            r => new UserPermissionAssignmentResponse(
+                r.GetString(r.GetOrdinal("Slug")),
+                r.GetBoolean(r.GetOrdinal("IsDeny")),
+                r.IsDBNull(r.GetOrdinal("WorkspaceRefId")) ? null : r.GetGuid(r.GetOrdinal("WorkspaceRefId"))
+            ),
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyCollection<GroupMembershipResponse>> GetUserGroupsAsync(int userId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.UserGroup_GetAllForUser",
+            p =>
+            {
+                p.AddWithValue("@UserId", userId);
+                p.AddWithValue("@TenantId", tenantId);
+            },
+            r => new GroupMembershipResponse(
+                r.GetGuid(r.GetOrdinal("GroupRefId")),
+                r.GetString(r.GetOrdinal("GroupName"))
+            ),
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyCollection<RoleAssignmentResponse>> GetGroupRolesAsync(int groupId, int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.GroupRole_GetAllForGroup",
+            p =>
+            {
+                p.AddWithValue("@GroupId", groupId);
+                p.AddWithValue("@TenantId", tenantId);
+            },
+            MapRoleAssignment,
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyCollection<RolePermissionAssignmentResponse>> GetRolePermissionsAsync(int roleId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.RolePermission_GetAllForRole",
+            p => p.AddWithValue("@RoleId", roleId),
+            r => new RolePermissionAssignmentResponse(
+                r.GetString(r.GetOrdinal("Slug")),
+                r.GetBoolean(r.GetOrdinal("IsDeny"))
+            ),
+            cancellationToken
+        );
+    }
+
+    private static RoleAssignmentResponse MapRoleAssignment(SqlDataReader reader)
+    {
+        return new RoleAssignmentResponse(
+            reader.GetGuid(reader.GetOrdinal("RoleRefId")),
+            reader.GetString(reader.GetOrdinal("RoleName")),
+            reader.IsDBNull(reader.GetOrdinal("WorkspaceRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkspaceRefId"))
+        );
+    }
+
+    private static TenantMemberResponse MapTenantMember(SqlDataReader reader)
+    {
+        return new TenantMemberResponse(
+            reader.GetGuid(reader.GetOrdinal("RefId")),
+            reader.GetString(reader.GetOrdinal("Username")),
+            reader.GetString(reader.GetOrdinal("Email")),
+            reader.GetBoolean(reader.GetOrdinal("IsActive"))
+        );
+    }
+
     private static User MapUser(SqlDataReader reader)
     {
         return new User

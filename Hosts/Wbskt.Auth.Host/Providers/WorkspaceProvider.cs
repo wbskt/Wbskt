@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 
 namespace Wbskt.Auth.Host.Providers;
 
@@ -47,6 +48,54 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         {
             p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@UserId", userId);
+        }, cancellationToken);
+    }
+
+    public async Task RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.WorkspaceMember_Remove", p =>
+        {
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            p.AddWithValue("@UserId", userId);
+        }, cancellationToken);
+    }
+
+    public async Task<IPagedList<TenantMemberResponse>> GetWorkspaceMembersAsync(int workspaceId, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await ExecutePagedCollectionAsync(
+            "dbo.WorkspaceMember_GetAll",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            r => new TenantMemberResponse(
+                r.GetGuid(r.GetOrdinal("RefId")),
+                r.GetString(r.GetOrdinal("Username")),
+                r.GetString(r.GetOrdinal("Email")),
+                r.GetBoolean(r.GetOrdinal("IsActive"))
+            ),
+            cancellationToken
+        );
+    }
+
+    public async Task UpdateWorkspaceAsync(int workspaceId, string name, string? description, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Workspace_Update", p =>
+        {
+            p.AddWithValue("@Id", workspaceId);
+            p.AddWithValue("@Name", name);
+            p.AddWithValue("@Description", description ?? (object)DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task DeleteWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Workspace_Delete", p =>
+        {
+            p.AddWithValue("@Id", workspaceId);
         }, cancellationToken);
     }
 

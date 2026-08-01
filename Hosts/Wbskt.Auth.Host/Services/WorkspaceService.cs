@@ -1,10 +1,13 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;
+using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
+using Wbskt.Primitives.Models;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -115,6 +118,139 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogTrace(ex, "AddUserToWorkspace failure stack trace for email {UserEmail} in workspace ID {WorkspaceId}", request.Email, workspaceId);
             return Result.Failure(Error.Failure("WORKSPACE_MEMBER_ERROR", ex.Message));
         }
+    }
+
+    public async Task<Result> RemoveUserFromWorkspaceAsync(int callerId, int workspaceId, Guid userRef, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Removing user {UserRef} from workspace ID: {WorkspaceId}", userRef, workspaceId);
+
+        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
+        if (gate.IsFailure)
+        {
+            return gate;
+        }
+
+        try
+        {
+            var user = await _authProvider.GetByIdAsync(await ResolveUserIdAsync(userRef, cancellationToken), cancellationToken);
+            await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, user.Id, cancellationToken);
+            _logger.LogInformation("Removed user ID {UserId} from workspace ID: {WorkspaceId}", user.Id, workspaceId);
+            return Result.Success();
+        }
+        catch (SecurityException ex)
+        {
+            _logger.LogWarning("Remove member failed: user {UserRef} not found. Error: {Message}", userRef, ex.Message);
+            return Result.Failure(Error.Forbidden("USER_NOT_FOUND", "User not found."));
+        }
+        catch (SqlException ex) when (ex.Number == 50006)
+        {
+            // The owner cannot be removed - a workspace with no owner has no route back to being
+            // administered.
+            _logger.LogWarning("Remove member rejected for workspace ID {WorkspaceId}: {Message}", workspaceId, ex.Message);
+            return Result.Failure(Error.Validation("WORKSPACE_OWNER_PROTECTED", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to remove user {UserRef} from workspace ID: {WorkspaceId}. Error: {Message}", userRef, workspaceId, ex.Message);
+            _logger.LogTrace(ex, "RemoveUserFromWorkspace failure stack trace for workspace {WorkspaceId}", workspaceId);
+            return Result.Failure(Error.Failure("WORKSPACE_MEMBER_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int callerId, int workspaceId, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersRead, cancellationToken);
+        if (gate.IsFailure)
+        {
+            return Result<IPagedList<TenantMemberResponse>>.Failure(gate.Error);
+        }
+
+        try
+        {
+            var members = await _workspaceProvider.GetWorkspaceMembersAsync(workspaceId, skip, take, cancellationToken);
+            return Result<IPagedList<TenantMemberResponse>>.Success(members);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to list members of workspace ID: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
+            _logger.LogTrace(ex, "GetMembers failure stack trace for workspace {WorkspaceId}", workspaceId);
+            return Result<IPagedList<TenantMemberResponse>>.Failure(Error.Failure("WORKSPACE_QUERY_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> UpdateWorkspaceAsync(int callerId, int workspaceId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
+    {
+        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
+        if (gate.IsFailure)
+        {
+            return gate;
+        }
+
+        try
+        {
+            await _workspaceProvider.UpdateWorkspaceAsync(workspaceId, request.Name, request.Description, cancellationToken);
+            _logger.LogInformation("Updated workspace ID: {WorkspaceId}", workspaceId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to update workspace ID: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
+            _logger.LogTrace(ex, "UpdateWorkspace failure stack trace for workspace {WorkspaceId}", workspaceId);
+            return Result.Failure(Error.Failure("WORKSPACE_UPDATE_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
+    {
+        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
+        if (gate.IsFailure)
+        {
+            return gate;
+        }
+
+        try
+        {
+            await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, cancellationToken);
+            _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to delete workspace ID: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
+            _logger.LogTrace(ex, "DeleteWorkspace failure stack trace for workspace {WorkspaceId}", workspaceId);
+            return Result.Failure(Error.Failure("WORKSPACE_DELETE_ERROR", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Membership gate plus a single permission check, for operations on an existing workspace.
+    /// </summary>
+    private async Task<Result> RequirePermissionAsync(int callerId, int workspaceId, PermissionSlug permission, CancellationToken cancellationToken)
+    {
+        var accessResult = await ResolveAccessAsync(callerId, workspaceId, cancellationToken);
+        if (accessResult.IsFailure)
+        {
+            return Result.Failure(accessResult.Error);
+        }
+
+        if (!accessResult.Value.Contains(permission))
+        {
+            _logger.LogWarning("Operation denied: caller lacks '{Permission}' in workspace ID: {WorkspaceId}", permission, workspaceId);
+            return Result.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {permission}"));
+        }
+
+        return Result.Success();
+    }
+
+    private async Task<int> ResolveUserIdAsync(Guid userRef, CancellationToken cancellationToken)
+    {
+        var userId = await _authProvider.FindIdByRefIdAsync(userRef, cancellationToken);
+        if (userId <= 0)
+        {
+            throw new SecurityException($"User with reference {userRef} not found.");
+        }
+
+        return userId;
     }
 
     public async Task<Result<IReadOnlyCollection<string>>> ResolveAccessAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)

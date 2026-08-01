@@ -33,9 +33,21 @@ END
 GO
 
 -- Permissions
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'users.read')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('users.read', 'Read users, groups and tenant membership');
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'users.manage')
 BEGIN
     INSERT INTO dbo.Permissions (Slug, Description) VALUES ('users.manage', 'Manage users');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'roles.read')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('roles.read', 'Read roles, permissions and assignments');
 END
 GO
 

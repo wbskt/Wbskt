@@ -20,12 +20,11 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
 
+    <!-- Microsoft.Extensions.Configuration.*, Hosting.Abstractions, Logging.Abstractions and
+         AspNetCore.Http.Abstractions are all supplied by the framework reference above, so they are
+         deliberately not listed here. -->
     <ItemGroup>
         <PackageReference Include="Microsoft.Data.SqlClient" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
         <PackageReference Include="Serilog" />
         <PackageReference Include="Serilog.Settings.Configuration" />
