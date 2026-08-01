@@ -60,12 +60,40 @@ Consequences worth knowing:
 | Membership gate + set resolution | `Hosts/Wbskt.Auth.Host/Services/WorkspaceService.cs` (`ResolveAccessAsync`) |
 | Resolve API | `POST /api/workspaces/resolve` → `{ workspaceId, permissions[] }` |
 | Consumer client | `Hosts/Wbskt.Management.Host/Services/Clients/IAuthServiceClient.cs` (`WorkspaceAccess`, single/multi-permission overloads) |
-| Role/group assignment APIs | `POST|DELETE /api/management/users/{userId}/roles/{roleId}` and `.../groups/{groupId}/roles/{roleId}` (`tenantId` required, `workspaceId` optional) |
+| Tenant administration | `Hosts/Wbskt.Auth.Host/Services/ManagementService.cs` — owns the permission gate and the tenant-scoped reference resolution |
 
-## Management API gating
+## Tenant administration API
 
-`api/management/*` endpoints require a **tenant-wide** permission in the target tenant:
-`roles.manage` for role operations, `users.manage` for group/user-group and account-state operations.
+Everything lives under `api/tenants/{tenantRef}` and is addressed by opaque `Guid` reference, never
+by internal integer ID. `GET /api/tenants` lists the caller's tenants and is the entry point.
+
+Reference resolution is **tenant-scoped**, which is why it sits in `ManagementService` rather than
+the controller: a role, group or user reference belonging to another tenant simply does not resolve,
+so a cross-tenant reference is reported the same as one that does not exist. Resolving a user is
+additionally gated on their `TenantMembers` row, so an administrator cannot pull an outsider into
+their tenant's permission graph.
+
+| Area | Endpoints |
+|---|---|
+| Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{slug}` |
+| Groups | `GET/POST /groups`, `PUT/DELETE /groups/{groupRef}`, `GET /groups/{groupRef}/roles`, `POST/DELETE /groups/{groupRef}/roles/{roleRef}` |
+| Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{slug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PUT /members/{userRef}/active` |
+| Catalogue | `GET /permissions` |
+
+Assignment scope travels in the body as `workspaceRef` on POST (null = tenant-wide) and as a query
+parameter on DELETE.
+
+Removing a direct user permission is a **delete, not a deny**. The two are not equivalent: a
+user-level row wins over any role-derived permission, so denying leaves the override in place while
+deleting returns the decision to the user's roles. Without the delete an accidental grant could
+never be undone through the API.
+
+List endpoints take `skip`/`take`, clamped to 200 rather than rejected.
+
+These endpoints require a **tenant-wide** permission in the target tenant:
+`roles.read`/`roles.manage` for roles, permissions and assignments; `users.read`/`users.manage` for
+groups, membership and account state. The read/manage split exists so that a console which only
+displays the permission graph does not need the right to rewrite it.
 `POST /api/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
 user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the
 membership gate but resolve no roles, since every assignment is filtered by `TenantId`.
@@ -87,7 +115,7 @@ codebase is a compile-time `Permissions.X` constant.
   rather than left sharing a live token with an attacker.
 - `POST /api/auth/logout` revokes one token; `POST /api/auth/logout-all` revokes the caller's whole
   set. Both succeed regardless of whether the token existed, so neither can be used to probe.
-- `PUT /api/management/users/{userId}/active` disables an account and revokes its refresh tokens.
+- `PUT /api/tenants/{tenantRef}/members/{userRef}/active` disables an account and revokes its refresh tokens.
   An access token already issued stays valid until it expires — deactivation is not instant.
 - The credential endpoints are rate limited per client IP (`RateLimiting:Authentication`).
 
@@ -100,8 +128,15 @@ revoked token. Consumers such as `AuthServiceClient` rely on the distinction.
 
 ## Deploying schema upgrades to an existing DB
 
-Existing databases (with workspace rows) must run
-`Databases/Migrations/PreTenantUpgrade.Auth.sql` once **before**
-`sqlpackage /Action:Publish` — the new `Workspaces.TenantId` FK validates before the
-post-deployment seed can create the default tenant. Fresh deployments (`Deploy-Databases.ps1 -Fresh`)
-need nothing extra.
+Run these against the Auth DB once, in order, **before** `sqlpackage /Action:Publish` (or before
+`Deploy-Databases.ps1` without `-Fresh`). Fresh deployments (`-Fresh`) need neither.
+
+1. `Databases/Migrations/PreTenantUpgrade.Auth.sql` — the `Workspaces.TenantId` FK validates during
+   schema deployment, before the post-deployment seed can create the default tenant.
+2. `Databases/Migrations/AddRoleGroupRefIds.Auth.sql` — adds `RefId` to `Roles` and `Groups` as a
+   nullable column, backfills it, then tightens it to `NOT NULL` with a unique constraint. Doing
+   that in one publish against tables that already have rows is a change SqlPackage will refuse or
+   attempt as a table rebuild.
+
+Both scripts are idempotent and live outside the `.sqlproj` directory on purpose — the DACPAC build
+sweeps up any `.sql` file inside the project folder into the model.

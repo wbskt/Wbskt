@@ -1,369 +1,380 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Infrastructure;
-using Wbskt.Primitives.Constants;
-using Wbskt.Primitives.Models;
+using Wbskt.Models;
 
 namespace Wbskt.Auth.Host.Controllers;
 
-[Route("api/management")]
+/// <summary>
+/// Tenant administration. Everything is addressed by public <c>Guid</c> reference and scoped to a
+/// tenant in the route, matching the workspace-scoped controllers in the management host.
+/// The permission gate lives in <see cref="IManagementService"/>, alongside the reference
+/// resolution it depends on.
+/// </summary>
+[Route("api/tenants")]
 [ApiController]
 [Authorize]
 public class ManagementController : ApiControllerBase
 {
-    private readonly IAuthService _authService;
+    private const int MaxPageSize = 200;
+
+    private readonly IManagementService _managementService;
     private readonly ILogger<ManagementController> _logger;
 
-    public ManagementController(IAuthService authService, ILogger<ManagementController> _logger)
+    public ManagementController(IManagementService managementService, ILogger<ManagementController> logger)
     {
-        this._authService = authService;
-        this._logger = _logger;
+        _managementService = managementService;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Retrieves the tenants the current user belongs to.
+    /// Retrieves the tenants the current user belongs to. This is the entry point for every other
+    /// endpoint here, since they are all addressed by tenant reference.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of tenant responses.</returns>
-    [HttpGet("tenants")]
+    [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<TenantResponse>>> GetTenants(CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: GetTenants requested");
-        var userIdResult = CurrentUserId();
-        if (userIdResult.IsFailure)
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(userIdResult.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.GetTenantsForUserAsync(userIdResult.Value, cancellationToken);
-        return MapResult(result);
+        return MapResult(await _managementService.GetTenantsForUserAsync(caller.Value, cancellationToken));
+    }
+
+    // ----- Roles -------------------------------------------------------------------------------
+
+    /// <summary>Lists the roles defined in a tenant. Requires <c>roles.read</c>.</summary>
+    [HttpGet("{tenantRef:guid}/roles")]
+    public async Task<ActionResult<ListResponse<RoleResponse>>> GetRoles(Guid tenantRef, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetRoles requested (TenantRef: {TenantRef})", tenantRef);
+        return await PagedAsync(tenantRef, skip, take, (callerId, s, t) => _managementService.GetRolesAsync(callerId, tenantRef, s, t, cancellationToken));
+    }
+
+    /// <summary>Creates a role. Requires <c>roles.manage</c>.</summary>
+    [HttpPost("{tenantRef:guid}/roles")]
+    public async Task<ActionResult<RoleResponse>> CreateRole(Guid tenantRef, [FromBody] CreateRoleRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: CreateRole requested (Name: '{RoleName}', TenantRef: {TenantRef})", request.Name, tenantRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
+        {
+            return MapError(caller.Error);
+        }
+
+        return MapResult(await _managementService.CreateRoleAsync(caller.Value, tenantRef, request, cancellationToken));
+    }
+
+    /// <summary>Renames a role or changes its description. Requires <c>roles.manage</c>.</summary>
+    [HttpPut("{tenantRef:guid}/roles/{roleRef:guid}")]
+    public async Task<IActionResult> UpdateRole(Guid tenantRef, Guid roleRef, [FromBody] UpdateRoleRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: UpdateRole requested (RoleRef: {RoleRef}, TenantRef: {TenantRef})", roleRef, tenantRef);
+        return await WithCallerAsync(callerId => _managementService.UpdateRoleAsync(callerId, tenantRef, roleRef, request, cancellationToken));
     }
 
     /// <summary>
-    /// Retrieves all roles defined in a tenant.
+    /// Deletes a role along with its permissions and every assignment of it. Requires <c>roles.manage</c>.
     /// </summary>
-    /// <param name="tenantId">The ID of the tenant.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of role responses.</returns>
-    [HttpGet("roles")]
-    public async Task<ActionResult<IReadOnlyCollection<RoleResponse>>> GetRoles(int tenantId, CancellationToken cancellationToken)
+    [HttpDelete("{tenantRef:guid}/roles/{roleRef:guid}")]
+    public async Task<IActionResult> DeleteRole(Guid tenantRef, Guid roleRef, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: GetRoles requested (TenantId: {TenantId})", tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
+        _logger.LogInformation("API: DeleteRole requested (RoleRef: {RoleRef}, TenantRef: {TenantRef})", roleRef, tenantRef);
+        return await WithCallerAsync(callerId => _managementService.DeleteRoleAsync(callerId, tenantRef, roleRef, cancellationToken));
+    }
+
+    /// <summary>Lists the permissions attached to a role. Requires <c>roles.read</c>.</summary>
+    [HttpGet("{tenantRef:guid}/roles/{roleRef:guid}/permissions")]
+    public async Task<ActionResult<IReadOnlyCollection<RolePermissionAssignmentResponse>>> GetRolePermissions(Guid tenantRef, Guid roleRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GetRolePermissions requested (RoleRef: {RoleRef})", roleRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.GetRolesAsync(tenantId, cancellationToken);
-        return MapResult(result);
+        return MapResult(await _managementService.GetRolePermissionsAsync(caller.Value, tenantRef, roleRef, cancellationToken));
+    }
+
+    /// <summary>Grants or denies a permission on a role. Requires <c>roles.manage</c>.</summary>
+    [HttpPost("{tenantRef:guid}/roles/{roleRef:guid}/permissions")]
+    public async Task<IActionResult> GrantRolePermission(Guid tenantRef, Guid roleRef, [FromBody] GrantPermissionRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GrantRolePermission requested (RoleRef: {RoleRef}, Slug: '{Slug}', IsDeny: {IsDeny})", roleRef, request.Slug, request.IsDeny);
+        return await WithCallerAsync(callerId => _managementService.GrantRolePermissionAsync(callerId, tenantRef, roleRef, request, cancellationToken));
     }
 
     /// <summary>
-    /// Retrieves all user groups defined in a tenant.
+    /// Detaches a permission from a role, as distinct from denying it. Requires <c>roles.manage</c>.
     /// </summary>
-    /// <param name="tenantId">The ID of the tenant.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of group responses.</returns>
-    [HttpGet("groups")]
-    public async Task<ActionResult<IReadOnlyCollection<GroupResponse>>> GetGroups(int tenantId, CancellationToken cancellationToken)
+    [HttpDelete("{tenantRef:guid}/roles/{roleRef:guid}/permissions/{slug}")]
+    public async Task<IActionResult> RemoveRolePermission(Guid tenantRef, Guid roleRef, string slug, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: GetGroups requested (TenantId: {TenantId})", tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
+        _logger.LogInformation("API: RemoveRolePermission requested (RoleRef: {RoleRef}, Slug: '{Slug}')", roleRef, slug);
+        return await WithCallerAsync(callerId => _managementService.RemoveRolePermissionAsync(callerId, tenantRef, roleRef, slug, cancellationToken));
+    }
+
+    // ----- Groups ------------------------------------------------------------------------------
+
+    /// <summary>Lists the groups defined in a tenant. Requires <c>users.read</c>.</summary>
+    [HttpGet("{tenantRef:guid}/groups")]
+    public async Task<ActionResult<ListResponse<GroupResponse>>> GetGroups(Guid tenantRef, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetGroups requested (TenantRef: {TenantRef})", tenantRef);
+        return await PagedAsync(tenantRef, skip, take, (callerId, s, t) => _managementService.GetGroupsAsync(callerId, tenantRef, s, t, cancellationToken));
+    }
+
+    /// <summary>Creates a group, optionally nested under a parent. Requires <c>users.manage</c>.</summary>
+    [HttpPost("{tenantRef:guid}/groups")]
+    public async Task<ActionResult<GroupResponse>> CreateGroup(Guid tenantRef, [FromBody] CreateGroupRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: CreateGroup requested (Name: '{GroupName}', TenantRef: {TenantRef})", request.Name, tenantRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.GetGroupsAsync(tenantId, cancellationToken);
-        return MapResult(result);
+        return MapResult(await _managementService.CreateGroupAsync(caller.Value, tenantRef, request, cancellationToken));
+    }
+
+    /// <summary>Renames a group. Requires <c>users.manage</c>.</summary>
+    [HttpPut("{tenantRef:guid}/groups/{groupRef:guid}")]
+    public async Task<IActionResult> UpdateGroup(Guid tenantRef, Guid groupRef, [FromBody] UpdateGroupRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: UpdateGroup requested (GroupRef: {GroupRef})", groupRef);
+        return await WithCallerAsync(callerId => _managementService.UpdateGroupAsync(callerId, tenantRef, groupRef, request, cancellationToken));
     }
 
     /// <summary>
-    /// Retrieves all permissions available in the system.
+    /// Deletes a group. Rejected if it still has child groups. Requires <c>users.manage</c>.
     /// </summary>
-    /// <param name="tenantId">The ID of the tenant used for the permission check.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of permission responses.</returns>
-    [HttpGet("permissions")]
-    public async Task<ActionResult<IReadOnlyCollection<PermissionResponse>>> GetPermissions(int tenantId, CancellationToken cancellationToken)
+    [HttpDelete("{tenantRef:guid}/groups/{groupRef:guid}")]
+    public async Task<IActionResult> DeleteGroup(Guid tenantRef, Guid groupRef, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: GetPermissions requested (TenantId: {TenantId})", tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
+        _logger.LogInformation("API: DeleteGroup requested (GroupRef: {GroupRef})", groupRef);
+        return await WithCallerAsync(callerId => _managementService.DeleteGroupAsync(callerId, tenantRef, groupRef, cancellationToken));
+    }
+
+    /// <summary>Lists the roles assigned to a group. Requires <c>roles.read</c>.</summary>
+    [HttpGet("{tenantRef:guid}/groups/{groupRef:guid}/roles")]
+    public async Task<ActionResult<IReadOnlyCollection<RoleAssignmentResponse>>> GetGroupRoles(Guid tenantRef, Guid groupRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GetGroupRoles requested (GroupRef: {GroupRef})", groupRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.GetPermissionsAsync(cancellationToken);
-        return MapResult(result);
+        return MapResult(await _managementService.GetGroupRolesAsync(caller.Value, tenantRef, groupRef, cancellationToken));
     }
 
     /// <summary>
-    /// Creates a new role within a tenant.
+    /// Assigns a role to a group. A null <c>workspaceRef</c> in the body means tenant-wide.
+    /// Requires <c>roles.manage</c>.
     /// </summary>
-    /// <param name="name">The name of the role.</param>
-    /// <param name="description">The role's description.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the role.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("roles")]
-    public async Task<IActionResult> CreateRole(string name, string description, int tenantId, CancellationToken cancellationToken)
+    [HttpPost("{tenantRef:guid}/groups/{groupRef:guid}/roles/{roleRef:guid}")]
+    public async Task<IActionResult> AssignGroupRole(Guid tenantRef, Guid groupRef, Guid roleRef, [FromBody] AssignmentScopeRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: CreateRole requested (Name: '{RoleName}', TenantId: {TenantId})", name, tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
+        _logger.LogInformation("API: AssignGroupRole requested (GroupRef: {GroupRef}, RoleRef: {RoleRef}, WorkspaceRef: {WorkspaceRef})", groupRef, roleRef, request.WorkspaceRef);
+        return await WithCallerAsync(callerId => _managementService.AssignGroupRoleAsync(callerId, tenantRef, groupRef, roleRef, request.WorkspaceRef, cancellationToken));
+    }
+
+    /// <summary>Removes a role assignment from a group. Requires <c>roles.manage</c>.</summary>
+    [HttpDelete("{tenantRef:guid}/groups/{groupRef:guid}/roles/{roleRef:guid}")]
+    public async Task<IActionResult> RemoveGroupRole(Guid tenantRef, Guid groupRef, Guid roleRef, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RemoveGroupRole requested (GroupRef: {GroupRef}, RoleRef: {RoleRef}, WorkspaceRef: {WorkspaceRef})", groupRef, roleRef, workspaceRef);
+        return await WithCallerAsync(callerId => _managementService.RemoveGroupRoleAsync(callerId, tenantRef, groupRef, roleRef, workspaceRef, cancellationToken));
+    }
+
+    // ----- Permissions catalogue ---------------------------------------------------------------
+
+    /// <summary>
+    /// Lists the permission catalogue. The catalogue is global and code-defined, so the tenant here
+    /// only scopes the permission check. Requires <c>roles.read</c>.
+    /// </summary>
+    [HttpGet("{tenantRef:guid}/permissions")]
+    public async Task<ActionResult<ListResponse<PermissionResponse>>> GetPermissions(Guid tenantRef, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetPermissions requested (TenantRef: {TenantRef})", tenantRef);
+        return await PagedAsync(tenantRef, skip, take, (callerId, s, t) => _managementService.GetPermissionsAsync(callerId, tenantRef, s, t, cancellationToken));
+    }
+
+    // ----- Members -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Lists the users in a tenant. This is how a caller discovers the user references every other
+    /// endpoint here needs. Requires <c>users.read</c>.
+    /// </summary>
+    [HttpGet("{tenantRef:guid}/members")]
+    public async Task<ActionResult<ListResponse<TenantMemberResponse>>> GetMembers(Guid tenantRef, [FromQuery] string? search, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetMembers requested (TenantRef: {TenantRef})", tenantRef);
+        return await PagedAsync(tenantRef, skip, take, (callerId, s, t) => _managementService.GetMembersAsync(callerId, tenantRef, search, s, t, cancellationToken));
+    }
+
+    /// <summary>Lists the roles a user holds and the scope of each. Requires <c>roles.read</c>.</summary>
+    [HttpGet("{tenantRef:guid}/members/{userRef:guid}/roles")]
+    public async Task<ActionResult<IReadOnlyCollection<RoleAssignmentResponse>>> GetUserRoles(Guid tenantRef, Guid userRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GetUserRoles requested (UserRef: {UserRef})", userRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.CreateRoleAsync(name, description, tenantId, cancellationToken);
-        return MapResult(result);
+        return MapResult(await _managementService.GetUserRolesAsync(caller.Value, tenantRef, userRef, cancellationToken));
     }
 
     /// <summary>
-    /// Creates a new user group within a tenant, optionally nested under a parent group.
+    /// Lists the permissions granted directly to a user. These override role-derived permissions in
+    /// both directions, so this is where an unexpected allow or deny is diagnosed.
+    /// Requires <c>roles.read</c>.
     /// </summary>
-    /// <param name="name">The name of the group.</param>
-    /// <param name="parentGroupId">The ID of the parent group, if any.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the group.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("groups")]
-    public async Task<IActionResult> CreateGroup(string name, int? parentGroupId, int tenantId, CancellationToken cancellationToken)
+    [HttpGet("{tenantRef:guid}/members/{userRef:guid}/permissions")]
+    public async Task<ActionResult<IReadOnlyCollection<UserPermissionAssignmentResponse>>> GetUserPermissions(Guid tenantRef, Guid userRef, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: CreateGroup requested (Name: '{GroupName}', ParentGroupId: {ParentGroupId}, TenantId: {TenantId})", name, parentGroupId, tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
+        _logger.LogInformation("API: GetUserPermissions requested (UserRef: {UserRef})", userRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.CreateGroupAsync(name, parentGroupId, tenantId, cancellationToken);
-        return MapResult(result);
+        return MapResult(await _managementService.GetUserPermissionsAsync(caller.Value, tenantRef, userRef, cancellationToken));
+    }
+
+    /// <summary>Lists the groups a user belongs to. Requires <c>users.read</c>.</summary>
+    [HttpGet("{tenantRef:guid}/members/{userRef:guid}/groups")]
+    public async Task<ActionResult<IReadOnlyCollection<GroupMembershipResponse>>> GetUserGroups(Guid tenantRef, Guid userRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GetUserGroups requested (UserRef: {UserRef})", userRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
+        {
+            return MapError(caller.Error);
+        }
+
+        return MapResult(await _managementService.GetUserGroupsAsync(caller.Value, tenantRef, userRef, cancellationToken));
+    }
+
+    /// <summary>Adds a user to a group. Requires <c>users.manage</c>.</summary>
+    [HttpPost("{tenantRef:guid}/members/{userRef:guid}/groups/{groupRef:guid}")]
+    public async Task<IActionResult> AddUserToGroup(Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: AddUserToGroup requested (UserRef: {UserRef}, GroupRef: {GroupRef})", userRef, groupRef);
+        return await WithCallerAsync(callerId => _managementService.AddUserToGroupAsync(callerId, tenantRef, userRef, groupRef, cancellationToken));
+    }
+
+    /// <summary>Removes a user from a group. Requires <c>users.manage</c>.</summary>
+    [HttpDelete("{tenantRef:guid}/members/{userRef:guid}/groups/{groupRef:guid}")]
+    public async Task<IActionResult> RemoveUserFromGroup(Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RemoveUserFromGroup requested (UserRef: {UserRef}, GroupRef: {GroupRef})", userRef, groupRef);
+        return await WithCallerAsync(callerId => _managementService.RemoveUserFromGroupAsync(callerId, tenantRef, userRef, groupRef, cancellationToken));
     }
 
     /// <summary>
-    /// Assigns a specific user to a group.
+    /// Assigns a role to a user. A null <c>workspaceRef</c> in the body means tenant-wide.
+    /// Requires <c>roles.manage</c>.
     /// </summary>
-    /// <param name="userId">The ID of the user.</param>
-    /// <param name="groupId">The ID of the group.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the group.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("users/{userId}/groups/{groupId}")]
-    public async Task<IActionResult> AddUserToGroup(int userId, int groupId, int tenantId, CancellationToken cancellationToken)
+    [HttpPost("{tenantRef:guid}/members/{userRef:guid}/roles/{roleRef:guid}")]
+    public async Task<IActionResult> AssignUserRole(Guid tenantRef, Guid userRef, Guid roleRef, [FromBody] AssignmentScopeRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: AddUserToGroup requested for UserId {UserId} and GroupId {GroupId} (TenantId: {TenantId})", userId, groupId, tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return MapError(gate.Error);
-        }
+        _logger.LogInformation("API: AssignUserRole requested (UserRef: {UserRef}, RoleRef: {RoleRef}, WorkspaceRef: {WorkspaceRef})", userRef, roleRef, request.WorkspaceRef);
+        return await WithCallerAsync(callerId => _managementService.AssignUserRoleAsync(callerId, tenantRef, userRef, roleRef, request.WorkspaceRef, cancellationToken));
+    }
 
-        var result = await _authService.AddUserToGroupAsync(userId, groupId, tenantId, cancellationToken);
-        return MapResult(result);
+    /// <summary>Removes a role assignment from a user. Requires <c>roles.manage</c>.</summary>
+    [HttpDelete("{tenantRef:guid}/members/{userRef:guid}/roles/{roleRef:guid}")]
+    public async Task<IActionResult> RemoveUserRole(Guid tenantRef, Guid userRef, Guid roleRef, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RemoveUserRole requested (UserRef: {UserRef}, RoleRef: {RoleRef}, WorkspaceRef: {WorkspaceRef})", userRef, roleRef, workspaceRef);
+        return await WithCallerAsync(callerId => _managementService.RemoveUserRoleAsync(callerId, tenantRef, userRef, roleRef, workspaceRef, cancellationToken));
+    }
+
+    /// <summary>Grants or denies a permission directly to a user. Requires <c>roles.manage</c>.</summary>
+    [HttpPost("{tenantRef:guid}/members/{userRef:guid}/permissions")]
+    public async Task<IActionResult> GrantUserPermission(Guid tenantRef, Guid userRef, [FromBody] GrantPermissionRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: GrantUserPermission requested (UserRef: {UserRef}, Slug: '{Slug}', IsDeny: {IsDeny})", userRef, request.Slug, request.IsDeny);
+        return await WithCallerAsync(callerId => _managementService.GrantUserPermissionAsync(callerId, tenantRef, userRef, request, cancellationToken));
     }
 
     /// <summary>
-    /// Enables or disables a user account. Disabling also revokes every refresh token the user
-    /// holds; any access token already issued stays valid until it expires.
+    /// Removes a direct user permission, returning the decision to the user's roles. This is not the
+    /// same as denying it — a user-level row wins over any role, so without this an accidental grant
+    /// could never be undone. Requires <c>roles.manage</c>.
     /// </summary>
-    /// <param name="userId">The ID of the user.</param>
-    /// <param name="tenantId">The ID of the tenant used for the permission check.</param>
-    /// <param name="request">The desired active state.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPut("users/{userId}/active")]
-    public async Task<IActionResult> SetUserActive(int userId, int tenantId, [FromBody] SetUserActiveRequest request, CancellationToken cancellationToken)
+    [HttpDelete("{tenantRef:guid}/members/{userRef:guid}/permissions/{slug}")]
+    public async Task<IActionResult> RemoveUserPermission(Guid tenantRef, Guid userRef, string slug, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: SetUserActive requested for UserId {UserId} (IsActive: {IsActive}, TenantId: {TenantId})", userId, request.IsActive, tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return MapError(gate.Error);
-        }
+        _logger.LogInformation("API: RemoveUserPermission requested (UserRef: {UserRef}, Slug: '{Slug}', WorkspaceRef: {WorkspaceRef})", userRef, slug, workspaceRef);
+        return await WithCallerAsync(callerId => _managementService.RemoveUserPermissionAsync(callerId, tenantRef, userRef, slug, workspaceRef, cancellationToken));
+    }
+
+    /// <summary>
+    /// Enables or disables an account. Disabling revokes every refresh token the user holds; an
+    /// access token already issued stays valid until it expires. Requires <c>users.manage</c>.
+    /// </summary>
+    [HttpPut("{tenantRef:guid}/members/{userRef:guid}/active")]
+    public async Task<IActionResult> SetUserActive(Guid tenantRef, Guid userRef, [FromBody] SetUserActiveRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: SetUserActive requested (UserRef: {UserRef}, IsActive: {IsActive})", userRef, request.IsActive);
 
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var result = await _authService.SetUserActiveAsync(userId, request.IsActive, ipAddress, cancellationToken);
-        return MapResult(result);
+        return await WithCallerAsync(callerId => _managementService.SetUserActiveAsync(callerId, tenantRef, userRef, request.IsActive, ipAddress, cancellationToken));
     }
 
-    /// <summary>
-    /// Grants or denies a specific permission to a role.
-    /// </summary>
-    /// <param name="roleId">The ID of the role.</param>
-    /// <param name="slug">The slug of the permission.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the role.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <param name="isDeny">If true, explicitly denies the permission.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("roles/{roleId}/permissions")]
-    public async Task<IActionResult> GrantRolePermission(int roleId, string slug, int tenantId, CancellationToken cancellationToken, bool isDeny = false)
+    // ----- Shared plumbing ---------------------------------------------------------------------
+
+    private async Task<IActionResult> WithCallerAsync(Func<int, Task<Result>> operation)
     {
-        _logger.LogInformation("API: GrantRolePermission requested for RoleId {RoleId}, Slug: '{PermissionSlug}' (IsDeny: {IsDeny}, TenantId: {TenantId})", roleId, slug, isDeny, tenantId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.GrantRolePermissionAsync(roleId, slug, isDeny, tenantId, cancellationToken);
-        return MapResult(result);
+        return MapResult(await operation(caller.Value));
     }
 
-    /// <summary>
-    /// Grants or denies a specific permission directly to a user (overriding role permissions)
-    /// at a scope: tenant-wide when no workspace is given, otherwise scoped to that workspace.
-    /// </summary>
-    /// <param name="userId">The ID of the user.</param>
-    /// <param name="slug">The slug of the permission.</param>
-    /// <param name="tenantId">The ID of the tenant the assignment belongs to.</param>
-    /// <param name="workspaceId">Optional workspace scope; null means tenant-wide.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <param name="isDeny">If true, explicitly denies the permission.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("users/{userId}/permissions")]
-    public async Task<IActionResult> GrantUserPermission(int userId, string slug, int tenantId, int? workspaceId, CancellationToken cancellationToken, bool isDeny = false)
+    private async Task<ActionResult<ListResponse<T>>> PagedAsync<T>(Guid tenantRef, int skip, int take, Func<int, int, int, Task<Result<IPagedList<T>>>> operation)
     {
-        _logger.LogInformation("API: GrantUserPermission requested for UserId {UserId}, Slug: '{PermissionSlug}' (IsDeny: {IsDeny}, TenantId: {TenantId}, WorkspaceId: {WorkspaceId})", userId, slug, isDeny, tenantId, workspaceId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
         {
-            return MapError(gate.Error);
+            return MapError(caller.Error);
         }
 
-        var result = await _authService.GrantUserPermissionAsync(userId, slug, isDeny, tenantId, workspaceId, cancellationToken);
-        return MapResult(result);
+        // Clamped rather than rejected: an out-of-range page size is not worth failing a read over,
+        // but an unbounded one would let a caller pull the whole table in a single request.
+        skip = Math.Max(0, skip);
+        take = Math.Clamp(take, 1, MaxPageSize);
+
+        var result = await operation(caller.Value, skip, take);
+        if (result.IsFailure)
+        {
+            return MapError(result.Error);
+        }
+
+        return Ok(new ListResponse<T> { Items = result.Value });
     }
-
-    /// <summary>
-    /// Assigns a role to a user at a scope: tenant-wide when no workspace is given,
-    /// otherwise scoped to that workspace.
-    /// </summary>
-    /// <param name="userId">The ID of the user.</param>
-    /// <param name="roleId">The ID of the role.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the role.</param>
-    /// <param name="workspaceId">Optional workspace scope; null means tenant-wide.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("users/{userId}/roles/{roleId}")]
-    public async Task<IActionResult> AssignUserRole(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("API: AssignUserRole requested for UserId {UserId}, RoleId {RoleId} (TenantId: {TenantId}, WorkspaceId: {WorkspaceId})", userId, roleId, tenantId, workspaceId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return MapError(gate.Error);
-        }
-
-        var result = await _authService.AssignUserRoleAsync(userId, roleId, tenantId, workspaceId, cancellationToken);
-        return MapResult(result);
-    }
-
-    /// <summary>
-    /// Removes a role assignment from a user at a scope: tenant-wide when no workspace is given,
-    /// otherwise scoped to that workspace.
-    /// </summary>
-    /// <param name="userId">The ID of the user.</param>
-    /// <param name="roleId">The ID of the role.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the role.</param>
-    /// <param name="workspaceId">Optional workspace scope; null means tenant-wide.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpDelete("users/{userId}/roles/{roleId}")]
-    public async Task<IActionResult> RemoveUserRole(int userId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("API: RemoveUserRole requested for UserId {UserId}, RoleId {RoleId} (TenantId: {TenantId}, WorkspaceId: {WorkspaceId})", userId, roleId, tenantId, workspaceId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return MapError(gate.Error);
-        }
-
-        var result = await _authService.RemoveUserRoleAsync(userId, roleId, tenantId, workspaceId, cancellationToken);
-        return MapResult(result);
-    }
-
-    /// <summary>
-    /// Assigns a role to a group at a scope: tenant-wide when no workspace is given,
-    /// otherwise scoped to that workspace.
-    /// </summary>
-    /// <param name="groupId">The ID of the group.</param>
-    /// <param name="roleId">The ID of the role.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the role and group.</param>
-    /// <param name="workspaceId">Optional workspace scope; null means tenant-wide.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("groups/{groupId}/roles/{roleId}")]
-    public async Task<IActionResult> AssignGroupRole(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("API: AssignGroupRole requested for GroupId {GroupId}, RoleId {RoleId} (TenantId: {TenantId}, WorkspaceId: {WorkspaceId})", groupId, roleId, tenantId, workspaceId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return MapError(gate.Error);
-        }
-
-        var result = await _authService.AssignGroupRoleAsync(groupId, roleId, tenantId, workspaceId, cancellationToken);
-        return MapResult(result);
-    }
-
-    /// <summary>
-    /// Removes a role assignment from a group at a scope: tenant-wide when no workspace is given,
-    /// otherwise scoped to that workspace.
-    /// </summary>
-    /// <param name="groupId">The ID of the group.</param>
-    /// <param name="roleId">The ID of the role.</param>
-    /// <param name="tenantId">The ID of the tenant that owns the role and group.</param>
-    /// <param name="workspaceId">Optional workspace scope; null means tenant-wide.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpDelete("groups/{groupId}/roles/{roleId}")]
-    public async Task<IActionResult> RemoveGroupRole(int groupId, int roleId, int tenantId, int? workspaceId, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("API: RemoveGroupRole requested for GroupId {GroupId}, RoleId {RoleId} (TenantId: {TenantId}, WorkspaceId: {WorkspaceId})", groupId, roleId, tenantId, workspaceId);
-        var gate = await EnsureTenantPermissionAsync(tenantId, Permissions.RolesManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return MapError(gate.Error);
-        }
-
-        var result = await _authService.RemoveGroupRoleAsync(groupId, roleId, tenantId, workspaceId, cancellationToken);
-        return MapResult(result);
-    }
-
-    /// <summary>
-    /// Verifies the caller holds the given permission tenant-wide (WorkspaceId = null scope)
-    /// before allowing a management operation.
-    /// </summary>
-    private async Task<Result> EnsureTenantPermissionAsync(int tenantId, PermissionSlug permission, CancellationToken cancellationToken)
-    {
-        var userIdResult = CurrentUserId();
-        if (userIdResult.IsFailure)
-        {
-            return Result.Failure(userIdResult.Error);
-        }
-
-        var verifyResult = await _authService.VerifyPermissionAsync(userIdResult.Value, tenantId, null, permission, cancellationToken);
-        if (verifyResult.IsFailure)
-        {
-            return Result.Failure(verifyResult.Error);
-        }
-
-        if (!verifyResult.Value)
-        {
-            _logger.LogWarning("Management operation denied: UserId {UserId} lacks tenant-wide '{Permission}' in TenantId {TenantId}", userIdResult.Value, permission, tenantId);
-            return Result.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {permission}"));
-        }
-
-        return Result.Success();
-    }
-
-
-
-
 }
