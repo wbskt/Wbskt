@@ -147,7 +147,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, 10, null, CancellationToken.None);
         
         Assert.True(response.IsFailure);
-        Assert.Equal(ErrorType.Unauthorized, response.Error.Type);
+        Assert.Equal(ErrorType.Forbidden, response.Error.Type);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, CancellationToken.None);
         
         Assert.True(response.IsFailure);
-        Assert.Equal(ErrorType.Unauthorized, response.Error.Type);
+        Assert.Equal(ErrorType.Forbidden, response.Error.Type);
     }
 
     private static WorkflowDefinitionRow CreateDefinitionRow(Guid refId, int workspaceId)

@@ -104,11 +104,11 @@ public sealed class SharedVariablesControllerTests
         var workflowRefId = Guid.NewGuid();
         var (controller, workflowService, _) = CreateController(provider.Object, Permissions.WorkflowsRead);
         workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Failure(Error.Unauthorized("WORKFLOW_UNAUTHORIZED", "denied")));
+            .ReturnsAsync(Result.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", "denied")));
 
         var result = await controller.Get(WorkspaceRef, workflowRefId, "counter", CancellationToken.None);
         
-        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         provider.Verify(x => x.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

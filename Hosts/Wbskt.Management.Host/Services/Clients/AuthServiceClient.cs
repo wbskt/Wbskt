@@ -26,10 +26,19 @@ internal sealed class AuthServiceClient : IAuthServiceClient
 
             if (!response.IsSuccessStatusCode)
             {
-                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden || response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                // These are now distinguishable: the auth service returns 403 when the caller is known
+                // but not a member of the workspace, and 401 only when it cannot identify them at all.
+                // Collapsing them would report an expired token as a permission problem.
+                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                 {
                     _logger.LogWarning("Workspace resolution forbidden: Access denied to workspace: '{WorkspaceRef}'", workspaceRef);
-                    return Result<WorkspaceAccess>.Failure(Error.Unauthorized("WORKSPACE_FORBIDDEN", "Access denied to workspace."));
+                    return Result<WorkspaceAccess>.Failure(Error.Forbidden("WORKSPACE_FORBIDDEN", "Access denied to workspace."));
+                }
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Workspace resolution unauthenticated for workspace: '{WorkspaceRef}'", workspaceRef);
+                    return Result<WorkspaceAccess>.Failure(Error.Unauthorized("WORKSPACE_UNAUTHENTICATED", "Not authenticated."));
                 }
 
                 _logger.LogError("Auth service failed to resolve workspace: '{WorkspaceRef}'. Status: {StatusCode}", workspaceRef, response.StatusCode);
@@ -71,7 +80,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
         if (missing.Count > 0)
         {
             _logger.LogWarning("Workspace '{WorkspaceRef}' resolved but caller lacks permission(s): {MissingPermissions}", workspaceRef, string.Join(", ", missing));
-            return Result<int>.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {string.Join(", ", missing)}"));
+            return Result<int>.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {string.Join(", ", missing)}"));
         }
 
         return Result<int>.Success(access.WorkspaceId);

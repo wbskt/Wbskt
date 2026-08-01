@@ -37,10 +37,12 @@ public sealed class AuthMetrics : IDisposable
     public void RecordRegistration(string outcome) => 
         Registrations.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
 
-    public void RecordWorkspaceResolution(string workspaceRef, string outcome) => 
-        WorkspaceResolutions.Add(1, 
-            new KeyValuePair<string, object?>("workspace_ref", workspaceRef), 
-            new KeyValuePair<string, object?>("outcome", outcome));
+    // Deliberately not labelled by workspace: the ref is caller-supplied and is recorded even when it
+    // resolves to nothing, so using it as a label would let anyone mint unbounded time series by
+    // posting random GUIDs. Per-workspace attribution belongs in the logs, which are not cardinality
+    // constrained.
+    public void RecordWorkspaceResolution(string outcome) =>
+        WorkspaceResolutions.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
 
     public void RecordPermissionCheck(string permissionSlug, string outcome) => 
         PermissionChecks.Add(1, 

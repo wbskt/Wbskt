@@ -13,7 +13,7 @@ namespace Wbskt.Management.Host.Controllers;
 [Route("api/workspaces/{workspaceRef:guid}/registration-policies")]
 [ApiController]
 [Authorize]
-public class RegistrationPoliciesController : ControllerBase
+public class RegistrationPoliciesController : ApiControllerBase
 {
     private readonly IRegistrationPolicyService _policyService;
     private readonly IAuthServiceClient _authClient;
@@ -106,7 +106,7 @@ public class RegistrationPoliciesController : ControllerBase
         if (result.Value.WorkspaceId != workspaceIdResult.Value)
         {
             _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceIdResult.Value);
-            return MapError(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
+            return MapError(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
         }
         
         return Ok(new RegistrationPolicyResponse(
@@ -201,36 +201,6 @@ public class RegistrationPoliciesController : ControllerBase
         return MapResult(result);
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

@@ -13,7 +13,7 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 [Route("api/workspaces/{workspaceRef:guid}/runs/{runRefId:guid}/history")]
 [ApiController]
 [Authorize]
-public sealed class WorkflowHistoryController : ControllerBase
+public sealed class WorkflowHistoryController : ApiControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
     private readonly IHistoryEventProvider _historyProvider;
@@ -79,36 +79,6 @@ public sealed class WorkflowHistoryController : ControllerBase
         }
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

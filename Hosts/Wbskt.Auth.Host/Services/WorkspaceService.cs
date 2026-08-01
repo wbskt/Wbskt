@@ -12,20 +12,17 @@ internal sealed class WorkspaceService : IWorkspaceService
 {
     private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IAuthProvider _authProvider;
-    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly AuthMetrics _metrics;
 
     public WorkspaceService(
-        IWorkspaceProvider workspaceProvider, 
+        IWorkspaceProvider workspaceProvider,
         IAuthProvider authProvider,
-        IHttpContextAccessor httpContextAccessor,
         ILogger<WorkspaceService> logger,
         AuthMetrics metrics)
     {
         _workspaceProvider = workspaceProvider;
         _authProvider = authProvider;
-        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _metrics = metrics;
     }
@@ -77,12 +74,12 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
     }
 
-    public async Task<Result> AddUserToWorkspaceAsync(int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> AddUserToWorkspaceAsync(int callerId, int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Adding user {UserEmail} to workspace ID: {WorkspaceId}", request.Email, workspaceId);
 
         // Caller must hold users.manage in this workspace
-        var accessResult = await ResolveAccessAsync(workspaceId, cancellationToken);
+        var accessResult = await ResolveAccessAsync(callerId, workspaceId, cancellationToken);
         if (accessResult.IsFailure)
         {
             return Result.Failure(accessResult.Error);
@@ -91,7 +88,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         if (!accessResult.Value.Contains(Permissions.UsersManage))
         {
             _logger.LogWarning("Add member denied: caller lacks '{Permission}' in workspace ID: {WorkspaceId}", Permissions.UsersManage, workspaceId);
-            return Result.Failure(Error.Unauthorized("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {Permissions.UsersManage}"));
+            return Result.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {Permissions.UsersManage}"));
         }
 
         try
@@ -120,19 +117,9 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
     }
 
-    public async Task<Result<IReadOnlyCollection<string>>> ResolveAccessAsync(int workspaceId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<string>>> ResolveAccessAsync(int userId, int workspaceId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Resolving access for workspace ID: {WorkspaceId}", workspaceId);
-
-        var currentUserIdResult = GetCurrentUserId();
-        if (currentUserIdResult.IsFailure)
-        {
-            _logger.LogWarning("Workspace access resolution failed: User not authenticated. WorkspaceId: {WorkspaceId}", workspaceId);
-            _metrics.RecordPermissionCheck("effective-set", "unauthorized");
-            return Result<IReadOnlyCollection<string>>.Failure(currentUserIdResult.Error);
-        }
-
-        var userId = currentUserIdResult.Value;
 
         try
         {
@@ -142,7 +129,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             {
                 _logger.LogWarning("Workspace access resolution failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, workspaceId);
                 _metrics.RecordPermissionCheck("effective-set", "unauthorized");
-                return Result<IReadOnlyCollection<string>>.Failure(Error.Unauthorized("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
+                return Result<IReadOnlyCollection<string>>.Failure(Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
             }
 
             // 2. Compute the effective permission set (an empty set is still a successful resolution)
@@ -159,21 +146,5 @@ internal sealed class WorkspaceService : IWorkspaceService
             _metrics.RecordPermissionCheck("effective-set", "error");
             return Result<IReadOnlyCollection<string>>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
         }
-    }
-    
-    private Result<int> GetCurrentUserId()
-    {
-        var user = _httpContextAccessor.HttpContext?.User;
-        if (user == null)
-        {
-            return Result<int>.Failure(Error.Unauthorized("USER_NOT_AUTHENTICATED", "User not found."));
-        }
-
-        var userIdString = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
-        {
-            return Result<int>.Failure(Error.Unauthorized("USER_NOT_AUTHENTICATED", "User not found in token."));
-        }
-        return Result<int>.Success(userId);
     }
 }

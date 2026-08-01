@@ -14,7 +14,7 @@ namespace Wbskt.Management.Host.Controllers;
 [Route("api/workspaces/{workspaceRef:guid}/event-logs")]
 [ApiController]
 [Authorize]
-public sealed class EventLogsController : ControllerBase
+public sealed class EventLogsController : ApiControllerBase
 {
     private readonly IEventLogService _eventLogService;
     private readonly IAuthServiceClient _authClient;
@@ -102,36 +102,6 @@ public sealed class EventLogsController : ControllerBase
         });
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }

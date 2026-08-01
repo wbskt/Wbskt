@@ -141,7 +141,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             if (definition.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Workspace access denied for Run '{RunRefId}'", run.RefId);
-                return Result.Failure(Error.Unauthorized("RUN_UNAUTHORIZED", $"Run '{run.RefId}' does not belong to the workspace."));
+                return Result.Failure(Error.Forbidden("RUN_UNAUTHORIZED", $"Run '{run.RefId}' does not belong to the workspace."));
             }
             return Result.Success();
         }
@@ -160,7 +160,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             if (definition.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Workspace access denied for workflow '{WorkflowRefId}'", workflowRefId);
-                return Result.Failure(Error.Unauthorized("WORKFLOW_UNAUTHORIZED", $"Workflow '{workflowRefId}' does not belong to the workspace."));
+                return Result.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{workflowRefId}' does not belong to the workspace."));
             }
             return Result.Success();
         }

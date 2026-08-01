@@ -69,7 +69,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             if (existing is not null && existing.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Workflow publish rejected: Workflow '{RefId}' does not belong to WorkspaceId: {WorkspaceId}", request.RefId, workspaceId);
-                return Result<WorkflowPublishResponse>.Failure(Error.Unauthorized("WORKFLOW_UNAUTHORIZED", $"Workflow '{request.RefId}' does not belong to the workspace."));
+                return Result<WorkflowPublishResponse>.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{request.RefId}' does not belong to the workspace."));
             }
 
             WorkflowDefinitionRow inserted = await _workflowDefinitionProvider.InsertAsync(new WorkflowDefinitionRow
@@ -261,7 +261,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         if (row.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Workspace access denied for workflow '{RefId}'", refId);
-            return Result.Failure(Error.Unauthorized("WORKFLOW_UNAUTHORIZED", $"Workflow '{refId}' does not belong to the workspace."));
+            return Result.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{refId}' does not belong to the workspace."));
         }
         return Result.Success();
     }

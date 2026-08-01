@@ -15,7 +15,7 @@ namespace Wbskt.Management.Host.Controllers;
 [Route("api/workspaces/{workspaceRef:guid}/clients")]
 [ApiController]
 [Authorize]
-public class ClientsController : ControllerBase
+public class ClientsController : ApiControllerBase
 {
     private readonly IClientService _clientService;
     private readonly IReferenceMapper _clientMapper;
@@ -134,7 +134,7 @@ public class ClientsController : ControllerBase
         if (policyResult.Value.WorkspaceId != workspaceIdResult.Value)
         {
             _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceIdResult.Value);
-            return MapError(Error.Unauthorized("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
+            return MapError(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
         }
 
         // 4. All checks pass, get the data
@@ -391,38 +391,8 @@ public class ClientsController : ControllerBase
         return NoContent();
     }
 
-    private IActionResult MapResult(Result result)
-    {
-        if (result.IsSuccess)
-        {
-            return NoContent();
-        }
 
-        return MapError(result.Error);
-    }
 
-    private ActionResult<T> MapResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
-        {
-            return Ok(result.Value);
-        }
-
-        return MapError(result.Error);
-    }
-
-    private ActionResult MapError(Error error)
-    {
-        _logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-            ErrorType.Unauthorized => Unauthorized(error),
-            _ => BadRequest(error)
-        };
-    }
 }
 
 public record UpdateClientStatusRequest(ClientStatus Status);

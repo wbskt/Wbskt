@@ -65,10 +65,38 @@ Consequences worth knowing:
 ## Management API gating
 
 `api/management/*` endpoints require a **tenant-wide** permission in the target tenant:
-`roles.manage` for role/permission operations, `users.manage` for group/user-group operations.
-`POST /api/workspaces/{ref}/members` requires `users.manage` **in that workspace**.
+`roles.manage` for role operations, `users.manage` for group/user-group and account-state operations.
+`POST /api/workspaces/{ref}/members` requires `users.manage` **in that workspace**, and also adds the
+user to the workspace's tenant (`WorkspaceMember_Add`) — without that row they would pass the
+membership gate but resolve no roles, since every assignment is filtered by `TenantId`.
 Workspace owners automatically receive the tenant's `Admin` role scoped to the new workspace
 (`Workspace_Create`).
+
+The permission catalogue is **code-defined**: `Wbskt.Primitives/Constants/Permissions.cs` seeded by
+`Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`. There is deliberately no API to
+create permissions — a slug invented at runtime cannot gate anything, because every check in the
+codebase is a compile-time `Permissions.X` constant.
+
+## Sessions and tokens
+
+- Access tokens last 60 minutes and are not revocable; refresh tokens last 7 days and are.
+- Refresh is **rotating**: `POST /api/auth/refresh-token` issues a new pair and revokes the token
+  presented, recording the replacement in `ReplacedByToken`.
+- Presenting an **already-revoked** token is treated as a leak: every refresh token for that user is
+  revoked and a `SecurityAlertEvent` is published. A client that loses a refresh race is signed out
+  rather than left sharing a live token with an attacker.
+- `POST /api/auth/logout` revokes one token; `POST /api/auth/logout-all` revokes the caller's whole
+  set. Both succeed regardless of whether the token existed, so neither can be used to probe.
+- `PUT /api/management/users/{userId}/active` disables an account and revokes its refresh tokens.
+  An access token already issued stays valid until it expires — deactivation is not instant.
+- The credential endpoints are rate limited per client IP (`RateLimiting:Authentication`).
+
+## Error semantics
+
+`ErrorType.Forbidden` → **403** is used for "authenticated but not permitted": failing a management
+permission gate, not being a workspace member, or touching a resource in another workspace.
+**401** is reserved for "we cannot identify the caller" — bad credentials, or an invalid, expired or
+revoked token. Consumers such as `AuthServiceClient` rely on the distinction.
 
 ## Deploying schema upgrades to an existing DB
 

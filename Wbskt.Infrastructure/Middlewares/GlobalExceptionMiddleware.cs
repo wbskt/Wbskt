@@ -42,13 +42,19 @@ public partial class GlobalExceptionMiddleware
         }
     }
 
+    // Safety net only. Expected failures travel as Result/Error and are given their status code by
+    // ApiControllerBase; anything reaching here is either a deliberate throw from a non-controller
+    // path or a genuine bug.
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception, IEventBus eventBus)
     {
         context.Response.ContentType = "application/json";
-        
+
         var statusCode = exception switch
         {
-            SecurityException => (int)HttpStatusCode.Unauthorized,
+            // Providers throw this for "record not found" as well as access denial, deliberately, so
+            // that a bad reference cannot be told apart from an inaccessible one. 403 rather than 401:
+            // the caller is authenticated, they just cannot have this.
+            SecurityException => (int)HttpStatusCode.Forbidden,
             ValidationException => (int)HttpStatusCode.BadRequest,
             NotFoundException => (int)HttpStatusCode.NotFound,
             OptimisticConcurrencyException => (int)HttpStatusCode.Conflict,
@@ -57,7 +63,9 @@ public partial class GlobalExceptionMiddleware
             _ => (int)HttpStatusCode.InternalServerError
         };
 
-        if (statusCode == (int)HttpStatusCode.InternalServerError)
+        var isServerFault = statusCode == (int)HttpStatusCode.InternalServerError;
+
+        if (isServerFault)
         {
             await eventBus.PublishAsync(new SystemErrorEvent(
                 exception.GetType().Name,
@@ -70,9 +78,17 @@ public partial class GlobalExceptionMiddleware
 
         context.Response.StatusCode = statusCode;
 
+        // The mapped types carry messages an author wrote for the caller, so those pass through.
+        // An unmapped exception's message is arbitrary runtime text — SQL statements, file paths,
+        // connection strings — and these hosts are publicly routed, so it is logged, not returned.
+        // The trace ID is the handle for correlating the response with the logged detail.
+        var message = isServerFault
+            ? "An unexpected error occurred while processing the request."
+            : exception.Message;
+
         var response = new ErrorResponse(
-            exception.Message,
-            exception.GetType().Name,
+            message,
+            isServerFault ? nameof(InternalServerException) : exception.GetType().Name,
             context.TraceIdentifier
         );
 
