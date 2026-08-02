@@ -12,28 +12,31 @@ BEGIN
         THROW 50001, 'Role does not belong to the specified tenant.', 1;
     END
 
-DECLARE @PermissionId INT;
+    DECLARE @PermissionId INT;
     SELECT @PermissionId = Id FROM dbo.Permissions WHERE Slug = @PermissionSlug;
 
-    IF @PermissionId IS NOT NULL
+    -- An unknown slug is a caller mistake (a typo grants nothing), so it is rejected rather than
+    -- silently skipped. Without this the API answers 204 for a grant that never happened.
+    IF @PermissionId IS NULL
     BEGIN
-
-MERGE dbo.RolePermissions AS target
-        USING (SELECT @RoleId AS RoleId, @PermissionId AS PermissionId) AS source
-        ON (target.RoleId = source.RoleId AND target.PermissionId = source.PermissionId)
-        WHEN MATCHED THEN
-            UPDATE SET IsDeny = @IsDeny
-        WHEN NOT MATCHED THEN
-            INSERT (
-                RoleId,
-                PermissionId,
-                IsDeny
-            )
-            VALUES (
-                @RoleId,
-                @PermissionId,
-                @IsDeny
-            );
+        THROW 50007, 'Permission slug does not exist.', 1;
     END
+
+    MERGE dbo.RolePermissions AS target
+    USING (SELECT @RoleId AS RoleId, @PermissionId AS PermissionId) AS source
+    ON (target.RoleId = source.RoleId AND target.PermissionId = source.PermissionId)
+    WHEN MATCHED THEN
+        UPDATE SET IsDeny = @IsDeny
+    WHEN NOT MATCHED THEN
+        INSERT (
+            RoleId,
+            PermissionId,
+            IsDeny
+        )
+        VALUES (
+            @RoleId,
+            @PermissionId,
+            @IsDeny
+        );
 END
 GO

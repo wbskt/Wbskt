@@ -254,7 +254,7 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Permission assignments --------------------------------------------------------------
 
-    public async Task<Result> GrantRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, GrantPermissionRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> GrantRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default)
     {
         var resolved = await ResolveRoleAsync(callerId, tenantRef, roleRef, Permissions.RolesManage, cancellationToken);
         if (resolved.IsFailure)
@@ -671,9 +671,10 @@ internal sealed class ManagementService : IManagementService
             return Error.NotFound("AUTH_NOT_FOUND", "The requested record was not found.");
         }
 
-        // THROW 50001-50006 from the stored procedures are deliberate guards (wrong tenant, group
-        // has children, cannot remove the owner) rather than faults, so they read back as validation.
-        if (ex is SqlException { Number: >= 50001 and <= 50006 } guard)
+        // THROW 50001-50007 from the stored procedures are deliberate guards (wrong tenant, group
+        // has children, cannot remove the owner, unknown permission slug) rather than faults, so
+        // they read back as validation.
+        if (ex is SqlException { Number: >= 50001 and <= 50007 } guard)
         {
             _logger.LogWarning("{Operation} rejected by database guard: {Message}", operation, guard.Message);
             return Error.Validation("AUTH_OPERATION_REJECTED", guard.Message);
