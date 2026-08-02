@@ -204,6 +204,197 @@ public sealed class ServicesFixture : IDisposable
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Raw request helpers
+    //
+    // The typed helpers above all call EnsureSuccessStatusCode, which is right for
+    // arranging a scenario but destroys exactly what a negative scenario asserts.
+    // These return the response untouched so a test can read the status, the error
+    // body, or a header off it.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public static string AuthUrl(string path) => $"{E2EConfig.AuthBaseUrl}{path}";
+
+    public static string ManagementUrl(string path) => $"{E2EConfig.ManagementBaseUrl}{path}";
+
+    /// <summary>Sends a request and returns the raw response without throwing on a failure status.</summary>
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? token = null, object? body = null)
+    {
+        using var req = new HttpRequestMessage(method, url);
+
+        if (token is not null)
+        {
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        if (body is not null)
+        {
+            req.Content = JsonContent.Create(body, options: JsonOptions);
+        }
+
+        return await _http.SendAsync(req);
+    }
+
+    /// <summary>Reads the <c>code</c> off an <c>Error</c> response body, or null when the body is not one.</summary>
+    public static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var error = await response.Content.ReadFromJsonAsync<ErrorDto>(JsonOptions);
+            return error?.Code;
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            // Model-validation failures return ProblemDetails, which has no code. Not an error here:
+            // the caller is asking "what code, if any", and the status assertion carries the weight.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// GETs a paged list endpoint and returns how many items came back alongside the X-Total-Count
+    /// header. A null total means the header was absent, which is the pagination bug itself.
+    /// </summary>
+    public async Task<(int ItemCount, int? TotalCount)> GetPageAsync(string url, string token)
+    {
+        var resp = await SendAsync(HttpMethod.Get, url, token);
+        resp.EnsureSuccessStatusCode();
+
+        var page = await resp.Content.ReadFromJsonAsync<ListDto<JsonElement>>(JsonOptions)
+            ?? throw new InvalidOperationException($"Empty list response from {url}.");
+
+        int? total = null;
+        if (resp.Headers.TryGetValues("X-Total-Count", out var values)
+            && int.TryParse(values.FirstOrDefault(), out var parsed))
+        {
+            total = parsed;
+        }
+
+        return (page.Items.Count, total);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Auth-host arrangement helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>A registered, logged-in user. Unique per call so scenarios never collide.</summary>
+    public sealed record TestUser(string Username, string Email, string Password, string Token);
+
+    /// <summary>Registers and logs in a brand-new user, returning their credentials and token.</summary>
+    public async Task<TestUser> CreateUserAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var email = $"e2e-{suffix}@test.local";
+
+        // At least 12 characters — RegisterRequest enforces it.
+        var password = $"P@ssw0rd-{suffix}";
+        var username = $"e2e-{suffix}";
+
+        var registerResp = await _http.PostAsJsonAsync(
+            AuthUrl("/api/auth/register"),
+            new { Username = username, Email = email, Password = password });
+        registerResp.EnsureSuccessStatusCode();
+
+        var loginResp = await _http.PostAsJsonAsync(
+            AuthUrl("/api/auth/login"),
+            new { Email = email, Password = password });
+        loginResp.EnsureSuccessStatusCode();
+
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Empty login response.");
+
+        return new TestUser(username, email, password, login.AccessToken);
+    }
+
+    /// <summary>The caller's first tenant reference — every /api/tenants route needs one.</summary>
+    public async Task<Guid> GetTenantRefAsync(string token)
+    {
+        var resp = await SendAsync(HttpMethod.Get, AuthUrl("/api/tenants"), token);
+        resp.EnsureSuccessStatusCode();
+
+        var tenants = await resp.Content.ReadFromJsonAsync<List<TenantDto>>(JsonOptions) ?? [];
+        if (tenants.Count == 0)
+        {
+            throw new InvalidOperationException("Caller belongs to no tenant.");
+        }
+
+        return tenants[0].RefId;
+    }
+
+    /// <summary>Finds a tenant member's public reference by email, or null when absent.</summary>
+    public async Task<Guid?> FindTenantMemberRefAsync(string token, Guid tenantRef, string email)
+    {
+        var resp = await SendAsync(
+            HttpMethod.Get,
+            AuthUrl($"/api/tenants/{tenantRef}/members?search={Uri.EscapeDataString(email)}&take=200"),
+            token);
+        resp.EnsureSuccessStatusCode();
+
+        var page = await resp.Content.ReadFromJsonAsync<ListDto<MemberDto>>(JsonOptions);
+        return page?.Items.FirstOrDefault(m => string.Equals(m.Email, email, StringComparison.OrdinalIgnoreCase))?.RefId;
+    }
+
+    /// <summary>Creates a tenant role and returns its reference.</summary>
+    public async Task<Guid> CreateRoleAsync(string token, Guid tenantRef, string? name = null)
+    {
+        var resp = await SendAsync(
+            HttpMethod.Post,
+            AuthUrl($"/api/tenants/{tenantRef}/roles"),
+            token,
+            new { Name = name ?? $"e2e-role-{Guid.NewGuid():N}", Description = "created by an E2E scenario" });
+        resp.EnsureSuccessStatusCode();
+
+        var role = await resp.Content.ReadFromJsonAsync<RoleDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Role creation returned empty response.");
+
+        return role.RefId;
+    }
+
+    /// <summary>Creates a tenant group and returns its reference.</summary>
+    public async Task<Guid> CreateGroupAsync(string token, Guid tenantRef, string? name = null)
+    {
+        var resp = await SendAsync(
+            HttpMethod.Post,
+            AuthUrl($"/api/tenants/{tenantRef}/groups"),
+            token,
+            new { Name = name ?? $"e2e-group-{Guid.NewGuid():N}", ParentGroupRef = (Guid?)null });
+        resp.EnsureSuccessStatusCode();
+
+        var group = await resp.Content.ReadFromJsonAsync<GroupDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Group creation returned empty response.");
+
+        return group.RefId;
+    }
+
+    /// <summary>Creates a workspace owned by the caller and returns its reference.</summary>
+    public async Task<Guid> CreateWorkspaceAsync(string token, string? name = null)
+    {
+        var resp = await SendAsync(
+            HttpMethod.Post,
+            AuthUrl("/api/workspaces"),
+            token,
+            new { Name = name ?? $"e2e-ws-{Guid.NewGuid():N}", Description = (string?)null });
+        resp.EnsureSuccessStatusCode();
+
+        var workspace = await resp.Content.ReadFromJsonAsync<WorkspaceDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Workspace creation returned empty response.");
+
+        return workspace.RefId;
+    }
+
+    /// <summary>The slugs currently attached to a role definition.</summary>
+    public async Task<IReadOnlyList<string>> GetRolePermissionSlugsAsync(string token, Guid tenantRef, Guid roleRef)
+    {
+        var resp = await SendAsync(
+            HttpMethod.Get,
+            AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
+            token);
+        resp.EnsureSuccessStatusCode();
+
+        var permissions = await resp.Content.ReadFromJsonAsync<List<RolePermissionDto>>(JsonOptions) ?? [];
+        return permissions.Select(p => p.Slug).ToList();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Policy helpers
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -529,6 +720,13 @@ public sealed class ServicesFixture : IDisposable
 
     private record LoginDto(string AccessToken, string RefreshToken);
     private record WorkspaceDto(Guid RefId, string Name, string? Description, DateTime CreatedAt);
+    private record ErrorDto(string Code, string Message, int Type);
+    private record ListDto<T>(List<T> Items);
+    private record TenantDto(Guid RefId, string Name);
+    private record RoleDto(Guid RefId, string Name, string? Description);
+    private record GroupDto(Guid RefId, string Name, Guid? ParentGroupRefId);
+    private record MemberDto(Guid RefId, string Username, string Email, bool IsActive);
+    private record RolePermissionDto(string Slug, bool IsDeny);
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
     private record ClientLoginDto(string AccessToken, int ExpiresIn);
