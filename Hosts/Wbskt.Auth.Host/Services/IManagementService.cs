@@ -36,7 +36,7 @@ public interface IManagementService
     Task<Result> RemoveUserFromGroupAsync(int callerId, Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default);
     Task<Result> SetUserActiveAsync(int callerId, Guid tenantRef, Guid userRef, bool isActive, string ipAddress, CancellationToken cancellationToken = default);
 
-    Task<Result> GrantRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, GrantPermissionRequest request, CancellationToken cancellationToken = default);
+    Task<Result> GrantRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default);
     Task<Result> RemoveRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, string slug, CancellationToken cancellationToken = default);
     Task<Result> GrantUserPermissionAsync(int callerId, Guid tenantRef, Guid userRef, GrantPermissionRequest request, CancellationToken cancellationToken = default);
     Task<Result> RemoveUserPermissionAsync(int callerId, Guid tenantRef, Guid userRef, string slug, Guid? workspaceRef, CancellationToken cancellationToken = default);

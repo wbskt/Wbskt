@@ -56,7 +56,7 @@ public class WorkspacesController : ApiControllerBase
         {
             _logger.LogWarning("API: Resolve failed - Workspace with RefId: '{WorkspaceRef}' not found", request.WorkspaceRef);
             _metrics.RecordWorkspaceResolution("not_found");
-            return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
+            return MapError(UnresolvedWorkspace());
         }
 
         var result = await _workspaceService.ResolveAccessAsync(userIdResult.Value, workspaceId, cancellationToken);
@@ -135,7 +135,7 @@ public class WorkspacesController : ApiControllerBase
         if (workspaceId <= 0)
         {
             _logger.LogWarning("API: AddMember failed - Workspace with RefId: '{WorkspaceRef}' not found", workspaceRef);
-            return NotFound(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
+            return MapError(UnresolvedWorkspace());
         }
 
         var result = await _workspaceService.AddUserToWorkspaceAsync(userIdResult.Value, workspaceId, request, cancellationToken);
@@ -164,6 +164,8 @@ public class WorkspacesController : ApiControllerBase
         {
             return MapError(result.Error);
         }
+
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
 
         return Ok(new ListResponse<TenantMemberResponse> { Items = result.Value });
     }
@@ -235,13 +237,24 @@ public class WorkspacesController : ApiControllerBase
         if (workspaceId <= 0)
         {
             _logger.LogWarning("Workspace with RefId: '{WorkspaceRef}' not found", workspaceRef);
-            return Result<(int, int)>.Failure(Error.NotFound("WORKSPACE_NOT_FOUND", "Workspace not found."));
+            return Result<(int, int)>.Failure(UnresolvedWorkspace());
         }
 
         return Result<(int, int)>.Success((userIdResult.Value, workspaceId));
     }
 
-
-
-
+    /// <summary>
+    /// A workspace reference that does not resolve. Forbidden rather than NotFound, for two reasons:
+    /// it is the convention for an unresolvable RefId (see "The ID Boundary" in
+    /// Docs/Coding.Conventions.md), and it keeps "no such workspace" indistinguishable from "not
+    /// yours", so the endpoint cannot be used to enumerate workspaces.
+    /// <para>
+    /// It also matters downstream. The management host resolves every workspace-scoped request
+    /// through here and only understands 401 and 403; any other status becomes an
+    /// <see cref="ErrorType.Failure"/> and surfaces to the user as a 500. A stale reference — the
+    /// normal state of affairs after a workspace is deleted, since resources in other services
+    /// outlive it — is a permission answer, not a server fault.
+    /// </para>
+    /// </summary>
+    private static Error UnresolvedWorkspace() => Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found.");
 }

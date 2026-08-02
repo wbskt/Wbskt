@@ -105,9 +105,13 @@ public class ManagementController : ApiControllerBase
         return MapResult(await _managementService.GetRolePermissionsAsync(caller.Value, tenantRef, roleRef, cancellationToken));
     }
 
-    /// <summary>Grants or denies a permission on a role. Requires <c>roles.manage</c>.</summary>
+    /// <summary>
+    /// Grants or denies a permission on a role. Role permissions are unscoped — the workspace is
+    /// chosen when the role is assigned, so this body takes no <c>workspaceRef</c>.
+    /// Requires <c>roles.manage</c>.
+    /// </summary>
     [HttpPost("{tenantRef:guid}/roles/{roleRef:guid}/permissions")]
-    public async Task<IActionResult> GrantRolePermission(Guid tenantRef, Guid roleRef, [FromBody] GrantPermissionRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> GrantRolePermission(Guid tenantRef, Guid roleRef, [FromBody] GrantRolePermissionRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: GrantRolePermission requested (RoleRef: {RoleRef}, Slug: '{Slug}', IsDeny: {IsDeny})", roleRef, request.Slug, request.IsDeny);
         return await WithCallerAsync(callerId => _managementService.GrantRolePermissionAsync(callerId, tenantRef, roleRef, request, cancellationToken));
@@ -374,6 +378,10 @@ public class ManagementController : ApiControllerBase
         {
             return MapError(result.Error);
         }
+
+        // The total is what makes the skip/take pair usable — without it a caller cannot tell a
+        // final page from a full one. Matches the header the management host's list endpoints set.
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
 
         return Ok(new ListResponse<T> { Items = result.Value });
     }

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Wbskt.Auth.Host.Models;
 
@@ -46,6 +47,10 @@ public record UpdateGroupRequest(
 /// </summary>
 public record AssignmentScopeRequest(Guid? WorkspaceRef);
 
+/// <summary>
+/// Grants or denies a permission directly to a user, at a scope. A null <c>WorkspaceRef</c> means
+/// tenant-wide.
+/// </summary>
 public record GrantPermissionRequest(
     [property: Required]
     [property: StringLength(100)]
@@ -54,6 +59,25 @@ public record GrantPermissionRequest(
     bool IsDeny = false,
 
     Guid? WorkspaceRef = null);
+
+/// <summary>
+/// Grants or denies a permission on a role. Deliberately has no workspace scope: a role permission
+/// is part of the role definition, and the scope is chosen when the role is assigned. Sharing
+/// <see cref="GrantPermissionRequest"/> here would accept a <c>WorkspaceRef</c> that could only be
+/// ignored, so the caller would get a success response for a scope that was never applied.
+/// <para>
+/// Unmapped members are rejected rather than dropped. Removing the property alone is not enough —
+/// the default is to ignore what it cannot bind, which is the same silent success by another route.
+/// This turns a caller who still sends <c>workspaceRef</c> into a 400 that names the mistake.
+/// </para>
+/// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public record GrantRolePermissionRequest(
+    [property: Required]
+    [property: StringLength(100)]
+    string Slug,
+
+    bool IsDeny = false);
 
 public record SetUserActiveRequest(bool IsActive);
 
