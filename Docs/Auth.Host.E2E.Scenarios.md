@@ -488,7 +488,9 @@ so the gap is visible; every one of these is an invariant `ManagementService` is
 
 ## 16. Suggested implementation order
 
-1. **§2 regression** — smallest set, highest value, proves the four fixes.
+1. **§2 regression** — ✅ implemented in `Scenarios/Auth/AuthRegressionTests.cs`. `REG_07`–`REG_10`
+   assert behaviour that lives in the stored procedures, so they need the corrected database
+   deployed, not just the host rebuilt.
 2. **§5 refresh/rotation** — most security-sensitive, entirely uncovered.
 3. **§8 `AUTH_TK_06`/`07`** — one test each, pins the token-type accident.
 4. **§9 resolve + `WS_CRD_04`** — the cross-service contract and the tenant/workspace admin boundary.
