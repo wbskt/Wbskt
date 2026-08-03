@@ -13,6 +13,18 @@ namespace Wbskt.Auth.Host.Services;
 
 internal sealed class ManagementService : IManagementService
 {
+    private const string DefaultWorkspaceName = "Default Workspace";
+
+    private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// One answer for every way an invitation can fail to redeem. An unknown token, an expired one
+    /// and one addressed to a different account are indistinguishable, so a token holder cannot use
+    /// the endpoint to learn anything about invitations that are not theirs.
+    /// </summary>
+    private static readonly Error InvalidInvitation =
+        Error.Validation("INVITATION_INVALID", "This invitation is not valid. It may have expired, been revoked, already been used, or been sent to a different email address.");
+
     private readonly IAuthProvider _provider;
     private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IEventBus _eventBus;
@@ -38,6 +50,141 @@ internal sealed class ManagementService : IManagementService
             return (IReadOnlyCollection<TenantResponse>)tenants
                 .Select(t => new TenantResponse(t.RefId, t.Name))
                 .ToList();
+        });
+    }
+
+    // ----- Tenant lifecycle --------------------------------------------------------------------
+
+    public async Task<Result<TenantResponse>> CreateTenantAsync(int callerId, CreateTenantRequest request, CancellationToken cancellationToken = default)
+    {
+        // No permission gate, and none is possible: permissions are held within a tenant, so
+        // requiring one to create the first tenant would be circular. Authentication is the bar.
+        return await GuardAsync("CreateTenant", async () =>
+        {
+            var refId = await _provider.CreateTenantAsync(request.Name, request.Description, callerId, DefaultWorkspaceName, cancellationToken);
+            _logger.LogInformation("Tenant '{TenantName}' created by user ID {CallerId} with RefId {RefId}", request.Name, callerId, refId);
+            return new TenantResponse(refId, request.Name);
+        });
+    }
+
+    public async Task<Result> UpdateTenantAsync(int callerId, Guid tenantRef, UpdateTenantRequest request, CancellationToken cancellationToken = default)
+    {
+        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return Result.Failure(scope.Error);
+        }
+
+        return await GuardAsync("UpdateTenant", () => _provider.UpdateTenantAsync(scope.Value, request.Name, request.Description, cancellationToken));
+    }
+
+    public async Task<Result> RemoveTenantMemberAsync(int callerId, Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default)
+    {
+        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.UsersManage, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return Result.Failure(resolved.Error);
+        }
+
+        // Workspaces owned by the removed member transfer to the caller, so removing yourself has no
+        // defined recipient. Leaving a tenant is a different operation with different semantics and
+        // is deliberately not this endpoint.
+        if (resolved.Value.EntityId == callerId)
+        {
+            return Result.Failure(Error.Validation("CANNOT_REMOVE_SELF", "You cannot remove yourself from a tenant."));
+        }
+
+        return await GuardAsync("RemoveTenantMember", async () =>
+        {
+            await _provider.RemoveTenantMemberAsync(resolved.Value.TenantId, resolved.Value.EntityId, callerId, cancellationToken);
+            await PublishUserPermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
+        });
+    }
+
+    // ----- Invitations -------------------------------------------------------------------------
+
+    public async Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, Guid tenantRef, CreateInvitationRequest request, CancellationToken cancellationToken = default)
+    {
+        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return Result<CreatedInvitationResponse>.Failure(scope.Error);
+        }
+
+        int? roleId = null;
+        if (request.RoleRef.HasValue)
+        {
+            var resolvedRoleId = await _provider.FindRoleIdByRefIdAsync(request.RoleRef.Value, scope.Value, cancellationToken);
+            if (resolvedRoleId <= 0)
+            {
+                return Result<CreatedInvitationResponse>.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
+            }
+
+            roleId = resolvedRoleId;
+        }
+
+        var token = InvitationTokens.Generate();
+        var expiresAt = DateTime.UtcNow.Add(InvitationLifetime);
+
+        return await GuardAsync("CreateInvitation", async () =>
+        {
+            var refId = await _provider.CreateInvitationAsync(scope.Value, request.Email, roleId, InvitationTokens.Hash(token), expiresAt, callerId, cancellationToken);
+            _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", refId, scope.Value, callerId);
+
+            // The raw token appears here and nowhere else — not in the store, and not in this log line.
+            return new CreatedInvitationResponse(refId, request.Email, expiresAt, token);
+        });
+    }
+
+    public async Task<Result<IPagedList<InvitationResponse>>> GetInvitationsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersRead, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return Result<IPagedList<InvitationResponse>>.Failure(scope.Error);
+        }
+
+        return await GuardAsync("GetInvitations", () => _provider.GetInvitationsAsync(scope.Value, skip, take, cancellationToken));
+    }
+
+    public async Task<Result> RevokeInvitationAsync(int callerId, Guid tenantRef, Guid invitationRef, CancellationToken cancellationToken = default)
+    {
+        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return Result.Failure(scope.Error);
+        }
+
+        // Scoped by tenant in the procedure, so an invitation belonging to another tenant simply
+        // matches nothing. Revoking an already-spent invitation is a no-op rather than an error:
+        // the caller's intent — that this invitation cannot be redeemed — already holds.
+        return await GuardAsync("RevokeInvitation", () => _provider.RevokeInvitationAsync(invitationRef, scope.Value, cancellationToken));
+    }
+
+    public async Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, string token, CancellationToken cancellationToken = default)
+    {
+        var tokenHash = InvitationTokens.Hash(token);
+
+        InvitationLookup invitation;
+        try
+        {
+            invitation = await _provider.GetInvitationByTokenHashAsync(tokenHash, cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            _logger.LogWarning("Invitation acceptance failed for user ID {CallerId}: no invitation matches the presented token", callerId);
+            return Result<AcceptInvitationResponse>.Failure(InvalidInvitation);
+        }
+
+        // Read back for the tenant name only. The procedure re-checks validity and the address
+        // match under a lock, so this is a nicety, never the gate.
+        return await GuardAsync("AcceptInvitation", async () =>
+        {
+            await _provider.AcceptInvitationAsync(tokenHash, callerId, cancellationToken);
+            _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
+
+            await PublishUserPermissionsChangedAsync(callerId, cancellationToken);
+            return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
         });
     }
 
@@ -671,10 +818,27 @@ internal sealed class ManagementService : IManagementService
             return Error.NotFound("AUTH_NOT_FOUND", "The requested record was not found.");
         }
 
-        // THROW 50001-50007 from the stored procedures are deliberate guards (wrong tenant, group
-        // has children, cannot remove the owner, unknown permission slug) rather than faults, so
-        // they read back as validation.
-        if (ex is SqlException { Number: >= 50001 and <= 50007 } guard)
+        // Redemption lost a race, or the token stopped being valid between the read-back and the
+        // procedure. Reported identically to the pre-check path, so which of the two rejected it is
+        // not observable from outside.
+        if (ex is SqlException { Number: 50011 })
+        {
+            _logger.LogWarning("{Operation} rejected: invitation no longer valid", operation);
+            return InvalidInvitation;
+        }
+
+        if (ex is SqlException { Number: 50012 })
+        {
+            _logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
+            return Error.Conflict("AUTH_ALREADY_MEMBER", "That user is already a member of this tenant.");
+        }
+
+        // THROW 50001-50019 from the stored procedures are deliberate guards (wrong tenant, group
+        // has children, cannot remove the owner or the last administrator, unknown permission slug,
+        // expired invitation) rather than faults, so they read back as validation. The upper bound
+        // is deliberately ahead of the codes in use: a new guard that lands outside this range
+        // reaches the caller as a 500, which is the opposite of what a guard is for.
+        if (ex is SqlException { Number: >= 50001 and <= 50019 } guard)
         {
             _logger.LogWarning("{Operation} rejected by database guard: {Message}", operation, guard.Message);
             return Error.Validation("AUTH_OPERATION_REJECTED", guard.Message);

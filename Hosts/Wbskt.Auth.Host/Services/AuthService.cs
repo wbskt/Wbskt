@@ -16,7 +16,14 @@ namespace Wbskt.Auth.Host.Services;
 
 internal sealed class AuthService : IAuthService
 {
-    private const int DefaultTenantId = 1;
+    private const string DefaultWorkspaceName = "Default Workspace";
+
+    /// <summary>
+    /// One answer for every way an invitation can fail. Registration is anonymous, so distinguishing
+    /// "no such token" from "wrong address" would turn it into an oracle for probing invitations.
+    /// </summary>
+    private static readonly Error InvalidInvitation =
+        Error.Validation("INVITATION_INVALID", "This invitation is not valid. It may have expired, been revoked, already been used, or been sent to a different email address.");
 
     private readonly IAuthProvider _provider;
     private readonly IJwtService _jwtService;
@@ -252,16 +259,29 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> RegisterUserAsync(string username, string email, string password, CancellationToken cancellationToken = default)
+    public async Task<Result> RegisterUserAsync(string username, string email, string password, string? invitationToken = null, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Attempting to register user: {Username} with email: {Email}", username, email);
 
+        // Checked before the account is created, not after. Redeeming an invitation is the last step
+        // of registration, so a token that turns out to be unusable would otherwise leave behind an
+        // account the user cannot register again — their email is taken — and did not want on its own.
+        if (invitationToken is not null)
+        {
+            var invitation = await ValidateInvitationAsync(invitationToken, email, cancellationToken);
+            if (invitation.IsFailure)
+            {
+                _metrics.RecordRegistration("invalid_invitation");
+                return invitation;
+            }
+        }
+
         try
         {
-            var user = new User 
-            { 
-                Username = username, 
-                Email = email 
+            var user = new User
+            {
+                Username = username,
+                Email = email
             };
 
             user.PasswordHash = _passwordHasher.HashPassword(user, password);
@@ -269,8 +289,22 @@ internal sealed class AuthService : IAuthService
             var userId = await _provider.InsertUserAsync(user, cancellationToken);
             _logger.LogDebug("User record inserted with database ID: {UserId}", userId);
 
-            // TODO(arch): multi-tenant sign-up flow. For now every new user joins the default tenant.
-            await _provider.InsertTenantMemberAsync(DefaultTenantId, userId, cancellationToken);
+            // Everyone gets their own tenant, invited or not. It is where a single user's workspaces
+            // live, and it means a member who later leaves the tenant that invited them still has
+            // somewhere to be — an account belonging to no tenant can do nothing at all and no
+            // endpoint can repair it.
+            var tenantRefId = await _provider.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, cancellationToken);
+            _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
+
+            if (invitationToken is not null)
+            {
+                // Re-validated authoritatively inside the procedure. Between the check above and here
+                // the invitation could have been revoked or redeemed, in which case this throws and
+                // registration fails — the account and its own tenant survive, so the user can log in
+                // and ask for a fresh invitation rather than being stranded.
+                var tenantId = await _provider.AcceptInvitationAsync(InvitationTokens.Hash(invitationToken), userId, cancellationToken);
+                _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, tenantId);
+            }
 
             user = await _provider.GetByIdAsync(userId, cancellationToken);
 
@@ -282,6 +316,16 @@ internal sealed class AuthService : IAuthService
         }
         catch (Exception ex)
         {
+            // The invitation was revoked or redeemed between the pre-check and the redemption. The
+            // account and its own tenant exist and are usable, so this is the caller's problem to
+            // retry with a fresh invitation, not a server fault — 400, matching the pre-check.
+            if (ex is SqlException { Number: 50011 })
+            {
+                _logger.LogWarning("Registration for {Username} completed but the invitation was no longer redeemable", username);
+                _metrics.RecordRegistration("invalid_invitation");
+                return Result.Failure(InvalidInvitation);
+            }
+
             if (ex is SqlException { Number: 2601 or 2627 })
             {
                 _logger.LogWarning("User registration failed: Conflict on Username={Username} or Email={Email}. Error: {Message}", username, email, ex.Message);
@@ -294,6 +338,35 @@ internal sealed class AuthService : IAuthService
             _metrics.RecordRegistration("error");
             return Result.Failure(Error.Failure("AUTH_REGISTRATION_ERROR", ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Confirms a token names a live invitation addressed to <paramref name="email"/>, before any
+    /// account exists. Every rejection is reported identically, so an unauthenticated caller cannot
+    /// use registration to discover whether a token is real or which address it was issued to.
+    /// </summary>
+    private async Task<Result> ValidateInvitationAsync(string invitationToken, string email, CancellationToken cancellationToken)
+    {
+        InvitationLookup invitation;
+        try
+        {
+            invitation = await _provider.GetInvitationByTokenHashAsync(InvitationTokens.Hash(invitationToken), cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            _logger.LogWarning("Registration rejected: no invitation matches the presented token");
+            return Result.Failure(InvalidInvitation);
+        }
+
+        // Ordinal-ignore-case, matching how SQL Server compares under the database's default
+        // collation — so the check here agrees with the one TenantInvitation_Accept applies.
+        if (!invitation.IsLive || !string.Equals(invitation.Email, email, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Registration rejected: invitation {RefId} is not live, or was issued to a different address", invitation.RefId);
+            return Result.Failure(InvalidInvitation);
+        }
+
+        return Result.Success();
     }
 
     private string GenerateAccessToken(User user)

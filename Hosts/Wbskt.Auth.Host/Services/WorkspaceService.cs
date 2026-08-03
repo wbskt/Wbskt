@@ -112,6 +112,15 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogInformation("Successfully added user ID {UserId} ({UserEmail}) to workspace ID: {WorkspaceId}", user.Id, request.Email, workspaceId);
             return Result.Success();
         }
+        catch (SqlException ex) when (ex.Number == 50009)
+        {
+            // The lookup above is by email across every account in the system, so a caller could
+            // otherwise distinguish "no such account" from "account exists in another tenant" and
+            // use this endpoint to test whether an address is registered. Both answers are the same
+            // NotFound: as far as this tenant is concerned, that user does not exist.
+            _logger.LogWarning("Add member denied: user {UserEmail} is not a member of the tenant owning workspace ID {WorkspaceId}", request.Email, workspaceId);
+            return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
+        }
         catch (Exception ex)
         {
             _logger.LogError("Failed to add user {UserEmail} to workspace ID: {WorkspaceId}. Error: {Message}", request.Email, workspaceId, ex.Message);

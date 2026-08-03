@@ -47,6 +47,79 @@ public class ManagementController : ApiControllerBase
         return MapResult(await _managementService.GetTenantsForUserAsync(caller.Value, cancellationToken));
     }
 
+    /// <summary>
+    /// Creates a tenant with the caller as its administrator, along with a default workspace.
+    /// Requires no permission — permissions are held inside a tenant, so demanding one to create the
+    /// first would be circular.
+    /// </summary>
+    [HttpPost]
+    public async Task<ActionResult<TenantResponse>> CreateTenant([FromBody] CreateTenantRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: CreateTenant requested (Name: '{TenantName}')", request.Name);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
+        {
+            return MapError(caller.Error);
+        }
+
+        return MapResult(await _managementService.CreateTenantAsync(caller.Value, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// Renames a tenant or changes its description. This is how the tenant a user is given at
+    /// sign-up becomes a named organisation. Requires <c>users.manage</c>.
+    /// </summary>
+    [HttpPut("{tenantRef:guid}")]
+    public async Task<IActionResult> UpdateTenant(Guid tenantRef, [FromBody] UpdateTenantRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: UpdateTenant requested (TenantRef: {TenantRef})", tenantRef);
+        return await WithCallerAsync(callerId => _managementService.UpdateTenantAsync(callerId, tenantRef, request, cancellationToken));
+    }
+
+    // ----- Invitations -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Lists invitations that have neither been accepted nor revoked. Requires <c>users.read</c>.
+    /// </summary>
+    [HttpGet("{tenantRef:guid}/invitations")]
+    public async Task<ActionResult<ListResponse<InvitationResponse>>> GetInvitations(Guid tenantRef, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("API: GetInvitations requested (TenantRef: {TenantRef})", tenantRef);
+        return await PagedAsync(tenantRef, skip, take, (callerId, s, t) => _managementService.GetInvitationsAsync(callerId, tenantRef, s, t, cancellationToken));
+    }
+
+    /// <summary>
+    /// Invites an address to the tenant, optionally with a role granted on acceptance. The response
+    /// carries the raw token once; it is stored only as a hash and cannot be retrieved again.
+    /// Requires <c>users.manage</c>.
+    /// </summary>
+    [HttpPost("{tenantRef:guid}/invitations")]
+    public async Task<ActionResult<CreatedInvitationResponse>> CreateInvitation(Guid tenantRef, [FromBody] CreateInvitationRequest request, CancellationToken cancellationToken)
+    {
+        // The address is the invitation's subject, not a lookup key, and is logged as such. The
+        // token it produces is never logged.
+        _logger.LogInformation("API: CreateInvitation requested (TenantRef: {TenantRef}, RoleRef: {RoleRef})", tenantRef, request.RoleRef);
+
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
+        {
+            return MapError(caller.Error);
+        }
+
+        return MapResult(await _managementService.CreateInvitationAsync(caller.Value, tenantRef, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// Withdraws an outstanding invitation. Requires <c>users.manage</c>.
+    /// </summary>
+    [HttpDelete("{tenantRef:guid}/invitations/{invitationRef:guid}")]
+    public async Task<IActionResult> RevokeInvitation(Guid tenantRef, Guid invitationRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RevokeInvitation requested (InvitationRef: {InvitationRef}, TenantRef: {TenantRef})", invitationRef, tenantRef);
+        return await WithCallerAsync(callerId => _managementService.RevokeInvitationAsync(callerId, tenantRef, invitationRef, cancellationToken));
+    }
+
     // ----- Roles -------------------------------------------------------------------------------
 
     /// <summary>Lists the roles defined in a tenant. Requires <c>roles.read</c>.</summary>
@@ -335,8 +408,22 @@ public class ManagementController : ApiControllerBase
     }
 
     /// <summary>
+    /// Removes a member from the tenant, along with every assignment scoped to it, and transfers any
+    /// workspace they owned to the caller. Their account and their other tenants are untouched —
+    /// this is offboarding from one tenant, not account closure. Requires <c>users.manage</c>.
+    /// </summary>
+    [HttpDelete("{tenantRef:guid}/members/{userRef:guid}")]
+    public async Task<IActionResult> RemoveMember(Guid tenantRef, Guid userRef, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RemoveMember requested (UserRef: {UserRef}, TenantRef: {TenantRef})", userRef, tenantRef);
+        return await WithCallerAsync(callerId => _managementService.RemoveTenantMemberAsync(callerId, tenantRef, userRef, cancellationToken));
+    }
+
+    /// <summary>
     /// Enables or disables an account. Disabling revokes every refresh token the user holds; an
-    /// access token already issued stays valid until it expires. Requires <c>users.manage</c>.
+    /// access token already issued stays valid until it expires. This is account-wide and affects
+    /// every tenant the user belongs to — to remove someone from one tenant, use
+    /// <see cref="RemoveMember"/>. Requires <c>users.manage</c>.
     /// </summary>
     [HttpPut("{tenantRef:guid}/members/{userRef:guid}/active")]
     public async Task<IActionResult> SetUserActive(Guid tenantRef, Guid userRef, [FromBody] SetUserActiveRequest request, CancellationToken cancellationToken)

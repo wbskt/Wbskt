@@ -320,8 +320,15 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>A registered, logged-in user. Unique per call so scenarios never collide.</summary>
     public sealed record TestUser(string Username, string Email, string Password, string Token);
 
-    /// <summary>Registers and logs in a brand-new user, returning their credentials and token.</summary>
-    public async Task<TestUser> CreateUserAsync()
+    /// <summary>
+    /// Registers and logs in a brand-new user, returning their credentials and token.
+    /// <para>
+    /// The new account lands in a tenant of its own, not in the caller's. A scenario that needs an
+    /// administrator to act on this user — anything under <c>/api/tenants/{tenantRef}/members</c> —
+    /// wants <see cref="CreateUserInTenantAsync"/> instead.
+    /// </para>
+    /// </summary>
+    public async Task<TestUser> CreateUserAsync(string? invitationToken = null)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var email = $"e2e-{suffix}@test.local";
@@ -330,9 +337,46 @@ public sealed class ServicesFixture : IDisposable
         var password = $"P@ssw0rd-{suffix}";
         var username = $"e2e-{suffix}";
 
+        return await RegisterAndLoginAsync(username, email, password, invitationToken);
+    }
+
+    /// <summary>
+    /// Creates a user who is a member of <paramref name="tenantRef"/>, by inviting an address and
+    /// registering against that invitation — the only route into an existing tenant.
+    /// </summary>
+    public async Task<TestUser> CreateUserInTenantAsync(string adminToken, Guid tenantRef)
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var email = $"e2e-{suffix}@test.local";
+        var password = $"P@ssw0rd-{suffix}";
+        var username = $"e2e-{suffix}";
+
+        var token = await InviteAsync(adminToken, tenantRef, email);
+
+        return await RegisterAndLoginAsync(username, email, password, token);
+    }
+
+    /// <summary>Issues an invitation and returns its raw token — the only time it is available.</summary>
+    public async Task<string> InviteAsync(string adminToken, Guid tenantRef, string email, Guid? roleRef = null)
+    {
+        var resp = await SendAsync(
+            HttpMethod.Post,
+            AuthUrl($"/api/tenants/{tenantRef}/invitations"),
+            adminToken,
+            new { Email = email, RoleRef = roleRef });
+        resp.EnsureSuccessStatusCode();
+
+        var invitation = await resp.Content.ReadFromJsonAsync<CreatedInvitationDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Empty invitation response.");
+
+        return invitation.Token;
+    }
+
+    private async Task<TestUser> RegisterAndLoginAsync(string username, string email, string password, string? invitationToken)
+    {
         var registerResp = await _http.PostAsJsonAsync(
             AuthUrl("/api/auth/register"),
-            new { Username = username, Email = email, Password = password });
+            new { Username = username, Email = email, Password = password, InvitationToken = invitationToken });
         registerResp.EnsureSuccessStatusCode();
 
         var loginResp = await _http.PostAsJsonAsync(
@@ -418,6 +462,36 @@ public sealed class ServicesFixture : IDisposable
 
         return tenants[0].RefId;
     }
+
+    /// <summary>A pending invitation as an administrator sees it.</summary>
+    public sealed record Invitation(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTime ExpiresAt, DateTime CreatedAt);
+
+    /// <summary>Redeems an invitation for the bearer. Returns the raw response so callers can assert on rejections.</summary>
+    public Task<HttpResponseMessage> AcceptInvitationAsync(string accessToken, string token) =>
+        SendAsync(HttpMethod.Post, AuthUrl("/api/invitations/accept"), accessToken, new { Token = token });
+
+    /// <summary>The invitations a tenant has outstanding.</summary>
+    public async Task<IReadOnlyList<Invitation>> GetInvitationsAsync(string token, Guid tenantRef)
+    {
+        var resp = await SendAsync(HttpMethod.Get, AuthUrl($"/api/tenants/{tenantRef}/invitations?take=200"), token);
+        resp.EnsureSuccessStatusCode();
+
+        var page = await resp.Content.ReadFromJsonAsync<ListDto<Invitation>>(JsonOptions);
+        return page?.Items ?? [];
+    }
+
+    /// <summary>Every tenant the caller belongs to, not just the first.</summary>
+    public async Task<IReadOnlyList<Tenant>> GetTenantsAsync(string token)
+    {
+        var resp = await SendAsync(HttpMethod.Get, AuthUrl("/api/tenants"), token);
+        resp.EnsureSuccessStatusCode();
+
+        var tenants = await resp.Content.ReadFromJsonAsync<List<Tenant>>(JsonOptions) ?? [];
+        return tenants;
+    }
+
+    /// <summary>A tenant as the API exposes it.</summary>
+    public sealed record Tenant(Guid RefId, string Name);
 
     /// <summary>Finds a tenant member's public reference by email, or null when absent.</summary>
     public async Task<Guid?> FindTenantMemberRefAsync(string token, Guid tenantRef, string email)
@@ -825,6 +899,7 @@ public sealed class ServicesFixture : IDisposable
     private record RoleDto(Guid RefId, string Name, string? Description);
     private record GroupDto(Guid RefId, string Name, Guid? ParentGroupRefId);
     private record MemberDto(Guid RefId, string Username, string Email, bool IsActive);
+    private record CreatedInvitationDto(Guid RefId, string Email, DateTime ExpiresAt, string Token);
     private record RolePermissionDto(string Slug, bool IsDeny);
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
