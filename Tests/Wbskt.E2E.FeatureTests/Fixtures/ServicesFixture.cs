@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Wbskt.Management.Models.Workflow;
 
@@ -233,6 +235,45 @@ public sealed class ServicesFixture : IDisposable
 
         return await _http.SendAsync(req);
     }
+
+    /// <summary>
+    /// Sends a request with a verbatim Authorization header, bypassing the well-formedness checks
+    /// that <see cref="AuthenticationHeaderValue"/> applies. Needed to present a malformed header.
+    /// </summary>
+    public async Task<HttpResponseMessage> SendWithRawAuthorizationAsync(HttpMethod method, string url, string headerValue)
+    {
+        using var req = new HttpRequestMessage(method, url);
+        req.Headers.TryAddWithoutValidation("Authorization", headerValue);
+
+        return await _http.SendAsync(req);
+    }
+
+    /// <summary>
+    /// Mints a JWT locally. Only used to produce tokens this host must refuse — one signed with a key
+    /// it does not know, and one carrying no signature at all. Pass a null <paramref name="signingKey"/>
+    /// for the unsigned <c>alg: none</c> form.
+    /// </summary>
+    public static string MintJwt(string? signingKey, string subject, TimeSpan lifetime)
+    {
+        var header = signingKey is null
+            ? "{\"alg\":\"none\",\"typ\":\"JWT\"}"
+            : "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+
+        var expires = DateTimeOffset.UtcNow.Add(lifetime).ToUnixTimeSeconds();
+        var payload = "{\"nameid\":\"" + subject + "\",\"type\":\"user\",\"exp\":" + expires + "}";
+
+        var signingInput = $"{Base64Url(Encoding.UTF8.GetBytes(header))}.{Base64Url(Encoding.UTF8.GetBytes(payload))}";
+        if (signingKey is null)
+        {
+            return $"{signingInput}.";
+        }
+
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(signingKey));
+        return $"{signingInput}.{Base64Url(hmac.ComputeHash(Encoding.UTF8.GetBytes(signingInput)))}";
+    }
+
+    private static string Base64Url(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     /// <summary>Reads the <c>code</c> off an <c>Error</c> response body, or null when the body is not one.</summary>
     public static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
