@@ -161,11 +161,12 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_10` | − | Access token submitted as a refresh token | **401** `AUTH_INVALID_TOKEN` |
 | `AUTH_RT_11` | − | Refresh after `logout` revoked the token | **401** `AUTH_TOKEN_INACTIVE` |
 | `AUTH_RT_12` | − | Refresh after `logout-all` | **401** |
-| `AUTH_RT_13` | − | Refresh for a user deactivated since issuance | **401** `AUTH_USER_INACTIVE` |
+| `AUTH_RT_13` | − | Refresh for a user deactivated since issuance | **401** `AUTH_TOKEN_INACTIVE` — *not* `AUTH_USER_INACTIVE`. Deactivation revokes every refresh token first, so rotation trips on the revoked token and never reaches the `IsActive` check. That branch is unreachable on this path, since a token issued after deactivation cannot exist |
 | `AUTH_RT_14` | − | Refresh token past its 7-day expiry | **401** `AUTH_TOKEN_INACTIVE` — needs clock control or a seeded expired row; mark skipped if neither is available |
 | `AUTH_RT_15` | − | Two concurrent refreshes with the same token | Exactly one 200; the other 401. Must not mint two live families |
 | `AUTH_RT_16` | + | Rotation is anonymous (no `Authorization` header) | **200** — the refresh token is the credential |
 | `AUTH_RT_17` | + | Access token issued before rotation stays valid until expiry | Documents that rotation does not retro-invalidate access tokens |
+| `AUTH_RT_18` | − | Log out on device A, then device A retries its refresh; check device B | B is **also** revoked. Logout marks the token revoked, and rotation cannot tell a deliberate logout from a stolen-token replay — both are "a retired token came back". A benign post-logout retry therefore signs out every device and raises a `RefreshTokenReplay` alert. Assert current behaviour; the false positive is a separate decision |
 
 ---
 
@@ -491,7 +492,9 @@ so the gap is visible; every one of these is an invariant `ManagementService` is
 1. **§2 regression** — ✅ implemented in `Scenarios/Auth/AuthRegressionTests.cs`. `REG_07`–`REG_10`
    assert behaviour that lives in the stored procedures, so they need the corrected database
    deployed, not just the host rebuilt.
-2. **§5 refresh/rotation** — most security-sensitive, entirely uncovered.
+2. **§5 refresh/rotation** — ✅ implemented in `Scenarios/Auth/TokenRotationTests.cs`.
+   `AUTH_RT_15` is expected to **fail** against the current host: it asserts the single-use property
+   that the rotation ordering does not yet guarantee. `AUTH_RT_14` skips pending clock control.
 3. **§8 `AUTH_TK_06`/`07`** — one test each, pins the token-type accident.
 4. **§9 resolve + `WS_CRD_04`** — the cross-service contract and the tenant/workspace admin boundary.
 5. **§3, §4, §6** — broad but shallow; cheap once the fixture helpers exist.

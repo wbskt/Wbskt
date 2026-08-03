@@ -305,6 +305,64 @@ public sealed class ServicesFixture : IDisposable
         return new TestUser(username, email, password, login.AccessToken);
     }
 
+    /// <summary>
+    /// One login's worth of credentials. The refresh token is the interesting half: it is the thing
+    /// that rotates, and the access token merely rides along until it expires.
+    /// </summary>
+    public sealed record Session(string AccessToken, string RefreshToken);
+
+    /// <summary>Logs in and returns both tokens. Throws if the credentials are refused.</summary>
+    public async Task<Session> LoginAsync(string email, string password)
+    {
+        var response = await SendAsync(
+            HttpMethod.Post, AuthUrl("/api/auth/login"), body: new { Email = email, Password = password });
+        response.EnsureSuccessStatusCode();
+
+        return await ReadSessionAsync(response);
+    }
+
+    /// <summary>Reads the token pair out of a successful login or rotation response.</summary>
+    public static async Task<Session> ReadSessionAsync(HttpResponseMessage response)
+    {
+        var login = await response.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Empty session response.");
+
+        return new Session(login.AccessToken, login.RefreshToken);
+    }
+
+    /// <summary>Exchanges a refresh token, returning the raw response so failures stay assertable.</summary>
+    public Task<HttpResponseMessage> RefreshAsync(string refreshToken) =>
+        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/refresh-token"), body: new { RefreshToken = refreshToken });
+
+    /// <summary>Revokes a single refresh token. Answers 204 whether or not it was live, by design.</summary>
+    public Task<HttpResponseMessage> LogoutAsync(string refreshToken) =>
+        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/logout"), body: new { RefreshToken = refreshToken });
+
+    /// <summary>Revokes every refresh token the bearer holds.</summary>
+    public Task<HttpResponseMessage> LogoutAllAsync(string accessToken) =>
+        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/logout-all"), accessToken);
+
+    /// <summary>
+    /// The workspaces the bearer can see. Used to establish *whose* access token was issued without
+    /// decoding it — a token that lists user B's workspaces belongs to user B.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> GetWorkspaceRefsAsync(string accessToken)
+    {
+        var response = await SendAsync(HttpMethod.Get, AuthUrl("/api/workspaces"), accessToken);
+        response.EnsureSuccessStatusCode();
+
+        var workspaces = await response.Content.ReadFromJsonAsync<List<WorkspaceDto>>(JsonOptions) ?? [];
+        return workspaces.Select(w => w.RefId).ToList();
+    }
+
+    /// <summary>Enables or disables an account. Requires a caller with tenant-wide users.manage.</summary>
+    public Task<HttpResponseMessage> SetUserActiveAsync(string adminToken, Guid tenantRef, Guid userRef, bool isActive) =>
+        SendAsync(
+            HttpMethod.Put,
+            AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/active"),
+            adminToken,
+            new { IsActive = isActive });
+
     /// <summary>The caller's first tenant reference — every /api/tenants route needs one.</summary>
     public async Task<Guid> GetTenantRefAsync(string token)
     {
