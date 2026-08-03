@@ -175,15 +175,29 @@ internal sealed class AuthService : IAuthService
             }
 
             _logger.LogDebug("Rotating refresh token for user: {Username}", user.Username);
-            var newAccessToken = GenerateAccessToken(user);
             var newRefreshToken = GenerateRefreshToken(user.Id);
 
-            await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
+            // Retire the presented token *before* minting its replacement, and let the revoke decide
+            // who won. It is a compare-and-swap - it only touches a row whose Revoked is still null -
+            // and reports how many rows it retired, so exactly one of two concurrent exchanges can
+            // come away with a count of 1. Minting first and revoking afterwards let both callers
+            // through the earlier IsActive check and both walk away with a live token, which turns
+            // one refresh token into two independent session families. That is precisely what the
+            // replay detection above exists to prevent: a thief racing the legitimate client would
+            // otherwise hold a family that survives the victim's next rotation.
+            var revoked = await _provider.RevokeRefreshTokenAsync(token, ipAddress, newRefreshToken.Token, cancellationToken);
+            if (revoked == 0)
+            {
+                // Another exchange retired this token in the moment between our read and our write.
+                // Losing that race is not evidence of theft - the token was used exactly once, just
+                // not by us - so the family is left alone and only this request is refused.
+                _logger.LogWarning("Token refresh lost a concurrent exchange for user ID {UserId}. IP: {IpAddress}", user.Id, ipAddress);
+                _metrics.RecordRefresh("token_raced");
+                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
+            }
 
-            // Retire the presented token now that its replacement exists. Without this the old token
-            // stays usable for its full lifetime, so a leaked one could be replayed indefinitely
-            // alongside the real session.
-            await _provider.RevokeRefreshTokenAsync(token, ipAddress, newRefreshToken.Token, cancellationToken);
+            var newAccessToken = GenerateAccessToken(user);
+            await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
 
             await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
