@@ -181,6 +181,12 @@ public static class Program
                 {
                     policyBuilder.SetIsOriginAllowed(_ => true).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
                 }
+
+                // AllowAnyHeader covers request headers only. Without this the list endpoints'
+                // X-Total-Count is dropped before script can read it - the console is always a
+                // separate origin (nginx serves the SPA and never proxies the API), so paged
+                // lists would silently look complete.
+                policyBuilder.WithExposedHeaders("X-Total-Count");
             });
         });
 
