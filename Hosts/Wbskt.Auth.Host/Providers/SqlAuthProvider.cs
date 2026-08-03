@@ -157,13 +157,109 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         );
     }
 
-    public async Task InsertTenantMemberAsync(int tenantId, int userId, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateTenantAsync(string name, string? description, int ownerUserId, string workspaceName, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.TenantMember_Insert", p =>
+        var parameters = await ExecuteNonQueryAsync("dbo.Tenant_Create", p =>
+        {
+            p.AddWithValue("@Name", name);
+            p.AddWithValue("@Description", (object?)description ?? DBNull.Value);
+            p.AddWithValue("@OwnerUserId", ownerUserId);
+            p.AddWithValue("@WorkspaceName", workspaceName);
+            p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+            p.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
+        }, cancellationToken);
+
+        return (Guid)parameters["@RefId"].Value;
+    }
+
+    public async Task UpdateTenantAsync(int tenantId, string name, string? description, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Tenant_Update", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Name", name);
+            p.AddWithValue("@Description", (object?)description ?? DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task RemoveTenantMemberAsync(int tenantId, int userId, int newOwnerUserId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.TenantMember_Remove", p =>
         {
             p.AddWithValue("@TenantId", tenantId);
             p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@NewOwnerUserId", newOwnerUserId);
         }, cancellationToken);
+    }
+
+    public async Task<Guid> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default)
+    {
+        var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Create", p =>
+        {
+            p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@Email", email);
+            p.AddWithValue("@RoleId", (object?)roleId ?? DBNull.Value);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+            p.AddWithValue("@ExpiresAt", expiresAt);
+            p.AddWithValue("@InvitedByUserId", invitedByUserId);
+            p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+        }, cancellationToken);
+
+        return (Guid)parameters["@RefId"].Value;
+    }
+
+    public async Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.TenantInvitation_GetBy_TokenHash",
+            p => p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash,
+            r => new InvitationLookup(
+                r.GetGuid(r.GetOrdinal("RefId")),
+                r.GetGuid(r.GetOrdinal("TenantRefId")),
+                r.GetString(r.GetOrdinal("TenantName")),
+                r.GetString(r.GetOrdinal("Email")),
+                r.GetDateTime(r.GetOrdinal("ExpiresAt")),
+                r.GetBoolean(r.GetOrdinal("IsLive"))),
+            new SecurityException("Invitation not found."),
+            cancellationToken
+        );
+    }
+
+    public async Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default)
+    {
+        var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Accept", p =>
+        {
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+            p.AddWithValue("@UserId", userId);
+            p.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
+        }, cancellationToken);
+
+        return (int)parameters["@TenantId"].Value;
+    }
+
+    public async Task RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.TenantInvitation_Revoke", p =>
+        {
+            p.AddWithValue("@RefId", invitationRef);
+            p.AddWithValue("@TenantId", tenantId);
+        }, cancellationToken);
+    }
+
+    public async Task<IPagedList<InvitationResponse>> GetInvitationsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await ExecutePagedCollectionAsync(
+            "dbo.TenantInvitation_GetAll",
+            p =>
+            {
+                p.AddWithValue("@TenantId", tenantId);
+                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@Take", take);
+                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
+            },
+            MapInvitation,
+            cancellationToken
+        );
     }
 
     public async Task<int> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default)
@@ -532,6 +628,18 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             reader.GetGuid(reader.GetOrdinal("RoleRefId")),
             reader.GetString(reader.GetOrdinal("RoleName")),
             reader.IsDBNull(reader.GetOrdinal("WorkspaceRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkspaceRefId"))
+        );
+    }
+
+    private static InvitationResponse MapInvitation(SqlDataReader reader)
+    {
+        return new InvitationResponse(
+            reader.GetGuid(reader.GetOrdinal("RefId")),
+            reader.GetString(reader.GetOrdinal("Email")),
+            reader.IsDBNull(reader.GetOrdinal("RoleRefId")) ? null : reader.GetGuid(reader.GetOrdinal("RoleRefId")),
+            reader.IsDBNull(reader.GetOrdinal("RoleName")) ? null : reader.GetString(reader.GetOrdinal("RoleName")),
+            reader.GetDateTime(reader.GetOrdinal("ExpiresAt")),
+            reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         );
     }
 

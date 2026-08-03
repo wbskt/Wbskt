@@ -317,7 +317,9 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
 
-        var user = await fixture.CreateUserAsync();
+        // Invited into the admin's tenant: registration alone would put them in a tenant of their
+        // own, where the admin holds nothing and cannot deactivate them.
+        var user = await fixture.CreateUserInTenantAsync(adminToken, tenantRef);
         var session = await fixture.LoginAsync(user.Email, user.Password);
 
         var userRef = await fixture.FindTenantMemberRefAsync(adminToken, tenantRef, user.Email);

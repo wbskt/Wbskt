@@ -34,7 +34,7 @@ public class AuthController : ApiControllerBase
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: Register requested for Username: '{Username}', Email: '{Email}'", request.Username, request.Email);
-        var result = await _authService.RegisterUserAsync(request.Username, request.Email, request.Password, cancellationToken);
+        var result = await _authService.RegisterUserAsync(request.Username, request.Email, request.Password, request.InvitationToken, cancellationToken);
         return MapResult(result);
     }
 

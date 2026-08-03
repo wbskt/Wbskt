@@ -19,6 +19,29 @@ public interface IManagementService
 {
     Task<Result<IReadOnlyCollection<TenantResponse>>> GetTenantsForUserAsync(int callerId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Creates a tenant with the caller as its administrator. The only endpoint here that is not
+    /// gated on an existing tenant, because there is nothing yet to hold a permission in.
+    /// </summary>
+    Task<Result<TenantResponse>> CreateTenantAsync(int callerId, CreateTenantRequest request, CancellationToken cancellationToken = default);
+    Task<Result> UpdateTenantAsync(int callerId, Guid tenantRef, UpdateTenantRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a member from a tenant, transferring any workspace they owned to the caller. Distinct
+    /// from deactivating the account, which locks the user out of every tenant they belong to.
+    /// </summary>
+    Task<Result> RemoveTenantMemberAsync(int callerId, Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default);
+
+    Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, Guid tenantRef, CreateInvitationRequest request, CancellationToken cancellationToken = default);
+    Task<Result<IPagedList<InvitationResponse>>> GetInvitationsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default);
+    Task<Result> RevokeInvitationAsync(int callerId, Guid tenantRef, Guid invitationRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Redeems an invitation for the calling account. Not tenant-scoped: the caller does not know
+    /// which tenant the token belongs to, and learning that is the point of the call.
+    /// </summary>
+    Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, string token, CancellationToken cancellationToken = default);
+
     Task<Result<IPagedList<RoleResponse>>> GetRolesAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default);
     Task<Result<IPagedList<GroupResponse>>> GetGroupsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default);
     Task<Result<IPagedList<PermissionResponse>>> GetPermissionsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default);

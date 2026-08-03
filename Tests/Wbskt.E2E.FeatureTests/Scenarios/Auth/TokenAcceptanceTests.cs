@@ -122,7 +122,9 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
 
-        var user = await fixture.CreateUserAsync();
+        // Invited into the admin's tenant: registration alone would put them in a tenant of their
+        // own, where the admin holds nothing and cannot deactivate them.
+        var user = await fixture.CreateUserInTenantAsync(adminToken, tenantRef);
         var userRef = await fixture.FindTenantMemberRefAsync(adminToken, tenantRef, user.Email);
         userRef.Should().NotBeNull();
 

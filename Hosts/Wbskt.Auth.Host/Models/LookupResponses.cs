@@ -81,6 +81,65 @@ public record GrantRolePermissionRequest(
 
 public record SetUserActiveRequest(bool IsActive);
 
+public record CreateTenantRequest(
+    [property: Required]
+    [property: StringLength(100, MinimumLength = 1)]
+    string Name,
+
+    [property: StringLength(500)]
+    string? Description);
+
+public record UpdateTenantRequest(
+    [property: Required]
+    [property: StringLength(100, MinimumLength = 1)]
+    string Name,
+
+    [property: StringLength(500)]
+    string? Description);
+
+/// <summary>
+/// Invites an address to a tenant. A null <c>RoleRef</c> creates a member with no role, which an
+/// administrator then assigns — the same end state as inviting and assigning separately.
+/// </summary>
+public record CreateInvitationRequest(
+    [property: Required]
+    [property: EmailAddress]
+    [property: StringLength(100)]
+    string Email,
+
+    Guid? RoleRef = null);
+
+/// <summary>
+/// A pending invitation as listed by an administrator. Deliberately carries no token: the raw value
+/// is returned once, by the call that issued it, and is not recoverable afterwards.
+/// </summary>
+public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTime ExpiresAt, DateTime CreatedAt);
+
+/// <summary>
+/// The result of issuing an invitation. <c>Token</c> is the only time the raw token exists outside
+/// the invitee's hands — only its hash is stored.
+/// <para>
+/// It is returned to the caller rather than emailed because this codebase has no mail transport
+/// (TODO(arch): deliver the invitation directly once one exists). Until then the administrator sends
+/// the link, which is the "copy invite link" behaviour of most consoles anyway.
+/// </para>
+/// </summary>
+public record CreatedInvitationResponse(Guid RefId, string Email, DateTime ExpiresAt, string Token);
+
+public record AcceptInvitationRequest(
+    [property: Required]
+    [property: StringLength(255)]
+    string Token);
+
+/// <summary>Identifies the tenant just joined, so a client can navigate straight into it.</summary>
+public record AcceptInvitationResponse(Guid TenantRef, string TenantName);
+
+/// <summary>
+/// An invitation as read back before it is redeemed. Not a response type — registration uses it to
+/// reject a bad token before creating an account, rather than after.
+/// </summary>
+public record InvitationLookup(Guid RefId, Guid TenantRef, string TenantName, string Email, DateTime ExpiresAt, bool IsLive);
+
 /// <summary>A user as seen by tenant administration.</summary>
 public record TenantMemberResponse(Guid RefId, string Username, string Email, bool IsActive);
 

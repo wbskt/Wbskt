@@ -16,4 +16,17 @@ public record RegisterRequest(
 
     [property: Required]
     [property: StringLength(128, MinimumLength = 12, ErrorMessage = "Password must be at least 12 characters.")]
-    string Password);
+    string Password,
+
+    /// <summary>
+    /// An invitation token, for someone joining an existing tenant who has no account yet. Optional:
+    /// without one the new account still gets its own tenant, so registration never depends on
+    /// having been invited.
+    /// <para>
+    /// Supplying it here rather than requiring register-then-accept means the invitee follows one
+    /// link and lands inside the tenant, instead of signing up and then having to find the
+    /// invitation again.
+    /// </para>
+    /// </summary>
+    [property: StringLength(255)]
+    string? InvitationToken = null);

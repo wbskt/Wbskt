@@ -31,8 +31,27 @@ internal interface IAuthProvider : IReferenceProvider
     Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<string>> GetEffectivePermissionsAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Tenant>> GetTenantsForUserAsync(int userId, CancellationToken cancellationToken = default);
-    Task InsertTenantMemberAsync(int tenantId, int userId, CancellationToken cancellationToken = default);
     Task<IPagedList<TenantMemberResponse>> GetTenantMembersAsync(int tenantId, string? search, int skip, int take, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a tenant with its own roles, the owner's membership and a tenant-wide Admin
+    /// assignment, plus a default workspace. All of it or none — a tenant missing any part of that
+    /// has no administrator, and no endpoint can grant one after the fact.
+    /// </summary>
+    Task<Guid> CreateTenantAsync(string name, string? description, int ownerUserId, string workspaceName, CancellationToken cancellationToken = default);
+    Task UpdateTenantAsync(int tenantId, string name, string? description, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes a member and transfers any workspace they owned to <paramref name="newOwnerUserId"/>.</summary>
+    Task RemoveTenantMemberAsync(int tenantId, int userId, int newOwnerUserId, CancellationToken cancellationToken = default);
+
+    // Invitations. The token is never stored or accepted in raw form here — the service hashes it,
+    // so a provider that logged its parameters could not leak a usable one.
+    Task<Guid> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default);
+    /// <summary>Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when no invitation carries that hash.</summary>
+    Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
+    Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default);
+    Task RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default);
+    Task<IPagedList<InvitationResponse>> GetInvitationsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default);
 
     Task<IPagedList<PermissionResponse>> GetPermissionsAsync(int skip, int take, CancellationToken cancellationToken = default);
     Task<IPagedList<RoleResponse>> GetRolesAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default);

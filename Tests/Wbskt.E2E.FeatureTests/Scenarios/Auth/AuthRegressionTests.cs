@@ -192,9 +192,9 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
 
-        var user = await fixture.CreateUserAsync();
+        var user = await fixture.CreateUserInTenantAsync(adminToken, tenantRef);
         var userRef = await fixture.FindTenantMemberRefAsync(adminToken, tenantRef, user.Email);
-        userRef.Should().NotBeNull("registration joins the default tenant, so the user must be listable");
+        userRef.Should().NotBeNull("a user who joined by invitation is a member of the inviting tenant, so must be listable");
 
         var response = await fixture.SendAsync(
             HttpMethod.Post,

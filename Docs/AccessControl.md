@@ -14,8 +14,8 @@ Tenant-owned definitions:  Roles, Groups (nested via ParentGroupId)
 Global definitions:        Permissions (code-defined catalog, Wbskt.Primitives/Constants/Permissions.cs)
 ```
 
-- Users are global identities; they belong to tenants via `TenantMembers`.
-  Registration currently auto-joins the default tenant (Id = 1).
+- Users are global identities; they belong to tenants via `TenantMembers`, which is many-to-many —
+  a user can be in any number of tenants and sees them all through `GET /api/tenants`.
 - `RolePermissions` (role → permission, allow/deny) is part of the **role definition** and is unscoped.
 - Scoping happens at **assignment**: `UserRoles`, `GroupRoles`, `UserPermissions` each carry
   `TenantId` (required) + `WorkspaceId` (nullable).
@@ -62,6 +62,55 @@ Consequences worth knowing:
 | Consumer client | `Hosts/Wbskt.Management.Host/Services/Clients/IAuthServiceClient.cs` (`WorkspaceAccess`, single/multi-permission overloads) |
 | Tenant administration | `Hosts/Wbskt.Auth.Host/Services/ManagementService.cs` — owns the permission gate and the tenant-scoped reference resolution |
 
+## Tenant lifecycle
+
+There is one shape, not two. A single user with several workspaces and an organisation with fifty
+members are the same structure at different sizes, so nothing branches on which one a tenant is.
+
+**Registration always creates a tenant** (`dbo.Tenant_Create`), whether or not the user was invited.
+It is one transaction because a tenant is unusable without every part of it — the row, its own
+`Roles` (roles are tenant-scoped, so a new tenant starts with none), the creator's `TenantMembers`
+row, a **tenant-wide** Admin `UserRoles` assignment, and a default workspace. A tenant whose creator
+did not end up with tenant-wide `users.manage` cannot be repaired: every management endpoint
+requires that permission *in that tenant* to act, so nobody is left who could grant it.
+
+Seeded per tenant, mirroring the post-deployment seed: `Admin` holds every permission in the
+catalogue, `User` holds none and is a starting point the administrator customises.
+
+**Joining an existing tenant happens exactly one way — a redeemed invitation.** An administrator
+issues one against an email address (`POST /{tenantRef}/invitations`), and the invitee redeems it,
+either with an account (`POST /api/invitations/accept`) or while creating one (`invitationToken` on
+`POST /api/auth/register`). The accepting account's email must match the address invited, so a
+leaked link is not by itself enough to join.
+
+- Only the SHA-256 hash of the token is stored. The raw value is returned once, by the call that
+  issued it, and is not recoverable — there is no mail transport in this codebase yet, so the
+  administrator delivers the link (`TODO(arch)`).
+- `dbo.TenantInvitation_Accept` re-checks validity under `UPDLOCK, HOLDLOCK`, so two concurrent
+  redemptions of one token cannot both succeed. Callers may look an invitation up first for a better
+  error message, but that read is never the gate.
+- Every rejection — unknown token, expired, revoked, spent, wrong address — is reported identically,
+  so the endpoint cannot be used to probe for invitations belonging to someone else.
+
+**`WorkspaceMember_Add` no longer joins the tenant implicitly.** It used to insert the missing
+`TenantMembers` row, which meant anyone holding `users.manage` in a single workspace could pull any
+account in the system into their tenant knowing only its email. It now rejects a user who is not
+already a tenant member (`THROW 50009`), and `WorkspaceService` reports that as the same
+`USER_NOT_FOUND` as an unknown address, so the endpoint does not reveal whether an address is
+registered.
+
+**Leaving:** `DELETE /{tenantRef}/members/{userRef}` removes a member and every assignment scoped to
+that tenant, and transfers workspaces they owned to the caller — access resolution gates on a
+`WorkspaceMembers` row before evaluating any permission, so a workspace owned by a non-member would
+be unreachable to everyone. It refuses to remove the last administrator (`THROW 50008`) and refuses
+self-removal, since the transfer would have no recipient. It is distinct from `PUT
+/members/{userRef}/active`, which disables the *account* across every tenant it belongs to.
+
+> The last-administrator guard counts direct `UserRoles` and `UserPermissions` only; an
+> administrator reached through a group is not counted. That undercounts, so the guard occasionally
+> refuses a removal it could safely allow — the deliberate direction to be wrong in, since the
+> alternative failure mode leaves a tenant nobody can administer.
+
 ## Tenant administration API
 
 Everything lives under `api/tenants/{tenantRef}` and is addressed by opaque `Guid` reference, never
@@ -75,6 +124,8 @@ their tenant's permission graph.
 
 | Area | Endpoints |
 |---|---|
+| Tenants | `GET /api/tenants`, `POST /api/tenants`, `PUT /{tenantRef}` |
+| Invitations | `GET/POST /{tenantRef}/invitations`, `DELETE /{tenantRef}/invitations/{invitationRef}`, `POST /api/invitations/accept` |
 | Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{slug}` |
 | Groups | `GET/POST /groups`, `PUT/DELETE /groups/{groupRef}`, `GET /groups/{groupRef}/roles`, `POST/DELETE /groups/{groupRef}/roles/{roleRef}` |
 | Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{slug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PUT /members/{userRef}/active` |
@@ -140,3 +191,8 @@ Run these against the Auth DB once, in order, **before** `sqlpackage /Action:Pub
 
 Both scripts are idempotent and live outside the `.sqlproj` directory on purpose — the DACPAC build
 sweeps up any `.sql` file inside the project folder into the model.
+
+The tenant-lifecycle change needs no migration script: adding `dbo.TenantInvitations`, dropping
+`UQ_Tenants_Name` and replacing procedures are all things SqlPackage applies directly. Note that
+`dbo.TenantMember_Insert` is gone — it inserted a membership row with no guard at all, which is the
+capability the invitation flow exists to replace.
