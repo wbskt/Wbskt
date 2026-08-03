@@ -493,9 +493,11 @@ so the gap is visible; every one of these is an invariant `ManagementService` is
    assert behaviour that lives in the stored procedures, so they need the corrected database
    deployed, not just the host rebuilt.
 2. **§5 refresh/rotation** — ✅ implemented in `Scenarios/Auth/TokenRotationTests.cs`.
-   `AUTH_RT_15` is expected to **fail** against the current host: it asserts the single-use property
-   that the rotation ordering does not yet guarantee. `AUTH_RT_14` skips pending clock control.
-3. **§8 `AUTH_TK_06`/`07`** — one test each, pins the token-type accident.
+   `AUTH_RT_15` found a real defect (one refresh token could be exchanged twice concurrently) and
+   the rotation now claims the token before minting; the test is the regression guard for it.
+   `AUTH_RT_14` skips pending clock control.
+3. **§8** — ✅ implemented in `Scenarios/Auth/TokenAcceptanceTests.cs`, except `AUTH_TK_04`
+   (expired access token — needs clock control) and `AUTH_TK_09` (already covered by `AUTH_RT_02`).
 4. **§9 resolve + `WS_CRD_04`** — the cross-service contract and the tenant/workspace admin boundary.
 5. **§3, §4, §6** — broad but shallow; cheap once the fixture helpers exist.
 6. **§12, §13** — the bulk; needs a per-test tenant-scoped setup helper.
