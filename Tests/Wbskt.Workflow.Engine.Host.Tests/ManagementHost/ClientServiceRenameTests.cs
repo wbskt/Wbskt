@@ -91,18 +91,24 @@ public sealed class ClientServiceRenameTests
         result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
     }
 
+    /// <summary>
+    /// An unknown reference and one belonging to another workspace have to be indistinguishable, or
+    /// the endpoint confirms that a guessed reference names a real client somewhere.
+    /// </summary>
     [Fact]
-    public async Task EnsureClientInWorkspace_reports_an_unknown_reference_as_not_found()
+    public async Task EnsureClientInWorkspace_reports_an_unknown_reference_exactly_as_a_foreign_one()
     {
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("no rows"));
         var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), NullLogger<ClientService>.Instance);
+        var (foreignService, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
 
-        var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
+        var unknown = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
+        var foreign = await foreignService.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
+        unknown.IsFailure.Should().BeTrue();
+        unknown.Error.Should().Be(foreign.Error);
     }
 
     private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateServiceWithDetail(ClientDetail detail)

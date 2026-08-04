@@ -203,7 +203,10 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
   `IWorkflowDefinitionService.EnsureWorkflowInWorkspaceAsync`, or a `WorkspaceId` comparison inside
   the service. This matters most where the endpoint publishes to the bus: the socket host dispatches
   `ClientCommandEvent`/`ClientPingEvent` on `ClientRefId` alone and has no workspace to check against,
-  so the controller's check is the only one there is.
+  so the controller's check is the only one there is. Per "The ID Boundary" in
+  `Docs/Coding.Conventions.md`, these checks answer 403 for both "no such resource" and "not yours" —
+  splitting them turns the endpoint into a way to confirm that a guessed reference names something
+  real.
 - **The realtime feed is per workspace, not per permission.** `workspace.join` puts a connection in
   `ws:{workspaceId}`, which carries every `[SignalRNotify]` event for that workspace. A member who
   holds only `workflows.read` still receives client command payloads over the hub. Narrowing that

@@ -28,7 +28,7 @@ public sealed class ClientsControllerScopingTests
     private static readonly Guid WorkspaceRef = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    private static readonly Error Foreign = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace.");
+    private static readonly Error Foreign = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client not found in this workspace.");
 
     private static (ClientsController Controller, Mock<IClientService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController(PermissionSlug permission)
     {
