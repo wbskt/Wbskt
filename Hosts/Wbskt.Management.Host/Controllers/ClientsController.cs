@@ -301,14 +301,17 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result.Failure(workspaceIdResult.Error));
         }
 
-        var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        if (clientId <= 0)
+        // Ownership has to be settled here: the command goes out over the bus and the socket host
+        // routes it by ClientRefId alone, so nothing downstream would notice a client from another
+        // workspace.
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
         {
-            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            return MapError(clientResult.Error);
         }
 
         var commandId = Guid.NewGuid();
-        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceIdResult.Value, request.Type, request.Payload, commandId), cancellationToken);
+        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, request.Type, request.Payload, commandId), cancellationToken);
         _logger.LogInformation("Successfully published client command event '{CommandId}' for ClientRefId: '{ClientRefId}'", commandId, clientRefId);
         return Accepted(new ClientCommandResponse(commandId));
     }
@@ -346,13 +349,16 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result<ListResponse<EventLogResponse>>.Failure(workspaceIdResult.Error));
         }
 
-        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        if (id <= 0)
+        // The query is workspace-filtered in SQL, so a foreign client would come back as an empty
+        // page. Resolving ownership up front reports it as the 403 the sibling endpoints return,
+        // rather than as a client that exists but has never said anything.
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
         {
-            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(clientResult.Error));
         }
 
-        var result = await _eventLogService.GetClientCommsAsync(workspaceIdResult.Value, id, direction, skip, take, cancellationToken);
+        var result = await _eventLogService.GetClientCommsAsync(workspaceIdResult.Value, clientResult.Value, direction, skip, take, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<EventLogResponse>>.Failure(result.Error));
@@ -380,13 +386,15 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result.Failure(workspaceIdResult.Error));
         }
 
-        var clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        if (clientId <= 0)
+        // Same reasoning as SendCommand: the ping is dispatched by ClientRefId, so the workspace it
+        // belongs to is only ever checked here.
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
         {
-            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            return MapError(clientResult.Error);
         }
 
-        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientId, workspaceIdResult.Value, DateTime.UtcNow), cancellationToken);
+        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, DateTime.UtcNow), cancellationToken);
         _logger.LogInformation("Successfully published client ping event for ClientRefId: '{ClientRefId}'", clientRefId);
         return NoContent();
     }

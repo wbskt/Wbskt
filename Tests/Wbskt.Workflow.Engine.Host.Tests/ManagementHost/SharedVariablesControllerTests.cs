@@ -83,7 +83,7 @@ public sealed class SharedVariablesControllerTests
                 UpdatedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow
             });
-        var (controller, workflowService, authClient) = CreateController(provider.Object, Permissions.WorkflowsUpdate);
+        var (controller, workflowService, authClient) = CreateController(provider.Object, Permissions.WorkflowsExecute);
         workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
 
@@ -93,7 +93,7 @@ public sealed class SharedVariablesControllerTests
         var dto = Assert.IsType<SharedVariableDto>(okResult.Value);
         Assert.Equal("2", dto.ValueJson);
         provider.Verify(x => x.SetAsync(workflowRefId, "counter", "2", It.IsAny<CancellationToken>()), Times.Once);
-        authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsUpdate, It.IsAny<CancellationToken>()), Times.Once);
+        authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsExecute, It.IsAny<CancellationToken>()), Times.Once);
         workflowService.Verify(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()), Times.Once);
     }
 

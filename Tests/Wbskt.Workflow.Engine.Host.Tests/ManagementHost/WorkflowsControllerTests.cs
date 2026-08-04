@@ -102,7 +102,7 @@ public sealed class WorkflowsControllerTests
     {
         var service = new Mock<IWorkflowDefinitionService>();
         var engineClient = new Mock<IWorkflowEngineClient>();
-        var authClient = AuthClientFor(Permissions.WorkflowsUpdate);
+        var authClient = AuthClientFor(Permissions.WorkflowsExecute);
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
@@ -119,7 +119,7 @@ public sealed class WorkflowsControllerTests
         var startRunResponse = Assert.IsType<StartRunResponse>(okResult.Value);
         Assert.Equal(runRefId, startRunResponse.RunRefId);
         Assert.Equal(88, startRunResponse.RunId);
-        authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsUpdate, It.IsAny<CancellationToken>()), Times.Once);
+        authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsExecute, It.IsAny<CancellationToken>()), Times.Once);
         service.Verify(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()), Times.Once);
         engineClient.Verify(x => x.StartManualRunAsync(workflowRefId, request, It.IsAny<CancellationToken>()), Times.Once);
     }

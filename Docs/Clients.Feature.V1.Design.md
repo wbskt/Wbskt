@@ -204,17 +204,21 @@ Query params: `direction=in|out|all` (default `all`), `skip`, `take`. Response: 
 
 | Verb / route | Permission | Request → Response |
 |---|---|---|
-| `GET` (`policyRefId?`, `skip`, `take`) | `clients.read` | → `ListResponse<MessageTemplateResponse>` |
-| `POST` | `clients.manage` | `MessageTemplateRequest` → `MessageTemplateResponse` |
-| `PUT {refId:guid}` | `clients.manage` | `MessageTemplateRequest` → 204 |
-| `DELETE {refId:guid}` | `clients.manage` | → 204 |
+| `GET` (`policyRefId?`, `skip`, `take`) | `templates.read` | → `ListResponse<MessageTemplateResponse>` |
+| `POST` | `templates.manage` | `MessageTemplateRequest` → `MessageTemplateResponse` |
+| `PUT {refId:guid}` | `templates.manage` | `MessageTemplateRequest` → 204 |
+| `DELETE {refId:guid}` | `templates.manage` | → 204 |
 
 ```csharp
 public record MessageTemplateRequest(string Name, string MessageType, string PayloadJson, Guid? PolicyRefId);
 public record MessageTemplateResponse(Guid RefId, string Name, string MessageType, string PayloadJson, Guid? PolicyRefId, DateTime CreatedAt, DateTime UpdatedAt);
 ```
 
-No new permission slugs — templates are send-payload tooling, governed by the existing `clients.*` family.
+> **Revised.** This originally reused `clients.read`/`clients.manage` on the reasoning that templates
+> are send-payload tooling. That put template editing behind a slug named "Manage clients", which
+> read as a much broader grant than it was and would have widened silently the moment
+> `clients.manage` gated anything to do with clients themselves. Templates now have their own
+> `templates.read`/`templates.manage` pair.
 
 ### 4.7 `RegistrationPolicyResponse` enrichment
 

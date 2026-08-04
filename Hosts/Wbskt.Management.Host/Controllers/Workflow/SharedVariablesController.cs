@@ -67,7 +67,7 @@ public sealed class SharedVariablesController : ApiControllerBase
     {
         _logger.LogInformation("API: Set shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsUpdate, ct);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result<SharedVariableDto>.Failure(workspaceIdResult.Error));

@@ -22,6 +22,6 @@ public class SignalRForwardingHandler<TEvent> : IConsumer<TEvent>
     public async Task Consume(ConsumeContext<TEvent> context)
     {
         var message = context.Message;
-        await _hubContext.Clients.Group($"ws:{message.WorkspaceId}").SendAsync(_metadata.ClientMethod, message);
+        await _hubContext.Clients.Group(NotificationHub.GroupName(message.WorkspaceId)).SendAsync(_metadata.ClientMethod, message);
     }
 }

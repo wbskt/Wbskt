@@ -71,7 +71,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var service = new Mock<IWorkflowRunQueryService>();
         var engineClient = new Mock<IWorkflowEngineClient>();
-        var authClient = AuthClientFor(Permissions.WorkflowsUpdate);
+        var authClient = AuthClientFor(Permissions.WorkflowsExecute);
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.CancelAsync(WorkspaceId, runRefId, "operator request", It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
         var controller = new WorkflowRunsController(service.Object, engineClient.Object, authClient.Object, Mock.Of<ILogger<WorkflowRunsController>>());
@@ -79,7 +79,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await controller.Cancel(WorkspaceRef, runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
 
         Assert.IsType<NoContentResult>(response);
-        authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsUpdate, It.IsAny<CancellationToken>()), Times.Once);
+        authClient.Verify(x => x.ResolveWorkspaceAsync(WorkspaceRef, Permissions.WorkflowsExecute, It.IsAny<CancellationToken>()), Times.Once);
         service.Verify(x => x.CancelAsync(WorkspaceId, runRefId, "operator request", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -88,7 +88,7 @@ public sealed class WorkflowRunsControllerTests
     {
         var service = new Mock<IWorkflowRunQueryService>();
         var engineClient = new Mock<IWorkflowEngineClient>();
-        var authClient = AuthClientFor(Permissions.WorkflowsUpdate);
+        var authClient = AuthClientFor(Permissions.WorkflowsExecute);
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<int>.Success(55));
         var expected = new SignalResponse(true, "ResumedBookmark");
