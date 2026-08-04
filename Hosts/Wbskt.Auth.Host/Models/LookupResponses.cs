@@ -14,31 +14,31 @@ public record GroupResponse(Guid RefId, string Name, Guid? ParentGroupRefId);
 public record TenantResponse(Guid RefId, string Name);
 
 public record CreateRoleRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name,
 
-    [property: StringLength(255)]
+    [StringLength(255)]
     string? Description);
 
 public record UpdateRoleRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name,
 
-    [property: StringLength(255)]
+    [StringLength(255)]
     string? Description);
 
 public record CreateGroupRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name,
 
     Guid? ParentGroupRef);
 
 public record UpdateGroupRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name);
 
 /// <summary>
@@ -52,8 +52,8 @@ public record AssignmentScopeRequest(Guid? WorkspaceRef);
 /// tenant-wide.
 /// </summary>
 public record GrantPermissionRequest(
-    [property: Required]
-    [property: StringLength(100)]
+    [Required]
+    [StringLength(100)]
     string Slug,
 
     bool IsDeny = false,
@@ -73,8 +73,8 @@ public record GrantPermissionRequest(
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record GrantRolePermissionRequest(
-    [property: Required]
-    [property: StringLength(100)]
+    [Required]
+    [StringLength(100)]
     string Slug,
 
     bool IsDeny = false);
@@ -82,19 +82,19 @@ public record GrantRolePermissionRequest(
 public record SetUserActiveRequest(bool IsActive);
 
 public record CreateTenantRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name,
 
-    [property: StringLength(500)]
+    [StringLength(500)]
     string? Description);
 
 public record UpdateTenantRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name,
 
-    [property: StringLength(500)]
+    [StringLength(500)]
     string? Description);
 
 /// <summary>
@@ -102,9 +102,9 @@ public record UpdateTenantRequest(
 /// administrator then assigns — the same end state as inviting and assigning separately.
 /// </summary>
 public record CreateInvitationRequest(
-    [property: Required]
-    [property: EmailAddress]
-    [property: StringLength(100)]
+    [Required]
+    [EmailAddress]
+    [StringLength(100)]
     string Email,
 
     Guid? RoleRef = null);
@@ -127,8 +127,8 @@ public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string
 public record CreatedInvitationResponse(Guid RefId, string Email, DateTime ExpiresAt, string Token);
 
 public record AcceptInvitationRequest(
-    [property: Required]
-    [property: StringLength(255)]
+    [Required]
+    [StringLength(255)]
     string Token);
 
 /// <summary>Identifies the tenant just joined, so a client can navigate straight into it.</summary>
