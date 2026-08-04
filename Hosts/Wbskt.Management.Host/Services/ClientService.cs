@@ -269,17 +269,26 @@ internal sealed class ClientService : IClientService
         {
             _logger.LogWarning("Client membership check failed: RefId {ClientRefId} not found. Error: {Message}", clientRefId, ex.Message);
             _logger.LogTrace(ex, "EnsureClientInWorkspaceAsync lookup failure stack trace for {ClientRefId}", clientRefId);
-            return Result<int>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            return Result<int>.Failure(Unauthorized);
         }
 
         if (client.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Client membership rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-            return Result<int>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+            return Result<int>.Failure(Unauthorized);
         }
 
         return Result<int>.Success(client.Id);
     }
+
+    /// <summary>
+    /// One answer for both "no such client" and "not this workspace's client". This gates the
+    /// command and ping endpoints, which is precisely where a caller would probe a reference it
+    /// guessed or kept from a workspace it was removed from — distinguishing the two would confirm
+    /// that a reference names a real client somewhere. Per "The ID Boundary" in
+    /// Docs/Coding.Conventions.md, an unresolvable reference is a permission answer, not a 404.
+    /// </summary>
+    private static readonly Error Unauthorized = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client not found in this workspace.");
 
     private static ClientResponse MapToResponse(Client c)
     {
