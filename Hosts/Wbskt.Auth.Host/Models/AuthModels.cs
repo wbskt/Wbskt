@@ -8,12 +8,12 @@ namespace Wbskt.Auth.Host.Models;
 // it would break the moment sign-in accepts a username as well as an email. Length and presence
 // are still bounded — they cost nothing and keep junk out of the password hasher and the query.
 public record LoginRequest(
-    [property: Required]
-    [property: StringLength(100)]
+    [Required]
+    [StringLength(100)]
     string Email,
 
-    [property: Required]
-    [property: StringLength(128)]
+    [Required]
+    [StringLength(128)]
     string Password);
 
 public record LoginResponse(string AccessToken, string RefreshToken);
@@ -24,6 +24,6 @@ public record LoginResponse(string AccessToken, string RefreshToken);
 /// Note this changed the wire format: the endpoint previously accepted a bare JSON string.
 /// </summary>
 public record RefreshTokenRequest(
-    [property: Required]
-    [property: StringLength(255)]
+    [Required]
+    [StringLength(255)]
     string RefreshToken);

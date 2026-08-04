@@ -6,15 +6,15 @@ public record WorkspaceResponse(Guid RefId, string Name, string? Description, Da
 
 // Lengths mirror dbo.Workspaces so over-long input fails validation rather than reaching SQL.
 public record CreateWorkspaceRequest(
-    [property: Required]
-    [property: StringLength(100, MinimumLength = 1)]
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
     string Name,
 
-    [property: StringLength(500)]
+    [StringLength(500)]
     string? Description);
 
 public record AddMemberRequest(
-    [property: Required]
-    [property: EmailAddress]
-    [property: StringLength(100)]
+    [Required]
+    [EmailAddress]
+    [StringLength(100)]
     string Email);
