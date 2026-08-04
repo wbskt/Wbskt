@@ -65,7 +65,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
     {
         _logger.LogInformation("API: Cancel run requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", workspaceRef, runRefId);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsUpdate, ct);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result.Failure(workspaceIdResult.Error));
@@ -80,7 +80,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
     {
         _logger.LogInformation("API: Send signal '{SignalName}' requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", signalName, workspaceRef, runRefId);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsUpdate, ct);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result<SignalResponse>.Failure(workspaceIdResult.Error));

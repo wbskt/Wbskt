@@ -5,6 +5,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Models;
 using ClientRow = Wbskt.Management.Host.Models.Client;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
@@ -66,5 +67,55 @@ public sealed class ClientServiceRenameTests
         result.IsSuccess.Should().BeTrue();
         provider.Verify(x => x.UpdateNameAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientRenamedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EnsureClientInWorkspace_returns_the_internal_id_when_owned()
+    {
+        var (service, _, _) = CreateServiceWithDetail(CreateDetail());
+
+        var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(ClientId);
+    }
+
+    [Fact]
+    public async Task EnsureClientInWorkspace_rejects_a_client_from_another_workspace()
+    {
+        var (service, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
+
+        var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+    }
+
+    [Fact]
+    public async Task EnsureClientInWorkspace_reports_an_unknown_reference_as_not_found()
+    {
+        var provider = new Mock<IClientProvider>();
+        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("no rows"));
+        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), NullLogger<ClientService>.Instance);
+
+        var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
+    }
+
+    private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateServiceWithDetail(ClientDetail detail)
+    {
+        var provider = new Mock<IClientProvider>();
+        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
+        var bus = new Mock<IEventBus>();
+        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NullLogger<ClientService>.Instance);
+        return (service, provider, bus);
+    }
+
+    private static ClientDetail CreateDetail(int workspaceId = WorkspaceId)
+    {
+        return new ClientDetail { Id = ClientId, RefId = ClientRefId, WorkspaceId = workspaceId, Name = "client" };
     }
 }

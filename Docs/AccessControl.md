@@ -156,6 +156,59 @@ The permission catalogue is **code-defined**: `Wbskt.Primitives/Constants/Permis
 create permissions — a slug invented at runtime cannot gate anything, because every check in the
 codebase is a compile-time `Permissions.X` constant.
 
+Adding a slug to that file is only half the job. `Tenant_Create` grants the tenant's `Admin` role the
+catalogue **as it stood when the tenant was created** and never revisits it, so a new slug reaches
+existing tenants only through the post-deployment script's `RolePermissions` backfill. That backfill
+runs across every `Admin` role, not just the default tenant's, and must stay set-based — a scalar
+`SELECT Id FROM dbo.Roles WHERE Name = 'Admin'` fails the whole script once a second tenant exists.
+
+## Workspace-scoped permissions (management host)
+
+Every route below is `api/workspaces/{workspaceRef:guid}/…` and resolves through
+`POST /api/workspaces/resolve` before doing anything else. The resolve call is the membership gate;
+the slug is the second gate.
+
+| Area | Endpoint | Permission |
+|---|---|---|
+| Clients | `GET clients`, `GET clients/policy/{ref}`, `GET clients/{ref}`, `GET clients/{ref}/state` | `clients.read` |
+| Clients | `PATCH clients/{ref}/status`, `PATCH clients/{ref}/name` | `clients.update` |
+| Clients | `POST clients/{ref}/command` | `clients.command` |
+| Clients | `POST clients/{ref}/ping` | `clients.ping` |
+| Clients | `GET clients/{ref}/comms` | `logs.read` — it is a projection of the event log, not client state |
+| Policies | `GET registration-policies…` | `policies.read` |
+| Policies | `POST`, `PATCH {ref}`, `POST {ref}/disable` | `policies.manage` |
+| Templates | `GET message-templates` | `templates.read` |
+| Templates | `POST`, `PUT {ref}`, `DELETE {ref}` | `templates.manage` |
+| Logs | `GET event-logs` | `logs.read` |
+| Workflows | `GET workflows…`, `GET runs…`, `GET runs/{ref}/history`, `GET …/variables/{name}` | `workflows.read` |
+| Workflows | `POST workflows` (publish) | `workflows.create` |
+| Workflows | `POST workflows/{ref}/deprecate` | `workflows.delete` |
+| Workflows | `POST workflows/{ref}/runs`, `POST runs/{ref}/cancel`, `POST runs/{ref}/signals/{name}`, `PUT …/variables/{name}` | `workflows.execute` |
+| Realtime | `NotificationHub.JoinWorkspace` | `workspace.join` |
+
+`workflows.update` currently gates nothing on its own — authoring a new version goes through
+`workflows.create` (publish is versioned, never in-place) and the run-control endpoints that used to
+require it now take `workflows.execute`. The split exists so that operating a workflow and rewriting
+one are separate grants; an operator with `workflows.execute` alone cannot change what a run does.
+
+`clients.manage` likewise gates nothing today. Both are kept in the catalogue rather than removed so
+that role configurations already granting them stay valid.
+
+Two structural notes on scoping, since neither is enforced by the resolve call:
+
+- **A reference is not a scope.** Resolving `workspaceRef` establishes *which* workspace the caller
+  is acting in; it says nothing about whether the `clientRefId` or `runRefId` in the same route
+  belongs to it. Every endpoint that acts on a nested resource has to check ownership separately —
+  `IClientService.EnsureClientInWorkspaceAsync`, `IWorkflowRunQueryService.EnsureRunInWorkspaceAsync`,
+  `IWorkflowDefinitionService.EnsureWorkflowInWorkspaceAsync`, or a `WorkspaceId` comparison inside
+  the service. This matters most where the endpoint publishes to the bus: the socket host dispatches
+  `ClientCommandEvent`/`ClientPingEvent` on `ClientRefId` alone and has no workspace to check against,
+  so the controller's check is the only one there is.
+- **The realtime feed is per workspace, not per permission.** `workspace.join` puts a connection in
+  `ws:{workspaceId}`, which carries every `[SignalRNotify]` event for that workspace. A member who
+  holds only `workflows.read` still receives client command payloads over the hub. Narrowing that
+  would mean per-event-category groups; it is a known gap, not a decision.
+
 ## Sessions and tokens
 
 - Access tokens last 60 minutes and are not revocable; refresh tokens last 7 days and are.

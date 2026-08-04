@@ -100,6 +100,19 @@ BEGIN
 END
 GO
 
+-- Message Template Permissions
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'templates.read')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('templates.read', 'Read message templates');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'templates.manage')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('templates.manage', 'Manage message templates');
+END
+GO
+
 -- Workflow Permissions
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.read')
 BEGIN
@@ -125,6 +138,12 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workflows.execute')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workflows.execute', 'Start, signal and cancel workflow runs');
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'workspace.join')
     BEGIN
         INSERT INTO dbo.Permissions (Slug, Description) VALUES ('workspace.join', 'Join workspaces');
@@ -137,18 +156,20 @@ BEGIN
 END
 GO
 
--- RolePermissions (Admin gets ALL)
-IF EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'Admin')
-BEGIN
-
-    -- Variables must be declared and used within the same batch (before the GO)
-    DECLARE @AdminRoleId INT = (SELECT Id FROM dbo.Roles WHERE Name = 'Admin');
-
-    INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
-    SELECT @AdminRoleId, p.Id, 0
-    FROM dbo.Permissions p
-    WHERE NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = @AdminRoleId AND rp.PermissionId = p.Id);
-END
+-- RolePermissions (every tenant's Admin gets ALL).
+--
+-- Set-based across all Admin roles on purpose. Roles are tenant-scoped, so once a second tenant
+-- exists there is more than one row named 'Admin' and assigning them to a scalar variable fails the
+-- whole post-deployment script with "Subquery returned more than 1 value". This is also the only
+-- mechanism by which a permission slug added after a tenant was created reaches that tenant's
+-- administrators -- Tenant_Create grants the catalogue as it stood at creation time and never
+-- revisits it -- so it has to run for every tenant, not just the default one.
+INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
+SELECT r.Id, p.Id, 0
+FROM dbo.Roles r
+CROSS JOIN dbo.Permissions p
+WHERE r.Name = 'Admin'
+  AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
 GO
 
 -- Users (Root WITH enforced ID)

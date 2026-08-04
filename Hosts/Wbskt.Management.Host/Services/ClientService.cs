@@ -256,6 +256,31 @@ internal sealed class ClientService : IClientService
         }
     }
 
+    public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Verifying client RefId: {ClientRefId} belongs to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+
+        Client client;
+        try
+        {
+            client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Client membership check failed: RefId {ClientRefId} not found. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "EnsureClientInWorkspaceAsync lookup failure stack trace for {ClientRefId}", clientRefId);
+            return Result<int>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        if (client.WorkspaceId != workspaceId)
+        {
+            _logger.LogWarning("Client membership rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+            return Result<int>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+        }
+
+        return Result<int>.Success(client.Id);
+    }
+
     private static ClientResponse MapToResponse(Client c)
     {
         return new ClientResponse(

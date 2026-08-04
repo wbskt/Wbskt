@@ -47,7 +47,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     {
         _logger.LogInformation("API: GetAll message templates requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result<ListResponse<MessageTemplateResponse>>.Failure(workspaceIdResult.Error));
@@ -75,7 +75,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     {
         _logger.LogInformation("API: Create message template requested for WorkspaceRef: '{WorkspaceRef}' (Name: '{TemplateName}')", workspaceRef, request.Name);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result<MessageTemplateResponse>.Failure(workspaceIdResult.Error));
@@ -98,7 +98,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     {
         _logger.LogInformation("API: Update message template requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result.Failure(workspaceIdResult.Error));
@@ -120,7 +120,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     {
         _logger.LogInformation("API: Delete message template requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result.Failure(workspaceIdResult.Error));

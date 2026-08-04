@@ -124,7 +124,7 @@ public sealed class WorkflowsController : ApiControllerBase
     {
         _logger.LogInformation("API: StartManualRun requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsUpdate, ct);
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
         if (workspaceIdResult.IsFailure)
         {
             return MapResult(Result<StartRunResponse>.Failure(workspaceIdResult.Error));
