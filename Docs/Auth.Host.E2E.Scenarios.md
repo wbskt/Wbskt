@@ -527,6 +527,10 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
 10. **§12.4–12.5 groups and group role assignments** — ✅ `Scenarios/Auth/TenantGroupTests.cs`.
 11. **§13 member administration** — ✅ `Scenarios/Auth/TenantMemberTests.cs`. Member *removal* is
     not repeated here; `TEN_13`–`TEN_16` own offboarding and its workspace-transfer rules.
+    One ID drifted from the catalogue: `MEM_37` here asserts that deactivation spans every tenant
+    the account belongs to, which is worth having but is not the row §13 defines. The catalogue's
+    `MEM_37` — an administrator deactivating *themselves* and stranding the tenant — is
+    `MEM_37b`.
 12. **§14 precedence** — ✅ `Scenarios/Auth/PermissionPrecedenceTests.cs`, covering the arms not
     already hit in passing by `WS_RES_12`, `MEM_25`, `GRL_05` and `MEM_18`/`MEM_19`.
 13. **§3 registration** — ✅ `Scenarios/Auth/RegistrationTests.cs`, extended with the invitation-token
@@ -544,9 +548,21 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
 
 ### Coverage
 
-Every section now has an implementation. What remains open is not scenarios but verification:
-nothing in `Tests/` is built by CI (`build-images.yml` builds only the four host images, and no host
-references the test project), so none of this has been through a compiler.
+Every section now has an implementation, and every scenario ID in §12.2–12.5 and §13 has a test.
+
+What remains open is not scenarios but verification, in two separate senses.
+
+**Compilation is no longer the gap, but it is still not automatic.** The suite builds clean under
+the .NET 10 SDK (`dotnet build Tests/Wbskt.E2E.FeatureTests`), and all scenarios are discovered by
+the runner. But nothing in `Tests/` is built by CI — `build-images.yml` builds only the four host
+images, and no host references the test project — so a scenario that stops compiling still breaks
+nobody's build. Until a host references it or CI builds it explicitly, that `dotnet build` is a
+manual step.
+
+**Nothing here has run green against a live stack.** Every scenario gates on
+`Skip.IfNot(fixture.HostsAvailable, …)` and skips when the four dev hosts are down, so a full run
+with no hosts reports success while asserting nothing. A ✅ in the list above means "written and
+compiling", not "passing".
 
 ### Known mismatch
 
