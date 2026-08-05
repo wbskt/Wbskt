@@ -93,6 +93,49 @@ leaked link is not by itself enough to join.
   error message, but that read is never the gate.
 - Every rejection — unknown token, expired, revoked, spent, wrong address — is reported identically,
   so the endpoint cannot be used to probe for invitations belonging to someone else.
+- The token is 256 bits from a cryptographic source, base64url — generated the way a refresh token
+  is, rather than from a `Guid`, which is neither unpredictable nor meant to be. It lives 7 days.
+  `InvitationTokens` is shared by both redemption paths on purpose: a second copy of `Hash` that
+  drifted would make every previously issued invitation silently unredeemable.
+
+### Redeeming, and why it needs an authenticated caller
+
+`POST /api/invitations/accept` requires a token **and** a signed-in account. That reads like a
+contradiction — registration always creates a tenant, so how does someone who already has one accept
+an invitation? — but only if tenants are read as exclusive. They are not: `TenantMembers` is
+many-to-many, so redemption **adds a second membership** rather than replacing anything. An invited
+user ends up in two tenants, their own and the one that invited them, and sees both through
+`GET /api/tenants`.
+
+The authentication is what makes the address check possible. `TenantInvitation_Accept` joins the
+invitation to `dbo.Users` on the accepting user's ID and requires `I.Email = U.Email`; with no
+authenticated caller there is no `U.Email` to compare against, and possession of a leaked link would
+be enough to join. An anonymous variant would have to take credentials in the body, which is login
+with extra steps. It also explains the separate controller: everything under
+`api/tenants/{tenantRef}` resolves the tenant from the route, and discovering which tenant the token
+belongs to is this call's purpose, so it cannot also be its precondition.
+
+Redemption marks the invitation accepted, inserts the membership, and — if the invitation named a
+role — grants it **tenant-wide**. That is the tenant's answer to "what can a new member do";
+narrowing it to one workspace is a later, explicit act. A `UserPermissionsChangedEvent` follows, so
+anything caching the user's effective set drops it.
+
+**Registering with a token** orders its steps around one failure: an account created for an
+invitation that turns out to be unusable cannot be registered again — the email is taken — and was
+not wanted on its own. So the token is validated *before* the account exists, then re-validated
+authoritatively inside the procedure, since it could be revoked or redeemed in between. If it has
+been, registration answers 400 but the account and its own tenant survive; the user logs in and asks
+for a fresh invitation rather than being stranded.
+
+Two consequences worth designing the console around:
+
+- An invited user gets `"{username}'s Tenant"` whether they wanted one or not. That is deliberate —
+  an account belonging to no tenant can do nothing and no endpoint can repair it, so someone who
+  later leaves the tenant that invited them still has somewhere to be — but it means a person
+  invited into an organisation finds a personal tenant nobody mentioned.
+- The stale-token registration above returns 400 for a request that **partly succeeded**. A console
+  that renders it as "registration failed" sends the user to retry, where they hit "email already
+  taken" with no indication they can simply log in.
 
 **`WorkspaceMember_Add` no longer joins the tenant implicitly.** It used to insert the missing
 `TenantMembers` row, which meant anyone holding `users.manage` in a single workspace could pull any

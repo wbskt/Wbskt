@@ -44,9 +44,16 @@
     <File Path="Scripts.bat" />
   </Folder>
   <Folder Name="/SolutionItems/Docs/">
+    <File Path="Docs/AccessControl.md" />
     <File Path="Docs/access_control.png" />
+    <File Path="Docs/API.Endpoints.md" />
+    <File Path="Docs/Auth.Host.E2E.Scenarios.md" />
+    <File Path="Docs/Clients.Feature.V1.Design.md" />
     <File Path="Docs/Coding.Conventions.md" />
+    <File Path="Docs/RoughFeatures.md" />
+    <File Path="Docs/UI.Mockup.Prompt.md" />
     <File Path="Docs/Workflow.Engine.V3.Design.md" />
+    <File Path="Docs/Workflow.Engine.V3.Remediation.Plan.md" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj" />
