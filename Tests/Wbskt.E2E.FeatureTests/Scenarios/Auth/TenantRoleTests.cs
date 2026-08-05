@@ -364,6 +364,51 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task ROLE_17_RolesManageHeldWorkspaceScopedOnly_DoesNotReachTenantAdministration()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var workspaceRef = await fixture.CreateWorkspaceAsync(admin.Token);
+        var member = await fixture.CreateUserInTenantAsync(admin.Token, tenantRef);
+
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
+            admin.Token,
+            new { Email = member.Email });
+
+        var memberRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, member.Email);
+        var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+
+        foreach (var slug in new[] { "roles.manage", "roles.read" })
+        {
+            await fixture.SendAsync(
+                HttpMethod.Post,
+                ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
+                admin.Token,
+                new { Slug = slug, IsDeny = false });
+        }
+
+        // Assigned to one workspace rather than tenant-wide: the capability is real, but pinned.
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
+            admin.Token,
+            new { WorkspaceRef = (Guid?)workspaceRef });
+
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef))
+            .Should().Contain("roles.manage", "the grant is genuinely in effect inside its workspace");
+
+        var response = await CreateRoleAsync(member.Token, tenantRef, $"e2e-{Guid.NewGuid():N}");
+
+        response.StatusCode.Should().Be(
+            HttpStatusCode.Forbidden,
+            "tenant administration verifies the slug with a null workspace, which a scoped grant does not satisfy");
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("PERMISSION_UNAUTHORIZED");
+    }
+
+    [SkippableFact]
     public async Task ROLE_18_NonGuidTenantRef_IsRejectedByRouting()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -400,6 +445,27 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task RPERM_02_GrantAsDeny_IsListedAsADenial()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
+            admin.Token,
+            new { Slug = "logs.read", IsDeny = true });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Attached either way, so the deny flag is the only thing separating this from a grant.
+        (await fixture.GetRolePermissionsAsync(admin.Token, tenantRef, roleRef))
+            .Should().ContainSingle(p => p.Slug == "logs.read").Which.IsDeny.Should().BeTrue();
+    }
+
+    [SkippableFact]
     public async Task RPERM_03_RegrantingFlipsTheDenyFlagInPlace()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -417,6 +483,47 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task RPERM_04_UnknownSlug_Returns400AndWritesNothing()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
+            admin.Token,
+            new { Slug = "roles.mange", IsDeny = false });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
+
+        // The section-2 regression in its own right: the rejection must reach the database too.
+        (await fixture.GetRolePermissionSlugsAsync(admin.Token, tenantRef, roleRef))
+            .Should().NotContain("roles.mange");
+    }
+
+    [SkippableFact]
+    public async Task RPERM_05_BodyCarryingWorkspaceRef_IsRejected()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+
+        // Role permissions are unscoped, so a workspace here could only ever be ignored. Unmapped
+        // members are refused rather than dropped, turning a silent success into a named mistake.
+        var response = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
+            admin.Token,
+            new { Slug = "logs.read", IsDeny = false, WorkspaceRef = Guid.NewGuid() });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [SkippableFact]
     public async Task RPERM_06_EmptySlug_IsRejectedByValidation()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -429,6 +536,23 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
             ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
             admin.Token,
             new { Slug = string.Empty, IsDeny = false });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [SkippableFact]
+    public async Task RPERM_07_OverlongSlug_IsRejectedByValidation()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
+            admin.Token,
+            new { Slug = new string('s', 101), IsDeny = false });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -471,6 +595,62 @@ public sealed class TenantRoleTests(ServicesFixture fixture)
             admin.Token);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent, "delete is idempotent");
+    }
+
+    [SkippableFact]
+    public async Task RPERM_10_RemovingIsNotDenying()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var workspaceRef = await fixture.CreateWorkspaceAsync(admin.Token);
+        var member = await fixture.CreateUserInTenantAsync(admin.Token, tenantRef);
+
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
+            admin.Token,
+            new { Email = member.Email });
+
+        var memberRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, member.Email);
+
+        // Two roles, both held tenant-wide: one is a standing source of the slug, the other is edited.
+        var granting = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+        var editable = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{granting}/permissions"),
+            admin.Token,
+            new { Slug = "logs.read", IsDeny = false });
+
+        foreach (var roleRef in new[] { granting, editable })
+        {
+            await fixture.SendAsync(
+                HttpMethod.Post,
+                ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
+                admin.Token,
+                new { WorkspaceRef = (Guid?)null });
+        }
+
+        // Denying on the second role overrides the first — role-deny outranks role-allow.
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{editable}/permissions"),
+            admin.Token,
+            new { Slug = "logs.read", IsDeny = true });
+
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef))
+            .Should().NotContain("logs.read", "a denial anywhere in the role set wins");
+
+        // Removing that denial is a different act from granting: the other role's allow returns.
+        await fixture.SendAsync(
+            HttpMethod.Delete,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{editable}/permissions/logs.read"),
+            admin.Token);
+
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef))
+            .Should().Contain("logs.read", "removal returns the decision to the remaining sources");
     }
 
     [SkippableFact]

@@ -95,6 +95,20 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task GRP_03_CreatedGroup_AppearsInTheList()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var name = $"e2e-group-{Guid.NewGuid():N}";
+
+        (await CreateGroupAsync(admin.Token, tenantRef, name)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await fixture.GetGroupsAsync(admin.Token, tenantRef))
+            .Should().ContainSingle(g => g.Name == name);
+    }
+
+    [SkippableFact]
     public async Task GRP_04_DuplicateNameInTheSameTenant_Returns409()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -318,6 +332,29 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
             new { WorkspaceRef = (Guid?)null });
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [SkippableFact]
+    public async Task GRL_02_AssignScopedToAWorkspace_IsListedWithThatScope()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+        var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
+        var workspaceRef = await fixture.CreateWorkspaceAsync(admin.Token);
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
+            admin.Token,
+            new { WorkspaceRef = (Guid?)workspaceRef });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // The scope is stored on the assignment, not inferred at read time.
+        (await fixture.GetGroupRoleAssignmentsAsync(admin.Token, tenantRef, groupRef))
+            .Should().ContainSingle(a => a.RoleRef == roleRef).Which.WorkspaceRef.Should().Be(workspaceRef);
     }
 
     [SkippableFact]
