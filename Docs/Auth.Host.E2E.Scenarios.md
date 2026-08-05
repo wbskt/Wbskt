@@ -527,12 +527,26 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
 10. **§12.4–12.5 groups and group role assignments** — ✅ `Scenarios/Auth/TenantGroupTests.cs`.
 11. **§13 member administration** — ✅ `Scenarios/Auth/TenantMemberTests.cs`. Member *removal* is
     not repeated here; `TEN_13`–`TEN_16` own offboarding and its workspace-transfer rules.
-12. **§14 precedence** — partly covered in passing: `WS_RES_12` and `MEM_25` cover user-deny over
-    role-allow, `GRL_05` covers group inheritance, `MEM_18`/`MEM_19` cover scope. The arms still
-    unwritten are role-deny beating role-allow across two roles, and user-deny beating user-allow.
-13. **§3, §4, §6 registration, login, logout** — broad but shallow. §4 needs revising first: login
-    no longer validates the identifier's format, so `AUTH_LOG_10` is stale.
-14. **§7 rate limiting** — last, and in its own xUnit collection.
+12. **§14 precedence** — ✅ `Scenarios/Auth/PermissionPrecedenceTests.cs`, covering the arms not
+    already hit in passing by `WS_RES_12`, `MEM_25`, `GRL_05` and `MEM_18`/`MEM_19`.
+13. **§3 registration** — ✅ `Scenarios/Auth/RegistrationTests.cs`, extended with the invitation-token
+    rejections (`AUTH_REG_22`–`24`) the original catalogue predated.
+14. **§4 login** — ✅ `Scenarios/Auth/LoginTests.cs`. `AUTH_LOG_10` was rewritten: `LoginRequest`
+    deliberately dropped `[EmailAddress]`, so a malformed identifier now returns the same **401** as
+    any other failed login rather than a 400. The test asserts it matches the wrong-password
+    response instead of hardcoding a status.
+15. **§6 logout** — ✅ `Scenarios/Auth/SessionTerminationTests.cs`.
+16. **§7 rate limiting** — ✅ `Scenarios/Auth/RateLimitingTests.cs`, **opt-in**. The limiter
+    partitions on caller IP, which the whole suite shares, so these are gated behind
+    `E2E_RATE_LIMIT_TESTS=1` and meant to be run with a filter. `AUTH_RL_02` waits out the full
+    window, so it is slow by nature. `E2E_AUTH_PERMIT_LIMIT` and `E2E_AUTH_WINDOW_MINUTES` must
+    match the host's configuration.
+
+### Coverage
+
+Every section now has an implementation. What remains open is not scenarios but verification:
+nothing in `Tests/` is built by CI (`build-images.yml` builds only the four host images, and no host
+references the test project), so none of this has been through a compiler.
 
 ### Known mismatch
 

@@ -275,6 +275,38 @@ public sealed class ServicesFixture : IDisposable
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
+    /// <summary>
+    /// Sends a verbatim body under a chosen media type. Needed for the two failures that cannot be
+    /// expressed through a serializer: malformed JSON, and a content type the host does not accept.
+    /// </summary>
+    public async Task<HttpResponseMessage> SendRawBodyAsync(HttpMethod method, string url, string content, string mediaType)
+    {
+        using var req = new HttpRequestMessage(method, url)
+        {
+            Content = new StringContent(content, Encoding.UTF8, mediaType)
+        };
+
+        return await _http.SendAsync(req);
+    }
+
+    /// <summary>Registers without logging in, so the raw response stays assertable.</summary>
+    public Task<HttpResponseMessage> RegisterAsync(string username, string email, string password, string? invitationToken = null) =>
+        SendAsync(
+            HttpMethod.Post,
+            AuthUrl("/api/auth/register"),
+            body: new { Username = username, Email = email, Password = password, InvitationToken = invitationToken });
+
+    /// <summary>Attempts a login and returns the raw response, without throwing on refusal.</summary>
+    public Task<HttpResponseMessage> LoginRawAsync(string email, string password) =>
+        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/login"), body: new { Email = email, Password = password });
+
+    /// <summary>A unique credential set that has not been registered.</summary>
+    public static (string Username, string Email, string Password) NewCredentials()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        return ($"e2e-{suffix}", $"e2e-{suffix}@test.local", $"P@ssw0rd-{suffix}");
+    }
+
     /// <summary>Reads the <c>code</c> off an <c>Error</c> response body, or null when the body is not one.</summary>
     public static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
     {
