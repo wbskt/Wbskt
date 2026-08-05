@@ -180,6 +180,27 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task MEM_08_UserGroups_ListTheGroupsTheyBelongTo()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+        var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+
+        var before = await fixture.GetUserGroupsAsync(admin.Token, tenantRef, memberRef);
+        before.Should().BeEmpty("an invited member joins no groups");
+
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
+            admin.Token);
+
+        (await fixture.GetUserGroupsAsync(admin.Token, tenantRef, memberRef))
+            .Should().ContainSingle(g => g.GroupRef == groupRef);
+    }
+
+    [SkippableFact]
     public async Task MEM_09_ReadBackForAnUnknownUserRef_Returns403()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -235,6 +256,24 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     // ── Group membership ──────────────────────────────────────────────────────────────────
 
     [SkippableFact]
+    public async Task MEM_11_ReadingGroupsWithoutUsersRead_Returns403()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+
+        // The groups read gates on users.read, not the roles.read that MEM_10 covers.
+        var response = await fixture.SendAsync(
+            HttpMethod.Get,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups"),
+            member.Token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("PERMISSION_UNAUTHORIZED");
+    }
+
+    [SkippableFact]
     public async Task MEM_12_AddUserToGroup_ShowsInTheirGroups()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -256,6 +295,34 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
             admin.Token)).Content.ReadAsStringAsync();
 
         body.Should().Contain(groupRef.ToString());
+    }
+
+    [SkippableFact]
+    public async Task MEM_13_GroupMembership_GrantsTheGroupsRoles()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
+        var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+        var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
+
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
+            admin.Token,
+            new { WorkspaceRef = (Guid?)null });
+
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef))
+            .Should().NotContain("logs.read", "the role is on the group, and they are not in it yet");
+
+        // Joining the group is what delivers the role — the assignment never names the user.
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
+            admin.Token);
+
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
     }
 
     [SkippableFact]
@@ -320,6 +387,23 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     // ── Role assignment ───────────────────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task MEM_17_RemovingFromAGroupTheyAreNotIn_IsIdempotent()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+        var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Delete,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
+            admin.Token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent, "delete is idempotent");
+    }
 
     [SkippableFact]
     public async Task MEM_18_TenantWideAssignment_AppliesInEveryWorkspace()
@@ -418,6 +502,34 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task MEM_22_RemovingARoleAssignment_TakesThePermissionsAway()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
+        var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
+
+        await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
+            admin.Token,
+            new { WorkspaceRef = (Guid?)null });
+
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Delete,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
+            admin.Token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().NotContain("logs.read");
+        (await fixture.GetUserRoleAssignmentsAsync(admin.Token, tenantRef, memberRef))
+            .Should().NotContain(a => a.RoleRef == roleRef);
+    }
+
+    [SkippableFact]
     public async Task MEM_23_ScopedAndTenantWideAssignmentsCoexist()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -509,6 +621,27 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task MEM_27_GrantingAnUnknownSlug_Returns400AndWritesNothing()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+
+        var response = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
+            admin.Token,
+            new { Slug = "logs.raed", IsDeny = false, WorkspaceRef = (Guid?)null });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
+
+        (await fixture.GetUserPermissionsAsync(admin.Token, tenantRef, memberRef))
+            .Should().NotContain(p => p.Slug == "logs.raed", "the rejection must reach the database too");
+    }
+
+    [SkippableFact]
     public async Task MEM_28_RemovingADirectEntry_RevertsToTheRoles()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
@@ -541,6 +674,32 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
+    }
+
+    [SkippableFact]
+    public async Task MEM_29_RemovingADirectEntry_IsScopeSensitive()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (_, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
+        var url = ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions");
+
+        await fixture.SendAsync(HttpMethod.Post, url, admin.Token, new { Slug = "logs.read", IsDeny = false, WorkspaceRef = (Guid?)null });
+        await fixture.SendAsync(HttpMethod.Post, url, admin.Token, new { Slug = "logs.read", IsDeny = false, WorkspaceRef = (Guid?)workspaceRef });
+
+        (await fixture.GetUserPermissionsAsync(admin.Token, tenantRef, memberRef))
+            .Where(p => p.Slug == "logs.read").Should().HaveCount(2, "scope is part of the row's identity");
+
+        // Addressing the scoped row leaves the tenant-wide one standing.
+        await fixture.SendAsync(
+            HttpMethod.Delete,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions/logs.read?workspaceRef={workspaceRef}"),
+            admin.Token);
+
+        (await fixture.GetUserPermissionsAsync(admin.Token, tenantRef, memberRef))
+            .Where(p => p.Slug == "logs.read").Should().ContainSingle()
+            .Which.WorkspaceRef.Should().BeNull();
     }
 
     [SkippableFact]
@@ -580,6 +739,27 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await ServicesFixture.ReadErrorCodeAsync(login)).Should().Be("AUTH_USER_INACTIVE");
+    }
+
+    [SkippableFact]
+    public async Task MEM_32_Deactivation_RevokesEveryRefreshToken()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+
+        // Two live sessions, both issued before the account is disabled.
+        var first = await fixture.LoginAsync(member.Email, member.Password);
+        var second = await fixture.LoginAsync(member.Email, member.Password);
+
+        await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: false);
+
+        // Blocking the next login is not enough on its own: a refresh token outlives the access
+        // token that came with it, so an un-revoked one would keep minting credentials for a
+        // disabled account.
+        (await fixture.RefreshAsync(first.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await fixture.RefreshAsync(second.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [SkippableFact]
@@ -666,5 +846,30 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
             body: new { Email = member.Email, Password = member.Password });
 
         login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [SkippableFact]
+    public async Task MEM_37b_AnAdministratorCanDeactivateThemselves_AndStrandTheTenant()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var adminRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, admin.Email);
+        adminRef.Should().NotBeNull();
+
+        // Documenting behaviour, not endorsing it. There is no self-protection guard, and this is
+        // the tenant's only administrator, so the tenant becomes unadministrable — nobody left
+        // holding users.manage to turn the account back on.
+        var response = await fixture.SetUserActiveAsync(admin.Token, tenantRef, adminRef!.Value, isActive: false);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var login = await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl("/api/auth/login"),
+            body: new { Email = admin.Email, Password = admin.Password });
+
+        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await ServicesFixture.ReadErrorCodeAsync(login)).Should().Be("AUTH_USER_INACTIVE");
     }
 }

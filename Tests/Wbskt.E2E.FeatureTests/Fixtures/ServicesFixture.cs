@@ -625,6 +625,9 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>A permission granted directly to a user, with its scope and whether it is a denial.</summary>
     public sealed record UserPermission(string Slug, bool IsDeny, Guid? WorkspaceRef);
 
+    /// <summary>A group a user belongs to.</summary>
+    public sealed record GroupMembership(Guid GroupRef, string GroupName);
+
     public async Task<IReadOnlyList<Role>> GetRolesAsync(string token, Guid tenantRef)
     {
         var page = await ReadListAsync<RoleDto>(AuthUrl($"/api/tenants/{tenantRef}/roles?take=200"), token);
@@ -645,6 +648,9 @@ public sealed class ServicesFixture : IDisposable
 
     public Task<IReadOnlyList<UserPermission>> GetUserPermissionsAsync(string token, Guid tenantRef, Guid userRef) =>
         ReadArrayAsync<UserPermission>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/permissions"), token);
+
+    public Task<IReadOnlyList<GroupMembership>> GetUserGroupsAsync(string token, Guid tenantRef, Guid userRef) =>
+        ReadArrayAsync<GroupMembership>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/groups"), token);
 
     /// <summary>Reads a <c>ListResponse</c>-shaped body (<c>{ "items": [...] }</c>).</summary>
     private async Task<IReadOnlyList<T>> ReadListAsync<T>(string url, string token)
@@ -677,6 +683,16 @@ public sealed class ServicesFixture : IDisposable
         var permissions = await resp.Content.ReadFromJsonAsync<List<RolePermissionDto>>(JsonOptions) ?? [];
         return permissions.Select(p => p.Slug).ToList();
     }
+
+    /// <summary>A permission attached to a role definition. Role permissions carry no scope.</summary>
+    public sealed record RolePermission(string Slug, bool IsDeny);
+
+    /// <summary>
+    /// The permissions on a role with their deny flags. The slug-only read above answers "is it
+    /// attached"; a grant and a denial are both attached, so telling them apart needs this.
+    /// </summary>
+    public Task<IReadOnlyList<RolePermission>> GetRolePermissionsAsync(string token, Guid tenantRef, Guid roleRef) =>
+        ReadArrayAsync<RolePermission>(AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"), token);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Policy helpers
