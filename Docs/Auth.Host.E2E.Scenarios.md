@@ -523,7 +523,20 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
    which also absorbs most of §12.1 and §15.
 8. **§3, §4, §6** — broad but shallow; cheap now that the fixture helpers exist. Note `§4` needs
    revising first: login no longer validates the identifier's format, so `AUTH_LOG_10` is stale.
-9. **§12.2–12.5, §13** — the bulk. Roles, groups, assignments and member administration.
-10. **§14 precedence** — highest setup cost, best documentation value. `WS_RES_12` covers one arm
-    (user-deny beats role-allow); the other twelve are unwritten.
-11. **§7 rate limiting** — last, and in its own xUnit collection.
+9. **§12.2–12.3 roles and role permissions** — ✅ `Scenarios/Auth/TenantRoleTests.cs`.
+10. **§12.4–12.5 groups and group role assignments** — ✅ `Scenarios/Auth/TenantGroupTests.cs`.
+11. **§13 member administration** — ✅ `Scenarios/Auth/TenantMemberTests.cs`. Member *removal* is
+    not repeated here; `TEN_13`–`TEN_16` own offboarding and its workspace-transfer rules.
+12. **§14 precedence** — partly covered in passing: `WS_RES_12` and `MEM_25` cover user-deny over
+    role-allow, `GRL_05` covers group inheritance, `MEM_18`/`MEM_19` cover scope. The arms still
+    unwritten are role-deny beating role-allow across two roles, and user-deny beating user-allow.
+13. **§3, §4, §6 registration, login, logout** — broad but shallow. §4 needs revising first: login
+    no longer validates the identifier's format, so `AUTH_LOG_10` is stale.
+14. **§7 rate limiting** — last, and in its own xUnit collection.
+
+### Known mismatch
+
+`Docs/API.Endpoints.md` says `PUT {tenantRef}/groups/{groupRef}` "renames a group **or re-parents
+it**". `UpdateGroupRequest` carries only `Name`, so re-parenting is not reachable through the API.
+Either the doc is ahead of the code or the property was dropped; no scenario asserts it until that
+is settled.

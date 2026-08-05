@@ -582,6 +582,57 @@ public sealed class ServicesFixture : IDisposable
         return (await ReadResolvedWorkspaceAsync(response)).Permissions;
     }
 
+    // ── Tenant administration read-back ──────────────────────────────────────
+
+    public sealed record Role(Guid RefId, string Name, string? Description);
+    public sealed record Group(Guid RefId, string Name, Guid? ParentGroupRefId);
+
+    /// <summary>A role held by a user or group, with the scope it was granted at.</summary>
+    public sealed record RoleAssignment(Guid RoleRef, string RoleName, Guid? WorkspaceRef);
+
+    /// <summary>A permission granted directly to a user, with its scope and whether it is a denial.</summary>
+    public sealed record UserPermission(string Slug, bool IsDeny, Guid? WorkspaceRef);
+
+    public async Task<IReadOnlyList<Role>> GetRolesAsync(string token, Guid tenantRef)
+    {
+        var page = await ReadListAsync<RoleDto>(AuthUrl($"/api/tenants/{tenantRef}/roles?take=200"), token);
+        return page.Select(r => new Role(r.RefId, r.Name, r.Description)).ToList();
+    }
+
+    public async Task<IReadOnlyList<Group>> GetGroupsAsync(string token, Guid tenantRef)
+    {
+        var page = await ReadListAsync<GroupDto>(AuthUrl($"/api/tenants/{tenantRef}/groups?take=200"), token);
+        return page.Select(g => new Group(g.RefId, g.Name, g.ParentGroupRefId)).ToList();
+    }
+
+    public Task<IReadOnlyList<RoleAssignment>> GetGroupRoleAssignmentsAsync(string token, Guid tenantRef, Guid groupRef) =>
+        ReadArrayAsync<RoleAssignment>(AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles"), token);
+
+    public Task<IReadOnlyList<RoleAssignment>> GetUserRoleAssignmentsAsync(string token, Guid tenantRef, Guid userRef) =>
+        ReadArrayAsync<RoleAssignment>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/roles"), token);
+
+    public Task<IReadOnlyList<UserPermission>> GetUserPermissionsAsync(string token, Guid tenantRef, Guid userRef) =>
+        ReadArrayAsync<UserPermission>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/permissions"), token);
+
+    /// <summary>Reads a <c>ListResponse</c>-shaped body (<c>{ "items": [...] }</c>).</summary>
+    private async Task<IReadOnlyList<T>> ReadListAsync<T>(string url, string token)
+    {
+        var response = await SendAsync(HttpMethod.Get, url, token);
+        response.EnsureSuccessStatusCode();
+
+        var page = await response.Content.ReadFromJsonAsync<ListDto<T>>(JsonOptions);
+        return page?.Items ?? [];
+    }
+
+    /// <summary>Reads a bare JSON array body, which the read-back endpoints return unwrapped.</summary>
+    private async Task<IReadOnlyList<T>> ReadArrayAsync<T>(string url, string token)
+    {
+        var response = await SendAsync(HttpMethod.Get, url, token);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<List<T>>(JsonOptions) ?? [];
+    }
+
     /// <summary>The slugs currently attached to a role definition.</summary>
     public async Task<IReadOnlyList<string>> GetRolePermissionSlugsAsync(string token, Guid tenantRef, Guid roleRef)
     {
