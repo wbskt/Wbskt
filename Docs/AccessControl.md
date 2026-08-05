@@ -2,6 +2,8 @@
 
 > Supersedes parts of `access_control.png` — the resolution *precedence* in that diagram is still
 > accurate, but the diagram predates tenants and workspace scoping.
+>
+> For the endpoints these permissions gate, see [API.Endpoints.md](API.Endpoints.md).
 
 ## Hierarchy
 
