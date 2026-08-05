@@ -21,6 +21,23 @@ internal static class E2EConfig
     public static string WorkflowBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_WORKFLOW_URL") ?? "https://localhost:7030";
 
+    /// <summary>
+    /// Opt-in gate for the rate-limiting scenarios. They deliberately exhaust the auth host's
+    /// per-IP budget, and since every test in the suite shares that IP, anything running inside the
+    /// same window afterwards gets a 429 it did not ask for. Off unless explicitly enabled, and
+    /// intended to be run on their own.
+    /// </summary>
+    public static bool RateLimitTestsEnabled =>
+        Environment.GetEnvironmentVariable("E2E_RATE_LIMIT_TESTS") is "1" or "true";
+
+    /// <summary>Must match RateLimiting:Authentication:PermitLimit on the host under test.</summary>
+    public static int AuthPermitLimit =>
+        int.TryParse(Environment.GetEnvironmentVariable("E2E_AUTH_PERMIT_LIMIT"), out var limit) ? limit : 10;
+
+    /// <summary>Must match RateLimiting:Authentication:WindowMinutes on the host under test.</summary>
+    public static int AuthWindowMinutes =>
+        int.TryParse(Environment.GetEnvironmentVariable("E2E_AUTH_WINDOW_MINUTES"), out var minutes) ? minutes : 1;
+
     // Seeded administrator (Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql):
     // user 'root' / admin@wbskt.com / Password123!, Admin role (all permissions),
     // owner of the Default Workspace (internal Id = 1).
