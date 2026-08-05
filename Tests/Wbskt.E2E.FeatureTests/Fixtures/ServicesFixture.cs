@@ -554,6 +554,34 @@ public sealed class ServicesFixture : IDisposable
         return workspace.RefId;
     }
 
+    /// <summary>The internal workspace ID and effective permission slugs a resolve call hands back.</summary>
+    public sealed record ResolvedWorkspace(int WorkspaceId, IReadOnlyList<string> Permissions);
+
+    /// <summary>
+    /// Calls the gate every other host depends on, returning the raw response. Most scenarios here
+    /// are about which status comes back, so this deliberately does not throw on failure.
+    /// </summary>
+    public Task<HttpResponseMessage> ResolveWorkspaceAsync(string? token, Guid workspaceRef) =>
+        SendAsync(HttpMethod.Post, AuthUrl("/api/workspaces/resolve"), token, new { WorkspaceRef = workspaceRef });
+
+    /// <summary>Reads a successful resolve response.</summary>
+    public static async Task<ResolvedWorkspace> ReadResolvedWorkspaceAsync(HttpResponseMessage response)
+    {
+        var resolved = await response.Content.ReadFromJsonAsync<ResolvedWorkspaceDto>(JsonOptions)
+            ?? throw new InvalidOperationException("Empty resolve response.");
+
+        return new ResolvedWorkspace(resolved.WorkspaceId, resolved.Permissions);
+    }
+
+    /// <summary>The caller's effective permission slugs in a workspace. Throws if the resolve fails.</summary>
+    public async Task<IReadOnlyList<string>> GetEffectivePermissionsAsync(string token, Guid workspaceRef)
+    {
+        var response = await ResolveWorkspaceAsync(token, workspaceRef);
+        response.EnsureSuccessStatusCode();
+
+        return (await ReadResolvedWorkspaceAsync(response)).Permissions;
+    }
+
     /// <summary>The slugs currently attached to a role definition.</summary>
     public async Task<IReadOnlyList<string>> GetRolePermissionSlugsAsync(string token, Guid tenantRef, Guid roleRef)
     {
@@ -901,6 +929,7 @@ public sealed class ServicesFixture : IDisposable
     private record MemberDto(Guid RefId, string Username, string Email, bool IsActive);
     private record CreatedInvitationDto(Guid RefId, string Email, DateTime ExpiresAt, string Token);
     private record RolePermissionDto(string Slug, bool IsDeny);
+    private record ResolvedWorkspaceDto(int WorkspaceId, List<string> Permissions);
     private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
     private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
     private record ClientLoginDto(string AccessToken, int ExpiresIn);

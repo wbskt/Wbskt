@@ -43,24 +43,31 @@ Beyond today's `ServicesFixture`, the suite needs:
 
 Established by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`:
 
-1. Tenant 1 "Default Tenant" exists. **Registration puts every new user in it**
-   (`AuthService.DefaultTenantId = 1`).
-2. `root` / `admin@wbskt.com` holds the Admin role **tenant-wide** (`WorkspaceId IS NULL`) and owns
-   Default Workspace (Id 1).
+Partly seeded by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`, partly a
+consequence of how registration works:
+
+1. **Registration provisions a whole tenant.** One transaction creates the account, its own tenant,
+   that tenant's `Admin`/`User` roles, the creator's membership, a **tenant-wide** Admin assignment,
+   and a default workspace. A brand-new account is therefore an administrator — of its own tenant,
+   and of nothing else.
+2. `root` / `admin@wbskt.com` holds Admin tenant-wide in the seeded tenant and owns Default Workspace.
 3. The Admin role carries every permission in the catalogue.
-4. A newly registered user has **no roles at all** — tenant membership without permissions.
+4. **Joining someone else's tenant requires an invitation.** `POST /api/tenants/{ref}/invitations`
+   issues a token, and the invitee redeems it either at registration (`invitationToken` on the
+   register body) or afterwards via `POST /api/invitations/accept`. The redeeming account's email
+   must match the address invited.
 5. `Workspace_Create` grants the creator the tenant's Admin role **scoped to the new workspace only**.
 
-Fact 4 vs 5 is the backbone of the authorization scenarios: creating a workspace makes you an admin
-*of that workspace*, never of the tenant.
+Facts 1, 4 and 5 are the backbone of the authorization scenarios. The boundary worth testing is no
+longer "registered user vs admin" — everyone is an admin somewhere — but **scope**: an invited member
+who creates a workspace administers *that workspace*, and tenant administration requires the same
+slugs held tenant-wide, which a workspace-scoped grant deliberately does not satisfy (`WS_CRD_04`).
+
+To arrange a non-privileged caller, invite them into someone else's tenant
+(`ServicesFixture.CreateUserInTenantAsync`). Registering alone will not do it — that makes them an
+administrator of their own tenant instead.
 
 ### Known gaps in reachability
-
-- **Cross-tenant isolation cannot be exercised through the API.** There is no endpoint that creates a
-  tenant, and registration hard-codes tenant 1. The scenarios in §14 are specified but need a seeded
-  second tenant (plus a user in it) before they can run. Until then they should be marked
-  `Skip("requires a second seeded tenant")` rather than deleted — they cover the isolation the
-  `ManagementService` resolvers exist to enforce.
 - **Rate limiting is per-IP and shared across the whole suite** (§5). Running those scenarios in
   parallel with the rest will cause unrelated 429s. Put them in their own xUnit collection, or point
   them at a host started with a high `RateLimiting:Authentication:PermitLimit`.
@@ -470,8 +477,16 @@ Exercised through `POST /api/workspaces/resolve`. Order per `Permission_Effectiv
 
 ## 15. Cross-tenant isolation
 
-**Blocked**: needs a seeded second tenant with its own user, role, group and workspace. Specified now
-so the gap is visible; every one of these is an invariant `ManagementService` is written to enforce.
+**No longer blocked.** Tenants are self-serve, so two registrations give two isolated tenants with no
+seeding required — `ServicesFixture.CreateUserAsync()` twice is the whole arrangement.
+
+Largely covered already by `Scenarios/Auth/TenantLifecycleTests.cs` (`TEN_01`–`TEN_20`), which owns
+the tenant and invitation surface. The rows below that it does not reach are the *addressability*
+cases — using a reference from tenant B under tenant A's route — and they remain worth writing.
+
+`ISO_09` has been resolved rather than documented: adding a workspace member now requires the target
+to already belong to the workspace's tenant, so the cross-boundary capture it described is closed
+(`WS_MEM_06b`).
 
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
@@ -498,8 +513,17 @@ so the gap is visible; every one of these is an invariant `ManagementService` is
    `AUTH_RT_14` skips pending clock control.
 3. **§8** — ✅ implemented in `Scenarios/Auth/TokenAcceptanceTests.cs`, except `AUTH_TK_04`
    (expired access token — needs clock control) and `AUTH_TK_09` (already covered by `AUTH_RT_02`).
-4. **§9 resolve + `WS_CRD_04`** — the cross-service contract and the tenant/workspace admin boundary.
-5. **§3, §4, §6** — broad but shallow; cheap once the fixture helpers exist.
-6. **§12, §13** — the bulk; needs a per-test tenant-scoped setup helper.
-7. **§14 precedence** — highest setup cost, best documentation value.
-8. **§15** — after a second tenant is seeded.
+4. **§9 resolve** — ✅ implemented in `Scenarios/Auth/WorkspaceResolutionTests.cs`. The cross-service
+   contract, including that 401 and 403 stay distinguishable and that a grant is visible on the very
+   next resolve.
+5. **§10 workspace CRUD** — ✅ implemented in `Scenarios/Auth/WorkspaceLifecycleTests.cs`, including
+   `WS_CRD_04`, the workspace-admin vs tenant-admin boundary.
+6. **§11 workspace membership** — ✅ implemented in `Scenarios/Auth/WorkspaceMembershipTests.cs`.
+7. **Tenants and invitations** — ✅ `Scenarios/Auth/TenantLifecycleTests.cs` (`TEN_01`–`TEN_20`),
+   which also absorbs most of §12.1 and §15.
+8. **§3, §4, §6** — broad but shallow; cheap now that the fixture helpers exist. Note `§4` needs
+   revising first: login no longer validates the identifier's format, so `AUTH_LOG_10` is stale.
+9. **§12.2–12.5, §13** — the bulk. Roles, groups, assignments and member administration.
+10. **§14 precedence** — highest setup cost, best documentation value. `WS_RES_12` covers one arm
+    (user-deny beats role-allow); the other twelve are unwritten.
+11. **§7 rate limiting** — last, and in its own xUnit collection.
