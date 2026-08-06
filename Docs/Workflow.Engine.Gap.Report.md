@@ -96,7 +96,7 @@ against current code** and worth working from directly.
 | WF-23 | 🟠 | Database | ✅ Four missing indexes, one of them on the user-facing run list |
 | WF-24 | 🟡 | Database | Unbounded `Warn`/`Error` history growth |
 | WF-25 | 🟡 | Database | Three dead stored procedures |
-| WF-26 | 🟠 | Analytics | No user-facing analytics endpoint at all |
+| WF-26 | 🟠 | Analytics | ◐ No user-facing analytics endpoint at all |
 | WF-27 | 🟠 | Analytics | Metrics are not workspace-scoped and node timings are not per-node |
 | WF-28 | 🟠 | Analytics | Credit accounting is a stub — every node costs exactly 1.0 |
 | WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
@@ -1247,6 +1247,46 @@ throughout. Migration is invasive (FKs everywhere) and was explicitly deferred b
 # G. Observability and analytics
 
 ## WF-26 🟠 No user-facing analytics endpoint at all
+
+**Status:** ◐ Partial — per-workflow stats landed 2026-08-07. The workspace-level rollup is **not**
+built; see below.
+
+**`GET /api/workspaces/{ws}/workflows/{refId}/stats?from=&to=`** (permission `workflows.read`,
+defaulting to the last 30 days) answers "how is this workflow doing?":
+
+| | |
+|---|---|
+| **Outcome counts** | per terminal status, plus in-flight |
+| **Durations** | p50 / p95 / max / avg, over **completed runs only** — counting in-flight runs as zero would make a busy workflow look fast |
+| **Success rate** | succeeded ÷ **finished**. In-flight runs are excluded from the denominator, or an active workflow reads as broken |
+| **Top failures** | the error codes that actually occur, by node, with counts and last-seen |
+| **Slowest nodes** | per-node avg/max duration and failure count |
+
+Three procedures: `Run_GetStatsBy_WorkflowRefId`, `Run_GetTopFailuresBy_WorkflowRefId`,
+`Run_GetNodeTimingsBy_WorkflowRefId`.
+
+**This is where WF-29 pays off.** The slowest-nodes breakdown reads the `durationMs` WF-29 put on
+every node outcome, and the failure buckets read `errorCode` from `NodeFailed` payloads. It answers
+"which step in *my* workflow is slow" — the question the Prometheus histogram structurally cannot,
+because it is tagged by node *kind*, not node id. **That closes most of WF-27's practical value**;
+what remains there is workspace tagging on the metrics themselves.
+
+**Deliberate decisions:**
+- The window is on `CreatedAt` — "runs *started* in this period". Windowing on completion would make
+  a long run appear or vanish depending on when it happened to finish.
+- `SuccessRate` is **nullable**. When nothing has finished, `0` would read as "everything failed"
+  rather than "nothing to report".
+- Every aggregate is read defensively: an empty window aggregates to `NULL`, not `0`, so a workflow
+  with no runs reports zeroes instead of throwing.
+
+**⚠ Not built: the workspace-level rollup.** `GET /api/workspaces/{ws}/stats` would need its own
+procedures (the joins differ) and a decision about what a cross-workflow "success rate" even means
+when workflows have wildly different volumes. Left out rather than guessed at.
+
+**⚠ Unverified against a database.** These are the most SQL-heavy procedures added in this pass —
+`PERCENTILE_CONT`, `JSON_VALUE`, `TRY_CAST` — and the DB integration tests no-op without a live SQL
+Server. The service logic is unit-tested against mocked providers; **the SQL itself has never
+executed.**
 
 **Symptom (user).** There is no way to answer "how is this workflow doing?" — no success rate, no
 average duration, no failure breakdown, no run counts over time. The only aggregate anywhere is the

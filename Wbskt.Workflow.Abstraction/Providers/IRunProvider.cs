@@ -15,6 +15,15 @@ public interface IRunProvider
     /// definition - so this joins through WorkflowDefinitionId.
     /// </summary>
     Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
+
+    /// <summary>Outcome counts and duration percentiles for runs started in the window.</summary>
+    Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+
+    /// <summary>The error codes that actually occur, most frequent first.</summary>
+    Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct);
+
+    /// <summary>Per-node timings, slowest average first.</summary>
+    Task<IReadOnlyCollection<NodeTimingRow>> GetNodeTimingsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());

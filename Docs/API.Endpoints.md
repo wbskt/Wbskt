@@ -236,6 +236,7 @@ in-place edit, which is why there is no update verb.
 |---|---|---|
 | `GET runs` | `workflows.read` | Lists every run in the workspace, newest first — the "recent activity" view. Filterable by `status`, cursor-paged. |
 | `GET workflows/{workflowRefId}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
+| `GET workflows/{workflowRefId}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. |
 | `GET runs/{runRefId}` | `workflows.read` | Run detail with its branches. |
 | `GET runs/{runRefId}/history` | `workflows.read` | The run's history event stream from `fromEventId`, cursor-paged — the execution trace. |
 | `POST runs/{runRefId}/cancel` | `workflows.execute` | Requests cancellation with a reason. Cooperative, not immediate. |

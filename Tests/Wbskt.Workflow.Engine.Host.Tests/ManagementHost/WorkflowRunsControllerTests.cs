@@ -159,6 +159,100 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
+    public async Task GetStatsAsync_computes_success_rate_over_finished_runs_only()
+    {
+        // In-flight runs must not count as failures - an active workflow would look broken.
+        var workflowRefId = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        definitionProvider.Setup(x => x.GetCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
+        runProvider.Setup(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 10, succeeded: 6, failed: 2, active: 2));
+        runProvider.Setup(x => x.GetTopFailuresAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new RunFailureBucketRow { ErrorCode = "WEBHOOK_HTTP_ERROR", NodeId = Guid.NewGuid(), Occurrences = 2, LastSeenAt = DateTime.UtcNow }]);
+        runProvider.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        // 6 succeeded of 8 finished - the 2 active runs are excluded from the denominator.
+        Assert.Equal(0.75, response.Value.SuccessRate);
+        Assert.Equal(10, response.Value.Counts.Total);
+        Assert.Equal(2, response.Value.Counts.Active);
+        Assert.Equal("WEBHOOK_HTTP_ERROR", Assert.Single(response.Value.TopFailures).ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetStatsAsync_reports_no_success_rate_when_nothing_has_finished()
+    {
+        // A rate of 0 would read as "everything failed" rather than "nothing to report".
+        var workflowRefId = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        definitionProvider.Setup(x => x.GetCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
+        runProvider.Setup(x => x.GetStatsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 3, succeeded: 0, failed: 0, active: 3));
+        runProvider.Setup(x => x.GetTopFailuresAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        runProvider.Setup(x => x.GetNodeTimingsAsync(workflowRefId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Null(response.Value.SuccessRate);
+    }
+
+    [Fact]
+    public async Task GetStatsAsync_rejects_an_inverted_window()
+    {
+        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetStatsAsync(WorkspaceId, Guid.NewGuid(), DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+        Assert.Equal("INVALID_WINDOW", response.Error.Code);
+    }
+
+    [Fact]
+    public async Task GetStatsAsync_refuses_a_workflow_in_another_workspace()
+    {
+        var workflowRefId = Guid.NewGuid();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        definitionProvider.Setup(x => x.GetCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId + 1));
+        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetStatsAsync(WorkspaceId, workflowRefId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+    }
+
+    private static RunStatsRow CreateStats(int total, int succeeded, int failed, int active)
+    {
+        return new RunStatsRow
+        {
+            TotalRuns = total,
+            SucceededCount = succeeded,
+            FailedCount = failed,
+            PartiallyFailedCount = 0,
+            CancelledCount = 0,
+            FaultedCount = 0,
+            OutOfCreditsCount = 0,
+            ActiveCount = active,
+            P50DurationMs = 120,
+            P95DurationMs = 900,
+            MaxDurationMs = 1500,
+            AvgDurationMs = 300
+        };
+    }
+
+    [Fact]
     public async Task ListByWorkspaceAsync_returns_runs_across_every_workflow()
     {
         // The procedure scopes by workspace itself, so no per-workflow ownership check is needed -

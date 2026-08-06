@@ -64,6 +64,33 @@ public sealed class WorkflowRunsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// How a workflow is doing: outcome counts, duration percentiles, success rate, the error codes
+    /// that actually occur, and which nodes are slowest. Defaults to the last 30 days.
+    /// </summary>
+    [HttpGet("workflows/{workflowRefId:guid}/stats")]
+    public async Task<ActionResult<WorkflowStatsResponse>> GetStats(
+        Guid workspaceRef,
+        Guid workflowRefId,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("API: Stats requested for WorkspaceRef: '{WorkspaceRef}', WorkflowRefId: '{WorkflowRefId}'", workspaceRef, workflowRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<WorkflowStatsResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        DateTime toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
+        DateTime fromUtc = (from ?? toUtc.AddDays(-30)).ToUniversalTime();
+
+        var result = await _runQueryService.GetStatsAsync(workspaceIdResult.Value, workflowRefId, fromUtc, toUtc, ct);
+        return MapResult(result);
+    }
+
     [HttpGet("runs/{runRefId:guid}")]
     public async Task<ActionResult<RunDetailDto>> Get(Guid workspaceRef, Guid runRefId, CancellationToken ct)
     {

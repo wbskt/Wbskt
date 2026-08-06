@@ -97,6 +97,112 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Run_GetStatsBy_WorkflowRefId",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+            },
+            MapStats,
+            new InvalidOperationException("Run_GetStatsBy_WorkflowRefId did not return a row."),
+            ct
+        );
+    }
+
+    public async Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetTopFailuresBy_WorkflowRefId",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+                p.AddWithValue("@Top", top);
+            },
+            MapFailureBucket,
+            ct
+        );
+    }
+
+    public async Task<IReadOnlyCollection<NodeTimingRow>> GetNodeTimingsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetNodeTimingsBy_WorkflowRefId",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+                p.AddWithValue("@Top", top);
+            },
+            MapNodeTiming,
+            ct
+        );
+    }
+
+    internal static RunStatsRow MapStats(SqlDataReader reader)
+    {
+        return new RunStatsRow
+        {
+            TotalRuns = reader.GetInt32(reader.GetOrdinal("TotalRuns")),
+            SucceededCount = ReadInt(reader, "SucceededCount"),
+            FailedCount = ReadInt(reader, "FailedCount"),
+            PartiallyFailedCount = ReadInt(reader, "PartiallyFailedCount"),
+            CancelledCount = ReadInt(reader, "CancelledCount"),
+            FaultedCount = ReadInt(reader, "FaultedCount"),
+            OutOfCreditsCount = ReadInt(reader, "OutOfCreditsCount"),
+            ActiveCount = ReadInt(reader, "ActiveCount"),
+            P50DurationMs = ReadDouble(reader, "P50DurationMs"),
+            P95DurationMs = ReadDouble(reader, "P95DurationMs"),
+            MaxDurationMs = ReadDouble(reader, "MaxDurationMs"),
+            AvgDurationMs = ReadDouble(reader, "AvgDurationMs")
+        };
+    }
+
+    internal static RunFailureBucketRow MapFailureBucket(SqlDataReader reader)
+    {
+        int nodeOrdinal = reader.GetOrdinal("NodeId");
+
+        return new RunFailureBucketRow
+        {
+            ErrorCode = reader.GetString(reader.GetOrdinal("ErrorCode")),
+            NodeId = reader.IsDBNull(nodeOrdinal) ? null : reader.GetGuid(nodeOrdinal),
+            Occurrences = reader.GetInt32(reader.GetOrdinal("Occurrences")),
+            LastSeenAt = reader.GetDateTime(reader.GetOrdinal("LastSeenAt"))
+        };
+    }
+
+    internal static NodeTimingRow MapNodeTiming(SqlDataReader reader)
+    {
+        return new NodeTimingRow
+        {
+            NodeId = reader.GetGuid(reader.GetOrdinal("NodeId")),
+            Executions = reader.GetInt32(reader.GetOrdinal("Executions")),
+            FailureCount = ReadInt(reader, "FailureCount"),
+            AvgDurationMs = ReadDouble(reader, "AvgDurationMs"),
+            MaxDurationMs = ReadDouble(reader, "MaxDurationMs")
+        };
+    }
+
+    // An empty window aggregates to NULL rather than zero, so every aggregate column is read
+    // defensively - a workflow with no runs yet must report zeroes, not blow up.
+    private static int ReadInt(SqlDataReader reader, string column)
+    {
+        int ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt32(reader.GetValue(ordinal));
+    }
+
+    private static double ReadDouble(SqlDataReader reader, string column)
+    {
+        int ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? 0d : Convert.ToDouble(reader.GetValue(ordinal));
+    }
+
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(

@@ -8,6 +8,9 @@ namespace Wbskt.Management.Host.Services.Workflow;
 
 public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 {
+    private const int TopFailures = 10;
+    private const int TopSlowNodes = 20;
+
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
@@ -86,6 +89,59 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         long? nextCursor = hasMore && page.Count > 0 ? page[^1].Id : null;
 
         return new RunListResponse(page.Select(MapRun).ToList(), nextCursor);
+    }
+
+    public async Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        _logger.LogDebug("Querying stats for workflow RefId: '{WorkflowRefId}'", workflowRefId);
+
+        if (toUtc <= fromUtc)
+        {
+            return Result<WorkflowStatsResponse>.Failure(Error.Validation("INVALID_WINDOW", "'to' must be later than 'from'."));
+        }
+
+        try
+        {
+            var ensureWorkflowResult = await EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
+            if (ensureWorkflowResult.IsFailure)
+            {
+                return Result<WorkflowStatsResponse>.Failure(ensureWorkflowResult.Error);
+            }
+
+            RunStatsRow stats = await _runProvider.GetStatsAsync(workflowRefId, fromUtc, toUtc, ct);
+            IReadOnlyCollection<RunFailureBucketRow> failures = await _runProvider.GetTopFailuresAsync(workflowRefId, fromUtc, toUtc, TopFailures, ct);
+            IReadOnlyCollection<NodeTimingRow> timings = await _runProvider.GetNodeTimingsAsync(workflowRefId, fromUtc, toUtc, TopSlowNodes, ct);
+
+            // Success rate is over FINISHED runs. Counting in-flight ones as failures would make an
+            // active workflow look broken, and dividing by zero when nothing has finished would report
+            // 0% - which reads as "everything failed" rather than "nothing to report".
+            int finished = stats.TotalRuns - stats.ActiveCount;
+            double? successRate = finished > 0 ? (double)stats.SucceededCount / finished : null;
+
+            return Result<WorkflowStatsResponse>.Success(new WorkflowStatsResponse(
+                workflowRefId,
+                fromUtc,
+                toUtc,
+                new RunOutcomeCountsDto(
+                    stats.TotalRuns,
+                    stats.SucceededCount,
+                    stats.FailedCount,
+                    stats.PartiallyFailedCount,
+                    stats.CancelledCount,
+                    stats.FaultedCount,
+                    stats.OutOfCreditsCount,
+                    stats.ActiveCount),
+                new RunDurationsDto(stats.P50DurationMs, stats.P95DurationMs, stats.MaxDurationMs, stats.AvgDurationMs),
+                successRate,
+                failures.Select(f => new FailureBucketDto(f.ErrorCode, f.NodeId, f.Occurrences, f.LastSeenAt)).ToList(),
+                timings.Select(t => new NodeTimingDto(t.NodeId, t.Executions, t.FailureCount, t.AvgDurationMs, t.MaxDurationMs)).ToList()));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query stats for workflow RefId: '{WorkflowRefId}'. Error: {Message}", workflowRefId, ex.Message);
+            _logger.LogTrace(ex, "GetStatsAsync exception stack trace for '{WorkflowRefId}'", workflowRefId);
+            return Result<WorkflowStatsResponse>.Failure(Error.Failure("RUN_STATS_ERROR", ex.Message));
+        }
     }
 
     public async Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct)
