@@ -59,8 +59,19 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                     try
                     {
                         RunRow run = await runProvider.GetByIdAsync(runId, ct);
-                        if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal) || string.Equals(run.Status, "Failing", StringComparison.Ordinal))
+                        if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal))
                         {
+                            // Cancelling CTS alone left the run's bookmarks and waiting branches behind:
+                            // the branches we are about to re-dispatch unwind, but a parked sibling keeps
+                            // ActiveBranchCount above zero forever, and the reaper skips any run holding a
+                            // bookmark - so the run could never reach a terminal status. Re-applying the
+                            // cancellation is idempotent on an already-'Cancelling' run and does that cleanup.
+                            await runCancellationService.RequestCancellationAsync(runId, run.CancellationReason ?? "Cancellation re-applied during recovery", ct);
+                        }
+                        else if (string.Equals(run.Status, "Failing", StringComparison.Ordinal))
+                        {
+                            // Failing is not cancelled - the run is winding down on its own - so only the
+                            // token is cancelled here.
                             runCancellationService.CancelCts(runId);
                         }
                     }

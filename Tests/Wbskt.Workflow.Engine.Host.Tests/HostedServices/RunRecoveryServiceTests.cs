@@ -86,9 +86,11 @@ public sealed class RunRecoveryServiceTests
         // Act
         await service.RecoverAsync(CancellationToken.None);
 
-        // Assert
-        Assert.Contains(171L, cancellationService.CancelledRuns);
-        Assert.Contains(172L, cancellationService.CancelledRuns);
+        // Assert: a Cancelling run gets the cancellation re-applied, which is what clears its bookmarks
+        // and waiting branches. A Failing run is winding down on its own and must not be turned into a
+        // cancelled one - only its token is cancelled.
+        Assert.Equal([171L], cancellationService.ReappliedCancellations);
+        Assert.Equal([172L], cancellationService.CancelledRuns);
     }
 
     private static RunRow CreateRunRow(int id, string status)
@@ -204,8 +206,14 @@ public sealed class RunRecoveryServiceTests
     private sealed class RecordingRunCancellationService : IRunCancellationService
     {
         public List<long> CancelledRuns { get; } = new();
+        public List<long> ReappliedCancellations { get; } = new();
 
-        public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
+        {
+            ReappliedCancellations.Add(runId);
+            return Task.FromResult(true);
+        }
+
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => throw new NotSupportedException();
         public void CancelCts(long runId)
         {

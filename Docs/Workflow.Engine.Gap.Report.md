@@ -4,24 +4,27 @@
 >
 > **This document is self-sufficient. You do not need any prior conversation.**
 >
-> A user-perspective review of the workflow engine catalogued 36 gaps (`WF-01`…`WF-36`). **21 are
-> done, 6 are partly done, 9 are untouched.** Work through the remaining ones by ID — each item below
-> carries symptom, root cause with `file:line`, fix, tests and acceptance criteria.
+> A user-perspective review of the workflow engine catalogued 36 gaps (`WF-01`…`WF-36`), and a 37th
+> was found while fixing WF-31. **23 are done, 6 are partly done, 8 are untouched.** Work through the
+> remaining ones by ID — each item below carries symptom, root cause with `file:line`, fix, tests and
+> acceptance criteria.
 >
 > ### Where the work lives
 >
-> Branch `claude/workflow-engine-review-08fbdf`, in a worktree at
-> `C:\dev\wbskt\Wbskt\.claude\worktrees\sleepy-shaw-b56b7c`. Seven commits from `977e45d`:
+> Branch `claude/workflow-engine-gap-report-e12741`, in a worktree at
+> `C:\dev\wbskt\Wbskt\.claude\worktrees\sleepy-shaw-b56b7c`. Nine commits from `3389998`:
 >
 > | Commit | Covers |
 > |---|---|
-> | `c7d31cc` | WF-01, 02, 03, 04, 05, 06, 07, 17, 18, 19, 20, 21, 22, 33 |
-> | `886d32c` | WF-14, WF-23 |
-> | `76517b0` | WF-13 |
-> | `17afed0` | WF-29 |
-> | `d919bdd` | WF-26 |
-> | `eac0447` | WF-27, WF-30 |
-> | `3078655` | WF-24, WF-25, WF-34 |
+> | `da022d0` | WF-01, 02, 03, 04, 05, 06, 07, 17, 18, 19, 20, 21, 22, 33 |
+> | `b9703df` | WF-14, WF-23 |
+> | `613fea8` | WF-13 |
+> | `7ba1312` | WF-29 |
+> | `c1e4e95` | WF-26 |
+> | `ef7dc51` | WF-27, WF-30 |
+> | `6f77180` | WF-24, WF-25, WF-34 |
+> | `fe7e8a3` | WF-32 |
+> | *(branch head)* | WF-31, and WF-37 written up — the commit that also carries this table |
 >
 > ### ⚠️ Live caveats — do not lose these
 >
@@ -73,9 +76,11 @@
 >
 > ### Suggested order for what is left
 >
-> 1. **WF-32** then **WF-31** — both already have `TODO(WF-3x)` markers in the code pointing at them.
-> 2. **WF-15** and **WF-16** — trigger filters and webhook secrets (both need WF-02's evaluator, which
+> 1. **WF-15** and **WF-16** — trigger filters and webhook secrets (both need WF-02's evaluator, which
 >    is done).
+> 2. **WF-37** — the token registry. Small wiring change, but it makes cancellation actually interrupt
+>    node work for the first time, so budget for the executor paths that will start seeing
+>    `OperationCanceledException`.
 > 3. **WF-09**, **WF-10**, **WF-28**.
 > 4. **WF-08** — no longer urgent: unimplemented kinds are now rejected at publish, so it is a missing
 >    feature rather than a runtime trap. Finish line is: implement the executors, then delete the two
@@ -196,12 +201,13 @@ against current code** and worth working from directly.
 | WF-28 | 🟠 | Analytics | Credit accounting is a stub — every node costs exactly 1.0 |
 | WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
 | WF-30 | 🟡 | Analytics | ✅ `FlusherLag` gauge is hardcoded to zero |
-| WF-31 | 🟠 | Runtime | Cancellation state is cached per-host with no cross-host invalidation |
+| WF-31 | 🟠 | Runtime | ✅ Cancellation state is cached per-host with no cross-host invalidation |
 | WF-32 | 🟠 | Runtime | ✅ Multi-registration dispatch reports only the first run started |
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
 | WF-34 | 🟡 | Hygiene | ◐ Resolved `[RJ]:` markers and duplicate assignments |
 | WF-35 | 🟡 | Hygiene | ◐ Shipped example generator emits a workflow that fails at runtime |
 | WF-36 | 🟡 | Runtime | `INT` primary keys modelled as `long` with checked casts |
+| WF-37 | 🟠 | Runtime | A run's `CancellationToken` can never be cancelled (found 2026-08-07 during WF-31) |
 
 ---
 
@@ -1578,6 +1584,64 @@ worse than no gauge — it will read as healthy on a dashboard forever. **Delete
 
 ## WF-31 🟠 Cancellation state is cached per-host with no cross-host invalidation
 
+**Status:** ✅ Fixed 2026-08-07 — all four markers. **A new, separate defect was found while doing it;
+it is written up as [WF-37](#wf-37--a-runs-cancellationtoken-can-never-be-cancelled).**
+
+**The event path was already end-to-end** — the management host publishes
+`WorkflowRunCancellationRequestedEvent` and the engine host consumes it — **but the consumer never
+touched the engine's cache.** `IsCancellationRequestedAsync` reads through a 10-second per-host
+`IMemoryCache`, and the only place that wrote to it was the tail of `RequestCancellationAsync`, which
+the consumer never reached: the management host had already made the transition, so the engine's call
+short-circuited on `if (!transitioned) return false`. New `IRunCancellationService.MarkCancellationRequested`
+(cache + token, no database) is now the consumer's **first** action, before any round trip.
+
+**`RequestCancellationAsync` no longer treats "did not transition" as "nothing to do."** It now
+distinguishes the two reasons that can happen:
+
+- **Already `Cancelling`** — another host got there first. The local cleanup still runs. This matters
+  because the engine host is the one that owns bookmarks, branches and the finalizer; skipping it left
+  a cancelled run holding live bookmarks, which `Run_GetStuck` deliberately excludes, so the reaper
+  could not collect it either.
+- **Terminal** — the only case that returns `false`.
+
+**`:92` — cancelling a run that is not `Running`.** A parked run *is* `Running` (only its branch is
+`Waiting`), so that case always worked. The real hole was `Failing`: a run whose first branch failed
+while its siblings keep going could not be cancelled at all, silently. The transition now tries
+`Running → Cancelling` and then `Failing → Cancelling`. No schema change — the existing
+`Run_TransitionStatus` is called twice rather than gaining a status list.
+
+**`:120` — the recovery path.** `RunRecoveryService` called only `CancelCts` for a run found in
+`Cancelling`, leaving its bookmarks and waiting branches behind; the branches it re-dispatched would
+unwind but a parked sibling kept `ActiveBranchCount` above zero forever, and the reaper skips any run
+holding a bookmark — so the run could never terminate. It now re-applies the cancellation (idempotent
+on an already-`Cancelling` run). A `Failing` run still gets only its token cancelled — `Failing` is not
+cancelled, and turning it into a cancellation would be wrong.
+
+**Idle-finalization moved into the service.** The engine consumer used to carry its own
+"if `ActiveBranchCount <= 0`, finalize" block. That logic belongs with the cleanup it completes, so it
+is now `RunCancellationService.FinalizeIfIdleAsync`, which means the recovery path gets it too. It is
+guarded: a counters read that fails must not turn a successful cancel into a reported failure. The
+consumer is down to two calls and three of its four dependencies are gone.
+
+**Republish guard.** The event is published **only when this call made the transition**. Without that,
+the already-`Cancelling` path would echo the event back to the host that sent it, forever.
+
+**Also fixed, user-visible.** `WorkflowRunQueryService.CancelAsync` discarded the boolean and always
+returned success — cancelling a finished run reported that it had been cancelled. It now returns 409
+`RUN_NOT_CANCELLABLE`, which the widened `false`-means-terminal contract makes meaningful.
+
+**Tests.** Six new `RunCancellationServiceTests` cases (cancel a `Failing` run; cleanup on the
+already-`Cancelling` path with no duplicate history event and no republish; publish exactly once on a
+real transition; `MarkCancellationRequested` visible immediately against a run row that still reads
+`Running`; finalize when idle; don't finalize while a branch runs), rewritten consumer tests pinning
+mark-before-request, a recovery test separating the `Cancelling` and `Failing` paths, and a controller
+test for the 409.
+
+**⚠ Residual, narrow.** A host crashing *between* the status transition and the bookmark delete leaves
+a run `Cancelling` with live bookmarks and no running branch. Recovery only walks runs that have
+running branches, so nothing sweeps it and the reaper excludes it. Closing that needs a way to
+enumerate `Cancelling` runs (a new procedure); it is not reachable by any non-crash path.
+
 **Symptom.** A cancel issued through the Management host is not seen by the Engine host until its
 10-second cache entry expires and it re-reads the DB. Cancellation is advertised as cooperative, but
 the latency floor is invisible to the user.
@@ -1730,6 +1794,42 @@ side-effect-free branches, plus a handful of genuinely-open `[RJ]` questions in 
   optional.
 - `RetryExecutor` (remediation plan §5.1): `policy.RetryOn` is never applied; there are unreachable
   side-effect-free branches; six duplicated try/catch blocks; `GetDelay` should use `Random.Shared`.
+
+---
+
+## WF-37 🟠 A run's `CancellationToken` can never be cancelled
+
+**Status:** ☐ Open. **Found 2026-08-07 while doing WF-31**, not part of the original review.
+
+**Symptom.** `CancelCts` appears to cancel a running branch's work and does not. Cancellation only ever
+takes effect at the *between-nodes* `IsCancellationRequestedAsync` check, so a cancel issued during a
+long node — a 60-second webhook, say — is not noticed until that node finishes on its own.
+
+**Root cause.** `RunCancellationService` holds its CTS registry in a **per-instance**
+`ConcurrentDictionary` (`_ctsRegistry`), but the service is registered **Scoped**
+(`WorkflowServiceCollectionExtensions.cs:36,120`). `BranchExecutionPump` creates a fresh scope per
+branch execution and resolves `IBranchLoop` from it (`BranchExecutionPump.cs:55-56`), so
+`BranchLoop.RunAsync`'s `GetToken(runId)` (`BranchLoop.cs:89`) mints a token in *that scope's* empty
+registry. Every `CancelCts` caller — the event consumer, the recovery service,
+`RequestCancellationAsync` — runs in a different scope and therefore cancels a different, unobserved
+`CancellationTokenSource`. The registry is process-global by nature; its lifetime says otherwise.
+
+The read-through cache is unaffected: `IMemoryCache` is a singleton (`AddMemoryCache`), which is why
+cooperative cancellation works at all today and why WF-31's fix lands correctly.
+
+**Fix.** Move the registry behind a singleton — a small `RunCancellationTokenRegistry` holding the
+dictionary, registered `AddSingleton` and injected into the scoped service. Prefer that to marking the
+field `static`: a static registry is shared between xUnit test classes running in one process and will
+leak cancellations across tests.
+
+**⚠ This is a behaviour change, not just a wiring fix.** Today no node is ever interrupted mid-flight.
+Once the token really cancels, in-flight `HttpClient` calls, delays and provider calls will start
+throwing `OperationCanceledException` from inside executors, and every one of those paths needs to be
+checked for whether it produces a clean `Cancelled` branch or an `EXECUTOR_CRASH`. Do this as its own
+item with its own tests; do not fold it into an unrelated change.
+
+**Acceptance.** A cancel issued on any host interrupts the run's in-flight node work, and an
+interrupted node ends its branch `Cancelled` rather than failed.
 
 ---
 

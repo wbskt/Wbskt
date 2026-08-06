@@ -331,12 +331,36 @@ public sealed class WorkflowRunsControllerTests
         runProvider.Setup(x => x.GetByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(63, runRefId, workflowRefId, 2, "Running"));
         definitionProvider.Setup(x => x.GetByRefIdVersionAsync(workflowRefId, 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
+        cancellationService.Setup(x => x.RequestCancellationAsync(63, "missing", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, cancellationService.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
         var response = await service.CancelAsync(WorkspaceId, runRefId, "missing", CancellationToken.None);
 
         Assert.True(response.IsSuccess);
         cancellationService.Verify(x => x.RequestCancellationAsync(63, "missing", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelAsync_reports_a_conflict_when_the_run_already_finished()
+    {
+        // Cancelling a finished run used to report success while doing nothing at all.
+        var runProvider = new Mock<IRunProvider>();
+        var branchProvider = new Mock<IBranchProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var cancellationService = new Mock<IRunCancellationService>();
+        var runRefId = Guid.NewGuid();
+        var workflowRefId = Guid.NewGuid();
+        runProvider.Setup(x => x.GetByRefIdAsync(runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(CreateRunRow(64, runRefId, workflowRefId, 2, "Succeeded"));
+        definitionProvider.Setup(x => x.GetByRefIdVersionAsync(workflowRefId, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
+        cancellationService.Setup(x => x.RequestCancellationAsync(64, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, cancellationService.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.CancelAsync(WorkspaceId, runRefId, "too late", CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+        Assert.Equal(ErrorType.Conflict, response.Error.Type);
+        Assert.Equal("RUN_NOT_CANCELLABLE", response.Error.Code);
     }
 
     [Fact]

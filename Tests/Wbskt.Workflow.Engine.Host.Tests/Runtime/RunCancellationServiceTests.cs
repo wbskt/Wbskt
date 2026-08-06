@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -71,6 +72,135 @@ public sealed class RunCancellationServiceTests
     }
 
     [Fact]
+    public async Task RequestCancellation_cancels_a_run_that_is_already_failing()
+    {
+        // A run whose first branch failed sits in 'Failing' while its siblings keep going. Refusing to
+        // cancel that left the operator with a run they could see running and could not stop.
+        var runProvider = new RecordingRunProvider("Failing", transitionResult: true, onlyFrom: "Failing");
+        var historyProvider = new RecordingHistoryEventProvider();
+        var service = new RunCancellationService(runProvider, historyProvider, new MemoryCache(new MemoryCacheOptions()), new FixedClock(), new DummyServiceProvider());
+
+        bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.True(cancelled);
+        Assert.Equal([(42L, "Running", "Cancelling"), (42L, "Failing", "Cancelling")], runProvider.TransitionRequests);
+        Assert.Equal("RunCancellationRequested", Assert.Single(historyProvider.Events).EventKind);
+    }
+
+    [Fact]
+    public async Task RequestCancellation_still_cleans_up_when_another_host_already_transitioned_the_run()
+    {
+        // The management host transitions the status and publishes; the engine host consumes and lands
+        // here. It must not treat "already Cancelling" as "nothing to do" - it owns the bookmarks and
+        // branches, and without this the run keeps live bookmarks the reaper deliberately skips.
+        var runProvider = new RecordingRunProvider("Cancelling", transitionResult: false);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var branchProvider = new CancellationTestBranchProvider();
+        var bookmarkProvider = new CancellationTestBookmarkProvider();
+        var eventBus = new RecordingEventBus();
+        var service = new RunCancellationService(
+            runProvider,
+            historyProvider,
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new DummyServiceProvider(),
+            branchProvider,
+            bookmarkProvider,
+            eventBus: eventBus);
+
+        bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.True(cancelled);
+        Assert.Equal(42, bookmarkProvider.DeletedRunId);
+        Assert.Equal(42, branchProvider.CancelledRunId);
+        // No second history entry for a transition this call did not make, and no republish - the two
+        // hosts consume each other's events, so echoing one back would never stop.
+        Assert.Empty(historyProvider.Events);
+        Assert.Equal(0, eventBus.PublishCount);
+    }
+
+    [Fact]
+    public async Task RequestCancellation_publishes_once_when_it_makes_the_transition()
+    {
+        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
+        var eventBus = new RecordingEventBus();
+        var service = new RunCancellationService(
+            runProvider,
+            new RecordingHistoryEventProvider(),
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new DummyServiceProvider(),
+            eventBus: eventBus);
+
+        await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.Equal(1, eventBus.PublishCount);
+    }
+
+    [Fact]
+    public async Task MarkCancellationRequested_is_visible_immediately_without_reading_the_run()
+    {
+        // The cross-host path: this host never issued the cancel, so without an explicit mark its cached
+        // answer would stay stale for the rest of the cache window. The run row still reads 'Running'
+        // here precisely to prove the answer is not coming from the database.
+        var service = new RunCancellationService(
+            new RecordingRunProvider("Running", transitionResult: false),
+            new RecordingHistoryEventProvider(),
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new DummyServiceProvider());
+
+        Assert.False(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
+
+        service.MarkCancellationRequested(42);
+
+        Assert.True(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
+        Assert.True(service.GetToken(42).IsCancellationRequested);
+    }
+
+    [Fact]
+    public async Task RequestCancellation_finalizes_a_run_left_with_nothing_running()
+    {
+        // A parked run's only branch is 'Waiting', so once it is cancelled no branch loop remains to
+        // carry the run to a terminal status - it would sit in 'Cancelling' until the reaper.
+        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
+        var finalizer = new RecordingRunFinalizer();
+        var service = new RunCancellationService(
+            runProvider,
+            new RecordingHistoryEventProvider(),
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new SingleServiceProvider(finalizer),
+            new CancellationTestBranchProvider(),
+            new CancellationTestBookmarkProvider(),
+            new IdleRunCountersProvider());
+
+        await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.Equal([42L], finalizer.FinalizedRuns);
+    }
+
+    [Fact]
+    public async Task RequestCancellation_leaves_finalization_to_the_branch_loop_while_a_branch_is_running()
+    {
+        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
+        var finalizer = new RecordingRunFinalizer();
+        var service = new RunCancellationService(
+            runProvider,
+            new RecordingHistoryEventProvider(),
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new SingleServiceProvider(finalizer),
+            new CancellationTestBranchProvider(),
+            new CancellationTestBookmarkProvider(),
+            new IdleRunCountersProvider(remainingAfterDecrement: 1));
+
+        await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.Empty(finalizer.FinalizedRuns);
+    }
+
+    [Fact]
     public async Task BranchLoop_short_circuits_to_cancelled_when_cancellation_requested()
     {
         var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -109,9 +239,12 @@ public sealed class RunCancellationServiceTests
         Assert.Equal([-1], counters.IncrementCalls);
     }
 
-    private sealed class RecordingRunProvider(string status, bool transitionResult) : IRunProvider
+    private sealed class RecordingRunProvider(string status, bool transitionResult, string? onlyFrom = null) : IRunProvider
     {
-        public (long RunId, string FromStatus, string ToStatus)? TransitionRequest { get; private set; }
+        public List<(long RunId, string FromStatus, string ToStatus)> TransitionRequests { get; } = [];
+
+        public (long RunId, string FromStatus, string ToStatus)? TransitionRequest =>
+            TransitionRequests.Count == 0 ? null : TransitionRequests[^1];
 
         public RunRow UpdatedRun { get; private set; } = CreateRun(status);
 
@@ -137,8 +270,9 @@ public sealed class RunCancellationServiceTests
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
-            TransitionRequest = (runId, fromStatus, toStatus);
-            if (transitionResult)
+            TransitionRequests.Add((runId, fromStatus, toStatus));
+            bool transitioned = transitionResult && (onlyFrom is null || string.Equals(onlyFrom, fromStatus, StringComparison.Ordinal));
+            if (transitioned)
             {
                 UpdatedRun = UpdatedRun with
                 {
@@ -148,7 +282,7 @@ public sealed class RunCancellationServiceTests
                 };
             }
 
-            return Task.FromResult(transitionResult);
+            return Task.FromResult(transitioned);
         }
 
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
@@ -416,6 +550,52 @@ public sealed class RunCancellationServiceTests
     private sealed class DummyServiceProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
+    }
+
+    private sealed class SingleServiceProvider(IRunFinalizer finalizer) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(IRunFinalizer) ? finalizer : null;
+    }
+
+    private sealed class RecordingRunFinalizer : IRunFinalizer
+    {
+        public List<long> FinalizedRuns { get; } = [];
+
+        public Task FinalizeAsync(long runId, CancellationToken ct)
+        {
+            FinalizedRuns.Add(runId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingEventBus : IEventBus
+    {
+        public int PublishCount { get; private set; }
+
+        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
+        {
+            PublishCount++;
+            return Task.CompletedTask;
+        }
+    }
+
+    // CancellationTestBranchProvider reports one waiting branch cancelled, so the decrement lands on
+    // whatever this returns - zero meaning "nothing left running".
+    private sealed class IdleRunCountersProvider(int remainingAfterDecrement = 0) : IRunCountersProvider
+    {
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult(new RunCountersRow
+        {
+            RunId = runId,
+            ActiveBranchCount = remainingAfterDecrement,
+            CreditsConsumed = 0m,
+            UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
+        });
+
+        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => Task.FromResult(remainingAfterDecrement);
+        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
     }
 }
 

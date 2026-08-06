@@ -190,7 +190,14 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 return ensureRunResult;
             }
 
-            await _cancellationService.RequestCancellationAsync(ensureRunResult.Value, reason, ct);
+            // A run that has already finished cannot be cancelled. Reporting success there told the caller
+            // their cancel took effect when nothing happened at all.
+            if (!await _cancellationService.RequestCancellationAsync(ensureRunResult.Value, reason, ct))
+            {
+                _logger.LogInformation("Run '{RunRefId}' is already in a terminal status; nothing to cancel.", runRefId);
+                return Result.Failure(Error.Conflict("RUN_NOT_CANCELLABLE", "The run has already reached a terminal status."));
+            }
+
             _logger.LogInformation("Run cancellation requested successfully for RunRefId: '{RunRefId}'", runRefId);
             return Result.Success();
         }
