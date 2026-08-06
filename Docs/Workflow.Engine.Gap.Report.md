@@ -1,5 +1,100 @@
 # Workflow Engine — Gap & Issue Report
 
+> ## ⚡ HANDOFF — read this first
+>
+> **This document is self-sufficient. You do not need any prior conversation.**
+>
+> A user-perspective review of the workflow engine catalogued 36 gaps (`WF-01`…`WF-36`). **21 are
+> done, 6 are partly done, 9 are untouched.** Work through the remaining ones by ID — each item below
+> carries symptom, root cause with `file:line`, fix, tests and acceptance criteria.
+>
+> ### Where the work lives
+>
+> Branch `claude/workflow-engine-review-08fbdf`, in a worktree at
+> `C:\dev\wbskt\Wbskt\.claude\worktrees\sleepy-shaw-b56b7c`. Seven commits from `977e45d`:
+>
+> | Commit | Covers |
+> |---|---|
+> | `c7d31cc` | WF-01, 02, 03, 04, 05, 06, 07, 17, 18, 19, 20, 21, 22, 33 |
+> | `886d32c` | WF-14, WF-23 |
+> | `76517b0` | WF-13 |
+> | `17afed0` | WF-29 |
+> | `d919bdd` | WF-26 |
+> | `eac0447` | WF-27, WF-30 |
+> | `3078655` | WF-24, WF-25, WF-34 |
+>
+> ### ⚠️ Live caveats — do not lose these
+>
+> 1. **A DACPAC redeploy is outstanding.** The owner deployed after `d919bdd` and reported all tests
+>    passing. `3078655` changed `HistoryEvent_DeleteForRetiredRuns`'s signature and deleted three
+>    procedures **after** that deploy, so the database is currently behind the code.
+> 2. **The E2E suite has never been run in-session.** It needs live hosts and failed at fixture setup
+>    with HTTP 429 from the auth host. The owner plans to run it once the items are finished.
+>    Two known problems waiting there:
+>    - `ForEachFanOutE2ETests` was rewritten for sequential `ForEach` (WF-04) but never executed.
+>    - **`NestedLoopE2ETests` builds a definition the new PFE↔Join rule rejects** — its
+>      `AddFork(...)` has no join mode, and its expected command count of 31 came from the old
+>      fan-out arithmetic. It needs a join mode and a re-derived count.
+> 3. **Toasts reach every workspace member.** The notification hub feed is per workspace, not per
+>    permission (`Docs/API.Endpoints.md` §2.8). WF-01 inherited this; nothing permission-sensitive
+>    should go in a toast until it is closed.
+> 4. **Indexes (WF-23) were reasoned from query shapes, not measured.** No execution plan has been
+>    inspected.
+>
+> ### Environment notes that will save you an hour
+>
+> - **Mixed line endings.** Some files are LF, some CRLF. Bulk `perl`/`sed` patterns anchored on
+>   `;\n` silently match only half the files — always allow `\r?\n`.
+> - **The integration fixture builds its own database.** `SqlEdgeFixture` connects to **`master`**
+>   (default `localhost,1433`, `sa`/`Welcome1234`, override with `WBSKT_INTEGRATION_CONNSTR`),
+>   creates a throwaway DB, deploys the DACPAC, and drops it. Pointing it at a pre-deployed database
+>   does nothing. When it cannot connect, **34 of 36 tests silently "pass" by skipping** — check with
+>   `--logger "console;verbosity=detailed"` and grep for `SKIPPED`.
+> - **Adding a method to `IRunProvider`/`IHistoryEventProvider` means patching ~15 test doubles.**
+>   Expect it; batch it.
+> - Commands:
+>   ```
+>   dotnet build Wbskt.slnx -v q --nologo
+>   dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj --nologo -v q
+>   dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj --nologo -v q
+>   ```
+>   Current baseline: **574 unit tests, 36 DB integration tests, all passing.**
+>
+> ### Decisions already taken — do not re-litigate
+>
+> | Decision | Where |
+> |---|---|
+> | Expressions are **strictly typed, no coercion**. `"5" ≠ 5`. Ordering across kinds is an error; equality across kinds is just "not equal". | WF-02 |
+> | Logic conditions are **structured `WorkflowExpression`**, with a converter that still reads the legacy bare-string form. **No data migration is needed.** | WF-02 B2 |
+> | **No separate enable/disable axis** — `deprecate` *is* disable; `reinstate` makes it reversible. **No rename** (name lives in the versioned definition). **No delete** (runs FK to definitions). | WF-13 |
+> | **`node_id` is deliberately not a metric tag** — unbounded cardinality. Per-node timings come from the history stream instead. | WF-27 |
+> | A `Fork` with no downstream `Join` is **legal**; only `ParallelForEach` requires one. | WF-03, WF-19 |
+> | Rollback republishes as a **new version**; history stays append-only. | WF-13 |
+>
+> ### Suggested order for what is left
+>
+> 1. **WF-32** then **WF-31** — both already have `TODO(WF-3x)` markers in the code pointing at them.
+> 2. **WF-15** and **WF-16** — trigger filters and webhook secrets (both need WF-02's evaluator, which
+>    is done).
+> 3. **WF-09**, **WF-10**, **WF-28**.
+> 4. **WF-08** — no longer urgent: unimplemented kinds are now rejected at publish, so it is a missing
+>    feature rather than a runtime trap. Finish line is: implement the executors, then delete the two
+>    entries from `NodeKind.NotYetImplemented`.
+> 5. **WF-36** is deferred by design — document only, do not action.
+>
+> ### The six partial items, and exactly what remains
+>
+> | Item | What is left |
+> |---|---|
+> | **WF-07** | `CompareAndSet` only. Needs an `expected` field on `VariableConfig`; the provider method and SP already exist. |
+> | **WF-13** | Nothing — the remainder was decided against (see table above). Kept as ◐ because the item as originally written asked for more. |
+> | **WF-26** | Workspace-level rollup (`GET /workspaces/{ws}/stats`). Needs its own procedures and a decision on what a cross-workflow success rate means across wildly different volumes. |
+> | **WF-29** | Inbound events — **blocked on schema**: `HistoryEvents.RunId` is `NOT NULL` and the leading clustered-PK column, but no run exists when an inbound event arrives. Needs a nullable `RunId` or a separate log. Credit charges wait for WF-28. |
+> | **WF-34** | `RetryExecutor`'s duplicated try/catch blocks and unreachable side-effect-free branches; a few genuinely-open `[RJ]` questions in `RunStarter`/`BookmarkResumer`. |
+> | **WF-35** | Smoke test asserting every exported example validates *and* runs to `Succeeded`. The generator itself is fixed. |
+
+---
+
 ## Context
 
 A user-perspective review (2026-08-05) of the workflow engine as it stands **after** Phases 1 and 2 of
