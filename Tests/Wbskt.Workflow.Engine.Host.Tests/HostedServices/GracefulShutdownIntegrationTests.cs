@@ -81,15 +81,13 @@ public sealed class GracefulShutdownIntegrationTests
         var mock = new Mock<IRunProvider>(MockBehavior.Strict);
         mock.Setup(x => x.GetStuckRunsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<RunRow>());
-        mock.Setup(x => x.CountByStatusAsync("Running", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0L);
         return mock.Object;
     }
 
     private static IHistoryEventProvider CreateHistoryEventProvider()
     {
         var mock = new Mock<IHistoryEventProvider>(MockBehavior.Strict);
-        mock.Setup(x => x.DeleteForRetiredRunsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        mock.Setup(x => x.DeleteForRetiredRunsAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
         return mock.Object;
     }

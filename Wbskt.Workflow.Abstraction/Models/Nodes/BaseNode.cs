@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes;
 
-// [RJ]: TODO: move to polymorphic
+// TODO(arch): could move to System.Text.Json [JsonPolymorphic]; the hand-rolled converter works and
+// writes "kind" first, so this is cosmetic.
 [JsonConverter(typeof(BaseNodeJsonConverter))]
 public abstract record BaseNode
 {

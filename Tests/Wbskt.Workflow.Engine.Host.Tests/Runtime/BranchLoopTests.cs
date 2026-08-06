@@ -1655,7 +1655,6 @@ public sealed class BranchLoopTests
 
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
             TransitionRequests.Add((runId, fromStatus, toStatus));
@@ -1743,7 +1742,7 @@ public sealed class BranchLoopTests
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingJoinAggregatorProvider(JoinContributionResult result) : IJoinAggregatorProvider

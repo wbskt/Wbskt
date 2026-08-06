@@ -94,8 +94,8 @@ against current code** and worth working from directly.
 | WF-21 | 🟠 | Database | ✅ `Bookmark_DeleteOrphans` omits `Faulted` |
 | WF-22 | 🟠 | Database | ✅ Publish version authority is split between C# and the SP |
 | WF-23 | 🟠 | Database | ✅ Four missing indexes, one of them on the user-facing run list |
-| WF-24 | 🟡 | Database | Unbounded `Warn`/`Error` history growth |
-| WF-25 | 🟡 | Database | Three dead stored procedures |
+| WF-24 | 🟡 | Database | ✅ Unbounded `Warn`/`Error` history growth |
+| WF-25 | 🟡 | Database | ✅ Three dead stored procedures |
 | WF-26 | 🟠 | Analytics | ◐ No user-facing analytics endpoint at all |
 | WF-27 | 🟠 | Analytics | ✅ Metrics are not workspace-scoped and node timings are not per-node |
 | WF-28 | 🟠 | Analytics | Credit accounting is a stub — every node costs exactly 1.0 |
@@ -104,7 +104,7 @@ against current code** and worth working from directly.
 | WF-31 | 🟠 | Runtime | Cancellation state is cached per-host with no cross-host invalidation |
 | WF-32 | 🟠 | Runtime | Multi-registration dispatch reports only the first run started |
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
-| WF-34 | 🟡 | Hygiene | Resolved `[RJ]:` markers and duplicate assignments |
+| WF-34 | 🟡 | Hygiene | ◐ Resolved `[RJ]:` markers and duplicate assignments |
 | WF-35 | 🟡 | Hygiene | ◐ Shipped example generator emits a workflow that fails at runtime |
 | WF-36 | 🟡 | Runtime | `INT` primary keys modelled as `long` with checked casts |
 
@@ -1214,6 +1214,15 @@ Cross-ref remediation plan §4.1.
 
 ## WF-24 🟡 Unbounded `Warn`/`Error` history growth
 
+**Status:** ✅ Fixed 2026-08-07 — two-window retention. Routine entries go after
+`HistoryRetentionWindow` (30 days); `Warn`/`Error` entries are kept until the new
+`HistoryRetentionWindowElevated` (default 365 days) — far longer, but no longer forever. They were
+previously excluded from collection outright. A null elevated cutoff preserves keep-forever
+behaviour for any caller that does not supply one.
+
+---
+
+
 `HistoryEvent_DeleteForRetiredRuns.sql` deletes events for runs completed before the cutoff **except**
 those with `Severity IN ('Warn','Error')` — which are kept forever. On a failure-heavy workspace
 `HistoryEvents` grows without bound.
@@ -1224,6 +1233,17 @@ those with `Severity IN ('Warn','Error')` — which are kept forever. On a failu
 ---
 
 ## WF-25 🟡 Three dead stored procedures
+
+**Status:** ✅ Fixed 2026-08-07 — all three deleted.
+
+`WorkflowDefinition_GetAllEnabled` and `ClientCapabilities_GetBy_ClientId` had zero references.
+`Run_CountByStatus` was resolved the other way from what this item suggested: WF-26 built purpose-made
+stats procedures rather than composing this one, leaving it genuinely dead, so the procedure, its
+provider method, its interface member and ~15 test-double implementations were removed. The only
+"usage" was a strict-mock setup that asserted nothing.
+
+---
+
 
 Verified zero references anywhere in the solution:
 - `WorkflowDefinition_GetAllEnabled.sql`
@@ -1283,10 +1303,11 @@ what remains there is workspace tagging on the metrics themselves.
 procedures (the joins differ) and a decision about what a cross-workflow "success rate" even means
 when workflows have wildly different volumes. Left out rather than guessed at.
 
-**⚠ Unverified against a database.** These are the most SQL-heavy procedures added in this pass —
-`PERCENTILE_CONT`, `JSON_VALUE`, `TRY_CAST` — and the DB integration tests no-op without a live SQL
-Server. The service logic is unit-tested against mocked providers; **the SQL itself has never
-executed.**
+**Verification.** These are the most SQL-heavy procedures added in this pass — `PERCENTILE_CONT`,
+`JSON_VALUE`, `TRY_CAST`. They were **exercised against a deployed database by the repo owner
+(2026-08-07, reported passing)**; they were *not* run in the authoring session, where the integration
+fixture could not reach a SQL Server. The service logic is separately unit-tested against mocked
+providers.
 
 **Symptom (user).** There is no way to answer "how is this workflow doing?" — no success rate, no
 average duration, no failure breakdown, no run counts over time. The only aggregate anywhere is the
@@ -1531,6 +1552,34 @@ guarded; if containment itself fails the run is left to the `RunReaper`.
 ---
 
 ## WF-34 🟡 Resolved markers and small hygiene
+
+**Status:** ◐ Partial — the behavioural items landed 2026-08-07; some `[RJ]` markers deliberately
+remain.
+
+**`RetryOn` is now applied** — this was a real behaviour gap, not tidying. `policy.RetryOn` was
+collected and never consulted, so a policy saying "only retry these" retried *everything* transient. A
+non-matching failure now returns immediately as non-retryable. An empty list still means "anything".
+
+**Jitter uses `Random.Shared`.** A fresh `Random` per call meant instances created in quick succession
+shared a seed, so concurrent retries jittered *identically* — defeating the entire purpose of jitter,
+which is to stop simultaneous retries from re-colliding.
+
+**Markers resolved into explanations** rather than deleted, where the question had an answer worth
+recording: `PendingTakePort` (a pre-decided exit taken on re-entry without re-running the node), the
+`RunCounters` seeding question, the trigger-key/idempotency interaction, the pending-event drain, and
+why the publishers are wrapped (so `Wbskt.Workflow` carries no event-bus dependency).
+
+**Markers retagged, not removed**, where the concern is real and tracked: the cancellation ones now
+read `TODO(WF-31)` and the dispatch-aggregation ones `TODO(WF-32)`, so they point at the item that
+will fix them instead of looking like stray musings. `BaseNode`'s polymorphism note became
+`TODO(arch)` with a note that the hand-rolled converter works.
+
+**Still open:** the duplicated try/catch blocks in `RetryExecutor` and its unreachable
+side-effect-free branches, plus a handful of genuinely-open `[RJ]` questions in `RunStarter` and
+`BookmarkResumer`.
+
+---
+
 
 **Safe to delete** — investigated and confirmed fine, with `EDIT:` follow-ups already in place:
 - `Wbskt.Workflow/Runtime/RunStarter.cs:87-88` — RunCounters seeding (resolved: `Run_Create` seeds it).

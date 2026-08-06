@@ -43,10 +43,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
     {
         string defaultCorrelation = _correlationKeyResolver.Resolve(evt);
-        // [RJ]: at this time this is basically the trigger key since we don't have the trigger yet.
-        // [RJ]: this key is basically for trigger row lookup. also for the idempotency and bookmarking. which in am pretty sure is messed up.
-        // [RJ]: EDIT: idempotency and bookmarking is not messed up :) explained in comments in the BookmarkResumer.
-        InboundEvent resolvedEvent = evt with { CorrelationKey = defaultCorrelation }; 
+        // At this point this is effectively the trigger key - no registration has been resolved yet, so
+        // there is no per-trigger correlation expression to apply. It serves three purposes: the
+        // registration lookup below, the idempotency claim, and bookmark matching. (The claim/bookmark
+        // interaction looks alarming but is correct; BookmarkResumer explains why.)
+        InboundEvent resolvedEvent = evt with { CorrelationKey = defaultCorrelation };
 
         BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, ct);
         if (bookmarkMatch.Matched)
@@ -120,10 +121,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
             
-            // [RJ]: re-think aggregation. this is wrong/meaningless aggregation data.
+            // TODO(WF-32): this aggregate collapses a multi-registration fan-out into one outcome.
             aggregateOutcome = TriggerDispatchOutcome.StartedRun;
             
-            // [RJ]: TODO: properly output aggregated results. currently, this only returns run id of the first started run.
+            // TODO(WF-32): reports only the first run started; callers cannot see the rest.
             if (firstStartedRunId == null)
             {
                 firstStartedRunId = runId;

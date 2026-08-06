@@ -296,6 +296,13 @@ internal static class RetryExecutor
                     }
                 }
 
+                // policy.RetryOn was collected but never consulted, so a policy saying "only retry
+                // these" retried everything transient. An empty list still means "retry anything".
+                if (!ShouldRetry(policy, fail.ErrorCode, ex))
+                {
+                    return fail with { Retryable = false };
+                }
+
                 if (attempt >= policy.MaxAttempts)
                 {
                     return fail;
@@ -389,6 +396,24 @@ internal static class RetryExecutor
         return new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] };
     }
 
+    /// <summary>
+    /// Whether a transient failure is one this policy opted into retrying. An empty
+    /// <see cref="RetryPolicy.RetryOn"/> means "anything transient"; otherwise the failure must match
+    /// by error code or by exception type name, so a policy can retry a timeout without also
+    /// retrying, say, a validation error the callee reported as transient.
+    /// </summary>
+    private static bool ShouldRetry(RetryPolicy policy, string errorCode, Exception exception)
+    {
+        if (policy.RetryOn.Count == 0)
+        {
+            return true;
+        }
+
+        return policy.RetryOn.Any(entry =>
+            string.Equals(entry, errorCode, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(entry, exception.GetType().Name, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static TimeSpan GetDelay(RetryPolicy policy, int attempt)
     {
         double baseMs = policy.Strategy switch
@@ -401,8 +426,10 @@ internal static class RetryExecutor
 
         if (policy.JitterPct > 0)
         {
-            var random = new Random();
-            double pct = random.Next(-policy.JitterPct, policy.JitterPct + 1) / 100.0;
+            // Random.Shared, not a fresh Random per call: instances created in quick succession used
+            // to share a seed, so concurrent retries jittered identically - defeating the point of
+            // jitter, which is to stop simultaneous retries from re-colliding.
+            double pct = Random.Shared.Next(-policy.JitterPct, policy.JitterPct + 1) / 100.0;
             baseMs += baseMs * pct;
         }
 

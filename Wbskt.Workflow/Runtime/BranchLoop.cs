@@ -142,7 +142,9 @@ internal sealed class BranchLoop : IBranchLoop
 
             NodeExecutionResult? result = null;
             
-            // [RJ]: what is PendingTakePort?
+            // PendingTakePort is a pre-decided exit: a port recorded on the branch row for the loop to
+            // take on re-entry without re-running the node. It is how a branch resumes "already past"
+            // its current node - re-executing would repeat the node's side effects.
             if (!string.IsNullOrEmpty(branchRow.PendingTakePort))
             {
                 result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>());

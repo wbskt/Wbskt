@@ -73,7 +73,7 @@ public sealed class HistoryRetentionGcTests
         public Task InsertBatchAsync(IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.HistoryEventRow> events, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Entities.HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct)
         {
             DeleteCalls.Add((cutoffUtc, batchSize));
             return Task.FromResult(_deletes.Dequeue());

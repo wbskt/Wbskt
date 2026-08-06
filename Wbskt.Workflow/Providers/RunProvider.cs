@@ -263,17 +263,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             ct
         );
     }
-
-    public async Task<long> CountByStatusAsync(string status, CancellationToken ct)
-    {
-        var result = await ExecuteScalarAsync<object>(
-            "dbo.Run_CountByStatus",
-            p => p.AddWithValue("@Status", status),
-            ct
-        );
-        return result is long count ? count : Convert.ToInt64(result ?? 0L);
-    }
-
+
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

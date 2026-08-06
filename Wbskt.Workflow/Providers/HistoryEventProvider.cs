@@ -63,7 +63,7 @@ internal sealed class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvi
         );
     }
 
-    public async Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    public async Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(
             "dbo.HistoryEvent_DeleteForRetiredRuns",
@@ -71,6 +71,7 @@ internal sealed class HistoryEventProvider : BaseSqlProvider, IHistoryEventProvi
             {
                 p.AddWithValue("@CutoffUtc", cutoffUtc);
                 p.AddWithValue("@BatchSize", batchSize);
+                p.AddWithValue("@ElevatedCutoffUtc", (object?)elevatedCutoffUtc ?? DBNull.Value);
             },
             ct
         );

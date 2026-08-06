@@ -16,6 +16,7 @@ public sealed class HistoryRetentionGc : BackgroundService
     private readonly ILogger<HistoryRetentionGc> _logger;
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _retentionWindow;
+    private readonly TimeSpan _elevatedRetentionWindow;
 
     [ActivatorUtilitiesConstructor]
     public HistoryRetentionGc(
@@ -24,7 +25,7 @@ public sealed class HistoryRetentionGc : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<HistoryRetentionGc> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(clock, leaseHolder, scopeFactory, logger, options.Value.HistoryRetentionInterval, options.Value.HistoryRetentionWindow)
+        : this(clock, leaseHolder, scopeFactory, logger, options.Value.HistoryRetentionInterval, options.Value.HistoryRetentionWindow, options.Value.HistoryRetentionWindowElevated)
     {
     }
 
@@ -34,8 +35,9 @@ public sealed class HistoryRetentionGc : BackgroundService
         IHistoryEventProvider historyEventProvider,
         ILogger<HistoryRetentionGc> logger,
         TimeSpan? pollInterval = null,
-        TimeSpan? retentionWindow = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(historyEventProvider), logger, pollInterval, retentionWindow)
+        TimeSpan? retentionWindow = null,
+        TimeSpan? elevatedRetentionWindow = null)
+        : this(clock, leaseHolder, new StaticScopeFactory(historyEventProvider), logger, pollInterval, retentionWindow, elevatedRetentionWindow)
     {
     }
 
@@ -45,7 +47,8 @@ public sealed class HistoryRetentionGc : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<HistoryRetentionGc> logger,
         TimeSpan? pollInterval,
-        TimeSpan? retentionWindow)
+        TimeSpan? retentionWindow,
+        TimeSpan? elevatedRetentionWindow = null)
     {
         _clock = clock;
         _leaseHolder = leaseHolder;
@@ -53,6 +56,7 @@ public sealed class HistoryRetentionGc : BackgroundService
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromHours(1);
         _retentionWindow = retentionWindow ?? TimeSpan.FromDays(30);
+        _elevatedRetentionWindow = elevatedRetentionWindow ?? TimeSpan.FromDays(365);
     }
 
     public async Task ProcessRetentionAsync(CancellationToken ct)
@@ -65,9 +69,10 @@ public sealed class HistoryRetentionGc : BackgroundService
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         var historyEventProvider = scope.ServiceProvider.GetRequiredService<IHistoryEventProvider>();
         DateTime cutoffUtc = _clock.UtcNow - _retentionWindow;
+        DateTime elevatedCutoffUtc = _clock.UtcNow - _elevatedRetentionWindow;
         while (true)
         {
-            int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, ct);
+            int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, elevatedCutoffUtc, ct);
             if (deleted < BatchSize)
             {
                 return;

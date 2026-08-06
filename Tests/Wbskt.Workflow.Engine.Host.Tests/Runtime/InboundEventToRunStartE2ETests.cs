@@ -223,7 +223,6 @@ public sealed class InboundEventToRunStartE2ETests
         }
 
         public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> CountByStatusAsync(string status, CancellationToken ct) => Task.FromResult((long)Runs.Values.Count(run => run.Status == status));
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
         {
@@ -351,7 +350,7 @@ public sealed class InboundEventToRunStartE2ETests
         }
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult<int?>(_definition.WorkflowRefId == refId && _definition.Version == version ? 42 : null);
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct) => Task.FromResult(ToRow(id));

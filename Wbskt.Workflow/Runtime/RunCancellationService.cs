@@ -64,8 +64,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
     }
 
-    // [RJ]: TODO: why this needs to be also called from RunRecoveryService?
-    // [RJ]: if we can avoid that call, we can make this private.
+    // TODO(WF-31): also called from RunRecoveryService; if that call can be avoided this becomes private.
     public void CancelCts(long runId)
     {
         var cts = _ctsRegistry.GetOrAdd(runId, _ => {
@@ -85,11 +84,12 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
     }
 
-    // [RJ]: TODO: cancel internally uses a cache but it lives in WMH and WEH separately.
-    // [RJ]: TODO: cancellation must be passed to WEH from WMH through events
+    // TODO(WF-31): the cancellation cache lives independently in the management and engine hosts, so a
+    // cancel issued through one is only seen by the other after its cache entry expires. Should be
+    // propagated over the event bus instead.
     public async Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
     {
-        // [RJ]: this will transition only if the run currently is in "Running" what about requesting cancellation for runs that are waiting/bookmarked.
+        // TODO(WF-31): transitions only if the run currently is in "Running" what about requesting cancellation for runs that are waiting/bookmarked.
         // Single status write (2.3): the reason/timestamp ride along with the transition itself,
         // so there's no follow-up UpdateStatusAsync call (and no extra GetByIdAsync round trip).
         bool transitioned = await _runProvider.TransitionStatusAsync(runId, "Running", "Cancelling", _clock.UtcNow, reason, ct);
@@ -117,8 +117,8 @@ internal sealed class RunCancellationService : IRunCancellationService
         CancelCts(runId);
 
         // Mass-delete bookmarks for this run
-        // [RJ]: TODO: what about the cancellation from the RunRecoveryService? dont we need to delete bookmarks of those runs too?
-        // [RJ]: since we are calling "CancelCts" from the RunRecoveryService.
+        // TODO(WF-31): the RunRecoveryService cancellation path does not delete bookmarks, so a parked run
+        // cancelled during recovery keeps live bookmarks.
         if (_bookmarkProvider is not null)
         {
             await _bookmarkProvider.DeleteAllByRunIdAsync(checked((int)runId), ct);
@@ -151,8 +151,8 @@ internal sealed class RunCancellationService : IRunCancellationService
             await _eventBus.PublishAsync(new Events.Workflow.WorkflowRunCancellationRequestedEvent(runId, reason), ct);
         }
 
-        // [RJ]: the memory cache stores if the run is canceled or not for the past 10 seconds
-        // [RJ]: IsCancellationRequestedAsync re-caches it from the DB if it's a cache miss
+        // The memory cache stores if the run is canceled or not for the past 10 seconds
+        // IsCancellationRequestedAsync re-caches it from the DB if it's a cache miss
         _memoryCache.Set(CreateCacheKey(runId), true, CacheTtl);
         return true;
     }

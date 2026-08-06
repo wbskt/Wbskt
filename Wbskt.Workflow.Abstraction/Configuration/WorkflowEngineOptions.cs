@@ -9,6 +9,13 @@ public sealed class WorkflowEngineOptions
     public TimeSpan RunStuckThreshold { get; init; } = TimeSpan.FromMinutes(30);
     public TimeSpan HistoryRetentionInterval { get; init; } = TimeSpan.FromHours(1);
     public TimeSpan HistoryRetentionWindow { get; init; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How long Warn/Error history entries are kept — the record of what went wrong, so far longer
+    /// than routine entries, but not forever. They were previously excluded from collection outright,
+    /// which let HistoryEvents grow without bound on a failure-heavy workspace.
+    /// </summary>
+    public TimeSpan HistoryRetentionWindowElevated { get; init; } = TimeSpan.FromDays(365);
     public TimeSpan PendingTriggerEventBacklogInterval { get; init; } = TimeSpan.FromMinutes(10);
     public TimeSpan PendingTriggerEventTtl { get; init; } = TimeSpan.FromHours(24);
     public TimeSpan MetricsExportInterval { get; init; } = TimeSpan.FromSeconds(15);

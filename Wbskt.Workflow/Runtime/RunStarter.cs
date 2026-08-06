@@ -65,7 +65,7 @@ internal sealed class RunStarter : IRunStarter
         RunRow createdRun = await _runProvider.CreateAsync(new RunRow
         {
             Id = 0,
-            RefId = _idGenerator.NewId(), // [RJ]: using external for easier testing
+            RefId = _idGenerator.NewId(), // generated outside the DB so tests can pin it
             WorkflowDefinitionId = workflowDefinitionId,
             WorkflowRefId = definition.RefId,
             WorkflowVersion = definition.Version,
@@ -84,9 +84,9 @@ internal sealed class RunStarter : IRunStarter
         // run can finalize when this branch completes (mirrors the Fork path, which
         // counts the child branches it creates). Run_Create seeds the counter at 0.
         
-        // [RJ]: TODO: is this working? i dont think so. since its matching by id. at this time there are no entries in the table with this id.
-        // [RJ]: EDIT: dbo.Run_Create in CreateAsync ensures the dbo.RunCounters has entry. so we good.
-        await _runCountersProvider.IncrementActiveBranchesAsync(createdRun.Id, 1, ct); 
+        // Safe to increment by id even though nothing wrote a counter row here: dbo.Run_Create seeds
+        // dbo.RunCounters as part of creating the run.
+        await _runCountersProvider.IncrementActiveBranchesAsync(createdRun.Id, 1, ct);
 
         string localJson = JsonSerializer.Serialize(
             new Dictionary<string, JsonElement>

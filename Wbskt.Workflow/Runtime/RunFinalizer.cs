@@ -109,10 +109,13 @@ internal sealed class RunFinalizer : IRunFinalizer
             }
         ], ct);
         
-        // [RJ]: TODO: investigate what this does
+        // The run just freed its correlation slot, so release exactly one event that a Queue
+        // concurrency policy parked behind it. One, not all: draining more would re-enter the
+        // concurrency enforcer while the newly started run is active and simply re-queue them.
         await _pendingTriggerEventDrainer.DrainAsync(updatedRun.WorkflowRefId, updatedRun.TriggerNodeId, updatedRun.CorrelationKey ?? string.Empty, ct);
-        
-        // [RJ]: TODO: make this simpler? do we need a wrapper to fire event through the e-bus?
+
+        // Published through an abstraction rather than IEventBus directly so Wbskt.Workflow carries no
+        // event-bus dependency; the engine host supplies the implementation.
         await _runCompletedPublisher.PublishAsync(updatedRun, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
 
