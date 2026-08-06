@@ -26,6 +26,14 @@ public sealed class WorkflowEngineOptions
 
     /// <summary>Maximum branches this host executes concurrently (BranchExecutionPump's semaphore).</summary>
     public int BranchWorkerLimit { get; init; } = 50;
+
+    /// <summary>
+    /// Hard ceiling on how many branches one ParallelForEach may fan out to. A collection that arrives
+    /// larger than this fails the node with a descriptive error instead of writing a branch row and a
+    /// dispatcher entry per element - which is one workflow's payload deciding the throughput of every
+    /// other tenant on the engine. Raise it deliberately, having thought about the row count.
+    /// </summary>
+    public int MaxFanOut { get; init; } = 1000;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;
 

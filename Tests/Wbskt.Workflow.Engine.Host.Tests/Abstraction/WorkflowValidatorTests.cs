@@ -1,4 +1,5 @@
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
@@ -245,6 +246,62 @@ public sealed class WorkflowValidatorRuleTests
         var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
 
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "ONFAILURE_TARGET_NOT_FOUND");
+    }
+
+    // ---------------------------------------------- WF-09 sub-workflow inputs
+
+    [Theory]
+    [InlineData("parentRunRefId")]
+    [InlineData("correlationKey")]
+    public void Validate_rejects_a_SubWorkflow_input_that_shadows_an_engine_key(string reservedKey)
+    {
+        // parentRunRefId is how the child's completion hook finds its way back; an input of the same
+        // name would overwrite it and strand the parent on its bookmark.
+        var def = ValidWorkflowBuilder.Build();
+        var subId = Guid.NewGuid();
+        var sub = new SubWorkflowNode
+        {
+            NodeId = subId,
+            Name = "sub",
+            Ports = [
+                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
+            ],
+            Config = new SubWorkflowConfig
+            {
+                WorkflowRefId = Guid.NewGuid(),
+                Input = new Dictionary<string, WorkflowExpression> { [reservedKey] = new LiteralExpression("x") }
+            }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, sub] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "SUBWORKFLOW_INPUT_KEY_RESERVED" && i.NodeId == subId);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_SubWorkflow_with_ordinary_inputs()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var subId = Guid.NewGuid();
+        var sub = new SubWorkflowNode
+        {
+            NodeId = subId,
+            Name = "sub",
+            Ports = [
+                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
+            ],
+            Config = new SubWorkflowConfig
+            {
+                WorkflowRefId = Guid.NewGuid(),
+                Input = new Dictionary<string, WorkflowExpression> { ["orderId"] = new BranchStateRefExpression("orderId") }
+            }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, sub] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "SUBWORKFLOW_INPUT_KEY_RESERVED");
     }
 
     // ---------------------------------------------- WF-19.3 PFE <-> Join

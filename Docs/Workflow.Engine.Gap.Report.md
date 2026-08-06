@@ -179,8 +179,8 @@ against current code** and worth working from directly.
 | WF-06 | 🟠 | Expressions | ✅ `$shared` variable refs and template interpolation throw at runtime |
 | WF-07 | 🟠 | Nodes | ◐ Variable node supports only `Set`; shared `Set` can fail under contention |
 | WF-08 | 🟠 | Nodes | `action:email` and `action:telegram` are unimplemented stubs |
-| WF-09 | 🟠 | Nodes | Sub-workflow cannot receive input from its parent |
-| WF-10 | 🟠 | Nodes | No fan-out concurrency cap on `ForEach`/`ParallelForEach` |
+| WF-09 | 🟠 | Nodes | ✅ Sub-workflow cannot receive input from its parent |
+| WF-10 | 🟠 | Nodes | ◐ No fan-out concurrency cap on `ForEach`/`ParallelForEach` |
 | WF-11 | 🟠 | API | ✅ Normal outcomes on "start run" return HTTP 500 |
 | WF-12 | 🟠 | API | ✅ No validate / dry-run endpoint |
 | WF-13 | 🟠 | API | ◐ Deprecate is one-way; no pause/resume, rename, rollback, or delete |
@@ -784,6 +784,26 @@ executors land.
 
 ## WF-09 🟠 Sub-workflow cannot receive input from its parent
 
+**Status:** ✅ Fixed 2026-08-07.
+
+`SubWorkflowConfig.Input` is an `IReadOnlyDictionary<string, WorkflowExpression>`, each entry evaluated
+against the *parent* branch and merged into the child's `$trigger.body` alongside the engine's own
+`parentRunRefId`/`correlationKey`. The return path already worked. `WorkflowBuilder.AddSubWorkflow`
+takes the map.
+
+**`parentRunRefId` and `correlationKey` are reserved.** `parentRunRefId` is how the child's completion
+hook finds its way back to the parent; an input of the same name would overwrite it and strand the
+parent on its bookmark forever. Rejected at publish (`SUBWORKFLOW_INPUT_KEY_RESERVED`, listed on
+`SubWorkflowConfig.ReservedInputKeys` so the validator and the executor cannot disagree) **and** at
+runtime, so a definition published before the rule existed cannot do it either.
+
+**An input that cannot be evaluated fails the node without starting the child**, non-retryably —
+starting it with a silently incomplete payload would have it run against missing data with nothing to
+explain why, and a bad expression yields the same result on every retry.
+
+**Tests.** Input evaluated into the child body with the engine's keys intact; unevaluatable input fails
+and the hub is never called; a reserved key is refused; plus two validator cases.
+
 **Symptom (user).** A user factors shared logic into a child workflow and finds no way to pass data
 into it. The child always receives the same fixed payload.
 
@@ -807,6 +827,34 @@ promoted to `childResult` on resume).
 ---
 
 ## WF-10 🟠 No fan-out concurrency cap
+
+**Status:** ◐ Partial — the **ceiling** landed 2026-08-07 and meets the acceptance criterion. **Windowed
+`MaxConcurrency` was deliberately not built**; the reasoning and a design sketch are below, because it
+is a real feature and someone will want it.
+
+**What landed.** `WorkflowEngineOptions.MaxFanOut` (default 1000). `ParallelForEachNodeExecutor` checks
+the evaluated collection *before* writing anything and fails with `PFE_FAN_OUT_TOO_LARGE`, naming both
+the actual count and the ceiling. Nothing is written on that path — no cohort to clean up, no branches
+to reap. `ForEach` is sequential since WF-04 and `Fork`'s children come from an author-written list, so
+`ParallelForEach` is the only unbounded fan-out left.
+
+**Why the window was not built.** It needs the pending items and the cohort's body-entry node stored on
+the aggregator row (three new columns), an atomic pop inside `JoinAggregator_Contribute`, and a
+branch-spawn on both contribution paths — the success path in `JoinNodeExecutor` and the failure path
+in `BranchLoop`. That is surgery on the exact code WF-03 just fixed, and **it cannot be verified here**:
+the DB integration tests no-op without a live SQL Server, so a mistake in the popping procedure would
+ship as "cohorts hang", which is the P0 WF-03 existed to remove. The ceiling removes the denial of
+service; the window is a fairness optimisation, and it should be built where its SQL can be run.
+
+**Sketch, for whoever picks it up.** `JoinAggregators` gains `PendingItemsJson NVARCHAR(MAX) NULL`,
+`MaxConcurrency INT NULL` and `BodyNodeId UNIQUEIDENTIFIER NULL` (so the spawn need not re-walk the
+graph). `ParallelForEachNodeExecutor` forks only the first `MaxConcurrency` items and stores the rest.
+`JoinAggregator_Contribute`, in the same transaction as the count, pops the head of the pending array
+and returns it; both callers spawn a branch for it with `{item, __join_token, __join_index}`, remembering
+to increment `ActiveBranchCount` *before* the contributing branch decrements its own. `ExpectedCount`
+stays the full item count, so quorum arithmetic is unchanged. **Do not add `MaxConcurrency` to
+`ParallelForEachConfig` until it is honoured** — a config field that is silently ignored is worse than
+an absent one.
 
 **Symptom (user).** A `ParallelForEach` (or today's `ForEach`) over a 10,000-element collection creates
 10,000 branch rows and 10,000 dispatcher entries in one tick, saturating the engine for every tenant.

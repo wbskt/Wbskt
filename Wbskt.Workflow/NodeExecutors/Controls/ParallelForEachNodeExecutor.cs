@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -13,11 +15,16 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
 {
     private readonly IExpressionEvaluator _expressionEvaluator;
     private readonly IJoinAggregatorProvider _aggregators;
+    private readonly int _maxFanOut;
 
-    public ParallelForEachNodeExecutor(IExpressionEvaluator expressionEvaluator, IJoinAggregatorProvider aggregators)
+    /// <param name="options">
+    /// Optional so the executor's unit tests need no configuration; without it the default ceiling applies.
+    /// </param>
+    public ParallelForEachNodeExecutor(IExpressionEvaluator expressionEvaluator, IJoinAggregatorProvider aggregators, IOptions<WorkflowEngineOptions>? options = null)
     {
         _expressionEvaluator = expressionEvaluator;
         _aggregators = aggregators;
+        _maxFanOut = options?.Value.MaxFanOut ?? new WorkflowEngineOptions().MaxFanOut;
     }
 
     public string Kind => NodeKind.ControlParallelForEach;
@@ -42,6 +49,19 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
         if (items.Count == 0)
         {
             return new NodeExecutionResult.Continue("empty", new Dictionary<string, JsonElement>());
+        }
+
+        // Bounded before anything is written. Past this point the node creates a branch row and a
+        // dispatcher entry per element in a single tick, so an unbounded collection is one workflow's
+        // payload deciding the throughput of every other tenant. Failing the node names the number and
+        // the ceiling, which is diagnosable; a saturated engine is not.
+        if (items.Count > _maxFanOut)
+        {
+            return new NodeExecutionResult.Fail(
+                "PFE_FAN_OUT_TOO_LARGE",
+                $"ParallelForEach node '{node.NodeId}' would fan out to {items.Count} branches, above the configured ceiling of {_maxFanOut} (WorkflowEngine:MaxFanOut). Batch the collection or raise the ceiling deliberately.",
+                false,
+                null);
         }
 
         // Resolve the Join this cohort converges on and stamp its config onto the aggregator. Doing

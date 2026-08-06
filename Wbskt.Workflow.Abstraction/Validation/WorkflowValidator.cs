@@ -33,6 +33,7 @@ public sealed class WorkflowValidator
         ValidateNodeConfigs(definition, issues);
         ValidateOnFailure(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
+        ValidateSubWorkflowInputs(definition, issues);
         ValidateTriggerConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
@@ -116,6 +117,31 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "ONFAILURE_TARGET_NOT_FOUND",
                     $"Node '{node.NodeId}' has onFailure targetNodeId '{target}', which is not a node in this workflow.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The engine writes <c>parentRunRefId</c> into the child's body so the completion hook can find its
+    /// way back to the parent. An input of the same name would overwrite it and strand the parent on its
+    /// bookmark, so it is rejected here rather than at runtime.
+    /// </summary>
+    private static void ValidateSubWorkflowInputs(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes.OfType<SubWorkflowNode>())
+        {
+            if (node.Config?.Input is not { Count: > 0 } input)
+            {
+                continue;
+            }
+
+            foreach (string key in input.Keys.Where(SubWorkflowConfig.ReservedInputKeys.Contains))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "SUBWORKFLOW_INPUT_KEY_RESERVED",
+                    $"SubWorkflow node '{node.NodeId}' supplies input '{key}', which the engine writes itself; rename it.",
                     node.NodeId));
             }
         }

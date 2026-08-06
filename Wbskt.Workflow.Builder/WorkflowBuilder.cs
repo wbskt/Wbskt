@@ -328,14 +328,18 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddSubWorkflow(Guid targetWorkflowRefId, string? correlationKey = null)
+    /// <param name="input">
+    /// Values evaluated against the calling branch and merged into the child's <c>$trigger.body</c>.
+    /// <c>parentRunRefId</c> and <c>correlationKey</c> are written by the engine and rejected here.
+    /// </param>
+    public WorkflowBuilder AddSubWorkflow(Guid targetWorkflowRefId, string? correlationKey = null, IReadOnlyDictionary<string, WorkflowExpression>? input = null)
     {
         var id = Guid.NewGuid();
         _nodes.Add(new SubWorkflowNode {
             NodeId = id,
             Name = "SubWorkflow",
             Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new SubWorkflowConfig { WorkflowRefId = targetWorkflowRefId, CorrelationKey = correlationKey } });
+            Config = new SubWorkflowConfig { WorkflowRefId = targetWorkflowRefId, CorrelationKey = correlationKey, Input = input } });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);

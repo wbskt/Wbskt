@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Moq;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -14,6 +16,47 @@ namespace Wbskt.Workflow.Engine.Host.Tests.NodeExecutors.Controls;
 public sealed class ParallelForEachNodeExecutorTests
 {
     private static readonly IExpressionEvaluator Evaluator = new ExpressionEvaluator(new SystemClock());
+
+    [Fact]
+    public async Task ExecuteAsync_fails_without_forking_when_the_collection_exceeds_the_fan_out_ceiling()
+    {
+        // A branch row and a dispatcher entry per element, in one tick, is one workflow's payload
+        // deciding throughput for every other tenant. Fail with the numbers rather than saturate.
+        var aggregatorMock = CreateAggregatorMock();
+        var executor = new ParallelForEachNodeExecutor(Evaluator, aggregatorMock.Object, Options.Create(new WorkflowEngineOptions { MaxFanOut = 3 }));
+        var node = CreateNode();
+        NodeContext ctx = CreateContext(
+            node,
+            new Dictionary<string, JsonElement>
+            {
+                ["items"] = JsonSerializer.SerializeToElement(new[] { "a", "b", "c", "d" })
+            });
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        Assert.Equal("PFE_FAN_OUT_TOO_LARGE", fail.ErrorCode);
+        Assert.Contains("4", fail.Message);
+        Assert.Contains("3", fail.Message);
+        Assert.False(fail.Retryable);
+        // Nothing was written: no cohort to clean up, no branches to reap.
+        aggregatorMock.Verify(a => a.InitializeAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_allows_a_collection_exactly_at_the_ceiling()
+    {
+        var executor = new ParallelForEachNodeExecutor(Evaluator, CreateAggregatorMock().Object, Options.Create(new WorkflowEngineOptions { MaxFanOut = 3 }));
+        NodeContext ctx = CreateContext(
+            CreateNode(),
+            new Dictionary<string, JsonElement>
+            {
+                ["items"] = JsonSerializer.SerializeToElement(new[] { "a", "b", "c" })
+            });
+
+        var fork = Assert.IsType<NodeExecutionResult.Fork>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        Assert.Equal(3, fork.Children.Count);
+    }
 
     [Fact]
     public async Task ExecuteAsync_forks_one_child_per_item_with_join_token()
