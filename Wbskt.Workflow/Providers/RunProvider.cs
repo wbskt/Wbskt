@@ -81,6 +81,22 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_ListBy_WorkspaceId",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@StatusFilter", (object?)statusFilter ?? DBNull.Value);
+                p.AddWithValue("@Top", top);
+                p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
+            },
+            Map,
+            ct
+        );
+    }
+
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(

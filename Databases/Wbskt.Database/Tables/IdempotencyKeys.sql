@@ -18,3 +18,10 @@ GO
 CREATE INDEX IX_IdempotencyKeys_RunId
     ON dbo.IdempotencyKeys (RunId);
 GO
+
+-- IdempotencyKey_DeleteExpired sweeps by CreatedAt every hour. This is the fastest-growing table in
+-- the schema - one row per inbound event plus one per non-side-effect-free action attempt - so the
+-- sweep must seek rather than scan.
+CREATE INDEX IX_IdempotencyKeys_CreatedAt
+    ON dbo.IdempotencyKeys (CreatedAt);
+GO

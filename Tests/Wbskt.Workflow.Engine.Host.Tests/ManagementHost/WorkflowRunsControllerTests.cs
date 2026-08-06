@@ -118,9 +118,12 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         definitionProvider.Setup(x => x.GetCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
-        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, "Running", 2, null, It.IsAny<CancellationToken>())).ReturnsAsync([
+        // The service asks for one more than the page size to detect a further page; three rows come
+        // back, so the page is trimmed to two and a cursor is returned.
+        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, "Running", 3, null, It.IsAny<CancellationToken>())).ReturnsAsync([
             CreateRunRow(41, Guid.NewGuid(), workflowRefId, 5, "Running"),
-            CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed")
+            CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed"),
+            CreateRunRow(43, Guid.NewGuid(), workflowRefId, 5, "Completed")
         ]);
         var service = new WorkflowRunQueryService(runProvider.Object, branchProvider.Object, definitionProvider.Object, cancellationService.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
 
@@ -130,6 +133,53 @@ public sealed class WorkflowRunsControllerTests
         Assert.Equal(2, response.Value.Runs.Count);
         Assert.Equal(42, response.Value.NextCursor);
         Assert.Equal(workflowRefId, response.Value.Runs[0].WorkflowDefinitionRefId);
+    }
+
+    [Fact]
+    public async Task ListByWorkflowAsync_returns_no_cursor_when_the_page_lands_exactly_on_the_end()
+    {
+        // Regression: "a full page means there is more" handed back a cursor even when the results
+        // ended exactly on the page boundary, so clients always fetched one empty page.
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var workflowRefId = Guid.NewGuid();
+        definitionProvider.Setup(x => x.GetCurrentByRefIdAsync(workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateDefinitionRow(workflowRefId, WorkspaceId));
+        runProvider.Setup(x => x.ListByWorkflowAsync(workflowRefId, null, 3, null, It.IsAny<CancellationToken>())).ReturnsAsync([
+            CreateRunRow(41, Guid.NewGuid(), workflowRefId, 5, "Running"),
+            CreateRunRow(42, Guid.NewGuid(), workflowRefId, 5, "Completed")
+        ]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, 2, null, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(2, response.Value.Runs.Count);
+        Assert.Null(response.Value.NextCursor);
+    }
+
+    [Fact]
+    public async Task ListByWorkspaceAsync_returns_runs_across_every_workflow()
+    {
+        // The procedure scopes by workspace itself, so no per-workflow ownership check is needed -
+        // and none should be attempted.
+        var runProvider = new Mock<IRunProvider>();
+        var definitionProvider = new Mock<IWorkflowDefinitionProvider>();
+        var workflowA = Guid.NewGuid();
+        var workflowB = Guid.NewGuid();
+        runProvider.Setup(x => x.ListByWorkspaceAsync(WorkspaceId, null, 11, null, It.IsAny<CancellationToken>())).ReturnsAsync([
+            CreateRunRow(41, Guid.NewGuid(), workflowA, 5, "Running"),
+            CreateRunRow(42, Guid.NewGuid(), workflowB, 5, "Succeeded")
+        ]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), definitionProvider.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.ListByWorkspaceAsync(WorkspaceId, null, 10, null, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(2, response.Value.Runs.Count);
+        Assert.Null(response.Value.NextCursor);
+        Assert.Equal([workflowA, workflowB], response.Value.Runs.Select(r => r.WorkflowDefinitionRefId));
+        definitionProvider.VerifyNoOtherCalls();
     }
 
     [Fact]

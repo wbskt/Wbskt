@@ -40,11 +40,12 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
                 return Result<RunListResponse>.Failure(ensureWorkflowResult.Error);
             }
 
-            IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkflowAsync(workflowRefId, statusFilter, top, cursorId, ct);
-            IReadOnlyList<RunSummaryDto> runs = rows.Select(MapRun).ToList();
-            long? nextCursor = runs.Count == top ? rows.Last().Id : null;
-            
-            return Result<RunListResponse>.Success(new RunListResponse(runs, nextCursor));
+            // Fetch one more than asked for: its presence is what proves another page exists. Using
+            // "a full page means there's more" hands back a cursor even when the page landed exactly
+            // on the end, so clients always fetched one empty page.
+            IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkflowAsync(workflowRefId, statusFilter, top + 1, cursorId, ct);
+
+            return Result<RunListResponse>.Success(BuildPage(rows, top));
         }
         catch (Exception ex)
         {
@@ -52,6 +53,39 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             _logger.LogTrace(ex, "ListByWorkflowAsync exception stack trace for '{WorkflowRefId}'", workflowRefId);
             return Result<RunListResponse>.Failure(Error.Failure("RUN_QUERY_ERROR", ex.Message));
         }
+    }
+
+    public async Task<Result<RunListResponse>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct)
+    {
+        _logger.LogDebug("Querying run list for WorkspaceId: {WorkspaceId}", workspaceId);
+
+        try
+        {
+            // The procedure filters by workspace itself, so there is no per-workflow membership check
+            // to do here - a run cannot appear unless its definition belongs to this workspace.
+            IReadOnlyCollection<RunRow> rows = await _runProvider.ListByWorkspaceAsync(workspaceId, statusFilter, top + 1, cursorId, ct);
+
+            return Result<RunListResponse>.Success(BuildPage(rows, top));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query run list for WorkspaceId: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
+            _logger.LogTrace(ex, "ListByWorkspaceAsync exception stack trace for WorkspaceId {WorkspaceId}", workspaceId);
+            return Result<RunListResponse>.Failure(Error.Failure("RUN_QUERY_ERROR", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Trims the extra row fetched to probe for a next page, and derives the cursor from whether that
+    /// row was actually there.
+    /// </summary>
+    private static RunListResponse BuildPage(IReadOnlyCollection<RunRow> rows, int top)
+    {
+        bool hasMore = rows.Count > top;
+        IReadOnlyList<RunRow> page = rows.Take(top).ToList();
+        long? nextCursor = hasMore && page.Count > 0 ? page[^1].Id : null;
+
+        return new RunListResponse(page.Select(MapRun).ToList(), nextCursor);
     }
 
     public async Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct)

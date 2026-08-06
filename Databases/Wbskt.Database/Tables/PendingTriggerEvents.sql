@@ -13,3 +13,9 @@ GO
 CREATE INDEX IX_PendingTriggerEvents_RunKey
     ON dbo.PendingTriggerEvents (WorkflowRefId, TriggerNodeId, CorrelationKey, EnqueuedAt);
 GO
+
+-- PendingTriggerEvent_DeleteExpired sweeps by age alone. The index above leads with WorkflowRefId,
+-- so it cannot serve that sweep.
+CREATE INDEX IX_PendingTriggerEvents_EnqueuedAt
+    ON dbo.PendingTriggerEvents (EnqueuedAt);
+GO

@@ -45,6 +45,25 @@ public sealed class WorkflowRunsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Every run in the workspace, newest first. Without this a dashboard would have to call the
+    /// per-workflow list once per workflow to show recent activity.
+    /// </summary>
+    [HttpGet("runs")]
+    public async Task<ActionResult<RunListResponse>> ListForWorkspace(Guid workspaceRef, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
+    {
+        _logger.LogInformation("API: List workspace runs requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<RunListResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _runQueryService.ListByWorkspaceAsync(workspaceIdResult.Value, status, top, cursor, ct);
+        return MapResult(result);
+    }
+
     [HttpGet("runs/{runRefId:guid}")]
     public async Task<ActionResult<RunDetailDto>> Get(Guid workspaceRef, Guid runRefId, CancellationToken ct)
     {

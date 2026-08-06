@@ -84,7 +84,7 @@ against current code** and worth working from directly.
 | WF-11 | 🟠 | API | ✅ Normal outcomes on "start run" return HTTP 500 |
 | WF-12 | 🟠 | API | ✅ No validate / dry-run endpoint |
 | WF-13 | 🟠 | API | Deprecate is one-way; no pause/resume, rename, rollback, or delete |
-| WF-14 | 🟠 | API | No workspace-wide run list |
+| WF-14 | 🟠 | API | ✅ No workspace-wide run list |
 | WF-15 | 🟠 | Triggers | Trigger filter expressions are plumbed but hardcoded to null |
 | WF-16 | 🟠 | Triggers | Webhook triggers have no secret |
 | WF-17 | 🟠 | Triggers | ✅ Invalid cron publishes the workflow, then throws — leaving it scheduleless |
@@ -93,7 +93,7 @@ against current code** and worth working from directly.
 | WF-20 | 🟡 | Database | ✅ `PendingTriggerEvent_DequeueNextBy_…_Correlation` dropped `TriggerNodeId` (was dead code — deleted) |
 | WF-21 | 🟠 | Database | ✅ `Bookmark_DeleteOrphans` omits `Faulted` |
 | WF-22 | 🟠 | Database | ✅ Publish version authority is split between C# and the SP |
-| WF-23 | 🟠 | Database | Four missing indexes, one of them on the user-facing run list |
+| WF-23 | 🟠 | Database | ✅ Four missing indexes, one of them on the user-facing run list |
 | WF-24 | 🟡 | Database | Unbounded `Warn`/`Error` history growth |
 | WF-25 | 🟡 | Database | Three dead stored procedures |
 | WF-26 | 🟠 | Analytics | No user-facing analytics endpoint at all |
@@ -864,6 +864,20 @@ lifecycle matches the available verbs.
 
 ## WF-14 🟠 No workspace-wide run list
 
+**Status:** ✅ Fixed 2026-08-06.
+
+`GET /api/workspaces/{workspaceRef}/runs` (permission `workflows.read`), backed by
+`Run_ListBy_WorkspaceId.sql`. Runs carry no workspace of their own — it lives on the definition — so
+the procedure joins through `WorkflowDefinitionId`, which WF-23's `IX_Runs_WorkflowDefinitionId_Id`
+covers. Because the procedure scopes by workspace itself there is no per-workflow ownership check to
+repeat in the service, and a test asserts none is attempted.
+
+**Cursor bug fixed at the same time.** Both list paths now fetch `top + 1` and use the extra row's
+presence to decide whether to return a cursor. The old rule — "a full page means there's more" —
+returned a cursor when the results landed exactly on the page boundary, so **every client fetched one
+empty page at the end of every listing**. Shared `BuildPage` helper; regression test pins the
+exact-boundary case.
+
 **Symptom (user).** Runs are queryable only per-workflow
 (`GET workflows/{workflowRefId}/runs`). A workspace "recent activity" or "what's failing right now"
 view is impossible without N calls.
@@ -1128,6 +1142,25 @@ values, and a DB blip cannot bypass the ownership check.
 ---
 
 ## WF-23 🟠 Four missing indexes
+
+**Status:** ✅ Fixed 2026-08-06 — five added, one changed.
+
+- `IX_Runs_WorkflowRefId_Id (WorkflowRefId, Id DESC) INCLUDE (Status)` — the run-history page. The
+  only existing `Runs` index was filtered to non-terminal statuses, so it could not serve a query
+  that is mostly *about* terminal runs.
+- `IX_Runs_WorkflowDefinitionId_Id` — supports WF-14's workspace join. SQL Server does not index
+  foreign keys automatically.
+- `IX_Runs_WorkflowRefId_CorrelationKey_Active` **changed** to include `TriggerNodeId`, so it fully
+  covers `Run_GetActiveBy_Correlation`.
+- `IX_IdempotencyKeys_CreatedAt` — the hourly GC sweep, on the fastest-growing table in the schema.
+- `IX_PendingTriggerEvents_EnqueuedAt` — the TTL sweep; the existing index leads with
+  `WorkflowRefId` and cannot serve it.
+
+**⚠ Not measured.** These are reasoned from the query shapes, not from execution plans — the DB
+integration tests no-op without a live SQL Server. Worth confirming with real plans at scale.
+
+---
+
 
 1. **`Runs` — the user-facing run list has no covering index.** `Run_ListBy_WorkflowRefId.sql` does
    `WHERE WorkflowRefId = @x [AND Status = @s] [AND Id < @cursor] ORDER BY Id DESC`. The only index on

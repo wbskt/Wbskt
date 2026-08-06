@@ -232,6 +232,7 @@ in-place edit, which is why there is no update verb.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
+| `GET runs` | `workflows.read` | Lists every run in the workspace, newest first — the "recent activity" view. Filterable by `status`, cursor-paged. |
 | `GET workflows/{workflowRefId}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
 | `GET runs/{runRefId}` | `workflows.read` | Run detail with its branches. |
 | `GET runs/{runRefId}/history` | `workflows.read` | The run's history event stream from `fromEventId`, cursor-paged — the execution trace. |

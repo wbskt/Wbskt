@@ -9,6 +9,12 @@ public interface IRunProvider
     Task<RunRow> GetByIdAsync(long runId, CancellationToken ct);
     Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
+
+    /// <summary>
+    /// Every run in a workspace, newest first. Runs carry no workspace of their own - it lives on the
+    /// definition - so this joins through WorkflowDefinitionId.
+    /// </summary>
+    Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());
