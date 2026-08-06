@@ -17,5 +17,18 @@ public interface IWorkflowDefinitionService
     Task<Result<WorkflowDefinitionDto>> GetVersionAsync(int workspaceId, Guid refId, int version, CancellationToken ct);
     Task<Result<Wbskt.Models.IPagedList<WorkflowSummaryDto>>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task<Result> DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct);
+
+    /// <summary>
+    /// The inverse of <see cref="DeprecateAsync"/>: re-enables the current version and re-registers
+    /// its triggers (re-seeding schedules from their cron). Without this, deprecating is one-way and
+    /// the only route back is republishing.
+    /// </summary>
+    Task<Result> ReinstateAsync(int workspaceId, Guid workspaceRef, Guid refId, CancellationToken ct);
+
+    /// <summary>
+    /// Republishes an earlier version's definition as a new version. Append-only: the old row is left
+    /// alone so the runs of every version keep pointing at the definition they ran.
+    /// </summary>
+    Task<Result<WorkflowPublishResponse>> RollbackAsync(int workspaceId, Guid workspaceRef, Guid refId, int version, CancellationToken ct);
     Task<Result> EnsureWorkflowInWorkspaceAsync(int workspaceId, Guid workflowRefId, CancellationToken ct);
 }

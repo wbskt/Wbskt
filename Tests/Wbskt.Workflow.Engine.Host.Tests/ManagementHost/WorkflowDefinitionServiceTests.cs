@@ -69,6 +69,127 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
+    public async Task Reinstate_reenables_and_reregisters_triggers()
+    {
+        // Deprecating deregisters the triggers, so flipping the flag back is not enough - the
+        // workflow would read as published and never fire.
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var refId = Guid.NewGuid();
+        var workspaceRef = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(9, refId, 3, isEnabled: false));
+        var service = CreateService(workflowProvider, triggerService, cache);
+
+        var result = await service.ReinstateAsync(WorkspaceId, workspaceRef, refId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        triggerService.Verify(x => x.OnPublishedAsync(9, workspaceRef, It.IsAny<CancellationToken>()), Times.Once);
+        workflowProvider.Verify(x => x.SetEnabledAsync(9, true, It.IsAny<CancellationToken>()), Times.Once);
+        cache.Verify(x => x.Invalidate(9), Times.Once);
+    }
+
+    [Fact]
+    public async Task Reinstate_rejects_a_workflow_that_is_already_enabled()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(9, refId, 3, isEnabled: true));
+        var service = CreateService(workflowProvider, triggerService, new Mock<IWorkflowDefinitionCache>());
+
+        var result = await service.ReinstateAsync(WorkspaceId, Guid.NewGuid(), refId, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("WORKFLOW_ALREADY_ENABLED", result.Error.Code);
+        triggerService.Verify(x => x.OnPublishedAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Reinstate_undoes_its_registrations_when_enabling_fails()
+    {
+        // Registrations without an enabled definition would fire a workflow the operator believes is
+        // switched off.
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(9, refId, 3, isEnabled: false));
+        workflowProvider.Setup(x => x.SetEnabledAsync(9, true, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        var service = CreateService(workflowProvider, triggerService, new Mock<IWorkflowDefinitionCache>());
+
+        var result = await service.ReinstateAsync(WorkspaceId, Guid.NewGuid(), refId, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        triggerService.Verify(x => x.OnDeprecatedAsync(9, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Rollback_republishes_the_old_definition_as_a_new_version()
+    {
+        // Append-only: the old row is untouched, so the runs of every version keep pointing at the
+        // definition they actually ran.
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var refId = CreatePublishRequest().RefId;
+        WorkflowDefinitionRow? inserted = null;
+
+        workflowProvider.Setup(x => x.GetByRefIdVersionAsync(refId, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(5, refId, 1, isEnabled: false));
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(6, refId, 2, isEnabled: true));
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { inserted = row; return row with { Id = 30, Version = 3 }; });
+
+        var service = new WorkflowDefinitionService(
+            workflowProvider.Object, triggerService.Object, Mock.Of<IWorkflowDefinitionCache>(),
+            new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+
+        var result = await service.RollbackAsync(WorkspaceId, Guid.NewGuid(), refId, 1, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(3, result.Value.Version);
+        Assert.NotNull(inserted);
+        // The superseded version is deprecated exactly as it would be by any other publish.
+        workflowProvider.Verify(x => x.DeprecateAsync(6, It.IsAny<CancellationToken>()), Times.Once);
+        // Version 1's own row is left alone.
+        workflowProvider.Verify(x => x.DeprecateAsync(5, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Rollback_returns_not_found_for_a_version_that_does_not_exist()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var refId = Guid.NewGuid();
+        workflowProvider.Setup(x => x.GetByRefIdVersionAsync(refId, 99, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NotFoundException("missing"));
+        var service = CreateService(workflowProvider, new Mock<ITriggerRegistrationService>(), new Mock<IWorkflowDefinitionCache>());
+
+        var result = await service.RollbackAsync(WorkspaceId, Guid.NewGuid(), refId, 99, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("WORKFLOW_VERSION_NOT_FOUND", result.Error.Code);
+    }
+
+    private static WorkflowDefinitionService CreateService(
+        Mock<IWorkflowDefinitionProvider> workflowProvider,
+        Mock<ITriggerRegistrationService> triggerService,
+        Mock<IWorkflowDefinitionCache> cache)
+    {
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+
+        return new WorkflowDefinitionService(
+            workflowProvider.Object, triggerService.Object, cache.Object,
+            new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+    }
+
+    [Fact]
     public void Validate_reports_issues_without_publishing_anything()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();

@@ -226,6 +226,8 @@ in-place edit, which is why there is no update verb.
 | `GET {refId}` | `workflows.read` | The current published version. |
 | `GET {refId}/versions/{version}` | `workflows.read` | A specific historical version. |
 | `POST {refId}/deprecate` | `workflows.delete` | Marks the definition deprecated and deregisters its triggers, so nothing new fires it. Not a delete — the version history and its runs stay queryable. |
+| `POST {refId}/reinstate` | `workflows.delete` | The inverse of deprecate: re-enables the current version **and re-registers its triggers**, re-seeding schedules from their cron. Rejects a workflow that is already enabled. |
+| `POST {refId}/rollback/{version}` | `workflows.create` | Republishes an earlier version's definition as a **new** version — history stays append-only. Validated like any other publish, so rolling back to a definition that predates a validation rule fails rather than reinstating a broken workflow. |
 | `POST {refId}/runs` | `workflows.execute` | Starts a manual run. Verifies the workflow belongs to the workspace, then relays to the engine. Not every non-start is an error: **200** started (or an idempotent retry, returning the original run), **202** queued behind an active run, **409** dropped by the concurrency policy / no manual trigger / workflow deprecated. A 5xx means the engine itself failed. |
 
 ### 2.6 Runs — `…/runs` and `…/workflows/{workflowRefId}/runs`

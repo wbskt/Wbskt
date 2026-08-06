@@ -83,7 +83,7 @@ against current code** and worth working from directly.
 | WF-10 | 🟠 | Nodes | No fan-out concurrency cap on `ForEach`/`ParallelForEach` |
 | WF-11 | 🟠 | API | ✅ Normal outcomes on "start run" return HTTP 500 |
 | WF-12 | 🟠 | API | ✅ No validate / dry-run endpoint |
-| WF-13 | 🟠 | API | Deprecate is one-way; no pause/resume, rename, rollback, or delete |
+| WF-13 | 🟠 | API | ◐ Deprecate is one-way; no pause/resume, rename, rollback, or delete |
 | WF-14 | 🟠 | API | ✅ No workspace-wide run list |
 | WF-15 | 🟠 | Triggers | Trigger filter expressions are plumbed but hardcoded to null |
 | WF-16 | 🟠 | Triggers | Webhook triggers have no secret |
@@ -829,6 +829,33 @@ node.
 ---
 
 ## WF-13 🟠 Deprecate is one-way; no pause/resume, rename, rollback, or delete
+
+**Status:** ◐ Partial — reinstate and rollback landed 2026-08-06. Rename and delete were **decided
+against**, deliberately; see below.
+
+**`POST {refId}/reinstate`** (permission `workflows.delete`, same as deprecating — it is the inverse
+of that operation). Deprecating **deregisters the triggers**, so flipping `IsEnabled` back is not
+enough: the workflow would read as published and never fire. Reinstate re-registers them, which also
+re-seeds schedules from their cron. Registration happens *before* enabling, so a failure leaves the
+row still disabled — the state the caller already had — and if enabling then fails the registrations
+are undone, because registrations without an enabled definition would fire a workflow the operator
+believes is switched off.
+
+**`POST {refId}/rollback/{version}`** (permission `workflows.create`) republishes an earlier version's
+definition **as a new version**. The old row is untouched, so history stays append-only and the runs
+of every version keep pointing at the definition they actually ran. It goes through `PublishAsync`,
+so a rollback is validated, versioned, registered and compensated on failure exactly like any other
+publish — which matters, because **a definition published before a validation rule existed may no
+longer be valid**, and rolling back to it should fail loudly rather than reinstate a broken workflow.
+
+**Decisions taken (not gaps):**
+- **No separate enable/disable axis.** `deprecate` already *is* disable; adding a parallel pair would
+  have created two overlapping notions of "off". Reinstate simply makes deprecate reversible.
+- **No rename.** Name and description live in the versioned definition. Editing them in place would
+  make a published version mutable, which the whole model is built to avoid — publish a new version.
+- **No delete.** Runs reference `WorkflowDefinitions.Id` by foreign key; deleting a definition would
+  orphan its history. (`DeleteUnreferencedAsync` exists solely as publish compensation and refuses any
+  row a run references.)
 
 **Symptom (user).** The only lifecycle verb is `POST {refId}/deprecate`. There is no way to:
 - **re-enable** a deprecated workflow (must republish),

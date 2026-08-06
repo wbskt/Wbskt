@@ -126,6 +126,125 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         }
     }
 
+    public async Task<Result> ReinstateAsync(int workspaceId, Guid workspaceRef, Guid refId, CancellationToken ct)
+    {
+        _logger.LogInformation("Reinstating workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
+
+        try
+        {
+            WorkflowDefinitionRow row;
+            try
+            {
+                row = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(refId, ct);
+            }
+            catch (Exception ex) when (IsNotFound(ex))
+            {
+                _logger.LogWarning("Failed to reinstate: workflow '{RefId}' not found.", refId);
+                return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+            }
+
+            var ensureWorkspaceResult = EnsureWorkspace(row, workspaceId, refId);
+            if (ensureWorkspaceResult.IsFailure)
+            {
+                return ensureWorkspaceResult;
+            }
+
+            if (row.IsEnabled)
+            {
+                return Result.Failure(Error.Conflict("WORKFLOW_ALREADY_ENABLED", $"Workflow '{refId}' is already enabled."));
+            }
+
+            // Deprecating deregisters the triggers, so re-enabling has to put them back - otherwise the
+            // workflow reads as published and never fires. Registering first means a failure leaves the
+            // row still disabled, which is the state the caller already had.
+            await _triggerRegistrationService.OnPublishedAsync(row.Id, workspaceRef, ct);
+
+            try
+            {
+                await _workflowDefinitionProvider.SetEnabledAsync(row.Id, true, ct);
+            }
+            catch
+            {
+                // Registrations without an enabled definition would fire a workflow the operator
+                // believes is off - worse than leaving it off.
+                await TryDeregisterAsync(row.Id, ct);
+                throw;
+            }
+
+            _cache.Invalidate(row.Id);
+            _logger.LogInformation("Workflow '{RefId}' version {Version} reinstated", refId, row.Version);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error reinstating workflow '{RefId}'. Error: {Message}", refId, ex.Message);
+            _logger.LogTrace(ex, "ReinstateAsync exception stack trace for RefId '{RefId}'", refId);
+            return Result.Failure(Error.Failure("WORKFLOW_REINSTATE_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<WorkflowPublishResponse>> RollbackAsync(int workspaceId, Guid workspaceRef, Guid refId, int version, CancellationToken ct)
+    {
+        _logger.LogInformation("Rolling workflow '{RefId}' back to version {Version} in WorkspaceId: {WorkspaceId}", refId, version, workspaceId);
+
+        WorkflowDefinitionRow source;
+        try
+        {
+            source = await _workflowDefinitionProvider.GetByRefIdVersionAsync(refId, version, ct);
+        }
+        catch (Exception ex) when (IsNotFound(ex))
+        {
+            _logger.LogWarning("Failed to roll back: workflow '{RefId}' version {Version} not found.", refId, version);
+            return Result<WorkflowPublishResponse>.Failure(Error.NotFound("WORKFLOW_VERSION_NOT_FOUND", $"Workflow '{refId}' has no version {version}."));
+        }
+
+        var ensureWorkspaceResult = EnsureWorkspace(source, workspaceId, refId);
+        if (ensureWorkspaceResult.IsFailure)
+        {
+            return Result<WorkflowPublishResponse>.Failure(ensureWorkspaceResult.Error);
+        }
+
+        WorkflowDefinition? definition;
+        try
+        {
+            definition = JsonSerializer.Deserialize<WorkflowDefinition>(source.DefinitionJson, SerializerOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError("Cannot roll back workflow '{RefId}' to version {Version}: stored definition is unreadable. Error: {Message}", refId, version, ex.Message);
+            return Result<WorkflowPublishResponse>.Failure(Error.Failure("WORKFLOW_DEFINITION_UNREADABLE", $"Version {version} of workflow '{refId}' could not be deserialized."));
+        }
+
+        if (definition is null)
+        {
+            return Result<WorkflowPublishResponse>.Failure(Error.Failure("WORKFLOW_DEFINITION_UNREADABLE", $"Version {version} of workflow '{refId}' could not be deserialized."));
+        }
+
+        // Rolling back publishes the old definition as a NEW version rather than resurrecting the old
+        // row, so the version history stays append-only and the runs of every version keep pointing at
+        // the definition they actually ran. Going through PublishAsync also means a rollback is
+        // validated, versioned, registered and compensated on failure exactly like any other publish -
+        // which matters, because a definition published before a validation rule existed may no longer
+        // be valid.
+        return await PublishAsync(
+            workspaceId,
+            workspaceRef,
+            new WorkflowPublishRequest(refId, source.Name, source.Description, definition),
+            ct);
+    }
+
+    private async Task TryDeregisterAsync(int definitionId, CancellationToken ct)
+    {
+        try
+        {
+            await _triggerRegistrationService.OnDeprecatedAsync(definitionId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to deregister triggers for definition {DefinitionId} while undoing a reinstate.", definitionId);
+        }
+    }
+
     public WorkflowValidationResponse Validate(WorkflowDefinition? definition)
     {
         ValidationResult validation = _validator.Validate(definition);

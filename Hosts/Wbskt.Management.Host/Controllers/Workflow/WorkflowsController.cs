@@ -142,6 +142,46 @@ public sealed class WorkflowsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Undoes a deprecate. Deprecating deregisters the workflow's triggers, so this re-registers them
+    /// (schedules are re-seeded from their cron) as well as flipping the flag back.
+    /// </summary>
+    [HttpPost("{refId:guid}/reinstate")]
+    public async Task<IActionResult> Reinstate(Guid workspaceRef, Guid refId, CancellationToken ct)
+    {
+        _logger.LogInformation("API: Reinstate workflow requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        // Bringing a workflow back into service is an authoring change, so it takes the same
+        // permission as deprecating it.
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsDelete, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _service.ReinstateAsync(workspaceIdResult.Value, workspaceRef, refId, ct);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Republishes an earlier version as a new version. The history stays append-only, so the runs of
+    /// every version keep pointing at the definition they actually ran.
+    /// </summary>
+    [HttpPost("{refId:guid}/rollback/{version:int}")]
+    public async Task<ActionResult<WorkflowPublishResponse>> Rollback(Guid workspaceRef, Guid refId, int version, CancellationToken ct)
+    {
+        _logger.LogInformation("API: Rollback requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}' to version {Version}", workspaceRef, refId, version);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsCreate, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<WorkflowPublishResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _service.RollbackAsync(workspaceIdResult.Value, workspaceRef, refId, version, ct);
+        return MapResult(result);
+    }
+
     [HttpPost("{refId:guid}/runs")]
     public async Task<ActionResult<StartRunResponse>> StartManualRun(Guid workspaceRef, Guid refId, [FromBody] StartRunRequest request, CancellationToken ct)
     {
