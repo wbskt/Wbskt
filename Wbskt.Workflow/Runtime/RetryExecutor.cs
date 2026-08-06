@@ -24,7 +24,8 @@ internal static class RetryExecutor
         CancellationToken ct,
         IRunCountersProvider? runCountersProvider = null,
         ICreditCostCalculator? creditCostCalculator = null,
-        WorkflowMetrics? workflowMetrics = null)
+        WorkflowMetrics? workflowMetrics = null,
+        WorkflowDefinition? definition = null)
     {
         _ = clock;
         RetryPolicy policy = GetPolicy(node);
@@ -183,6 +184,7 @@ internal static class RetryExecutor
             {
                 Branch = context with { Attempt = attempt },
                 Node = node,
+                Definition = definition,
                 Providers = services.Providers,
                 Tick = services.Tick,
                 ParentResults = services.ParentResults,
@@ -299,7 +301,7 @@ internal static class RetryExecutor
             }
             catch (PermanentNodeException ex)
             {
-                var fail = new NodeExecutionResult.Fail("PERMANENT_ERROR", ex.Message, false, ex);
+                var fail = new NodeExecutionResult.Fail(ex.ErrorCode, ex.Message, false, ex);
                 string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
 
                 if (idempotencyKeyProvider != null)

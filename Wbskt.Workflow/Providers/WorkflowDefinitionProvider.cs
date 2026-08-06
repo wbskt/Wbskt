@@ -102,15 +102,31 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
 
     public async Task DeprecateAsync(int id, CancellationToken ct)
     {
+        await SetEnabledAsync(id, false, ct);
+    }
+
+    public async Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct)
+    {
         await ExecuteNonQueryAsync(
             "dbo.WorkflowDefinition_UpdateIsEnabled",
             p =>
             {
                 p.AddWithValue("@Id", id);
-                p.AddWithValue("@IsEnabled", false);
+                p.AddWithValue("@IsEnabled", isEnabled);
             },
             ct
         );
+    }
+
+    public async Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct)
+    {
+        var deleted = await ExecuteScalarAsync<object>(
+            "dbo.WorkflowDefinition_DeleteUnreferencedById",
+            p => p.AddWithValue("@Id", id),
+            ct
+        );
+
+        return deleted is not null && Convert.ToInt32(deleted) > 0;
     }
 
     internal static WorkflowDefinitionRow Map(DbDataReader reader)

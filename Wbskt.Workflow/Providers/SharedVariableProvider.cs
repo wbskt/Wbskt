@@ -55,7 +55,8 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
                 p.AddWithValue("@ValueJson", valueJson);
             },
             Map,
-            new InvalidOperationException("SharedVariable_Set did not return a row."),
+            // SharedVariable_Set is UPDATE-only: no row means the variable was never initialised.
+            null,
             ct
         );
     }
@@ -71,7 +72,8 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
                 p.AddWithValue("@Delta", delta);
             },
             r => r.GetString(0),
-            new InvalidOperationException("SharedVariable_Increment did not return a value."),
+            // null => KeyNotFoundException, the repo-wide "no such row" signal the executor branches on
+            null,
             ct
         );
     }
@@ -87,7 +89,8 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
                 p.AddWithValue("@Delta", delta);
             },
             r => r.GetString(0),
-            new InvalidOperationException("SharedVariable_Decrement did not return a value."),
+            // null => KeyNotFoundException, the repo-wide "no such row" signal the executor branches on
+            null,
             ct
         );
     }

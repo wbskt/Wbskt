@@ -1,7 +1,10 @@
 CREATE PROCEDURE dbo.JoinAggregator_Initialize
-    @JoinToken    UNIQUEIDENTIFIER,
-    @RunId        INT,
-    @ExpectedCount INT
+    @JoinToken     UNIQUEIDENTIFIER,
+    @RunId         INT,
+    @ExpectedCount INT,
+    @Mode          NVARCHAR(20) = N'All',
+    @QuorumCount   INT = 0,
+    @JoinNodeId    UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -10,13 +13,19 @@ BEGIN
     (
         JoinToken,
         RunId,
-        ExpectedCount
+        ExpectedCount,
+        Mode,
+        QuorumCount,
+        JoinNodeId
     )
     VALUES
     (
         @JoinToken,
         @RunId,
-        @ExpectedCount
+        @ExpectedCount,
+        @Mode,
+        @QuorumCount,
+        @JoinNodeId
     );
 END;
 GO

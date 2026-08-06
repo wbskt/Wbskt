@@ -17,6 +17,13 @@ internal sealed class BranchLoop : IBranchLoop
 {
     private const string ActiveStatus = "Active";
     private const string CompletedStatus = "Completed";
+
+    /// <summary>
+    /// Local-state key marking a branch as a member of a fan-out cohort (written by ForkNodeExecutor
+    /// and ParallelForEachNodeExecutor, read by JoinNodeExecutor). Kept here too because the fail
+    /// path must contribute on behalf of a branch that will never reach the Join node.
+    /// </summary>
+    internal const string JoinTokenKey = "__join_token";
     private readonly IBranchProvider _branchProvider;
     private readonly IRunProvider _runProvider;
     private readonly IRunCountersProvider _runCountersProvider;
@@ -32,6 +39,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly IRunCancellationService _runCancellationService;
     private readonly ICompensationOrchestrator? _compensationOrchestrator;
     private readonly ICreditCostCalculator _creditCostCalculator;
+    private readonly IJoinAggregatorProvider? _joinAggregatorProvider;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<BranchLoop>? _logger;
     private readonly OnFailureHandler _onFailureHandler = new();
@@ -53,7 +61,8 @@ internal sealed class BranchLoop : IBranchLoop
         ICompensationOrchestrator? compensationOrchestrator = null,
         ICreditCostCalculator? creditCostCalculator = null,
         WorkflowMetrics? workflowMetrics = null,
-        ILogger<BranchLoop>? logger = null)
+        ILogger<BranchLoop>? logger = null,
+        IJoinAggregatorProvider? joinAggregatorProvider = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -71,7 +80,7 @@ internal sealed class BranchLoop : IBranchLoop
         _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
         _compensationOrchestrator = compensationOrchestrator;
         _creditCostCalculator = creditCostCalculator ?? new DefaultCreditCostCalculator();
-        _workflowMetrics = workflowMetrics;
+        _joinAggregatorProvider = joinAggregatorProvider;
         _logger = logger;
     }
 
@@ -131,12 +140,18 @@ internal sealed class BranchLoop : IBranchLoop
                 await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "NodeStarted", ct);
                 _logger?.LogInformation("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
 
-                INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
                 System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 string outcome = "Succeeded";
                 bool hostShutdownInterrupted = false;
                 try
                 {
+                    // Resolving the executor MUST stay inside this try. An unregistered node kind throws,
+                    // and if that escapes RunAsync the branch is left Active forever: the finalizer never
+                    // runs (ActiveBranchCount is never decremented), Run_GetStuck deliberately skips runs
+                    // that still have Active branches so the reaper won't collect it, and RunRecoveryService
+                    // re-dispatches it into the same crash on every restart.
+                    INodeExecutor executor = _nodeExecutorRegistry.For(node.Kind);
+
                     result = await RetryExecutor.RunWithRetryAsync(
                         node,
                         branchContext,
@@ -146,7 +161,8 @@ internal sealed class BranchLoop : IBranchLoop
                         linkedToken,
                         _runCountersProvider,
                         _creditCostCalculator,
-                        workflowMetrics: _workflowMetrics);
+                        workflowMetrics: _workflowMetrics,
+                        definition: definition);
                 }
                 catch (EngineFaultException ex)
                 {
@@ -177,6 +193,12 @@ internal sealed class BranchLoop : IBranchLoop
                         outcome = "Interrupted";
                         hostShutdownInterrupted = true;
                         _logger?.LogInformation("Host shutdown interrupted node {NodeId} in branch {BranchId} for run {RunId}; leaving branch Active for recovery.", branchRow.NodeId, branchId, runId);
+                    }
+                    else if (ex is NodeKindNotSupportedException)
+                    {
+                        _logger?.LogError(ex, "Node {NodeId} in branch {BranchId} for run {RunId} has unsupported kind {NodeKind}", branchRow.NodeId, branchId, runId, node.Kind);
+                        outcome = "Failed";
+                        result = new NodeExecutionResult.Fail("NODE_KIND_NOT_SUPPORTED", ex.Message, false, ex);
                     }
                     else
                     {
@@ -238,7 +260,7 @@ internal sealed class BranchLoop : IBranchLoop
                         return;
                     }
 
-                    string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, @continue.LocalStatePatch));
+                    string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, @continue.LocalStatePatch, @continue.RemoveKeys));
                     branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, ActiveStatus, localJson, branchRow.LastOutputJson, ct);
                     break;
                 }
@@ -321,7 +343,7 @@ internal sealed class BranchLoop : IBranchLoop
                             return;
                         }
 
-                        string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, handledContinue.LocalStatePatch));
+                        string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, handledContinue.LocalStatePatch, handledContinue.RemoveKeys));
                         branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, ActiveStatus, localJson, branchRow.LastOutputJson, ct);
                         break;
                     }
@@ -362,6 +384,11 @@ internal sealed class BranchLoop : IBranchLoop
                         await _runCancellationService.RequestCancellationAsync(runRow.Id, "OUT_OF_CREDITS", ct);
                     }
 
+                    // This branch is dying, so it will never reach its Join. Contribute on its behalf,
+                    // otherwise a Mode=All cohort never reaches ExpectedCount and everything after the
+                    // Join is silently skipped until the reaper eventually cancels the run.
+                    await ContributeFailureToJoinAsync(runRow, branchRow, definition, ct);
+
                     int postDecrementCount = await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
                     if (postDecrementCount == 0 && _runFinalizer is not null)
                     {
@@ -382,6 +409,93 @@ internal sealed class BranchLoop : IBranchLoop
                 default:
                     throw new NotImplementedException("Additional branch loop outcomes are implemented in later phase tasks.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Records a dying branch's "failed" arrival at the Join its cohort converges on, and — if that
+    /// arrival is the one that satisfies the quorum — spawns the continuation branch the Join would
+    /// otherwise have continued on.
+    ///
+    /// A branch that fails never reaches the Join node, so without this a Mode=All cohort can never
+    /// reach ExpectedCount: the aggregator stays unclaimed, everything downstream of the Join is
+    /// silently skipped, and the run sits Running until the reaper collects it.
+    ///
+    /// The continuation is a fresh branch rather than a resurrection of the failed one: the failed
+    /// branch keeps its Failed status (so the run still finalizes as Failed/PartiallyFailed), while
+    /// the work after the Join proceeds. Best-effort — a failure here must not mask the original node
+    /// failure that brought us into this path.
+    /// </summary>
+    private async Task ContributeFailureToJoinAsync(RunRow runRow, BranchRow branchRow, WorkflowDefinition definition, CancellationToken ct)
+    {
+        if (_joinAggregatorProvider is null)
+        {
+            return;
+        }
+
+        IReadOnlyDictionary<string, JsonElement> localState = DeserializeDictionary(branchRow.LocalJson);
+        if (!localState.TryGetValue(JoinTokenKey, out JsonElement tokenElement)
+            || tokenElement.ValueKind != JsonValueKind.String
+            || !Guid.TryParse(tokenElement.GetString(), out Guid joinToken))
+        {
+            // Not part of a Fork/ParallelForEach cohort - nothing to contribute to.
+            return;
+        }
+
+        try
+        {
+            JoinContributionResult contribution = await _joinAggregatorProvider.ContributeAsync(joinToken, "failed", ct);
+            _logger?.LogInformation(
+                "Branch {BranchId} failed and contributed 'failed' to join {JoinToken} ({Contributed}/{Expected}, {Failed} failed).",
+                branchRow.Id, joinToken, contribution.ContributedCount, contribution.ExpectedCount, contribution.FailedCount);
+
+            if (!contribution.ShouldContinue || contribution.JoinNodeId is not Guid joinNodeId)
+            {
+                return;
+            }
+
+            Guid? continuationNodeId = WorkflowGraph.ResolveTarget(definition, joinNodeId, "default");
+            if (continuationNodeId is null)
+            {
+                // The Join's "default" port leads nowhere, so there is nothing after it to run.
+                return;
+            }
+
+            string continuationLocalJson = SerializeLocalState(new Dictionary<string, JsonElement>
+            {
+                ["joinContributed"] = JsonSerializer.SerializeToElement(contribution.ContributedCount),
+                ["joinSucceeded"] = JsonSerializer.SerializeToElement(contribution.SucceededCount),
+                ["joinFailed"] = JsonSerializer.SerializeToElement(contribution.FailedCount)
+            });
+
+            // Count the continuation BEFORE creating it, so the caller's own decrement cannot drive
+            // the run to zero active branches and finalize it out from under the new branch.
+            await _runCountersProvider.IncrementActiveBranchesAsync(runRow.Id, 1, ct);
+
+            BranchRow continuation = await _branchProvider.CreateAsync(new BranchRow
+            {
+                Id = 0,
+                RefId = _idGenerator.NewId(),
+                RunId = runRow.Id,
+                ParentBranchId = branchRow.RefId,
+                ForkCohortId = branchRow.ForkCohortId,
+                NodeId = continuationNodeId.Value,
+                Status = ActiveStatus,
+                PendingTakePort = null,
+                LocalJson = continuationLocalJson,
+                LastOutputJson = null,
+                CompensationStackJson = branchRow.CompensationStackJson,
+                CreatedAt = _clock.UtcNow,
+                UpdatedAt = _clock.UtcNow,
+                RowVersion = Array.Empty<byte>()
+            }, ct);
+
+            await AppendEventAsync(runRow.Id, continuation.RefId, joinNodeId, "JoinContinuationSpawned", ct);
+            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runRow.Id, continuation.Id, BranchExecutionReason.ForkChild), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to contribute branch {BranchId}'s failure to its join cohort on run {RunId}.", branchRow.Id, runRow.Id);
         }
     }
 
@@ -466,9 +580,22 @@ internal sealed class BranchLoop : IBranchLoop
         };
     }
 
-    private static IReadOnlyDictionary<string, JsonElement> MergeLocalState(string existingJson, IReadOnlyDictionary<string, JsonElement> patch)
+    private static IReadOnlyDictionary<string, JsonElement> MergeLocalState(
+        string existingJson,
+        IReadOnlyDictionary<string, JsonElement> patch,
+        IReadOnlyCollection<string>? removeKeys = null)
     {
         Dictionary<string, JsonElement> merged = new(DeserializeDictionary(existingJson), StringComparer.Ordinal);
+
+        // Removals run first so a node can drop a key and re-add it in the same step.
+        if (removeKeys is not null)
+        {
+            foreach (string key in removeKeys)
+            {
+                merged.Remove(key);
+            }
+        }
+
         foreach (var pair in patch)
         {
             merged[pair.Key] = pair.Value.Clone();

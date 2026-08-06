@@ -15,6 +15,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly IPendingTriggerEventDrainer _pendingTriggerEventDrainer;
     private readonly IRunCompletedPublisher _runCompletedPublisher;
     private readonly IBookmarkProvider _bookmarkProvider;
+    private readonly IJoinAggregatorProvider? _joinAggregatorProvider;
     private readonly ISubWorkflowCompletionHook _completionHook;
     private readonly IClock _clock;
     private readonly IRunCancellationService? _runCancellationService;
@@ -32,7 +33,8 @@ internal sealed class RunFinalizer : IRunFinalizer
         IClock clock,
         IRunCancellationService? runCancellationService = null,
         WorkflowMetrics? workflowMetrics = null,
-        ILogger<RunFinalizer>? logger = null)
+        ILogger<RunFinalizer>? logger = null,
+        IJoinAggregatorProvider? joinAggregatorProvider = null)
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
@@ -44,6 +46,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         _clock = clock;
         _workflowMetrics = workflowMetrics;
         _runCancellationService = runCancellationService;
+        _joinAggregatorProvider = joinAggregatorProvider;
         _logger = logger;
     }
 
@@ -83,6 +86,14 @@ internal sealed class RunFinalizer : IRunFinalizer
         // [RJ]: TODO: make this simpler? do we need a wrapper to fire event through the e-bus?
         await _runCompletedPublisher.PublishAsync(updatedRun, terminalStatus, ct);
         await _bookmarkProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
+
+        // Join cohorts are kept for the life of the run (they are what you inspect when a cohort
+        // looks stuck) and collected here, alongside the bookmarks.
+        if (_joinAggregatorProvider is not null)
+        {
+            await _joinAggregatorProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
+        }
+
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);
         if (_runCancellationService is not null)
         {

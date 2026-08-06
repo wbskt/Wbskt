@@ -16,6 +16,9 @@ public sealed class WorkflowEngineOptions
     public TimeSpan IdempotencyRetentionWindow { get; init; } = TimeSpan.FromHours(24);
     public decimal DefaultCreditBudgetPerRun { get; init; } = 10000m;
     public int LeaseDurationSeconds { get; init; } = 120;
+
+    /// <summary>Maximum branches this host executes concurrently (BranchExecutionPump's semaphore).</summary>
+    public int BranchWorkerLimit { get; init; } = 50;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;
 

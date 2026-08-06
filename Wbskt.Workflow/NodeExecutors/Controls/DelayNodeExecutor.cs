@@ -31,7 +31,10 @@ internal sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
         {
             if (clock.UtcNow >= wakeAt)
             {
-                return Continue();
+                // Clear the deadline on the way out. Without this a Delay revisited in a loop sees a
+                // deadline already in the past and continues immediately - so it waits on the first
+                // lap only and the loop then spins.
+                return Continue(clearMarker: true);
             }
 
             // Re-dispatched before the timer was actually due: re-park on the same instant.
@@ -47,10 +50,13 @@ internal sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
         return Park(clock.UtcNow + duration, includeMarker: true);
     }
 
-    private static Task<NodeExecutionResult> Continue()
+    private static Task<NodeExecutionResult> Continue(bool clearMarker = false)
     {
         return Task.FromResult<NodeExecutionResult>(
-            new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()));
+            new NodeExecutionResult.Continue(
+                "default",
+                new Dictionary<string, JsonElement>(),
+                RemoveKeys: clearMarker ? [DelayUntilKey] : null));
     }
 
     private static Task<NodeExecutionResult> Park(DateTime wakeAt, bool includeMarker)

@@ -73,7 +73,7 @@ public sealed class WorkflowDefinitionCacheTests
             true,
             [
                 new ManualTriggerNode { NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new ManualTriggerConfig() },
-                new LogicGateNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } }
+                new LogicGateNode { NodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } }
             ],
             [
                 new Edge(
@@ -142,5 +142,9 @@ public sealed class WorkflowDefinitionCacheTests
         {
             throw new NotSupportedException();
         }
+
+        public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => throw new NotSupportedException();
     }
 }

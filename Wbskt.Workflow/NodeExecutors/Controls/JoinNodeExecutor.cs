@@ -33,13 +33,11 @@ internal sealed class JoinNodeExecutor : INodeExecutor
             return new NodeExecutionResult.Fail("JOIN_NO_TOKEN", "Join reached without a join token (must follow a ParallelForEach).", false, null);
         }
 
-        string outcome = "succeeded";
-        JoinContributionResult result = await _aggregators.ContributeAsync(
-            joinToken,
-            outcome,
-            node.Config.Mode.ToString(),
-            node.Config.QuorumCount ?? 0,
-            ct);
+        // A branch only reaches the Join node by succeeding - a failed branch dies in BranchLoop,
+        // which contributes "failed" on its behalf. Mode/quorum now live on the aggregator row
+        // (stamped by ParallelForEach at fan-out), so both contributors agree without the failing
+        // side needing to see this node's config.
+        JoinContributionResult result = await _aggregators.ContributeAsync(joinToken, "succeeded", ct);
 
         if (result.ShouldContinue)
         {

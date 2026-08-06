@@ -6,6 +6,8 @@ namespace Tests.Wbskt.Workflow.Engine.Host.Tests.Providers;
 
 public class JoinAggregatorProviderTests
 {
+    private static readonly Guid JoinNodeId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
     [Fact]
     public void Map_reads_ShouldContinue_true_and_all_counts()
     {
@@ -17,7 +19,8 @@ public class JoinAggregatorProviderTests
                 ["ContributedCount"] = 3,
                 ["SucceededCount"]   = 3,
                 ["FailedCount"]      = 0,
-                ["ExpectedCount"]    = 3
+                ["ExpectedCount"]    = 3,
+                ["JoinNodeId"]       = JoinNodeId
             }
         });
 
@@ -29,6 +32,8 @@ public class JoinAggregatorProviderTests
         result.SucceededCount.Should().Be(3);
         result.FailedCount.Should().Be(0);
         result.ExpectedCount.Should().Be(3);
+        // BranchLoop needs this to spawn the continuation branch when a failed arrival meets quorum.
+        result.JoinNodeId.Should().Be(JoinNodeId);
     }
 
     [Fact]
@@ -42,7 +47,9 @@ public class JoinAggregatorProviderTests
                 ["ContributedCount"] = 1,
                 ["SucceededCount"]   = 1,
                 ["FailedCount"]      = 0,
-                ["ExpectedCount"]    = 3
+                ["ExpectedCount"]    = 3,
+                // A Fork cohort with no Join downstream stores a null JoinNodeId - Map must tolerate it.
+                ["JoinNodeId"]       = null
             }
         });
 
@@ -54,6 +61,7 @@ public class JoinAggregatorProviderTests
         result.SucceededCount.Should().Be(1);
         result.FailedCount.Should().Be(0);
         result.ExpectedCount.Should().Be(3);
+        result.JoinNodeId.Should().BeNull();
     }
 
     [Fact]
@@ -67,7 +75,8 @@ public class JoinAggregatorProviderTests
                 ["ContributedCount"] = 2,
                 ["SucceededCount"]   = 1,
                 ["FailedCount"]      = 1,
-                ["ExpectedCount"]    = 5
+                ["ExpectedCount"]    = 5,
+                ["JoinNodeId"]       = JoinNodeId
             }
         });
 

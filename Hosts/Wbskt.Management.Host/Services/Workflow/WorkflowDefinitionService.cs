@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Primitives.Exceptions;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
@@ -47,9 +48,13 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             ValidationResult validation = _validator.Validate(request.Definition);
             if (!validation.IsValid)
             {
+                // Each error names its node, so the message points at what to fix rather than being a
+                // bare sentence. The structured form is available from the validate endpoint.
                 string message = string.Join("; ", validation.Issues
                     .Where(issue => issue.Severity == ValidationSeverity.Error)
-                    .Select(issue => issue.Message));
+                    .Select(issue => issue.NodeId is Guid nodeId
+                        ? $"[{issue.Code}] {issue.Message} (node {nodeId})"
+                        : $"[{issue.Code}] {issue.Message}"));
                 _logger.LogWarning("Workflow publish failed: Validation issues: {Issues}", message);
                 return Result<WorkflowPublishResponse>.Failure(Error.Validation("WORKFLOW_VALIDATION_FAILED", message));
             }
@@ -59,12 +64,13 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             {
                 existing = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(request.RefId, ct);
             }
-            catch (Exception)
+            catch (Exception ex) when (IsNotFound(ex))
             {
+                // Only a genuine "no such workflow" means this is the first version. Swallowing every
+                // exception here would let a transient DB error masquerade as a new workflow and skip
+                // the workspace-ownership check below.
                 existing = null;
             }
-
-            int nextVersion = existing?.Version + 1 ?? 1;
 
             if (existing is not null && existing.WorkspaceId != workspaceId)
             {
@@ -72,31 +78,44 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 return Result<WorkflowPublishResponse>.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{request.RefId}' does not belong to the workspace."));
             }
 
+            // The version is assigned by WorkflowDefinition_Publish under HOLDLOCK, which also stamps
+            // it into the stored JSON. Nothing is pre-computed here: a version guessed from the
+            // unlocked read above could disagree with the row under concurrent publishes.
             WorkflowDefinitionRow inserted = await _workflowDefinitionProvider.InsertAsync(new WorkflowDefinitionRow
             {
                 Id = 0,
                 RefId = request.RefId,
-                Version = nextVersion,
+                Version = 0,
                 WorkspaceId = workspaceId,
                 Name = request.Name,
                 Description = request.Description,
                 IsEnabled = true,
-                DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, Version = nextVersion, IsEnabled = true }, SerializerOptions),
+                DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
                 PublishedBy = _identityService.GetUserIdentity().UserId,
                 CreatedAt = request.Definition.CreatedAt
             }, ct);
 
-            if (existing is not null)
+            // From here the row exists. Anything that fails must not leave a published version whose
+            // triggers were never registered - that workflow would be current, and dead.
+            try
             {
-                await _workflowDefinitionProvider.DeprecateAsync(existing.Id, ct);
-                await _triggerRegistrationService.OnDeprecatedAsync(existing.Id, ct);
-                _cache.Invalidate(existing.Id);
+                if (existing is not null)
+                {
+                    await _workflowDefinitionProvider.DeprecateAsync(existing.Id, ct);
+                    await _triggerRegistrationService.OnDeprecatedAsync(existing.Id, ct);
+                    _cache.Invalidate(existing.Id);
+                }
+
+                await _triggerRegistrationService.OnPublishedAsync(inserted.Id, workspaceRef, ct);
+                _cache.Invalidate(inserted.Id);
+            }
+            catch (Exception ex)
+            {
+                await CompensateFailedPublishAsync(inserted, existing, workspaceRef, ex, ct);
+                throw;
             }
 
-            await _triggerRegistrationService.OnPublishedAsync(inserted.Id, workspaceRef, ct);
-            _cache.Invalidate(inserted.Id);
-
-            _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, nextVersion);
+            _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, inserted.Version);
             return Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(inserted.RefId, inserted.Version, "Published"));
         }
         catch (Exception ex)
@@ -105,6 +124,94 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             _logger.LogTrace(ex, "PublishAsync exception stack trace for RefId '{RefId}'", request.RefId);
             return Result<WorkflowPublishResponse>.Failure(Error.Failure("WORKFLOW_PUBLISH_ERROR", ex.Message));
         }
+    }
+
+    public WorkflowValidationResponse Validate(WorkflowDefinition? definition)
+    {
+        ValidationResult validation = _validator.Validate(definition);
+
+        return new WorkflowValidationResponse(
+            validation.IsValid,
+            validation.Issues
+                .Select(issue => new WorkflowValidationIssueDto(
+                    issue.Severity.ToString(),
+                    issue.Code,
+                    issue.Message,
+                    issue.NodeId))
+                .ToList());
+    }
+
+    /// <summary>
+    /// Undoes a publish that inserted its row and then failed. Without this the new version stays
+    /// current with no triggers registered - and if it superseded an earlier version, that one has
+    /// already been deprecated and deregistered, so the workflow stops firing altogether.
+    ///
+    /// Best-effort and fully guarded: the original failure is what the caller reports, so a problem
+    /// here must not replace it. Anything left behind is logged loudly enough to fix by hand.
+    /// </summary>
+    private async Task CompensateFailedPublishAsync(
+        WorkflowDefinitionRow inserted,
+        WorkflowDefinitionRow? existing,
+        Guid workspaceRef,
+        Exception cause,
+        CancellationToken ct)
+    {
+        _logger.LogError(
+            "Publish of workflow '{RefId}' version {Version} failed after the row was inserted ({Message}); rolling back.",
+            inserted.RefId, inserted.Version, cause.Message);
+
+        try
+        {
+            // Drop any registrations the failed attempt managed to create before throwing.
+            await _triggerRegistrationService.OnDeprecatedAsync(inserted.Id, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Rollback: could not deregister triggers for workflow definition {Id}.", inserted.Id);
+        }
+
+        try
+        {
+            bool removed = await _workflowDefinitionProvider.DeleteUnreferencedAsync(inserted.Id, ct);
+            if (!removed)
+            {
+                _logger.LogError(
+                    "Rollback: workflow definition {Id} could not be removed (runs already reference it); it remains as a version with no triggers.",
+                    inserted.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Rollback: could not remove workflow definition {Id}.", inserted.Id);
+        }
+
+        if (existing is null)
+        {
+            return;
+        }
+
+        // Put the superseded version back the way it was.
+        try
+        {
+            await _workflowDefinitionProvider.SetEnabledAsync(existing.Id, true, ct);
+            // The real workspace ref matters: webhook trigger keys are workspace-scoped, so
+            // re-registering with anything else would mint keys nothing can ever match.
+            await _triggerRegistrationService.OnPublishedAsync(existing.Id, workspaceRef, ct);
+            _cache.Invalidate(existing.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Rollback: could not restore previous workflow definition {Id}; it may be left deprecated with no triggers.",
+                existing.Id);
+        }
+    }
+
+    /// <summary>Distinguishes "no such workflow" from a real failure talking to the database.</summary>
+    private static bool IsNotFound(Exception ex)
+    {
+        return ex is KeyNotFoundException or NotFoundException;
     }
 
     public async Task<Result<WorkflowDefinitionDto>> GetCurrentAsync(int workspaceId, Guid refId, CancellationToken ct)

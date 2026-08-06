@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Enums;
@@ -10,14 +11,73 @@ public class ControlNodeTests
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public void LogicGateNode_deserialises_condition()
+    public void LogicGateNode_deserialises_a_structured_condition()
     {
+        // The form that actually supports comparisons: reading.temperature > 35.
         var json = """
-            { "nodeId": "22222222-2222-2222-2222-222222222222", "kind": "control:logic", "name": "Gate", "ports": [], "config": { "condition": "$trigger.temperature > 35" } }
+            {
+              "nodeId": "22222222-2222-2222-2222-222222222222",
+              "kind": "control:logic",
+              "name": "Gate",
+              "ports": [],
+              "config": {
+                "condition": {
+                  "kind": "binary",
+                  "left": { "kind": "branchStateRef", "path": "reading.temperature" },
+                  "operator": "GreaterThan",
+                  "right": { "kind": "literal", "value": 35 }
+                }
+              }
+            }
             """;
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var logic = Assert.IsType<LogicGateNode>(node);
-        Assert.Equal("$trigger.temperature > 35", logic.Config!.Condition);
+
+        var binary = Assert.IsType<BinaryExpression>(logic.Config!.Condition);
+        Assert.Equal(BinaryOperator.GreaterThan, binary.Operator);
+        Assert.Equal("reading.temperature", Assert.IsType<BranchStateRefExpression>(binary.Left).Path);
+    }
+
+    [Fact]
+    public void LogicGateNode_still_accepts_the_legacy_string_condition()
+    {
+        // Definitions published before the condition became structured must keep deserialising, and
+        // must keep their original meaning: a non-boolean string was a branch-state path.
+        var json = """
+            { "nodeId": "22222222-2222-2222-2222-222222222222", "kind": "control:logic", "name": "Gate", "ports": [], "config": { "condition": "decision" } }
+            """;
+        var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
+        var logic = Assert.IsType<LogicGateNode>(node);
+
+        Assert.Equal("decision", Assert.IsType<BranchStateRefExpression>(logic.Config!.Condition).Path);
+    }
+
+    [Fact]
+    public void LogicGateNode_legacy_boolean_string_condition_becomes_a_literal()
+    {
+        var json = """
+            { "nodeId": "22222222-2222-2222-2222-222222222222", "kind": "control:logic", "name": "Gate", "ports": [], "config": { "condition": "true" } }
+            """;
+        var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
+        var logic = Assert.IsType<LogicGateNode>(node);
+
+        Assert.Equal(true, Assert.IsType<LiteralExpression>(logic.Config!.Condition).Value);
+    }
+
+    [Fact]
+    public void LogicGateNode_writes_a_legacy_condition_back_in_structured_form()
+    {
+        // Round-tripping upgrades a legacy definition, so republishing normalises it.
+        var json = """
+            { "nodeId": "22222222-2222-2222-2222-222222222222", "kind": "control:logic", "name": "Gate", "ports": [], "config": { "condition": "decision" } }
+            """;
+        var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
+
+        string roundTripped = JsonSerializer.Serialize(node, Options);
+
+        Assert.Contains("\"kind\":\"branchStateRef\"", roundTripped.Replace(" ", string.Empty));
+        var reparsed = Assert.IsType<LogicGateNode>(JsonSerializer.Deserialize<BaseNode>(roundTripped, Options));
+        Assert.Equal("decision", Assert.IsType<BranchStateRefExpression>(reparsed.Config!.Condition).Path);
     }
 
     [Fact]

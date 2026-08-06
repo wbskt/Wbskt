@@ -64,7 +64,6 @@ public sealed class PendingTriggerEventBacklogReaperTests
 
         public Task<Wbskt.Workflow.Abstraction.Entities.PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<Wbskt.Workflow.Abstraction.Entities.PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
-        public Task<Wbskt.Workflow.Abstraction.Entities.PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<long> CountAllAsync(CancellationToken ct) => throw new NotSupportedException();

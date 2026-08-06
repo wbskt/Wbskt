@@ -14,6 +14,145 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
 public sealed class BranchLoopTests
 {
+    /// <summary>
+    /// Regression: a node kind with no registered executor (e.g. a published "action:toast" node)
+    /// must fail the branch cleanly instead of letting the exception escape RunAsync. If it escapes,
+    /// the branch is left Active forever - the finalizer never runs, Run_GetStuck skips runs with
+    /// Active branches so the reaper can't collect it, and RunRecoveryService re-dispatches it into
+    /// the same crash on every restart.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_fails_branch_cleanly_when_node_kind_has_no_executor()
+    {
+        // Arrange
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "toast", Ports = Array.Empty<PortDefinition>(), KindValue = "action:toast" });
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var countersProvider = new StubRunCountersProvider();
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            countersProvider,
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            new UnsupportedKindNodeExecutorRegistry(),
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+
+        // Act - must not throw
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert - the branch is drained, not left Active
+        Assert.True(branchProvider.SetFailedCalled);
+        Assert.Contains(-1, countersProvider.DecrementCalls); // the stub records -delta
+
+        var failure = Assert.Single(historyProvider.Events, evt => evt.EventKind == "NodeFailed");
+        Assert.Contains("NODE_KIND_NOT_SUPPORTED", failure.PayloadJson);
+        Assert.Contains("action:toast", failure.PayloadJson);
+    }
+
+    /// <summary>
+    /// Regression: a branch that fails inside a fan-out cohort never reaches its Join node, so the
+    /// branch loop must contribute "failed" on its behalf. Without this a Mode=All cohort never
+    /// reaches ExpectedCount, the aggregator is never claimed, and everything downstream of the Join
+    /// is silently skipped until the reaper eventually collects the run.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_contributes_failure_to_join_when_a_cohort_branch_fails()
+    {
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var joinToken = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "failing", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+
+        var branchProvider = new RecordingBranchProvider(nodeId, $$"""{"__join_token":"{{joinToken}}"}""");
+        var aggregator = new RecordingJoinAggregatorProvider(
+            new JoinContributionResult(ShouldContinue: false, ContributedCount: 2, SucceededCount: 1, FailedCount: 1, ExpectedCount: 3));
+        var registry = new StubNodeExecutorRegistry(
+            new ScriptedExecutor(new NodeExecutionResult.Fail("BOOM", "node blew up", false, null)));
+
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            registry,
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            joinAggregatorProvider: aggregator);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        Assert.True(branchProvider.SetFailedCalled);
+        var contribution = Assert.Single(aggregator.Contributions);
+        Assert.Equal(joinToken, contribution.JoinToken);
+        Assert.Equal("failed", contribution.Outcome);
+    }
+
+    /// <summary>
+    /// When the failed arrival is the one that satisfies the quorum, the Join would have continued -
+    /// but the branch that would have carried it is dead. A fresh continuation branch is spawned at
+    /// the node past the Join's "default" edge so the work after the Join still runs.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_spawns_join_continuation_when_failed_arrival_meets_quorum()
+    {
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var joinNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var afterJoinNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var joinToken = Guid.Parse("99999999-9999-9999-9999-999999999999");
+
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "failing", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new TestNode { NodeId = joinNodeId, Name = "join", Ports = Array.Empty<PortDefinition>(), KindValue = "control:join" },
+            new TestNode { NodeId = afterJoinNodeId, Name = "after", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new Edge((nodeId, "body"), (joinNodeId, "in")),
+            new Edge((joinNodeId, "default"), (afterJoinNodeId, "in")));
+
+        var branchProvider = new RecordingBranchProvider(nodeId, $$"""{"__join_token":"{{joinToken}}"}""");
+        var aggregator = new RecordingJoinAggregatorProvider(
+            new JoinContributionResult(true, 3, 2, 1, 3, JoinNodeId: joinNodeId));
+        var counters = new StubRunCountersProvider();
+        var dispatcher = new RecordingRunDispatcher();
+        var registry = new StubNodeExecutorRegistry(
+            new ScriptedExecutor(new NodeExecutionResult.Fail("BOOM", "node blew up", false, null)));
+
+        var loop = new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            counters,
+            new RecordingBookmarkProvider(),
+            new RecordingHistoryEventProvider(),
+            new StubWorkflowDefinitionCache(definition),
+            registry,
+            dispatcher,
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            joinAggregatorProvider: aggregator);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // A continuation branch was created at the node past the Join and dispatched...
+        BranchRow continuation = Assert.Single(branchProvider.CreatedBranches);
+        Assert.Equal(afterJoinNodeId, continuation.NodeId);
+        Assert.Equal("Active", continuation.Status);
+        Assert.Contains(dispatcher.Requests, request => request.BranchId == continuation.Id);
+
+        // ...and it was counted BEFORE the failed branch's own decrement, so the run cannot finalize
+        // out from under it.
+        Assert.Contains(1, counters.IncrementCalls);
+    }
+
     [Fact]
     public async Task RunAsync_executes_two_Continue_nodes_then_Terminal()
     {
@@ -1150,6 +1289,22 @@ public sealed class BranchLoopTests
 
     private sealed class TestWorkflowDefinition
     {
+        public static WorkflowDefinition Create(TestNode only)
+        {
+            return new WorkflowDefinition(
+                Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                1,
+                9,
+                "branch-loop",
+                null,
+                true,
+                [only],
+                [],
+                [],
+                new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+                7);
+        }
+
         public static WorkflowDefinition Create(TestNode first, TestNode second, TestNode third, Edge firstEdge, Edge secondEdge)
         {
             return new WorkflowDefinition(
@@ -1185,6 +1340,12 @@ public sealed class BranchLoopTests
     private sealed class StubNodeExecutorRegistry(INodeExecutor executor) : INodeExecutorRegistry
     {
         public INodeExecutor For(string kind) => executor;
+    }
+
+    /// <summary>Mimics the real registry's behaviour for a node kind that has no registered executor.</summary>
+    private sealed class UnsupportedKindNodeExecutorRegistry : INodeExecutorRegistry
+    {
+        public INodeExecutor For(string kind) => throw new NodeKindNotSupportedException(kind);
     }
 
     private sealed class RecordingRunCancellationService : IRunCancellationService
@@ -1502,6 +1663,28 @@ public sealed class BranchLoopTests
         public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingJoinAggregatorProvider(JoinContributionResult result) : IJoinAggregatorProvider
+    {
+        public List<(Guid JoinToken, string Outcome)> Contributions { get; } = [];
+
+        public List<int> DeletedRunIds { get; } = [];
+
+        public Task InitializeAsync(Guid joinToken, int runId, int expectedCount, string mode, int quorumCount, Guid? joinNodeId, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task<JoinContributionResult> ContributeAsync(Guid joinToken, string outcome, CancellationToken ct)
+        {
+            Contributions.Add((joinToken, outcome));
+            return Task.FromResult(result);
+        }
+
+        public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct)
+        {
+            DeletedRunIds.Add(runId);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RecordingRunDispatcher(List<string>? operationLog = null) : IRunDispatcher

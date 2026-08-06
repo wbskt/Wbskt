@@ -1,7 +1,9 @@
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
+using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Abstraction.Validation;
 
@@ -11,6 +13,8 @@ public sealed class WorkflowValidator
     // long enough not to be brute-forceable. 24 characters ~= 128 bits when random (e.g. a GUID "N"
     // form or a base64 nonce).
     private const int MinWakeTokenLength = 24;
+    private const string ErrorPortId = "error";
+    private const string BodyPortId = "body";
 
     public ValidationResult Validate(WorkflowDefinition? definition)
     {
@@ -23,11 +27,180 @@ public sealed class WorkflowValidator
         ValidateShape(definition, issues);
         ValidateDuplicateNodeIds(definition, issues);
         ValidateEdges(definition, issues);
+        ValidateDuplicatePortEdges(definition, issues);
         ValidatePorts(definition, issues);
+        ValidateNodeKinds(definition, issues);
         ValidateNodeConfigs(definition, issues);
+        ValidateOnFailure(definition, issues);
+        ValidateParallelForEachPairing(definition, issues);
+        ValidateTriggerConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
         return new ValidationResult(issues);
+    }
+
+    /// <summary>
+    /// Two edges leaving the same port would make the next node ambiguous. The branch loop resolves
+    /// the next node with SingleOrDefault, so this is not merely undefined - it throws at runtime,
+    /// mid-run. Multi-edge fan-out is deliberately not supported; use a Fork node.
+    /// </summary>
+    private static void ValidateDuplicatePortEdges(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        var duplicates = def.Edges
+            .GroupBy(edge => (edge.From.NodeId, edge.From.PortId))
+            .Where(group => group.Count() > 1);
+
+        foreach (var group in duplicates)
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "DUPLICATE_PORT_EDGE",
+                $"Port '{group.Key.PortId}' on node '{group.Key.NodeId}' has {group.Count()} outbound edges; a port may have at most one. Use a Fork node to branch.",
+                group.Key.NodeId));
+        }
+    }
+
+    /// <summary>
+    /// Rejects kinds the engine cannot run, so an author finds out at publish rather than watching a
+    /// run fail partway through.
+    /// </summary>
+    private static void ValidateNodeKinds(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            if (!NodeKind.All.Contains(node.Kind))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "UNKNOWN_NODE_KIND",
+                    $"Node '{node.NodeId}' has unknown kind '{node.Kind}'.",
+                    node.NodeId));
+            }
+            else if (NodeKind.NotYetImplemented.Contains(node.Kind))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "NODE_KIND_NOT_IMPLEMENTED",
+                    $"Node '{node.NodeId}' uses kind '{node.Kind}', which is not implemented yet and would fail at runtime.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    private static void ValidateOnFailure(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        var nodeIds = def.Nodes.Select(node => node.NodeId).ToHashSet();
+
+        foreach (var node in def.Nodes)
+        {
+            if (node is not Models.Nodes.Actions.BaseActionNode { OnFailure: { } onFailure })
+            {
+                continue;
+            }
+
+            // ContinueOnError leaves through an "error" port; without one the outcome silently does
+            // nothing and the branch behaves as if the failure had been ignored.
+            if (onFailure.Outcome == ErrorOutcome.ContinueOnError
+                && !node.Ports.Any(port => port.PortId == ErrorPortId && port.Direction == PortDirection.Output))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "CONTINUE_ON_ERROR_WITHOUT_ERROR_PORT",
+                    $"Node '{node.NodeId}' declares onFailure 'ContinueOnError' but has no output port '{ErrorPortId}' to leave through.",
+                    node.NodeId));
+            }
+
+            if (onFailure.TargetNodeId is Guid target && !nodeIds.Contains(target))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "ONFAILURE_TARGET_NOT_FOUND",
+                    $"Node '{node.NodeId}' has onFailure targetNodeId '{target}', which is not a node in this workflow.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A ParallelForEach cohort converges on a Join; without one the aggregator is never satisfied,
+    /// so everything downstream is silently skipped and the run hangs until the reaper collects it.
+    /// A Fork without a Join is legal - its branches simply run to their own ends.
+    /// </summary>
+    private static void ValidateParallelForEachPairing(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes.OfType<ParallelForEachNode>())
+        {
+            if (WorkflowGraph.FindDownstream<JoinNode>(def, node.NodeId, BodyPortId) is null)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "PARALLEL_FOREACH_WITHOUT_JOIN",
+                    $"ParallelForEach node '{node.NodeId}' has no Join node downstream of its '{BodyPortId}' port; the cohort could never converge.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    private static void ValidateTriggerConfigs(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            switch (node)
+            {
+                case ScheduleTriggerNode schedule:
+                    // An invalid cron currently throws *after* the definition row is inserted,
+                    // leaving a published workflow that can never fire.
+                    if (!CronParser.TryParse(schedule.Config?.Cron ?? string.Empty, out _))
+                    {
+                        issues.Add(new ValidationIssue(
+                            ValidationSeverity.Error,
+                            "INVALID_CRON",
+                            $"Schedule trigger '{node.NodeId}' has an invalid cron expression '{schedule.Config?.Cron}'.",
+                            node.NodeId));
+                    }
+                    WarnOnCorrelation(node.NodeId, schedule.Config?.CorrelationKey, null, issues);
+                    break;
+
+                case ClientTriggerNode client:
+                    WarnOnCorrelation(node.NodeId, client.Config?.CorrelationKey, client.Config?.ConcurrencyPolicy, issues);
+                    break;
+
+                case WebhookTriggerNode webhook:
+                    WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, webhook.Config?.ConcurrencyPolicy, issues);
+                    break;
+            }
+        }
+    }
+
+    private static void WarnOnCorrelation(
+        Guid nodeId,
+        string? correlationKey,
+        WorkflowConcurrencyPolicy? concurrencyPolicy,
+        List<ValidationIssue> issues)
+    {
+        if (correlationKey is not null
+            && !correlationKey.StartsWith("$trigger.", StringComparison.OrdinalIgnoreCase)
+            && correlationKey.Contains('$'))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Warning,
+                "SUSPICIOUS_CORRELATION_KEY",
+                $"Trigger '{nodeId}' has correlationKey '{correlationKey}', which is neither a '$trigger.' path nor a plain constant; it will be used verbatim.",
+                nodeId));
+        }
+
+        // Every concurrency policy other than AllowParallel groups runs by correlation key. With no
+        // key there is nothing to group by, so the policy silently degrades.
+        if (concurrencyPolicy is not null
+            && concurrencyPolicy != WorkflowConcurrencyPolicy.AllowParallel
+            && string.IsNullOrWhiteSpace(correlationKey))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Warning,
+                "CONCURRENCY_POLICY_WITHOUT_CORRELATION_KEY",
+                $"Trigger '{nodeId}' sets concurrencyPolicy '{concurrencyPolicy}' but has no correlationKey, so it will behave as AllowParallel.",
+                nodeId));
+        }
     }
 
     private static void ValidateNodeConfigs(WorkflowDefinition def, List<ValidationIssue> issues)
@@ -153,13 +326,23 @@ public sealed class WorkflowValidator
                 }
             }
 
-            // Check for extra ports
+            // Check for extra ports. Any action node MAY declare an optional "error" output - it is
+            // what an OnFailure of ContinueOnError leaves through - so it is never "unexpected".
+            bool allowsOptionalErrorPort = node.Kind.StartsWith("action:", StringComparison.Ordinal);
+
             foreach (var actual in node.Ports)
             {
-                if (!expectedPorts.Any(p => p.PortId == actual.PortId && p.Direction == actual.Direction))
+                if (expectedPorts.Any(p => p.PortId == actual.PortId && p.Direction == actual.Direction))
                 {
-                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "EXTRA_PORT", $"Node '{node.NodeId}' of kind '{node.Kind}' defines an unexpected {actual.Direction} port '{actual.PortId}'."));
+                    continue;
                 }
+
+                if (allowsOptionalErrorPort && actual.PortId == ErrorPortId && actual.Direction == PortDirection.Output)
+                {
+                    continue;
+                }
+
+                issues.Add(new ValidationIssue(ValidationSeverity.Error, "EXTRA_PORT", $"Node '{node.NodeId}' of kind '{node.Kind}' defines an unexpected {actual.Direction} port '{actual.PortId}'."));
             }
         }
     }

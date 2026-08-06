@@ -30,7 +30,7 @@ public sealed class BranchLoopEndToEndTests
             true,
             [
                 new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new ManualTriggerConfig { Description = "manual start" } },
-                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = "true" } }
+                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } }
             ],
             [new Edge((triggerNodeId, "default"), (logicNodeId, "in"))],
             [],
@@ -253,6 +253,8 @@ public sealed class BranchLoopEndToEndTests
         public Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
+        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class StubProviderComposite : IProviderComposite

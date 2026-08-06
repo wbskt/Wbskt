@@ -52,28 +52,6 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
         }
     }
 
-    public async Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct)
-    {
-        try
-        {
-            return await ExecuteSingleAsync(
-                "dbo.PendingTriggerEvent_DequeueNextBy_WorkflowDefinitionId_Correlation",
-                p =>
-                {
-                    p.AddWithValue("@WorkflowDefinitionId", workflowDefinitionId);
-                    p.AddWithValue("@CorrelationKey", correlationKey);
-                },
-                Map,
-                null,
-                ct
-            );
-        }
-        catch (KeyNotFoundException)
-        {
-            return null;
-        }
-    }
-
     public async Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         await ExecuteNonQueryAsync(

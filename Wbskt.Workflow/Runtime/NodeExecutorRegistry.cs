@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
@@ -28,6 +29,6 @@ internal sealed class NodeExecutorRegistry : INodeExecutorRegistry
             return executor;
         }
 
-        throw new InvalidOperationException($"No executor registered for {kind}");
+        throw new NodeKindNotSupportedException(kind);
     }
 }

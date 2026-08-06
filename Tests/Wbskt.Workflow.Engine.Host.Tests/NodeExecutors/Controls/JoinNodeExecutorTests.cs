@@ -48,7 +48,7 @@ public sealed class JoinNodeExecutorTests
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", "All", 0, It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(true, 3, 3, 0, 3));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -74,7 +74,7 @@ public sealed class JoinNodeExecutorTests
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", "All", 0, It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(false, 1, 1, 0, 3));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -92,36 +92,15 @@ public sealed class JoinNodeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_calls_contribute_with_any_mode_string()
+    public async Task ExecuteAsync_contributes_succeeded_without_resupplying_the_mode()
     {
+        // Mode/quorum are stamped on the aggregator row at fan-out, not passed per contribution -
+        // that is what allows a FAILED branch to contribute from BranchLoop, which never sees this
+        // node's config. Reaching the Join node at all means this branch succeeded.
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", "Any", 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new JoinContributionResult(true, 1, 1, 0, 5));
-
-        var executor = new JoinNodeExecutor(aggregatorMock.Object);
-        NodeContext ctx = CreateContext(
-            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig { Mode = JoinMode.Any } },
-            new Dictionary<string, JsonElement>
-            {
-                ["__join_token"] = JsonSerializer.SerializeToElement(joinToken.ToString())
-            });
-
-        await executor.ExecuteAsync(ctx, CancellationToken.None);
-
-        aggregatorMock.Verify(
-            a => a.ContributeAsync(joinToken, "succeeded", "Any", 0, It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_calls_contribute_with_quorum_mode_and_count()
-    {
-        Guid joinToken = Guid.NewGuid();
-        var aggregatorMock = new Mock<IJoinAggregatorProvider>();
-        aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", "Quorum", 3, It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(true, 3, 3, 0, 5));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -135,8 +114,9 @@ public sealed class JoinNodeExecutorTests
         await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         aggregatorMock.Verify(
-            a => a.ContributeAsync(joinToken, "succeeded", "Quorum", 3, It.IsAny<CancellationToken>()),
+            a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()),
             Times.Once);
+        aggregatorMock.VerifyNoOtherCalls();
     }
 
     private static NodeContext CreateContext(JoinNode node, IReadOnlyDictionary<string, JsonElement> localState)

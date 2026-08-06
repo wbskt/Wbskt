@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Builder;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 
 namespace Wbskt.Workflow.Exporter;
 
@@ -53,7 +54,14 @@ public class Program
         var builder = new WorkflowBuilder("Branching Workflow", Guid.NewGuid());
         builder.AddClientTrigger("sensor-A", "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _);
 
-        builder.AddLogicGate("event.value > 100", logic => 
+        // Structured condition: "event.value > 100". The old bare-string form was never parsed - it
+        // was read as a branch-state path, resolved to null, and failed the node at runtime.
+        var valueOverThreshold = new BinaryExpression(
+            new BranchStateRefExpression("event.value"),
+            BinaryOperator.GreaterThan,
+            new LiteralExpression(100));
+
+        builder.AddLogicGate(valueOverThreshold, logic =>
         {
             logic.OnTrue(b => 
             {

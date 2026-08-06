@@ -77,7 +77,6 @@ public sealed class PendingTriggerEventDrainerTests
         public Task<long> CountAllAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<PendingTriggerEventRow?> DequeueNextAsync(int workflowDefinitionId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingInboundHub : IInboundHub

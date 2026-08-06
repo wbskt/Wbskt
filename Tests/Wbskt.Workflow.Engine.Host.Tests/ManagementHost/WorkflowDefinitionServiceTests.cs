@@ -33,7 +33,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new NotFoundException("missing"));
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 11 });
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 11, Version = 1 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
@@ -69,6 +69,132 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
+    public void Validate_reports_issues_without_publishing_anything()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var service = new WorkflowDefinitionService(
+            workflowProvider.Object, Mock.Of<ITriggerRegistrationService>(), Mock.Of<IWorkflowDefinitionCache>(),
+            new WorkflowValidator(), Mock.Of<IIdentityService>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+
+        // A definition with no nodes at all: no triggers (warning) and nothing to run.
+        var empty = CreatePublishRequest().Definition with { Nodes = [], Edges = [] };
+
+        WorkflowValidationResponse response = service.Validate(empty);
+
+        Assert.True(response.IsValid, "an empty definition has warnings but no errors");
+        Assert.Contains(response.Issues, issue => issue.Code == "NO_TRIGGERS" && issue.Severity == "Warning");
+        // Nothing was written.
+        workflowProvider.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void Validate_returns_errors_with_the_offending_node()
+    {
+        var service = new WorkflowDefinitionService(
+            Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ITriggerRegistrationService>(), Mock.Of<IWorkflowDefinitionCache>(),
+            new WorkflowValidator(), Mock.Of<IIdentityService>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+
+        var definition = CreatePublishRequest().Definition;
+        var duplicateEdge = definition.Edges.First();
+
+        WorkflowValidationResponse response = service.Validate(definition with { Edges = [.. definition.Edges, duplicateEdge] });
+
+        Assert.False(response.IsValid);
+        var issue = Assert.Single(response.Issues, i => i.Code == "DUPLICATE_PORT_EDGE");
+        Assert.Equal("Error", issue.Severity);
+        Assert.NotNull(issue.NodeId);
+    }
+
+    [Fact]
+    public async Task Publish_takes_the_version_from_the_inserted_row_not_a_precomputed_guess()
+    {
+        // The procedure assigns the version under HOLDLOCK. The service must report what came back,
+        // not a number derived from its own earlier unlocked read - under concurrent publishes the
+        // two can differ.
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var request = CreatePublishRequest();
+        WorkflowDefinitionRow? submitted = null;
+
+        // Stale read says v1 exists; the procedure actually lands on v9 because someone else
+        // published in between.
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateWorkflowRow(5, request.RefId, 1, true));
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { submitted = row; return row with { Id = 6, Version = 9 }; });
+
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(9, response.Value.Version);
+        // Nothing is pre-computed on the way in.
+        Assert.NotNull(submitted);
+        Assert.Equal(0, submitted!.Version);
+    }
+
+    [Fact]
+    public async Task Publish_does_not_treat_a_database_error_as_a_missing_workflow()
+    {
+        // Security-relevant: swallowing every lookup exception would let a transient DB error look
+        // like a brand-new workflow and skip the workspace-ownership check entirely.
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var request = CreatePublishRequest();
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("connection reset"));
+
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Publish_rolls_back_the_inserted_row_when_trigger_registration_fails()
+    {
+        // Otherwise the new version is current with no triggers registered - and because the previous
+        // version has already been deprecated and deregistered, the workflow stops firing entirely.
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var cache = new Mock<IWorkflowDefinitionCache>();
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var request = CreatePublishRequest();
+        var existing = CreateWorkflowRow(5, request.RefId, 1, true);
+        var workspaceRef = Guid.NewGuid();
+
+        workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6, Version = 2 });
+        workflowProvider.Setup(x => x.DeleteUnreferencedAsync(6, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        triggerService.Setup(x => x.OnPublishedAsync(6, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("registration exploded"));
+
+        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+
+        var response = await service.PublishAsync(WorkspaceId, workspaceRef, request, CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+
+        // The half-published row is removed...
+        workflowProvider.Verify(x => x.DeleteUnreferencedAsync(6, It.IsAny<CancellationToken>()), Times.Once);
+        // ...and the superseded version is put back, with the real workspace ref so its
+        // workspace-scoped webhook keys match what callers will present.
+        workflowProvider.Verify(x => x.SetEnabledAsync(5, true, It.IsAny<CancellationToken>()), Times.Once);
+        triggerService.Verify(x => x.OnPublishedAsync(5, workspaceRef, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Publish_second_version_increments_and_deprecates_first()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
@@ -80,7 +206,7 @@ public sealed class WorkflowDefinitionServiceTests
         var existing = CreateWorkflowRow(5, request.RefId, 1, true);
         workflowProvider.Setup(x => x.GetCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6 });
+            .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6, Version = 2 });
         var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, cache.Object, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);

@@ -45,6 +45,47 @@ public sealed class DelayNodeExecutorTests
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
         Assert.Equal("default", cont.OutboundPort);
+        // The deadline is cleared on the way out - see the loop re-arm test below.
+        Assert.Contains(DelayUntilKey, cont.RemoveKeys!);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_re_arms_when_the_node_is_revisited_in_a_loop()
+    {
+        // Regression: the deadline marker used to survive the resume, so a Delay inside a loop
+        // waited on the first lap and was skipped on every lap after - the loop then spun.
+        var clock = new MutableClock(T0);
+        var executor = new DelayNodeExecutor(clock);
+        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig { Duration = TimeSpan.FromMinutes(5) } };
+
+        // Lap 1: parks.
+        var state = new Dictionary<string, JsonElement>();
+        var firstPark = Assert.IsType<NodeExecutionResult.WaitForBookmark>(
+            await executor.ExecuteAsync(CreateContext(node, state), CancellationToken.None));
+        ApplyPatch(state, firstPark.LocalStatePatch);
+
+        // Timer fires; the resume continues and clears the marker.
+        clock.UtcNow = T0.AddMinutes(5).AddSeconds(1);
+        var resume = Assert.IsType<NodeExecutionResult.Continue>(
+            await executor.ExecuteAsync(CreateContext(node, state), CancellationToken.None));
+        foreach (string key in resume.RemoveKeys ?? [])
+        {
+            state.Remove(key);
+        }
+
+        // Lap 2: must park again rather than sail through on the stale deadline.
+        var secondPark = Assert.IsType<NodeExecutionResult.WaitForBookmark>(
+            await executor.ExecuteAsync(CreateContext(node, state), CancellationToken.None));
+        var timer = Assert.IsType<TimerWakeCondition>(secondPark.Condition);
+        Assert.Equal(clock.UtcNow.AddMinutes(5), timer.At);
+    }
+
+    private static void ApplyPatch(Dictionary<string, JsonElement> state, IReadOnlyDictionary<string, JsonElement> patch)
+    {
+        foreach (var pair in patch)
+        {
+            state[pair.Key] = pair.Value;
+        }
     }
 
     [Fact]

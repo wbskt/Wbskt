@@ -26,18 +26,23 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
 
         EngineManualResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineManualResponse>(SerializerOptions, ct);
 
-        // A duplicate idempotent call is suppressed by the engine (no new run started).
-        if (string.Equals(engineResponse?.Outcome, "Idempotent", StringComparison.Ordinal))
+        // Not starting a run is frequently the correct outcome - a concurrency policy queued or
+        // dropped the request, or an idempotency key deduplicated a retry. These are reported, not
+        // thrown, so the controller can answer with something other than "500 something broke".
+        StartRunOutcome outcome = engineResponse?.Outcome switch
         {
-            return new StartRunResponse(Guid.Empty, 0);
-        }
+            "StartedRun" => StartRunOutcome.Started,
+            "Idempotent" => StartRunOutcome.Duplicate,
+            "Queued" => StartRunOutcome.Queued,
+            "Dropped" => StartRunOutcome.Dropped,
+            "NoRegistration" => StartRunOutcome.NoManualTrigger,
+            _ => engineResponse?.RunRefId is null ? StartRunOutcome.NoManualTrigger : StartRunOutcome.Started
+        };
 
-        if (engineResponse?.RunRefId is null)
-        {
-            throw new InvalidOperationException("Manual trigger did not start a run.");
-        }
-
-        return new StartRunResponse(engineResponse.RunRefId.Value, engineResponse.RunId!.Value);
+        return new StartRunResponse(
+            engineResponse?.RunRefId ?? Guid.Empty,
+            engineResponse?.RunId ?? 0,
+            outcome);
     }
 
     public async Task<SignalResponse> SignalAsync(Guid runRefId, string signalName, SignalRequest request, CancellationToken ct)

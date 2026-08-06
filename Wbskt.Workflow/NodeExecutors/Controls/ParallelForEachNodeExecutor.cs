@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
@@ -42,8 +44,30 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
             return new NodeExecutionResult.Continue("empty", new Dictionary<string, JsonElement>());
         }
 
+        // Resolve the Join this cohort converges on and stamp its config onto the aggregator. Doing
+        // it here (rather than passing config on each contribution) is what lets a FAILED branch
+        // contribute later from BranchLoop, which never sees the Join node.
+        JoinNode? joinNode = ctx.Definition is null
+            ? null
+            : WorkflowGraph.FindDownstream<JoinNode>(ctx.Definition, node.NodeId, "body");
+        if (joinNode is null)
+        {
+            return new NodeExecutionResult.Fail(
+                "PFE_NO_JOIN",
+                $"ParallelForEach node '{node.NodeId}' has no Join node downstream of its 'body' port; the cohort could never converge.",
+                false,
+                null);
+        }
+
         Guid joinToken = Guid.NewGuid();
-        await _aggregators.InitializeAsync(joinToken, (int)ctx.Branch.RunId, items.Count, ct);
+        await _aggregators.InitializeAsync(
+            joinToken,
+            (int)ctx.Branch.RunId,
+            items.Count,
+            (joinNode.Config?.Mode ?? JoinMode.All).ToString(),
+            joinNode.Config?.QuorumCount ?? 0,
+            joinNode.NodeId,
+            ct);
 
         JsonElement joinTokenElement = JsonSerializer.SerializeToElement(joinToken.ToString());
 

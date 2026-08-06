@@ -45,6 +45,29 @@ public sealed class WorkflowsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Checks a definition without publishing it. Publishing is the only other way to run the
+    /// validator, and it creates an immutable version and re-registers triggers - far too heavy for
+    /// "is this draft OK?".
+    /// </summary>
+    [HttpPost("validate")]
+    public async Task<ActionResult<WorkflowValidationResponse>> ValidateDefinition(Guid workspaceRef, [FromBody] WorkflowPublishRequest request, CancellationToken ct)
+    {
+        _logger.LogInformation("API: Validate requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        // Same permission as publishing: this is an authoring operation, and it reveals which rules
+        // a definition breaks.
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsCreate, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<WorkflowValidationResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        // An invalid definition is a successful answer to "is this valid?" - 200 with IsValid false,
+        // not an HTTP error.
+        return Ok(_service.Validate(request.Definition));
+    }
+
     [HttpGet]
     public async Task<ActionResult<Wbskt.Models.ListResponse<WorkflowSummaryDto>>> GetAll(
         Guid workspaceRef,
@@ -137,18 +160,49 @@ public sealed class WorkflowsController : ApiControllerBase
             return MapResult(Result<StartRunResponse>.Failure(getWorkflowResult.Error));
         }
 
+        // A deprecated workflow still resolves as "current" (the lookup returns the latest version
+        // regardless of IsEnabled), but its triggers were deregistered - so the engine would find no
+        // registration and the caller would get an opaque failure. Say so plainly instead.
+        if (getWorkflowResult.Value.Status != "Published")
+        {
+            _logger.LogInformation("Rejected manual run for deprecated workflow '{RefId}'", refId);
+            return MapError(Error.Conflict("WORKFLOW_DEPRECATED", $"Workflow '{refId}' is deprecated and cannot be started."));
+        }
+
+        StartRunResponse response;
         try
         {
-            var response = await _engineClient.StartManualRunAsync(refId, request, ct);
-            _logger.LogInformation("Successfully started manual run for workflow '{RefId}'", refId);
-            return Ok(response);
+            response = await _engineClient.StartManualRunAsync(refId, request, ct);
         }
         catch (Exception ex)
         {
+            // Only a genuine transport/engine fault reaches here now.
             _logger.LogError("Unexpected error starting manual run for workflow '{RefId}'. Error: {Message}", refId, ex.Message);
             _logger.LogTrace(ex, "StartManualRun exception stack trace for RefId '{RefId}'", refId);
             return MapError(Error.Failure("ENGINE_START_ERROR", ex.Message));
         }
+
+        _logger.LogInformation("Manual run request for workflow '{RefId}' resulted in {Outcome}", refId, response.Outcome);
+
+        return response.Outcome switch
+        {
+            // A deduplicated retry is a success from the caller's point of view - it returns the run
+            // the original call started rather than a second one.
+            StartRunOutcome.Started or StartRunOutcome.Duplicate => Ok(response),
+
+            // Accepted but not yet running: the concurrency policy is holding it behind an active run.
+            StartRunOutcome.Queued => Accepted(response),
+
+            StartRunOutcome.Dropped => MapError(Error.Conflict(
+                "RUN_DROPPED_BY_CONCURRENCY_POLICY",
+                $"Workflow '{refId}' already has an active run and its concurrency policy discarded this request.")),
+
+            StartRunOutcome.NoManualTrigger => MapError(Error.Conflict(
+                "WORKFLOW_HAS_NO_MANUAL_TRIGGER",
+                $"Workflow '{refId}' has no manual trigger, so it cannot be started this way.")),
+
+            _ => MapError(Error.Failure("ENGINE_START_ERROR", $"Unrecognised engine outcome '{response.Outcome}'."))
+        };
     }
 
 

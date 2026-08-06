@@ -83,7 +83,10 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         services.AddSingleton<ICorrelationKeyResolver, CorrelationKeyResolver>();
-        services.AddSingleton<IExpressionEvaluator, ExpressionEvaluator>();
+        // Scoped, not Singleton: the evaluator reads shared variables through the Scoped
+        // ISharedVariableProvider. Every consumer (the Logic/Variable/ForEach/ParallelForEach
+        // executors) is itself Scoped, so this does not widen anything's lifetime.
+        services.AddScoped<IExpressionEvaluator, ExpressionEvaluator>();
         services.AddSingleton<IOutboundAddressGuard, OutboundAddressGuard>();
         // The client/schedule/webhook/manual triggers all just record the payload and continue via
         // "default", so a single PassthroughTriggerExecutor serves them - one instance per kind.
@@ -105,6 +108,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutor, EndNodeExecutor>();
         services.AddScoped<INodeExecutor, CommandNodeExecutor>();
         services.AddScoped<INodeExecutor, WebhookNodeExecutor>();
+        services.AddScoped<INodeExecutor, ToastNodeExecutor>();
         services.AddScoped<INodeExecutor, EmailNodeExecutor>();
         services.AddScoped<INodeExecutor, TelegramNodeExecutor>();
         services.AddScoped<INodeExecutorRegistry, NodeExecutorRegistry>();

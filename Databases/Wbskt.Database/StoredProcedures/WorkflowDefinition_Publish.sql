@@ -18,6 +18,15 @@ BEGIN
                   FROM dbo.WorkflowDefinitions WITH (HOLDLOCK, UPDLOCK)
                  WHERE RefId = @RefId), 0) + 1;
 
+    -- This procedure is the single authority on the version number. The stored JSON is stamped here,
+    -- under the same HOLDLOCK that computed it, so the row's Version column and the DefinitionJson's
+    -- "version" property can never disagree - which they could when the caller pre-computed a version
+    -- from an unlocked read and baked it into the JSON before calling.
+    -- Property names are camelCase to match JsonSerializerDefaults.Web output.
+    SET @DefinitionJson = JSON_MODIFY(
+                              JSON_MODIFY(@DefinitionJson, '$.version', @NextVersion),
+                              '$.isEnabled', CAST(@IsEnabled AS BIT));
+
     INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, IsEnabled, DefinitionJson, PublishedBy)
     VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @IsEnabled, @DefinitionJson, @PublishedBy);
 

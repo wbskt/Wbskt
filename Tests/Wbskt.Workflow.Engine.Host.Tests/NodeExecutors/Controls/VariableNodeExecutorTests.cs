@@ -28,56 +28,154 @@ public sealed class VariableNodeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_shared_scope_sets_shared_variable()
+    public async Task ExecuteAsync_shared_scope_set_is_last_writer_wins()
     {
-        var provider = new RecordingSharedVariableProvider([1]);
-        var evaluator = new MockExpressionEvaluator();
-        var executor = new VariableNodeExecutor(provider, evaluator);
+        // Set used to run a 3-attempt CAS loop that could fail the node outright under contention.
+        // It is now a plain UPDATE - no compare-and-set, no retries, no spurious failure.
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
         NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("cool") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
-        var continuation = Assert.IsType<NodeExecutionResult.Continue>(result);
-        Assert.Equal("default", continuation.OutboundPort);
-        Assert.Single(provider.CompareAndSetCalls);
-        Assert.Equal("\"cool\"", provider.CompareAndSetCalls[0].NewValue);
+        Assert.Equal("default", Assert.IsType<NodeExecutionResult.Continue>(result).OutboundPort);
+        var set = Assert.Single(provider.SetCalls);
+        Assert.Equal("mode", set.VarName);
+        Assert.Equal("\"cool\"", set.ValueJson);
+        Assert.Empty(provider.CompareAndSetCalls);
     }
 
     [Fact]
-    public async Task ExecuteAsync_shared_scope_retries_on_compare_and_set_conflict()
+    public async Task ExecuteAsync_shared_scope_set_initialises_a_variable_that_does_not_exist()
     {
-        var provider = new RecordingSharedVariableProvider([0, 0, 1]);
-        var evaluator = new MockExpressionEvaluator();
-        var executor = new VariableNodeExecutor(provider, evaluator);
-        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("heat") } });
+        // SharedVariable_Set only UPDATEs, so a never-written variable must be created.
+        var provider = new RecordingSharedVariableProvider { SetThrowsNotFound = true };
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("cool") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
         Assert.IsType<NodeExecutionResult.Continue>(result);
-        Assert.Equal(3, provider.CompareAndSetCalls.Count);
-        Assert.Equal(3, provider.GetCalls);
+        var initialize = Assert.Single(provider.InitializeCalls);
+        Assert.Equal("Json", initialize.VarType);
+        Assert.Equal("\"cool\"", initialize.ValueJson);
+    }
+
+    [Theory]
+    [InlineData(VariableOperation.Increment, 1)]
+    [InlineData(VariableOperation.Decrement, 1)]
+    public async Task ExecuteAsync_shared_counter_uses_the_atomic_procedures(VariableOperation op, long expectedDelta)
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = op, Var = "hits", Value = null } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.IsType<NodeExecutionResult.Continue>(result);
+        if (op == VariableOperation.Increment)
+        {
+            Assert.Equal(expectedDelta, Assert.Single(provider.IncrementCalls).Delta);
+            Assert.Empty(provider.DecrementCalls);
+        }
+        else
+        {
+            Assert.Equal(expectedDelta, Assert.Single(provider.DecrementCalls).Delta);
+            Assert.Empty(provider.IncrementCalls);
+        }
+
+        // Atomic in the UPDATE - there is no read-modify-write, so nothing is read first.
+        Assert.Equal(0, provider.GetCalls);
     }
 
     [Fact]
-    public async Task ExecuteAsync_shared_scope_fails_after_three_conflicts()
+    public async Task ExecuteAsync_shared_counter_honours_a_configured_step()
     {
-        var provider = new RecordingSharedVariableProvider([0, 0, 0]);
-        var evaluator = new MockExpressionEvaluator();
-        var executor = new VariableNodeExecutor(provider, evaluator);
-        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("heat") } });
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Increment, Var = "hits", Value = JsonSerializer.SerializeToElement(5) } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(5, Assert.Single(provider.IncrementCalls).Delta);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_shared_counter_seeds_the_variable_when_it_does_not_exist()
+    {
+        var provider = new RecordingSharedVariableProvider { CounterThrowsNotFound = true };
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Increment, Var = "hits", Value = JsonSerializer.SerializeToElement(3) } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.IsType<NodeExecutionResult.Continue>(result);
+        var initialize = Assert.Single(provider.InitializeCalls);
+        Assert.Equal("Counter", initialize.VarType);
+        Assert.Equal("3", initialize.ValueJson);
+    }
+
+    [Theory]
+    [InlineData(VariableOperation.Increment, 7d)]
+    [InlineData(VariableOperation.Decrement, 5d)]
+    public async Task ExecuteAsync_local_counter_patches_arithmetic_into_branch_state(VariableOperation op, double expected)
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(
+            new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = op, Var = "hits", Value = JsonSerializer.SerializeToElement(1) } },
+            new Dictionary<string, JsonElement> { ["hits"] = JsonSerializer.SerializeToElement(6) });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal(expected, continuation.LocalStatePatch["hits"].GetDouble());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_local_counter_treats_a_missing_value_as_zero()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Increment, Var = "fresh", Value = null } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(1d, Assert.IsType<NodeExecutionResult.Continue>(result).LocalStatePatch["fresh"].GetDouble());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_counter_with_a_non_numeric_step_fails()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Increment, Var = "hits", Value = JsonSerializer.SerializeToElement("lots") } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal("VARIABLE_STEP_NOT_NUMERIC", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_compare_and_set_is_rejected_with_an_explanation()
+    {
+        // The provider primitive exists, but VariableConfig carries no "expected" value to compare.
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "mode", Value = JsonSerializer.SerializeToElement("x") } });
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
         var failure = Assert.IsType<NodeExecutionResult.Fail>(result);
-        Assert.Equal("SHARED_VAR_CAS_FAILED", failure.ErrorCode);
-        Assert.True(failure.Retryable);
+        Assert.Equal("VARIABLE_OPERATION_NOT_SUPPORTED", failure.ErrorCode);
+        Assert.Contains("expected", failure.Message);
     }
 
-    private static NodeContext CreateContext(VariableNode node)
+    private static NodeContext CreateContext(VariableNode node, IReadOnlyDictionary<string, JsonElement>? localState = null)
     {
         return new NodeContext
         {
-            Branch = new BranchContext(42, 1001, 5, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow, 9),
+            Branch = new BranchContext(42, 1001, 5, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1, node.NodeId.ToString(), 1, localState ?? new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow, 9),
             Node = node,
             Providers = new StubProviderComposite(),
             Tick = 1,
@@ -91,53 +189,89 @@ public sealed class VariableNodeExecutorTests
         return [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }];
     }
 
-    private sealed class RecordingSharedVariableProvider(IEnumerable<int>? compareAndSetResults = null) : ISharedVariableProvider
+    private sealed class RecordingSharedVariableProvider : ISharedVariableProvider
     {
-        private readonly Queue<int> _compareAndSetResults = new(compareAndSetResults ?? [1]);
+        /// <summary>Makes SetAsync report the variable as never written (KeyNotFoundException).</summary>
+        public bool SetThrowsNotFound { get; init; }
+
+        /// <summary>Makes Increment/Decrement report no matching counter row.</summary>
+        public bool CounterThrowsNotFound { get; init; }
 
         public int GetCalls { get; private set; }
 
         public List<(Guid WorkflowRefId, string VarName, string Expected, string NewValue)> CompareAndSetCalls { get; } = [];
 
+        public List<(string VarName, string ValueJson)> SetCalls { get; } = [];
+
+        public List<(string VarName, string VarType, string ValueJson)> InitializeCalls { get; } = [];
+
+        public List<(string VarName, long Delta)> IncrementCalls { get; } = [];
+
+        public List<(string VarName, long Delta)> DecrementCalls { get; } = [];
+
         public Task<SharedVariableRow> GetByWorkflowRefIdNameAsync(Guid workflowRefId, string varName, CancellationToken ct)
         {
             GetCalls++;
-            return Task.FromResult(new SharedVariableRow
-            {
-                Id = 5,
-                WorkflowRefId = workflowRefId,
-                VarName = varName,
-                VarType = "Json",
-                ValueJson = $"\"current-{GetCalls}\"",
-                UpdatedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
-            });
+            return Task.FromResult(Row(workflowRefId, varName, "Json", $"\"current-{GetCalls}\""));
         }
 
         public Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
         {
-            throw new NotSupportedException();
+            InitializeCalls.Add((varName, varType, valueJson));
+            return Task.FromResult(Row(workflowRefId, varName, varType, valueJson));
         }
 
         public Task<SharedVariableRow> SetAsync(Guid workflowRefId, string varName, string valueJson, CancellationToken ct)
         {
-            throw new NotSupportedException();
+            if (SetThrowsNotFound)
+            {
+                throw new KeyNotFoundException(varName);
+            }
+
+            SetCalls.Add((varName, valueJson));
+            return Task.FromResult(Row(workflowRefId, varName, "Json", valueJson));
         }
 
         public Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
         {
-            throw new NotSupportedException();
+            if (CounterThrowsNotFound)
+            {
+                throw new KeyNotFoundException(varName);
+            }
+
+            IncrementCalls.Add((varName, delta));
+            return Task.FromResult(delta.ToString());
         }
 
         public Task<string> DecrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
         {
-            throw new NotSupportedException();
+            if (CounterThrowsNotFound)
+            {
+                throw new KeyNotFoundException(varName);
+            }
+
+            DecrementCalls.Add((varName, delta));
+            return Task.FromResult((-delta).ToString());
         }
 
         public Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct)
         {
             CompareAndSetCalls.Add((workflowRefId, varName, expected, newValue));
-            return Task.FromResult(_compareAndSetResults.Dequeue());
+            return Task.FromResult(1);
+        }
+
+        private static SharedVariableRow Row(Guid workflowRefId, string varName, string varType, string valueJson)
+        {
+            return new SharedVariableRow
+            {
+                Id = 5,
+                WorkflowRefId = workflowRefId,
+                VarName = varName,
+                VarType = varType,
+                ValueJson = valueJson,
+                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
         }
     }
 

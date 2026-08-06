@@ -17,7 +17,20 @@ public abstract record NodeExecutionResult
         return new Continue(nodeId.ToString(), localStatePatch);
     }
 
-    public sealed record Continue(string OutboundPort, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
+    /// <summary>
+    /// Move to the node wired to <paramref name="OutboundPort"/>.
+    /// </summary>
+    /// <param name="LocalStatePatch">Keys to add or overwrite in the branch's local state.</param>
+    /// <param name="RemoveKeys">
+    /// Keys to delete from local state. Needed by nodes that can be revisited in a loop and must
+    /// clear their own bookkeeping on the way out - a sequential ForEach dropping its iterator, or a
+    /// Delay dropping its deadline so the next lap waits again. Without removal, a patch could only
+    /// ever add or overwrite, so stale markers would make the second visit behave like a resume.
+    /// </param>
+    public sealed record Continue(
+        string OutboundPort,
+        IReadOnlyDictionary<string, JsonElement> LocalStatePatch,
+        IReadOnlyCollection<string>? RemoveKeys = null) : NodeExecutionResult;
 
     public sealed record Fork(IReadOnlyCollection<ForkSpec> Children, string? ContinueOutboundPort, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
 

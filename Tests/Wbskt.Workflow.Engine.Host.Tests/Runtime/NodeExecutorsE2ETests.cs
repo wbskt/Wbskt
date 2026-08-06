@@ -24,6 +24,7 @@ public sealed class NodeExecutorsE2ETests
         var variableNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var forEachNodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var endNodeId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var bodyNodeId = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
         WorkflowDefinition definition = new(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -34,16 +35,20 @@ public sealed class NodeExecutorsE2ETests
             true,
             [
                 new ManualTriggerNode { NodeId = triggerNodeId, Name = "start", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new ManualTriggerConfig { Description = "start" } },
-                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = "gate" } },
+                new LogicGateNode { NodeId = logicNodeId, Name = "logic", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("gate") } },
                 new VariableNode { NodeId = variableNodeId, Name = "variable", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("auto") } },
                 new ForEachNode { NodeId = forEachNodeId, Name = "foreach", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "body", Direction = PortDirection.Output, Label = "Body" }, new PortDefinition { PortId = "done", Direction = PortDirection.Output, Label = "Done" }], Config = new ForEachConfig { Collection = "items" } },
-                new LogicGateNode { NodeId = endNodeId, Name = "end", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = "true" } }
+                new LogicGateNode { NodeId = endNodeId, Name = "end", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } },
+                new LogicGateNode { NodeId = bodyNodeId, Name = "body", Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" }, new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }], Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("true") } }
             ],
             [
                 new Edge((triggerNodeId, "default"), (logicNodeId, "in")),
                 new Edge((logicNodeId, "true"), (variableNodeId, "in")),
                 new Edge((variableNodeId, "default"), (forEachNodeId, "in")),
-                new Edge((forEachNodeId, "body"), (endNodeId, "in")),
+                // ForEach is sequential: the body returns to the loop node, which hands out the next
+                // item or leaves via "done". The back-edge is what makes it a loop.
+                new Edge((forEachNodeId, "body"), (bodyNodeId, "in")),
+                new Edge((bodyNodeId, "true"), (forEachNodeId, "in")),
                 new Edge((forEachNodeId, "done"), (endNodeId, "in"))
             ],
             [],
@@ -62,9 +67,9 @@ public sealed class NodeExecutorsE2ETests
             new StubWorkflowDefinitionCache(definition),
             new NodeExecutorRegistry([
                 new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock()),
-                new LogicNodeExecutor(new ExpressionEvaluator()),
-                new VariableNodeExecutor(new NoOpSharedVariableProvider(), new ExpressionEvaluator()),
-                new ForEachNodeExecutor(new ExpressionEvaluator())
+                new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock())),
+                new VariableNodeExecutor(new NoOpSharedVariableProvider(), new ExpressionEvaluator(new SystemClock())),
+                new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()))
             ]),
             dispatcher,
             new StubProviderComposite(),
@@ -79,12 +84,29 @@ public sealed class NodeExecutorsE2ETests
             await loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
         }
 
-        Assert.Equal(3, providers.CreatedBranches.Count);
-        Assert.All(providers.CreatedBranches, branch => Assert.Equal("Completed", providers.Branches[branch.Id].Status));
-        Assert.Equal(["x", "y", "z"], providers.CreatedBranches.Select(branch => JsonDocument.Parse(providers.Branches[branch.Id].LocalJson).RootElement.GetProperty("item").GetString()));
-        Assert.All(providers.CreatedBranches, branch => Assert.Equal("auto", JsonDocument.Parse(providers.Branches[branch.Id].LocalJson).RootElement.GetProperty("mode").GetString()));
+        // Sequential: one branch walks the whole collection - nothing is forked.
+        Assert.Empty(providers.CreatedBranches);
         Assert.Equal("Completed", providers.Branches[1001].Status);
         Assert.Equal([42L], finalizer.RunIds);
+
+        // The loop node is entered once per item plus once more to leave via "done", and the body
+        // node runs once per item.
+        Assert.Equal(4, providers.HistoryEvents.Count(evt => evt.EventKind == "NodeStarted" && evt.NodeId == forEachNodeId));
+        Assert.Equal(3, providers.HistoryEvents.Count(evt => evt.EventKind == "NodeStarted" && evt.NodeId == bodyNodeId));
+
+        // Items were handed out in order.
+        string[] itemsSeen = providers.HistoryEvents
+            .Where(evt => evt.EventKind == "NodeCompleted" && evt.NodeId == forEachNodeId && evt.PayloadJson is not null)
+            .Select(evt => JsonDocument.Parse(evt.PayloadJson!).RootElement)
+            .Where(payload => payload.GetProperty("port").GetString() == "body")
+            .Select(payload => payload.GetProperty("output").GetProperty("item").GetString()!)
+            .ToArray();
+        Assert.Equal(["x", "y", "z"], itemsSeen);
+
+        // Final state: earlier nodes' writes survive, and the iterator is cleared on the way out.
+        JsonElement finalState = JsonDocument.Parse(providers.Branches[1001].LocalJson).RootElement;
+        Assert.Equal("auto", finalState.GetProperty("mode").GetString());
+        Assert.False(finalState.TryGetProperty(ForEachNodeExecutor.IteratorKey(forEachNodeId), out _));
     }
 
     private sealed class InMemoryProviders : IBranchProvider, IRunProvider, IRunCountersProvider, IBookmarkProvider, IHistoryEventProvider

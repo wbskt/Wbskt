@@ -110,30 +110,52 @@ public sealed class PublishToObserveE2ETests
 
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)
         {
-            WorkflowDefinitionRow inserted = row with { Id = ++_nextId };
-            if (!_rows.TryGetValue(inserted.RefId, out List<WorkflowDefinitionRow>? versions))
+            if (!_rows.TryGetValue(row.RefId, out List<WorkflowDefinitionRow>? versions))
             {
                 versions = [];
-                _rows.Add(inserted.RefId, versions);
+                _rows.Add(row.RefId, versions);
             }
+
+            // Mirrors WorkflowDefinition_Publish: the procedure assigns the version, the caller does
+            // not supply one.
+            int nextVersion = versions.Count == 0 ? 1 : versions.Max(candidate => candidate.Version) + 1;
+            WorkflowDefinitionRow inserted = row with { Id = ++_nextId, Version = nextVersion };
 
             versions.Add(inserted);
             return Task.FromResult(inserted);
         }
 
-        public Task DeprecateAsync(int id, CancellationToken ct)
+        public Task DeprecateAsync(int id, CancellationToken ct) => SetEnabledAsync(id, false, ct);
+
+        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct)
         {
             foreach (var pair in _rows)
             {
                 int index = pair.Value.FindIndex(candidate => candidate.Id == id);
                 if (index >= 0)
                 {
-                    pair.Value[index] = pair.Value[index] with { IsEnabled = false };
+                    pair.Value[index] = pair.Value[index] with { IsEnabled = isEnabled };
                     return Task.CompletedTask;
                 }
             }
 
             throw new NotFoundException("missing");
+        }
+
+        public List<int> DeletedIds { get; } = [];
+
+        public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct)
+        {
+            DeletedIds.Add(id);
+            foreach (var pair in _rows)
+            {
+                if (pair.Value.RemoveAll(candidate => candidate.Id == id) > 0)
+                {
+                    return Task.FromResult(true);
+                }
+            }
+
+            return Task.FromResult(false);
         }
     }
 

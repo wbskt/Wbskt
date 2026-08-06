@@ -56,6 +56,7 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         services.AddWorkflowProviders();
         services.AddWorkflowRuntime();
         services.AddScoped<IDeviceCommandPublisher>(_ => Mock.Of<IDeviceCommandPublisher>());
+        services.AddScoped<IToastPublisher>(_ => Mock.Of<IToastPublisher>());
         services.AddHostedService<BranchExecutionPump>();
         services.AddHostedService<BookmarkScheduler>();
         services.AddHostedService<ScheduledFireTicker>();
@@ -75,8 +76,13 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var hostIdentity2 = provider.GetRequiredService<IHostIdentity>();
         var correlationKeyResolver1 = provider.GetRequiredService<ICorrelationKeyResolver>();
         var correlationKeyResolver2 = provider.GetRequiredService<ICorrelationKeyResolver>();
-        var expressionEvaluator1 = provider.GetRequiredService<IExpressionEvaluator>();
-        var expressionEvaluator2 = provider.GetRequiredService<IExpressionEvaluator>();
+        // The evaluator is Scoped (it reads shared variables via the Scoped ISharedVariableProvider),
+        // so it must be resolved from a scope - the root provider would fail scope validation.
+        using IServiceScope evaluatorScope = provider.CreateScope();
+        var expressionEvaluator1 = evaluatorScope.ServiceProvider.GetRequiredService<IExpressionEvaluator>();
+        var expressionEvaluator2 = evaluatorScope.ServiceProvider.GetRequiredService<IExpressionEvaluator>();
+        using IServiceScope otherEvaluatorScope = provider.CreateScope();
+        var expressionEvaluatorInOtherScope = otherEvaluatorScope.ServiceProvider.GetRequiredService<IExpressionEvaluator>();
         var leaseHolder1 = provider.GetRequiredService<ILeaseHolder>();
         var leaseHolder2 = provider.GetRequiredService<ILeaseHolder>();
         var workflowMetrics1 = provider.GetRequiredService<WorkflowMetrics>();
@@ -127,7 +133,9 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.IsType<CorrelationKeyResolver>(correlationKeyResolver1);
         Assert.Same(correlationKeyResolver1, correlationKeyResolver2);
         Assert.IsType<ExpressionEvaluator>(expressionEvaluator1);
+        // Scoped, not Singleton: same instance within a scope, a different one across scopes.
         Assert.Same(expressionEvaluator1, expressionEvaluator2);
+        Assert.NotSame(expressionEvaluator1, expressionEvaluatorInOtherScope);
         Assert.True(leaseHolder1.GetType().Name == "AlwaysHoldsLeaseHolder");
         Assert.Same(leaseHolder1, leaseHolder2);
         Assert.IsType<WorkflowMetrics>(workflowMetrics1);

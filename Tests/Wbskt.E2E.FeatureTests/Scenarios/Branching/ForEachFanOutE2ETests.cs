@@ -104,20 +104,20 @@ public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
 
         lock (commandLock)
         {
-            allArrived.Should().BeTrue($"ForEach should fan out into {Items.Length} command deliveries; saw {commands.Count}");
-            commands.Should().HaveCount(Items.Length, "fan-out siblings must not be deduped against each other");
+            allArrived.Should().BeTrue($"ForEach should send one command per item ({Items.Length}); saw {commands.Count}");
+            commands.Should().HaveCount(Items.Length, "every item's body runs exactly once");
             commands.Should().OnlyContain(c => c == "OpenVent");
         }
 
-        // ── 7. Each fanned-out branch carried a distinct item (binding correctness) ─
+        // ── 7. ForEach is SEQUENTIAL: one branch walks the collection, so the run must not have
+        //       fanned out into a branch per item. (It previously behaved like ParallelForEach.)
         var detail = await fixture.GetRunDetailAsync(token, workspaceRef, runRefId);
-        var boundItems = detail.Branches
-            .Select(b => TryGetLocalItem(b.LocalJson))
-            .Where(i => i is not null)
-            .Select(i => i!)
-            .OrderBy(i => i, StringComparer.Ordinal)
-            .ToList();
-        boundItems.Should().BeEquivalentTo(Items, "each body branch must bind a distinct ForEach item");
+        detail.Branches.Should().HaveCount(1, "a sequential ForEach iterates on a single branch");
+
+        // The surviving branch holds the last item it processed, and the iterator has been cleared
+        // on the way out through "done".
+        TryGetLocalItem(detail.Branches.Single().LocalJson)
+            .Should().Be(Items[^1], "the branch carries the final item after the last lap");
     }
 
     private static string? TryGetLocalItem(string? localJson)

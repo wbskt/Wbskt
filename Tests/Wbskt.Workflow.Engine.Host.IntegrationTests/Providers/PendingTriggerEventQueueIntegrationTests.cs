@@ -30,11 +30,11 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
     {
         if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
 
-        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
+        var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
         var dequeued = await provider.DequeueNextAsync(
-            workflowDefinitionId, "empty-correlation", CancellationToken.None);
+            workflowRefId, Guid.NewGuid(), "empty-correlation", CancellationToken.None);
 
         dequeued.Should().BeNull();
     }
@@ -44,7 +44,7 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
     {
         if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
 
-        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
+        var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
         string correlationKey = $"order-test-{Guid.NewGuid():N}";
@@ -65,10 +65,10 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
             workflowRefId, triggerNodeId, correlationKey, """{"n":3}""", CancellationToken.None);
 
         // Dequeue three times; should come out in enqueue order
-        var d1 = await provider.DequeueNextAsync(workflowDefinitionId, correlationKey, CancellationToken.None);
-        var d2 = await provider.DequeueNextAsync(workflowDefinitionId, correlationKey, CancellationToken.None);
-        var d3 = await provider.DequeueNextAsync(workflowDefinitionId, correlationKey, CancellationToken.None);
-        var d4 = await provider.DequeueNextAsync(workflowDefinitionId, correlationKey, CancellationToken.None);
+        var d1 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
+        var d2 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
+        var d3 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
+        var d4 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
 
         d1.Should().NotBeNull();
         d2.Should().NotBeNull();
@@ -80,11 +80,44 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
     }
 
     [Fact]
+    public async Task Dequeue_does_not_cross_trigger_nodes()
+    {
+        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+
+        var (workflowRefId, _) = await CreateWorkflowAsync();
+        var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
+
+        // Two triggers in the SAME workflow sharing a correlation key. Draining one must never
+        // consume the other's queued event - doing so would start a run from the wrong trigger
+        // node with the wrong payload.
+        string correlationKey = $"shared-key-{Guid.NewGuid():N}";
+        Guid triggerA = Guid.NewGuid();
+        Guid triggerB = Guid.NewGuid();
+
+        await provider.EnqueueAsync(workflowRefId, triggerA, correlationKey, """{"trigger":"A"}""", CancellationToken.None);
+        await provider.EnqueueAsync(workflowRefId, triggerB, correlationKey, """{"trigger":"B"}""", CancellationToken.None);
+
+        var fromA = await provider.DequeueNextAsync(workflowRefId, triggerA, correlationKey, CancellationToken.None);
+        fromA.Should().NotBeNull();
+        fromA!.TriggerNodeId.Should().Be(triggerA);
+        fromA.InboundEventJson.Should().Contain("A");
+
+        // A's queue is now empty; B's event must still be there, untouched.
+        var aAgain = await provider.DequeueNextAsync(workflowRefId, triggerA, correlationKey, CancellationToken.None);
+        aAgain.Should().BeNull("draining trigger A must not reach across to trigger B's event");
+
+        var fromB = await provider.DequeueNextAsync(workflowRefId, triggerB, correlationKey, CancellationToken.None);
+        fromB.Should().NotBeNull();
+        fromB!.TriggerNodeId.Should().Be(triggerB);
+        fromB.InboundEventJson.Should().Contain("B");
+    }
+
+    [Fact]
     public async Task Concurrent_dequeues_return_distinct_rows()
     {
         if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
 
-        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
+        var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
         const int rowCount = 20;
@@ -106,7 +139,7 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
             async (_, ct) =>
             {
                 var p = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
-                var row = await p.DequeueNextAsync(workflowDefinitionId, correlationKey, ct);
+                var row = await p.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, ct);
                 if (row is not null)
                 {
                     dequeued.Add(row.Id);

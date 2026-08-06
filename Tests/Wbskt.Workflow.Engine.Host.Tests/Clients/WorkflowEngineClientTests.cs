@@ -48,16 +48,39 @@ public sealed class WorkflowEngineClientTests
         Assert.Equal(42, result.RunId);
     }
 
-    [Fact]
-    public async Task StartManualRunAsync_throws_when_run_not_started()
+    [Theory]
+    [InlineData("NoRegistration", StartRunOutcome.NoManualTrigger)]
+    [InlineData("Queued", StartRunOutcome.Queued)]
+    [InlineData("Dropped", StartRunOutcome.Dropped)]
+    [InlineData("Idempotent", StartRunOutcome.Duplicate)]
+    public async Task StartManualRunAsync_reports_non_start_outcomes_instead_of_throwing(string engineOutcome, StartRunOutcome expected)
     {
+        // These are all normal results - a concurrency policy did its job, or a retry was
+        // deduplicated. Throwing turned each of them into an HTTP 500.
         var workflowRefId = Guid.NewGuid();
-        var engineResponse = new { Outcome = "NoRegistration", RunRefId = (Guid?)null, RunId = (long?)null };
+        var engineResponse = new { Outcome = engineOutcome, RunRefId = (Guid?)null, RunId = (long?)null };
         var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
         var client = new WorkflowEngineClient(BuildClient(handler));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None));
+        StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
+
+        Assert.Equal(expected, response.Outcome);
+    }
+
+    [Fact]
+    public async Task StartManualRunAsync_reports_the_started_run()
+    {
+        var workflowRefId = Guid.NewGuid();
+        var runRefId = Guid.NewGuid();
+        var engineResponse = new { Outcome = "StartedRun", RunRefId = (Guid?)runRefId, RunId = (long?)77 };
+        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
+        var client = new WorkflowEngineClient(BuildClient(handler));
+
+        StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
+
+        Assert.Equal(StartRunOutcome.Started, response.Outcome);
+        Assert.Equal(runRefId, response.RunRefId);
+        Assert.Equal(77, response.RunId);
     }
 
     [Fact]

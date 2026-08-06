@@ -51,6 +51,7 @@ public static class Program
         builder.Services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
+        builder.Services.AddScoped<IToastPublisher, ToastPublisher>();
         builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
         builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
         builder.Services.AddSingleton<RunRecoveryService>();

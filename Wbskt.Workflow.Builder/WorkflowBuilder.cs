@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
@@ -142,6 +143,27 @@ public sealed class WorkflowBuilder
             Retry = null,
             OnFailure = null,
             Compensation = compensation });
+
+        ConnectToHead(id, PortNames.In);
+        _head = (id, PortNames.Default);
+        return this;
+    }
+
+    /// <summary>
+    /// Raises a toast to everyone watching the workspace. Unlike <see cref="AddClientMessage"/> this
+    /// has no device target - it goes to the workspace's dashboard connections.
+    /// </summary>
+    public WorkflowBuilder AddToast(string title, string message, string? name = null)
+    {
+        var id = Guid.NewGuid();
+        _nodes.Add(new ToastNotificationNode {
+            NodeId = id,
+            Name = name ?? title,
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new ToastConfig { Title = title, Message = message },
+            Retry = null,
+            OnFailure = null,
+            Compensation = null });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -320,7 +342,11 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddLogicGate(string condition, out Guid nodeId)
+    /// <summary>
+    /// Adds a Logic gate whose condition is a structured expression - the form that supports
+    /// comparisons and functions, e.g. <c>reading.temperature &gt; 30</c>.
+    /// </summary>
+    public WorkflowBuilder AddLogicGate(WorkflowExpression condition, out Guid nodeId)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -333,6 +359,16 @@ public sealed class WorkflowBuilder
         ConnectToHead(id, PortNames.In);
         _head = null;
         return this;
+    }
+
+    /// <summary>
+    /// Legacy string form. The string is NOT parsed as an expression - it is interpreted exactly as
+    /// the pre-structured engine did: "true"/"false" is a literal, anything else is a branch-state
+    /// path holding a boolean. Use the <see cref="WorkflowExpression"/> overload to compare values.
+    /// </summary>
+    public WorkflowBuilder AddLogicGate(string condition, out Guid nodeId)
+    {
+        return AddLogicGate(LogicConditionJsonConverter.FromLegacyString(condition), out nodeId);
     }
 
     public WorkflowBuilder AddWebhookTrigger(string path, string method, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
@@ -383,6 +419,11 @@ public sealed class WorkflowBuilder
 
     public WorkflowBuilder AddLogicGate(string condition, Action<LogicGateScope> branches, JoinMode? joinMode = null)
     {
+        return AddLogicGate(LogicConditionJsonConverter.FromLegacyString(condition), branches, joinMode);
+    }
+
+    public WorkflowBuilder AddLogicGate(WorkflowExpression condition, Action<LogicGateScope> branches, JoinMode? joinMode = null)
+    {
         AddLogicGate(condition, out var gateId);
 
         var scope = new LogicGateScope(this, gateId);
@@ -430,14 +471,32 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddParallelForEach(string collectionKey, Action<ForEachScope> loopBody)
+    /// <summary>
+    /// Fans the collection out, one branch per item, and converges them on a Join.
+    ///
+    /// The Join is not optional: a ParallelForEach cohort has nowhere to converge without one, and
+    /// the engine rejects such a definition at fan-out with PFE_NO_JOIN. If the body ends without a
+    /// tail to wire up - e.g. it ends in a Fork that was given no join mode of its own - no Join can
+    /// be added here and the definition will be rejected; give the inner construct a join mode.
+    /// </summary>
+    public WorkflowBuilder AddParallelForEach(string collectionKey, Action<ForEachScope> loopBody, JoinMode joinMode = JoinMode.All)
     {
         AddParallelForEach(collectionKey, out var pfeId);
 
         var scope = new ForEachScope(this, pfeId);
         loopBody(scope);
 
-        _head = (pfeId, PortNames.Empty);
+        if (scope.BodyTail is { } bodyTail)
+        {
+            // Leaves the head on the Join's "default" port, so whatever follows runs once, after the
+            // cohort converges - rather than once per item.
+            AddJoin(joinMode, bodyTail);
+        }
+        else
+        {
+            _head = (pfeId, PortNames.Empty);
+        }
+
         return this;
     }
 
@@ -447,6 +506,14 @@ public sealed class WorkflowBuilder
 
         var scope = new ForEachScope(this, loopId);
         loopBody(scope);
+
+        // Close the loop. ForEach is sequential: the body's tail returns to the ForEach node, which
+        // then hands out the next item or leaves via "done". Without this back-edge the body would
+        // run once and the graph would be a straight line, not a loop.
+        if (scope.BodyTail is { } bodyTail)
+        {
+            AddEdge(bodyTail.NodeId, bodyTail.PortId, loopId, PortNames.In);
+        }
 
         _head = (loopId, PortNames.Done);
         return this;
@@ -595,10 +662,18 @@ public sealed class ForEachScope(WorkflowBuilder builder, Guid loopId)
 {
     public Guid LoopId => loopId;
 
+    /// <summary>
+    /// Where the body ended, so the loop can be closed with a back-edge to the ForEach node.
+    /// Tracked separately from the builder head because <see cref="OnDone"/> moves the head onto the
+    /// after-loop path.
+    /// </summary>
+    public (Guid NodeId, string PortId)? BodyTail { get; private set; }
+
     public void OnBody(Action<WorkflowBuilder> body)
     {
         builder.SetHead(loopId, PortNames.Body);
         body(builder);
+        BodyTail = builder.CurrentHead;
     }
 
     public void OnDone(Action<WorkflowBuilder> done)

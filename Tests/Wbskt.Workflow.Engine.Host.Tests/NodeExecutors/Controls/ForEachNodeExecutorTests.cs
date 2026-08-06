@@ -11,40 +11,98 @@ namespace Wbskt.Workflow.Engine.Host.Tests.NodeExecutors.Controls;
 
 public sealed class ForEachNodeExecutorTests
 {
+    private static readonly Guid LoopNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     [Fact]
-    public async Task ExecuteAsync_forks_one_child_per_item()
+    public async Task ExecuteAsync_hands_out_the_first_item_on_the_first_visit()
     {
-        var executor = new ForEachNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new ForEachNode { NodeId = Guid.NewGuid(), Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig { Collection = "items" } }, new Dictionary<string, JsonElement>
-        {
-            ["items"] = JsonSerializer.SerializeToElement(new[] { "a", "b", "c" })
-        });
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        NodeContext context = CreateContext(CreateNode(), Items("a", "b", "c"));
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
-        var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
-        Assert.Equal("done", fork.ContinueOutboundPort);
-        Assert.Equal(3, fork.Children.Count);
-        Assert.All(fork.Children, child => Assert.Equal("body", child.OutboundPort));
-        Assert.Equal("a", fork.Children.ElementAt(0).LocalState["item"].GetString());
-        Assert.Equal("b", fork.Children.ElementAt(1).LocalState["item"].GetString());
-        Assert.Equal("c", fork.Children.ElementAt(2).LocalState["item"].GetString());
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal("body", cont.OutboundPort);
+        Assert.Equal("a", cont.LocalStatePatch["item"].GetString());
+        Assert.Equal(0, cont.LocalStatePatch["index"].GetInt32());
+        Assert.Equal(1, cont.LocalStatePatch[IteratorKey].GetInt32());
     }
 
     [Fact]
-    public async Task ExecuteAsync_empty_collection_returns_empty_fork()
+    public async Task ExecuteAsync_walks_the_collection_one_item_at_a_time_then_leaves_via_done()
     {
-        var executor = new ForEachNodeExecutor(new ExpressionEvaluator());
-        NodeContext context = CreateContext(new ForEachNode { NodeId = Guid.NewGuid(), Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig { Collection = "items" } }, new Dictionary<string, JsonElement>
+        // Drives the loop the way the branch loop does: each lap re-enters the node with the
+        // iterator the previous lap wrote.
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var state = new Dictionary<string, JsonElement>(Items("a", "b", "c"));
+        var seen = new List<string>();
+
+        for (int lap = 0; lap < 4; lap++)
         {
-            ["items"] = JsonSerializer.SerializeToElement(Array.Empty<string>())
-        });
+            NodeExecutionResult result = await executor.ExecuteAsync(CreateContext(CreateNode(), state), CancellationToken.None);
+            var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
+
+            if (cont.OutboundPort == "done")
+            {
+                // The iterator is dropped so a re-entry (nested or outer loop) starts over.
+                Assert.Contains(IteratorKey, cont.RemoveKeys!);
+                Assert.Equal(3, lap);
+                break;
+            }
+
+            Assert.Equal("body", cont.OutboundPort);
+            seen.Add(cont.LocalStatePatch["item"].GetString()!);
+            foreach (var pair in cont.LocalStatePatch)
+            {
+                state[pair.Key] = pair.Value;
+            }
+        }
+
+        Assert.Equal(["a", "b", "c"], seen);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_empty_collection_goes_straight_to_done()
+    {
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        NodeContext context = CreateContext(CreateNode(), Items());
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
-        var fork = Assert.IsType<NodeExecutionResult.Fork>(result);
-        Assert.Equal("done", fork.ContinueOutboundPort);
-        Assert.Empty(fork.Children);
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal("done", cont.OutboundPort);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_keeps_separate_iterators_per_node()
+    {
+        // Nested loops must not share a counter, so the key is derived from the node id.
+        var other = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        Assert.NotEqual(ForEachNodeExecutor.IteratorKey(LoopNodeId), ForEachNodeExecutor.IteratorKey(other));
+
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var state = new Dictionary<string, JsonElement>(Items("a", "b"))
+        {
+            // The *other* loop is mid-flight; this one must still start at zero.
+            [ForEachNodeExecutor.IteratorKey(other)] = JsonSerializer.SerializeToElement(1)
+        };
+
+        NodeExecutionResult result = await executor.ExecuteAsync(CreateContext(CreateNode(), state), CancellationToken.None);
+
+        Assert.Equal("a", Assert.IsType<NodeExecutionResult.Continue>(result).LocalStatePatch["item"].GetString());
+    }
+
+    private static string IteratorKey => ForEachNodeExecutor.IteratorKey(LoopNodeId);
+
+    private static ForEachNode CreateNode()
+    {
+        return new ForEachNode { NodeId = LoopNodeId, Name = "foreach", Ports = CreatePorts(), Config = new ForEachConfig { Collection = "items" } };
+    }
+
+    private static Dictionary<string, JsonElement> Items(params string[] values)
+    {
+        return new Dictionary<string, JsonElement> { ["items"] = JsonSerializer.SerializeToElement(values) };
     }
 
     private static NodeContext CreateContext(ForEachNode node, IReadOnlyDictionary<string, JsonElement> localState)

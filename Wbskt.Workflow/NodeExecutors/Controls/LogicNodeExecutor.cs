@@ -21,27 +21,20 @@ internal sealed class LogicNodeExecutor : INodeExecutor
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
-        if (ctx.Node is not LogicGateNode node || node.Config is null || string.IsNullOrWhiteSpace(node.Config.Condition))
+        if (ctx.Node is not LogicGateNode node || node.Config?.Condition is null)
         {
             return new NodeExecutionResult.Fail("LOGIC_CONFIG_INVALID", "Logic node config is required.", false, null);
         }
 
-        JsonElement evaluation = await _expressionEvaluator.EvaluateAsync(ParseCondition(node.Config.Condition), ctx.Branch, ct);
+        // The condition is a full expression tree, so comparisons and functions work here. A
+        // malformed one raises ExpressionEvaluationException, which the retry executor turns into a
+        // non-retryable EXPRESSION_EVALUATION_ERROR naming the offending types.
+        JsonElement evaluation = await _expressionEvaluator.EvaluateAsync(node.Config.Condition, ctx.Branch, ct);
         if (evaluation.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
         {
             return new NodeExecutionResult.Fail("LOGIC_CONDITION_NOT_BOOL", $"Logic condition evaluated to {evaluation.ValueKind} instead of bool.", false, null);
         }
 
         return new NodeExecutionResult.Continue(evaluation.GetBoolean() ? "true" : "false", new Dictionary<string, JsonElement>());
-    }
-
-    private static WorkflowExpression ParseCondition(string condition)
-    {
-        if (bool.TryParse(condition, out bool literal))
-        {
-            return new LiteralExpression(literal);
-        }
-
-        return new BranchStateRefExpression(condition);
     }
 }
