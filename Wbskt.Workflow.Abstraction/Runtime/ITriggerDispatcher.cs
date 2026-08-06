@@ -52,5 +52,11 @@ public enum TriggerDispatchOutcome
     Dropped,
     Cancelled,
     NoRegistration,
-    Idempotent
+    Idempotent,
+
+    /// <summary>The registration matched, but its filter expression rejected the payload.</summary>
+    Filtered,
+
+    /// <summary>The registration matched, but the caller did not present its webhook secret.</summary>
+    SecretMismatch
 }

@@ -28,6 +28,7 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
                 p.AddWithValue("@CorrelationExpression", (object?)row.CorrelationExpression ?? DBNull.Value);
                 p.AddWithValue("@ConcurrencyPolicy", (object?)row.ConcurrencyPolicy ?? DBNull.Value);
                 p.AddWithValue("@FilterExpression", (object?)row.FilterExpression ?? DBNull.Value);
+                p.AddWithValue("@WebhookSecret", (object?)row.WebhookSecret ?? DBNull.Value);
             },
             Map,
             new InvalidOperationException("TriggerRegistration_Insert did not return a row."),
@@ -99,6 +100,7 @@ internal sealed class TriggerRegistrationProvider : BaseSqlProvider, ITriggerReg
             CorrelationExpression = reader.IsDBNull(reader.GetOrdinal("CorrelationExpression")) ? null : reader.GetString(reader.GetOrdinal("CorrelationExpression")),
             ConcurrencyPolicy = reader.IsDBNull(reader.GetOrdinal("ConcurrencyPolicy")) ? null : reader.GetString(reader.GetOrdinal("ConcurrencyPolicy")),
             FilterExpression = reader.IsDBNull(reader.GetOrdinal("FilterExpression")) ? null : reader.GetString(reader.GetOrdinal("FilterExpression")),
+            WebhookSecret = reader.IsDBNull(reader.GetOrdinal("WebhookSecret")) ? null : reader.GetString(reader.GetOrdinal("WebhookSecret")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
     }

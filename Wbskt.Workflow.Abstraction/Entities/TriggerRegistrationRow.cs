@@ -11,6 +11,14 @@ public record TriggerRegistrationRow
     public required string TriggerKey { get; init; }
     public required string? CorrelationExpression { get; init; }
     public required string ConcurrencyPolicy { get; init; }
+    /// <summary>Serialized <c>WorkflowExpression</c>, evaluated against the inbound payload before a run starts.</summary>
     public required string? FilterExpression { get; init; }
+
+    /// <summary>
+    /// Shared secret a webhook caller must present. Not required (null) and meaningless for non-webhook
+    /// kinds. Optional on the row so existing registrations keep working without one.
+    /// </summary>
+    public string? WebhookSecret { get; init; }
+
     public required DateTime CreatedAt { get; init; }
 }

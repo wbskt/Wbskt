@@ -23,6 +23,7 @@ public class TriggerRegistrationProviderTests
                 ["CorrelationExpression"] = "$.clientId",
                 ["ConcurrencyPolicy"] = "Queue",
                 ["FilterExpression"] = "$.status == 'active'",
+                ["WebhookSecret"] = "s3cret",
                 ["CreatedAt"] = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
             }
         });
@@ -40,6 +41,7 @@ public class TriggerRegistrationProviderTests
         row.CorrelationExpression.Should().Be("$.clientId");
         row.ConcurrencyPolicy.Should().Be("Queue");
         row.FilterExpression.Should().Be("$.status == 'active'");
+        row.WebhookSecret.Should().Be("s3cret");
         row.CreatedAt.Should().Be(new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
     }
 
@@ -60,6 +62,7 @@ public class TriggerRegistrationProviderTests
                 ["CorrelationExpression"] = DBNull.Value,
                 ["ConcurrencyPolicy"] = "Queue",
                 ["FilterExpression"] = DBNull.Value,
+                ["WebhookSecret"] = DBNull.Value,
                 ["CreatedAt"] = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
             }
         });
@@ -69,5 +72,6 @@ public class TriggerRegistrationProviderTests
 
         row.CorrelationExpression.Should().BeNull();
         row.FilterExpression.Should().BeNull();
+        row.WebhookSecret.Should().BeNull();
     }
 }

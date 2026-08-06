@@ -27,6 +27,9 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 [RequestSizeLimit(PublicCallbackPolicy.MaxBodyBytes)]
 public sealed class PublicCallbackController : ControllerBase
 {
+    /// <summary>The header a webhook caller presents its trigger's shared secret in.</summary>
+    public const string WebhookSecretHeader = "X-Wbskt-Secret";
+
     private readonly IWorkflowEngineClient _engineClient;
     private readonly ILogger<PublicCallbackController> _logger;
 
@@ -62,7 +65,13 @@ public sealed class PublicCallbackController : ControllerBase
 
         try
         {
-            WebhookResponse response = await _engineClient.WebhookAsync(workspaceRef, path, payload, ct);
+            // Relayed verbatim; the engine compares it against the trigger's configured secret. Checking
+            // it here would mean this host loading trigger registrations it otherwise never touches.
+            string? secret = Request.Headers.TryGetValue(WebhookSecretHeader, out Microsoft.Extensions.Primitives.StringValues presented)
+                ? presented.ToString()
+                : null;
+
+            WebhookResponse response = await _engineClient.WebhookAsync(workspaceRef, path, payload, secret, ct);
             // Outcome/RunId logged for operators only; the anonymous caller gets an opaque 202 so the
             // response reveals nothing about whether the path matched a registered trigger.
             _logger.LogInformation("Public webhook callback outcome {Outcome} (runId={RunId}).", response.Outcome, response.RunId);

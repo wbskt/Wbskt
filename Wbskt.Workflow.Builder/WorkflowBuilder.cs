@@ -77,7 +77,7 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId, string? name = null)
+    public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId, string? name = null, WorkflowExpression? filter = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -85,7 +85,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = name ?? "Device Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new ClientTriggerConfig { ClientRef = clientRef, Type = type, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy } });
+            Config = new ClientTriggerConfig { ClientRef = clientRef, Type = type, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy, Filter = filter } });
         _head = (id, PortNames.Default);
         return this;
     }
@@ -371,7 +371,7 @@ public sealed class WorkflowBuilder
         return AddLogicGate(LogicConditionJsonConverter.FromLegacyString(condition), out nodeId);
     }
 
-    public WorkflowBuilder AddWebhookTrigger(string path, string method, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
+    public WorkflowBuilder AddWebhookTrigger(string path, string method, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId, WorkflowExpression? filter = null, string? secret = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -379,7 +379,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = "Webhook Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new WebhookTriggerConfig { Path = path, Method = method, CorrelationKey = null, ConcurrencyPolicy = concurrencyPolicy } });
+            Config = new WebhookTriggerConfig { Path = path, Method = method, CorrelationKey = null, ConcurrencyPolicy = concurrencyPolicy, Filter = filter, Secret = secret } });
 
         _head = (id, PortNames.Default);
         return this;

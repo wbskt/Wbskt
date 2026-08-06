@@ -39,7 +39,10 @@ public sealed class InboundAdaptersE2ETests
         var runProvider = new Mock<IRunProvider>();
         runProvider.Setup(r => r.GetByIdAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RunRow { Id = 1, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
-        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
+        var controller = new InboundWebhookController(hub.Object, runProvider.Object)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() }
+        };
 
         await controller.Post(Guid.NewGuid(), "alerts", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
 

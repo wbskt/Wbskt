@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -18,7 +20,7 @@ public sealed class InboundWebhookControllerTests
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 42, null, "ok"));
         runProvider.Setup(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RunRow { Id = 42, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
-        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
+        var controller = CreateController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
         var workspaceRef = Guid.Parse("99999999-9999-9999-9999-999999999999");
 
@@ -44,7 +46,7 @@ public sealed class InboundWebhookControllerTests
         var testRef = Guid.NewGuid();
         runProvider.Setup(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RunRow { Id = 42, RefId = testRef, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
-        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
+        var controller = CreateController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
         InboundWebhookResponse response = await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
@@ -73,7 +75,7 @@ public sealed class InboundWebhookControllerTests
             ]));
         runProvider.Setup(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(MakeRunRow(42, firstRef));
         runProvider.Setup(r => r.GetByIdAsync(43, It.IsAny<CancellationToken>())).ReturnsAsync(MakeRunRow(43, secondRef));
-        var controller = new InboundWebhookController(hub.Object, runProvider.Object);
+        var controller = CreateController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
         InboundWebhookResponse response = await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
@@ -82,6 +84,49 @@ public sealed class InboundWebhookControllerTests
         Assert.Equal(
             [(1L, workflowA, "StartedRun", (Guid?)firstRef), (2L, workflowB, "StartedRun", secondRef), (3L, workflowB, "Queued", null)],
             response.Registrations.Select(r => (r.RegistrationId, r.WorkflowRefId, r.Outcome, r.RunRefId)));
+    }
+
+    [Fact]
+    public async Task Post_webhook_forwards_the_presented_secret_beside_the_payload()
+    {
+        // The secret must reach the dispatcher without ever entering the payload, which is persisted
+        // as the run's trigger data and rendered in its history.
+        var hub = new Mock<IInboundHub>();
+        var runProvider = new Mock<IRunProvider>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "ok"));
+        var controller = CreateController(hub.Object, runProvider.Object);
+        controller.ControllerContext.HttpContext.Request.Headers[InboundWebhookController.SecretHeader] = "s3cret";
+        JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
+
+        await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e => e.Secret == "s3cret" && !e.Payload.ContainsKey("secret")),
+            CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task Post_webhook_reports_no_secret_when_the_caller_sent_none()
+    {
+        var hub = new Mock<IInboundHub>();
+        var runProvider = new Mock<IRunProvider>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "ok"));
+        var controller = CreateController(hub.Object, runProvider.Object);
+        JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
+
+        await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(It.Is<InboundEvent>(e => e.Secret == null), CancellationToken.None), Times.Once);
+    }
+
+    private static InboundWebhookController CreateController(IInboundHub hub, IRunProvider runProvider)
+    {
+        return new InboundWebhookController(hub, runProvider)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     private static RunRow MakeRunRow(int id, Guid refId)

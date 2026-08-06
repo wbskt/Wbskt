@@ -10,6 +10,9 @@ namespace Wbskt.Workflow.Engine.Host.Controllers;
 [InboundEndpoint]
 public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abstraction.Providers.IRunProvider runProvider, ILogger<InboundWebhookController>? logger = null) : ControllerBase
 {
+    /// <summary>The header a webhook caller presents its trigger's shared secret in.</summary>
+    public const string SecretHeader = "X-Wbskt-Secret";
+
     [HttpPost("{workspaceRef:guid}/{channelKind}")]
     public async Task<InboundWebhookResponse> Post(Guid workspaceRef, string channelKind, [FromBody] JsonElement payload, CancellationToken ct)
     {
@@ -26,7 +29,14 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
                 ["webhookPath"] = JsonSerializer.SerializeToElement(channelKind),
                 ["body"] = payload
             },
-            default);
+            default)
+        {
+            // Carried beside the payload, never inside it: the payload is persisted as the run's trigger
+            // data, and a secret written there would be readable from the run's history forever.
+            Secret = Request.Headers.TryGetValue(SecretHeader, out Microsoft.Extensions.Primitives.StringValues presented)
+                ? presented.ToString()
+                : null
+        };
 
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, ct);
 

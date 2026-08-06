@@ -185,8 +185,8 @@ against current code** and worth working from directly.
 | WF-12 | 🟠 | API | ✅ No validate / dry-run endpoint |
 | WF-13 | 🟠 | API | ◐ Deprecate is one-way; no pause/resume, rename, rollback, or delete |
 | WF-14 | 🟠 | API | ✅ No workspace-wide run list |
-| WF-15 | 🟠 | Triggers | Trigger filter expressions are plumbed but hardcoded to null |
-| WF-16 | 🟠 | Triggers | Webhook triggers have no secret |
+| WF-15 | 🟠 | Triggers | ✅ Trigger filter expressions are plumbed but hardcoded to null |
+| WF-16 | 🟠 | Triggers | ✅ Webhook triggers have no secret |
 | WF-17 | 🟠 | Triggers | ✅ Invalid cron publishes the workflow, then throws — leaving it scheduleless |
 | WF-18 | 🟠 | Validator | ✅ Duplicate `(node, port)` edges throw at runtime instead of failing at publish |
 | WF-19 | 🟠 | Validator | ✅ Five more missing publish-time checks |
@@ -1031,6 +1031,31 @@ the `top + 1` fetch-and-trim pattern the history controller already uses correct
 
 ## WF-15 🟠 Trigger filter expressions are plumbed but hardcoded to null
 
+**Status:** ✅ Fixed 2026-08-07.
+
+`Filter` (a `WorkflowExpression`) is now on `ClientTriggerConfig` and `WebhookTriggerConfig`, serialized
+onto `TriggerRegistrations.FilterExpression` at publish, and evaluated in
+`TriggerDispatcher.FilterPassesAsync` **before** the concurrency enforcer — a filtered event must not be
+able to queue, drop or cancel anything, because as far as the trigger is concerned it never arrived.
+
+The filter is copied onto the registration row rather than read from the definition at dispatch time:
+the dispatcher matches registrations by key and would otherwise have to load and deserialize a whole
+definition per candidate just to decide to discard the event.
+
+**No branch exists yet**, so the evaluation context is a shim over the payload — `$trigger` resolves,
+branch-local state is empty, and the ids that only mean something inside a run are zero.
+
+**Fails closed.** A filter that throws, or that yields a non-boolean, is treated as *not matching* and
+logged at warning. A gate that cannot be evaluated has not been passed, and starting the run anyway
+would defeat the point of configuring one.
+
+**Filtered events are reported, not swallowed.** New `TriggerDispatchOutcome.Filtered` appears in
+WF-32's per-registration list, so "I fired the webhook and nothing happened" has an answer.
+
+**Tests.** Filter rejects / filter matches / unparseable filter fails closed, plus registration-service
+cases pinning that the expression round-trips structurally onto the row and that a workflow with no
+filter still stores null.
+
 **Symptom (user).** Every event matching a trigger key starts a run. There is no way to say "only when
 `status == 'active'`" — the user must start a run and immediately end it, burning credits and
 polluting run history.
@@ -1053,6 +1078,37 @@ The column exists on `TriggerRegistrations`, the entity carries it, nothing popu
 ---
 
 ## WF-16 🟠 Webhook triggers have no secret
+
+**Status:** ✅ Fixed 2026-08-07. **⚠ DACPAC redeploy required** — new
+`TriggerRegistrations.WebhookSecret` column.
+
+Optional `Secret` on `WebhookTriggerConfig`, stored on the registration row (nullable
+`WebhookSecret NVARCHAR(200)`), presented by the caller in **`X-Wbskt-Secret`**. A registration without
+one stays open, so every webhook published before this keeps working unchanged.
+
+**The secret never enters the payload.** The original sketch said to fold it into the relayed body, but
+the payload is persisted as the run's trigger data and rendered in its history trace — a credential
+written there is readable forever. It travels as a header on the relay and as a non-positional
+`InboundEvent.Secret` property in process, so it is never serialized into workflow state.
+
+**Compared in fixed time** (`CryptographicOperations.FixedTimeEquals`), so the check cannot be used to
+recover the secret a character at a time.
+
+**No oracle.** The public callback still answers an opaque 202 either way, and the engine's own inbound
+response is backend-network-only. A mismatch is recorded as `TriggerDispatchOutcome.SecretMismatch` in
+the per-registration list for operators, and logged at warning.
+
+**Checked before the concurrency enforcer**, for the same reason as the filter: an unauthenticated call
+must not be able to queue or drop a legitimate caller's run.
+
+**Not done:** the same-workspace duplicate-path question below is still open. Two workflows in one
+workspace sharing a path both fire; with WF-32 landed the response now at least *reports* both, so the
+behaviour is visible rather than surprising. Whether it should be a validator error is a product
+decision, not a defect.
+
+**Tests.** Mismatch, missing-when-required (the upgrade hazard — adding a secret must not keep letting
+old callers through), match, and no-secret-means-open; plus controller tests that the header reaches
+`InboundEvent.Secret` and never the payload.
 
 **Symptom (user).** Anyone who learns the public callback URL
 (`POST api/callbacks/webhook/{workspaceRef}/{path}`) can fire the workflow. The only protection is

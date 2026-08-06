@@ -10,6 +10,9 @@ CREATE TABLE dbo.TriggerRegistrations
     CorrelationExpression NVARCHAR(1000)   NULL,
     ConcurrencyPolicy     NVARCHAR(32)     NOT NULL DEFAULT N'Queue',
     FilterExpression      NVARCHAR(2000)   NULL,
+    -- Shared secret a webhook caller must present in X-Wbskt-Secret. NULL means the trigger is open,
+    -- which is what every registration published before this column existed will read as.
+    WebhookSecret         NVARCHAR(200)    NULL,
     CreatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_TriggerRegistrations_WorkflowDefinitions
         FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)

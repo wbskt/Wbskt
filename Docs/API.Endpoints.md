@@ -339,6 +339,15 @@ and every `/api/inbound/*` route additionally requires the shared key in `X-Wbsk
 Unlike the public front door, these return their real outcome (`Outcome`, `Matched`, `RunRefId`) —
 the caller is a trusted service, so there is no oracle to protect against.
 
+A webhook trigger may carry a **secret**. When it does, the caller must present it in the
+`X-Wbskt-Secret` header — on the public callback, which relays it inward as a header (never in the
+body, which becomes the run's persisted trigger payload). The comparison is fixed-time, and the public
+response stays an opaque 202 either way, so a wrong secret is indistinguishable from a right one. A
+trigger with no secret configured is open, as every webhook published before secrets existed is.
+
+A trigger may also carry a **filter** expression, evaluated against the payload before any run starts;
+a non-matching event reports `Filtered` for that registration and starts nothing.
+
 One event can match several trigger registrations — two workflows sharing a webhook path, or one
 workflow with two manual triggers — and each of them independently starts, queues or drops a run. The
 manual and webhook responses therefore carry a `Registrations` array (`registrationId`,

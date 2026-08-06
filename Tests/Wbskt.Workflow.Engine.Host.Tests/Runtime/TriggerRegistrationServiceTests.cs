@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -85,6 +86,56 @@ public sealed class TriggerRegistrationServiceTests
         // Assert
         Assert.Equal([42], triggerRegistrationProvider.DeletedWorkflowDefinitionIds);
         Assert.Equal([42], scheduledFireProvider.DeletedWorkflowDefinitionIds);
+    }
+
+    [Fact]
+    public async Task OnPublished_copies_the_filter_and_secret_onto_the_registration()
+    {
+        // The dispatcher matches on the row, so anything it needs at dispatch time has to be copied
+        // here - otherwise it would load and deserialize a whole definition per candidate registration.
+        WorkflowExpression filter = new BinaryExpression(
+            new BranchStateRefExpression("status"),
+            BinaryOperator.Equal,
+            new LiteralExpression("active"));
+        var definition = CreateDefinition() with
+        {
+            Nodes =
+            [
+                new WebhookTriggerNode { NodeId = Guid.Parse("33333333-3333-3333-3333-333333333333"), Name = "webhook", Ports = [], Config = new WebhookTriggerConfig { Path = "/hooks/intake", Method = "POST", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.DropIfRunning, Filter = filter, Secret = "s3cret" } },
+                new ClientTriggerNode { NodeId = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "client", Ports = [], Config = new ClientTriggerConfig { ClientRef = "client-serial-1", Type = "telemetry", CorrelationKey = null, ConcurrencyPolicy = WorkflowConcurrencyPolicy.Queue, Filter = filter } }
+            ]
+        };
+        var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
+
+        TriggerRegistrationRow webhook = triggerRegistrationProvider.Rows.Single(r => r.TriggerKind == "webhook");
+        TriggerRegistrationRow client = triggerRegistrationProvider.Rows.Single(r => r.TriggerKind == "client");
+
+        // Round-trips as a structured expression, not as some stringified shorthand.
+        Assert.NotNull(webhook.FilterExpression);
+        Assert.IsType<BinaryExpression>(JsonSerializer.Deserialize<WorkflowExpression>(webhook.FilterExpression!, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        Assert.Equal("s3cret", webhook.WebhookSecret);
+
+        Assert.NotNull(client.FilterExpression);
+        // A secret is a webhook-only notion; a client trigger must not acquire one.
+        Assert.Null(client.WebhookSecret);
+    }
+
+    [Fact]
+    public async Task OnPublished_leaves_filter_and_secret_null_when_the_author_configured_neither()
+    {
+        var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
+
+        Assert.All(triggerRegistrationProvider.Rows, row =>
+        {
+            Assert.Null(row.FilterExpression);
+            Assert.Null(row.WebhookSecret);
+        });
     }
 
     private static WorkflowDefinition CreateDefinition()

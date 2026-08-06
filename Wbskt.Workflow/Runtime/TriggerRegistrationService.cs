@@ -2,6 +2,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -38,10 +39,10 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         {
             TriggerRegistrationRow? registration = node switch
             {
-                ClientTriggerNode clientTrigger => CreateRegistration(definitionRow, clientTrigger.NodeId, "client", $"client:{clientTrigger.Config.ClientRef}:{clientTrigger.Config.Type}", clientTrigger.Config.ConcurrencyPolicy.ToString(), clientTrigger.Config.CorrelationKey),
+                ClientTriggerNode clientTrigger => CreateRegistration(definitionRow, clientTrigger.NodeId, "client", $"client:{clientTrigger.Config.ClientRef}:{clientTrigger.Config.Type}", clientTrigger.Config.ConcurrencyPolicy.ToString(), clientTrigger.Config.CorrelationKey, clientTrigger.Config.Filter),
                 // Webhook keys are workspace-scoped so an author-chosen path is unique per workspace
                 // and the anonymous public callback for one workspace can never fire another's trigger.
-                WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{workspaceRef}:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey),
+                WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{workspaceRef}:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey, webhookTrigger.Config.Filter, webhookTrigger.Config.Secret),
                 ManualTriggerNode manualTrigger => CreateRegistration(definitionRow, manualTrigger.NodeId, "manual", $"manual:{definitionRow.RefId}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null),
                 ScheduleTriggerNode scheduleTrigger => await CreateScheduleRegistrationAsync(definitionRow, scheduleTrigger, ct),
                 _ => null
@@ -71,7 +72,15 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         return CreateRegistration(definitionRow, scheduleTrigger.NodeId, "schedule", $"schedule:{scheduledFire.Id}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null);
     }
 
-    private static TriggerRegistrationRow CreateRegistration(WorkflowDefinitionRow definitionRow, Guid triggerNodeId, string triggerKind, string triggerKey, string concurrencyPolicy, string? correlationExpression)
+    private static TriggerRegistrationRow CreateRegistration(
+        WorkflowDefinitionRow definitionRow,
+        Guid triggerNodeId,
+        string triggerKind,
+        string triggerKey,
+        string concurrencyPolicy,
+        string? correlationExpression,
+        WorkflowExpression? filter = null,
+        string? webhookSecret = null)
     {
         return new TriggerRegistrationRow
         {
@@ -84,14 +93,15 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
             TriggerKey = triggerKey,
             CorrelationExpression = correlationExpression,
             ConcurrencyPolicy = concurrencyPolicy,
-            
-            // The field is designed as a pre-filtering mechanism for event-driven triggers (such as Webhooks or Device Telemetry):
-            //
-            // • Event Filtering: It holds a path expression or query (e.g. $.status = ='active' or $.value > 50  in JSONPath) that must be evaluated against the incoming trigger event payload.
-            // • Avoid unnecessary runs: By checking this expression at the  TriggerDispatcher  layer, the system can determine whether to start a workflow run. If the incoming event payload does not satisfy the  FilterExpression , the event is discarded before a
-            // run is initialized, saving compute resource costs.
-            FilterExpression = null,
+
+            // Copied onto the row rather than read from the definition at dispatch time: the dispatcher
+            // matches registrations by key and would otherwise have to load and deserialize a whole
+            // definition per candidate just to decide whether to discard the event.
+            FilterExpression = filter is null ? null : JsonSerializer.Serialize(filter, SerializerOptions),
+            WebhookSecret = webhookSecret,
             CreatedAt = definitionRow.CreatedAt
         };
     }
+
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 }

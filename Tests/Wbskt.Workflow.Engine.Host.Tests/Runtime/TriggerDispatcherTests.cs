@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
@@ -235,6 +237,116 @@ public sealed class TriggerDispatcherTests
         Assert.Empty(result.StartedRunIds);
     }
 
+    [Fact]
+    public async Task Dispatch_skips_a_registration_whose_filter_rejects_the_payload()
+    {
+        // The whole point of a filter: no run, no credits burned, no run history to explain.
+        var registration = CreateRegistration("AllowParallel");
+        registration = registration with { FilterExpression = Filter("messageType", "not-telemetry") };
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: runStarter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.Filtered, result.Outcome);
+        Assert.Empty(operations);
+        Assert.Equal(TriggerDispatchOutcome.Filtered, Assert.Single(result.Registrations).Outcome);
+    }
+
+    [Fact]
+    public async Task Dispatch_starts_a_run_when_the_filter_matches_the_payload()
+    {
+        var registration = CreateRegistration("AllowParallel");
+        registration = registration with { FilterExpression = Filter("messageType", "telemetry") };
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Dispatch_treats_an_unevaluatable_filter_as_non_matching()
+    {
+        // Fail closed. A filter is a gate; one that cannot be evaluated has not been passed, and
+        // starting the run anyway would defeat the point of configuring it.
+        var registration = CreateRegistration("AllowParallel");
+        registration = registration with { FilterExpression = "{ not json" };
+        var operations = new List<string>();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: new RecordingRunStarter(operations));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.Filtered, result.Outcome);
+        Assert.Empty(operations);
+    }
+
+    [Fact]
+    public async Task Dispatch_rejects_a_webhook_whose_secret_does_not_match()
+    {
+        var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
+        var operations = new List<string>();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: new RecordingRunStarter(operations));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { Secret = "wrong" }, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.SecretMismatch, result.Outcome);
+        Assert.Empty(operations);
+    }
+
+    [Fact]
+    public async Task Dispatch_rejects_a_secret_protected_webhook_when_none_is_presented()
+    {
+        // The upgrade hazard: adding a secret to a live trigger must not silently keep letting the old,
+        // unauthenticated callers through.
+        var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.SecretMismatch, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Dispatch_accepts_a_webhook_with_the_matching_secret()
+    {
+        var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { Secret = "expected" }, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Dispatch_leaves_a_registration_without_a_secret_open()
+    {
+        // Every webhook published before secrets existed has a null one and must keep working.
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+    }
+
+    /// <summary>A serialized `$trigger.{field} == {expected}` comparison, as the publish path stores it.</summary>
+    private static string Filter(string field, string expected)
+    {
+        WorkflowExpression expression = new BinaryExpression(
+            new BranchStateRefExpression(field),
+            BinaryOperator.Equal,
+            new LiteralExpression(expected));
+
+        return JsonSerializer.Serialize(expression, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
     private static TriggerDispatcher CreateDispatcher(
         RecordingBookmarkResumer? bookmarkResumer = null,
         RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null,
@@ -251,7 +363,13 @@ public sealed class TriggerDispatcherTests
             runCancellationService ?? new RecordingRunCancellationService(),
             runStarter ?? new RecordingRunStarter([]),
             runDispatcher ?? new RecordingRunDispatcher([]),
-            new MockIdempotencyKeyProvider());
+            new MockIdempotencyKeyProvider(),
+            new ExpressionEvaluator(new DispatcherTestClock()));
+    }
+
+    private sealed class DispatcherTestClock : IClock
+    {
+        public DateTime UtcNow => new(2026, 8, 7, 12, 0, 0, DateTimeKind.Utc);
     }
 
     private sealed class MockIdempotencyKeyProvider : IIdempotencyKeyProvider

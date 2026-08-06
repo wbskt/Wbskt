@@ -5,6 +5,9 @@ namespace Wbskt.Management.Host.Services.Clients;
 
 internal sealed class WorkflowEngineClient : IWorkflowEngineClient
 {
+    /// <summary>Must match <c>InboundWebhookController.SecretHeader</c> on the engine side.</summary>
+    internal const string WebhookSecretHeader = "X-Wbskt-Secret";
+
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
@@ -68,13 +71,27 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new WakeResponse(engineResponse?.Matched ?? false, engineResponse?.Outcome ?? string.Empty);
     }
 
-    public async Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, CancellationToken ct)
+    public async Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, CancellationToken ct)
     {
         // Same relay shape as WakeAsync: the engine's /api/inbound/webhook is backend-only and
         // api-key gated (WorkflowEngineApiKeyHandler adds the key), so this fronts an external
         // webhook publicly without exposing the engine. The webhook is workspace-scoped so a path is
         // unique per workspace; the caller-supplied path segment is escaped.
-        var response = await _httpClient.PostAsJsonAsync($"api/inbound/webhook/{workspaceRef}/{Uri.EscapeDataString(path)}", payload, SerializerOptions, ct);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/inbound/webhook/{workspaceRef}/{Uri.EscapeDataString(path)}")
+        {
+            Content = JsonContent.Create(payload, options: SerializerOptions)
+        };
+
+        // Relayed as a header rather than folded into the body: the body becomes the run's persisted
+        // trigger payload, and the secret must not end up in workflow state or the history trace.
+        // TryAddWithoutValidation because the caller controls this value and a malformed one should be
+        // rejected by the engine's comparison, not throw here.
+        if (!string.IsNullOrEmpty(secret))
+        {
+            request.Headers.TryAddWithoutValidation(WebhookSecretHeader, secret);
+        }
+
+        var response = await _httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
 
         EngineWebhookResponse? engineResponse = await response.Content.ReadFromJsonAsync<EngineWebhookResponse>(SerializerOptions, ct);

@@ -15,6 +15,7 @@ BEGIN
         CorrelationExpression,
         ConcurrencyPolicy,
         FilterExpression,
+        WebhookSecret,
         CreatedAt
     FROM dbo.TriggerRegistrations
     WHERE TriggerKey = @TriggerKey;

@@ -1,5 +1,7 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Microsoft.Extensions.Logging;
@@ -16,6 +18,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly IRunStarter _runStarter;
     private readonly IRunDispatcher _runDispatcher;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
+    private readonly IExpressionEvaluator? _expressionEvaluator;
     private readonly ILogger<TriggerDispatcher>? _logger;
 
     public TriggerDispatcher(
@@ -27,6 +30,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         IRunStarter runStarter,
         IRunDispatcher runDispatcher,
         IIdempotencyKeyProvider idempotencyKeyProvider,
+        IExpressionEvaluator? expressionEvaluator = null,
         ILogger<TriggerDispatcher>? logger = null)
     {
         _correlationKeyResolver = correlationKeyResolver;
@@ -37,6 +41,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         _runStarter = runStarter;
         _runDispatcher = runDispatcher;
         _idempotencyKeyProvider = idempotencyKeyProvider;
+        _expressionEvaluator = expressionEvaluator;
         _logger = logger;
     }
 
@@ -87,6 +92,26 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             _logger?.LogDebug("Evaluated correlation expression for registration {RegistrationId} to {CorrelationValue}", registration.Id, correlationValue);
             InboundEvent normalizedEvent = resolvedEvent with { CorrelationKey = correlationValue };
 
+            // Secret and filter are both checked before the concurrency enforcer: neither should be able
+            // to queue, drop or cancel anything. An event that fails either was never for this trigger.
+            if (!SecretMatches(registration, resolvedEvent))
+            {
+                // Recorded per-registration but never surfaced to the caller: the public callback answers
+                // 202 either way, so a wrong secret stays indistinguishable from a right one.
+                _logger?.LogWarning("Registration {RegistrationId} rejected event {EventId}: webhook secret mismatch.", registration.Id, evt.InboundEventId);
+                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.SecretMismatch, null, correlationValue));
+                continue;
+            }
+
+            if (!await FilterPassesAsync(registration, normalizedEvent, ct))
+            {
+                // Reported rather than silently swallowed - "I fired the webhook and nothing happened" is
+                // otherwise unanswerable, and a filter is the most likely reason.
+                _logger?.LogDebug("Registration {RegistrationId} filtered out event {EventId}.", registration.Id, evt.InboundEventId);
+                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Filtered, null, correlationValue));
+                continue;
+            }
+
             TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
             _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
             switch (concurrencyDecision.Outcome)
@@ -126,7 +151,9 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         TriggerRegistrationDispatch? summary =
             perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.StartedRun)
             ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Queued)
-            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Dropped);
+            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Dropped)
+            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Filtered)
+            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.SecretMismatch);
 
         return new TriggerDispatchResult(
             summary?.Outcome ?? TriggerDispatchOutcome.NoRegistration,
@@ -135,6 +162,80 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             summary?.CorrelationKey ?? defaultCorrelation,
             perRegistration);
     }
+
+    /// <summary>
+    /// Constant-time comparison against the registration's secret. A registration without one is open,
+    /// which is what every webhook published before secrets existed reads as.
+    /// </summary>
+    private static bool SecretMatches(TriggerRegistrationRow registration, InboundEvent evt)
+    {
+        if (string.IsNullOrEmpty(registration.WebhookSecret))
+        {
+            return true;
+        }
+
+        // Fixed-time so the comparison cannot be used to recover the secret a character at a time.
+        return CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(registration.WebhookSecret),
+            System.Text.Encoding.UTF8.GetBytes(evt.Secret ?? string.Empty));
+    }
+
+    /// <summary>
+    /// Evaluates the registration's filter against the inbound payload, before any run exists. Returns
+    /// true when there is no filter.
+    /// </summary>
+    private async Task<bool> FilterPassesAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(registration.FilterExpression) || _expressionEvaluator is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            WorkflowExpression? filter = JsonSerializer.Deserialize<WorkflowExpression>(registration.FilterExpression, SerializerOptions);
+            if (filter is null)
+            {
+                return true;
+            }
+
+            // There is no branch yet, so the context is a shim over the payload: $trigger resolves,
+            // branch-local state is empty, and the ids that only mean something inside a run are zero.
+            var context = new BranchContext(
+                RunId: 0,
+                BranchId: 0,
+                WorkflowDefinitionId: registration.WorkflowDefinitionId,
+                WorkflowDefinitionRefId: registration.WorkflowRefId,
+                Version: registration.WorkflowVersion,
+                CurrentNodeId: registration.TriggerNodeId.ToString(),
+                Attempt: 0,
+                LocalState: EmptyState,
+                TriggerPayload: evt.Payload,
+                CorrelationKey: evt.CorrelationKey ?? string.Empty,
+                StartedAt: evt.ReceivedAt,
+                WorkspaceId: 0);
+
+            JsonElement result = await _expressionEvaluator.EvaluateAsync(filter, context, ct);
+            if (result.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                return result.ValueKind == JsonValueKind.True;
+            }
+
+            _logger?.LogWarning("Filter on registration {RegistrationId} produced {Kind}, not a boolean; treating the event as non-matching.", registration.Id, result.ValueKind);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Fail closed. A filter is a gate, and a gate that cannot be evaluated has not been passed -
+            // starting the run anyway would defeat the point of having one. Logged at warning because a
+            // filter that never evaluates is a definition bug the author needs to see.
+            _logger?.LogWarning(ex, "Filter on registration {RegistrationId} could not be evaluated; treating the event as non-matching.", registration.Id);
+            return false;
+        }
+    }
+
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+    private static readonly IReadOnlyDictionary<string, JsonElement> EmptyState = new Dictionary<string, JsonElement>();
 
     // [RJ]: I'm gonna trust this for now. will review later.
     private static string? EvaluateCorrelationExpression(string? expression, InboundEvent evt)
