@@ -33,7 +33,6 @@ public sealed class WorkflowMetrics : IDisposable
         NodeDuration = _meter.CreateHistogram<double>("wbskt_workflow_node_duration_ms");
         DispatcherQueueDepth = _meter.CreateObservableGauge("wbskt_workflow_dispatcher_queue_depth", () => { return _dispatcherQueueDepth; });
         CreditsConsumed = _meter.CreateCounter<double>("wbskt_workflow_credits_consumed_total");
-        FlusherLag = _meter.CreateObservableGauge("wbskt_workflow_history_event_flusher_lag", () => { return 0L; });
 
         PendingTriggers = _meter.CreateObservableGauge("wbskt_workflow_pending_triggers", () =>
         {
@@ -48,7 +47,6 @@ public sealed class WorkflowMetrics : IDisposable
     public Histogram<double> NodeDuration { get; }
     public ObservableGauge<long> DispatcherQueueDepth { get; }
     public Counter<double> CreditsConsumed { get; }
-    public ObservableGauge<long> FlusherLag { get; }
     public ObservableGauge<long> PendingTriggers { get; }
 
     public void UpdateSnapshot(long activeBranches, long dispatcherQueueDepth, long pendingTriggerDepth, IReadOnlyDictionary<string, long> bookmarksByWakeKind)
@@ -63,14 +61,29 @@ public sealed class WorkflowMetrics : IDisposable
         }
     }
 
-    public void RecordRunStarted(string workflowRef, string triggerKind)
+    // Every run-level metric carries workspace_id. Without it these series can only be read as a
+    // fleet total: an operator cannot answer "how much is this tenant using" or "is one workspace
+    // responsible for the failure spike", which are the first two questions asked of them.
+    //
+    // node_id is deliberately NOT a tag on NodeDuration - one series per node per workflow is
+    // unbounded cardinality. Per-node timings come from the history stream instead, aggregated by
+    // Run_GetNodeTimingsBy_WorkflowRefId, which is scoped to one workflow and one window.
+    public void RecordRunStarted(string workflowRef, string triggerKind, int workspaceId)
     {
-        RunsStarted.Add(1, new KeyValuePair<string, object?>("workflow_ref", workflowRef), new KeyValuePair<string, object?>("trigger_kind", triggerKind));
+        RunsStarted.Add(
+            1,
+            new KeyValuePair<string, object?>("workflow_ref", workflowRef),
+            new KeyValuePair<string, object?>("trigger_kind", triggerKind),
+            new KeyValuePair<string, object?>("workspace_id", workspaceId));
     }
 
-    public void RecordRunCompleted(string workflowRef, string status)
+    public void RecordRunCompleted(string workflowRef, string status, int workspaceId)
     {
-        RunsCompleted.Add(1, new KeyValuePair<string, object?>("workflow_ref", workflowRef), new KeyValuePair<string, object?>("status", status));
+        RunsCompleted.Add(
+            1,
+            new KeyValuePair<string, object?>("workflow_ref", workflowRef),
+            new KeyValuePair<string, object?>("status", status),
+            new KeyValuePair<string, object?>("workspace_id", workspaceId));
     }
 
     public void RecordNodeDuration(string nodeKind, string outcome, double durationMs)
@@ -78,9 +91,12 @@ public sealed class WorkflowMetrics : IDisposable
         NodeDuration.Record(durationMs, new KeyValuePair<string, object?>("node_kind", nodeKind), new KeyValuePair<string, object?>("outcome", outcome));
     }
 
-    public void RecordCreditsConsumed(string workflowRef, double cost)
+    public void RecordCreditsConsumed(string workflowRef, double cost, int workspaceId)
     {
-        CreditsConsumed.Add(cost, new KeyValuePair<string, object?>("workflow_ref", workflowRef));
+        CreditsConsumed.Add(
+            cost,
+            new KeyValuePair<string, object?>("workflow_ref", workflowRef),
+            new KeyValuePair<string, object?>("workspace_id", workspaceId));
     }
 
     public void Dispose()

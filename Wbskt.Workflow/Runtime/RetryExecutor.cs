@@ -184,7 +184,7 @@ internal static class RetryExecutor
 
                 if (workflowMetrics != null)
                 {
-                    workflowMetrics.RecordCreditsConsumed(context.WorkflowDefinitionRefId.ToString(), (double)cost);
+                    workflowMetrics.RecordCreditsConsumed(context.WorkflowDefinitionRefId.ToString(), (double)cost, context.WorkspaceId);
                 }
             }
 

@@ -16,6 +16,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly IRunCompletedPublisher _runCompletedPublisher;
     private readonly IBookmarkProvider _bookmarkProvider;
     private readonly IJoinAggregatorProvider? _joinAggregatorProvider;
+    private readonly IWorkflowDefinitionCache? _definitionCache;
     private readonly ISubWorkflowCompletionHook _completionHook;
     private readonly IClock _clock;
     private readonly IRunCancellationService? _runCancellationService;
@@ -34,7 +35,8 @@ internal sealed class RunFinalizer : IRunFinalizer
         IRunCancellationService? runCancellationService = null,
         WorkflowMetrics? workflowMetrics = null,
         ILogger<RunFinalizer>? logger = null,
-        IJoinAggregatorProvider? joinAggregatorProvider = null)
+        IJoinAggregatorProvider? joinAggregatorProvider = null,
+        IWorkflowDefinitionCache? definitionCache = null)
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
@@ -47,7 +49,31 @@ internal sealed class RunFinalizer : IRunFinalizer
         _workflowMetrics = workflowMetrics;
         _runCancellationService = runCancellationService;
         _joinAggregatorProvider = joinAggregatorProvider;
+        _definitionCache = definitionCache;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// The workspace a run belongs to, for metric tagging. Runs do not carry it - it lives on the
+    /// definition - and this is only used to label a counter, so a lookup failure degrades to 0
+    /// rather than derailing finalization.
+    /// </summary>
+    private async Task<int> ResolveWorkspaceIdAsync(int workflowDefinitionId, CancellationToken ct)
+    {
+        if (_definitionCache is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return (await _definitionCache.GetAsync(workflowDefinitionId, ct)).WorkspaceId;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Could not resolve the workspace for definition {DefinitionId} while tagging run metrics.", workflowDefinitionId);
+            return 0;
+        }
     }
 
     public async Task FinalizeAsync(long runId, CancellationToken ct)
@@ -64,7 +90,10 @@ internal sealed class RunFinalizer : IRunFinalizer
             return;
         }
 
-        _workflowMetrics?.RecordRunCompleted(updatedRun.WorkflowRefId.ToString(), terminalStatus);
+        _workflowMetrics?.RecordRunCompleted(
+            updatedRun.WorkflowRefId.ToString(),
+            terminalStatus,
+            await ResolveWorkspaceIdAsync(updatedRun.WorkflowDefinitionId, ct));
         await _historyEventProvider.InsertBatchAsync(
         [
             new HistoryEventRow

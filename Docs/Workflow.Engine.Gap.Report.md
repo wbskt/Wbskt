@@ -97,10 +97,10 @@ against current code** and worth working from directly.
 | WF-24 | 🟡 | Database | Unbounded `Warn`/`Error` history growth |
 | WF-25 | 🟡 | Database | Three dead stored procedures |
 | WF-26 | 🟠 | Analytics | ◐ No user-facing analytics endpoint at all |
-| WF-27 | 🟠 | Analytics | Metrics are not workspace-scoped and node timings are not per-node |
+| WF-27 | 🟠 | Analytics | ✅ Metrics are not workspace-scoped and node timings are not per-node |
 | WF-28 | 🟠 | Analytics | Credit accounting is a stub — every node costs exactly 1.0 |
 | WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
-| WF-30 | 🟡 | Analytics | `FlusherLag` gauge is hardcoded to zero |
+| WF-30 | 🟡 | Analytics | ✅ `FlusherLag` gauge is hardcoded to zero |
 | WF-31 | 🟠 | Runtime | Cancellation state is cached per-host with no cross-host invalidation |
 | WF-32 | 🟠 | Runtime | Multi-registration dispatch reports only the first run started |
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
@@ -1315,6 +1315,24 @@ reasons without scraping Prometheus.
 
 ## WF-27 🟠 Metrics are not workspace-scoped, and node timings are not per-node
 
+**Status:** ✅ Fixed 2026-08-07 — both halves, though the second is answered differently from how the
+item proposed.
+
+**Workspace tagging.** `runs_started_total`, `runs_completed_total` and `credits_consumed_total` now
+carry `workspace_id`. Without it these series could only be read as a fleet total — an operator could
+not answer "how much is this tenant using" or "is one workspace responsible for the failure spike".
+`RunStarter` takes it from the definition row and `RetryExecutor` from the branch context; only
+`RunFinalizer` needed a new dependency (the definition cache), and since this only labels a counter, a
+lookup failure degrades to `0` rather than derailing finalization.
+
+**Node timings — resolved, but not by adding a `node_id` tag.** One time series per node per workflow
+is unbounded cardinality, which is exactly the thing that takes a Prometheus server down. Per-node
+timings instead come from the history stream via WF-26's `Run_GetNodeTimingsBy_WorkflowRefId`, which
+is scoped to one workflow and one window and so has no cardinality problem at all. **The user-facing
+question — "which step in my workflow is slow" — is answered**; the metric deliberately stays coarse
+for alerting. This is recorded as a comment on `RecordNodeDuration` so nobody "fixes" it later by
+adding the tag.
+
 **Symptom.** Even with the Prometheus data, a tenant cannot see their own numbers, and "which step in
 *my* workflow is slow" is unanswerable.
 
@@ -1425,6 +1443,12 @@ client-side inference.
 ---
 
 ## WF-30 🟡 `FlusherLag` gauge is hardcoded to zero
+
+**Status:** ✅ Fixed 2026-08-07 — deleted. History writes are synchronous, so there is no flusher and
+no lag; a permanently-zero gauge reads as healthy forever.
+
+---
+
 
 `Wbskt.Workflow/Telemetry/WorkflowMetrics.cs:36` —
 `FlusherLag = _meter.CreateObservableGauge("wbskt_workflow_history_event_flusher_lag", () => { return 0L; });`

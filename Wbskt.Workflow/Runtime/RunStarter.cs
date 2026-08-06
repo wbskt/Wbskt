@@ -57,7 +57,7 @@ internal sealed class RunStarter : IRunStarter
         try
         {
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
-            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind);
+            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
             decimal creditBudget = ResolveCreditBudget(definition.DefinitionJson);
             DateTime nowUtc = _clock.UtcNow;
         string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent); // [RJ]: we actually will always have c-key in the trigger event at this point. don't need to use resolver.
