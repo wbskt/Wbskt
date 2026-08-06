@@ -77,9 +77,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, defaultCorrelation);
         }
 
-        TriggerDispatchOutcome aggregateOutcome = TriggerDispatchOutcome.NoRegistration;
-        long? firstStartedRunId = null;
-        string finalReason = defaultCorrelation;
+        List<TriggerRegistrationDispatch> perRegistration = new(registrations.Count);
 
         foreach (TriggerRegistrationRow registration in registrations)
         {
@@ -94,19 +92,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             switch (concurrencyDecision.Outcome)
             {
                 case TriggerConcurrencyOutcome.Dropped:
-                    if (aggregateOutcome == TriggerDispatchOutcome.NoRegistration)
-                    {
-                        aggregateOutcome = TriggerDispatchOutcome.Dropped;
-                        finalReason = correlationValue;
-                    }
+                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue));
                     continue;
 
                 case TriggerConcurrencyOutcome.Queued:
-                    if (aggregateOutcome == TriggerDispatchOutcome.NoRegistration || aggregateOutcome == TriggerDispatchOutcome.Dropped)
-                    {
-                        aggregateOutcome = TriggerDispatchOutcome.Queued;
-                        finalReason = correlationValue;
-                    }
+                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue));
                     continue;
 
                 case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
@@ -120,16 +110,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
             _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
-            
-            // TODO(WF-32): this aggregate collapses a multi-registration fan-out into one outcome.
-            aggregateOutcome = TriggerDispatchOutcome.StartedRun;
-            
-            // TODO(WF-32): reports only the first run started; callers cannot see the rest.
-            if (firstStartedRunId == null)
-            {
-                firstStartedRunId = runId;
-                finalReason = correlationValue;
-            }
+
+            perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, runId, correlationValue));
         }
 
         if (bookmarkMatch.ClaimKey != null)
@@ -138,7 +120,20 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             await _idempotencyKeyProvider.MarkSucceededAsync(bookmarkMatch.ClaimKey, "{}", ct);
         }
 
-        return new TriggerDispatchResult(aggregateOutcome, firstStartedRunId, null, finalReason);
+        // The summary is deliberately lossy - one event fanning out to several registrations can
+        // legitimately start one run and drop another. Callers that care read Registrations; the
+        // summary exists so the common single-registration case stays a single value.
+        TriggerRegistrationDispatch? summary =
+            perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.StartedRun)
+            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Queued)
+            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Dropped);
+
+        return new TriggerDispatchResult(
+            summary?.Outcome ?? TriggerDispatchOutcome.NoRegistration,
+            summary?.RunId,
+            null,
+            summary?.CorrelationKey ?? defaultCorrelation,
+            perRegistration);
     }
 
     // [RJ]: I'm gonna trust this for now. will review later.

@@ -136,6 +136,40 @@ public sealed class InboundManualControllerTests
     }
 
     [Fact]
+    public async Task Post_reports_every_registration_the_event_matched()
+    {
+        // A workflow can carry more than one manual trigger; the response must name every run it
+        // started, not just whichever one the summary happens to point at.
+        var workflowRefId = Guid.NewGuid();
+        var firstRunRefId = Guid.NewGuid();
+        var secondRunRefId = Guid.NewGuid();
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 42, null, "ok",
+            [
+                new TriggerRegistrationDispatch(7, workflowRefId, TriggerDispatchOutcome.StartedRun, 42, "ok"),
+                new TriggerRegistrationDispatch(8, workflowRefId, TriggerDispatchOutcome.StartedRun, 43, "ok"),
+                new TriggerRegistrationDispatch(9, workflowRefId, TriggerDispatchOutcome.Dropped, null, "ok")
+            ]));
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(MakeRunRow(42, firstRunRefId, workflowRefId));
+        runProvider.Setup(r => r.GetByIdAsync(43, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(MakeRunRow(43, secondRunRefId, workflowRefId));
+        var controller = new InboundManualController(hub.Object, runProvider.Object);
+        JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
+
+        InboundManualResponse response = await controller.Post(workflowRefId, payload, null, CancellationToken.None);
+
+        Assert.Equal(firstRunRefId, response.RunRefId);
+        Assert.Equal(
+            [(7L, "StartedRun", (Guid?)firstRunRefId), (8L, "StartedRun", secondRunRefId), (9L, "Dropped", null)],
+            response.Registrations.Select(r => (r.RegistrationId, r.Outcome, r.RunRefId)));
+        // The summary run was resolved from the projection, not looked up a second time.
+        runProvider.Verify(r => r.GetByIdAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Post_with_idempotency_key_uses_it_as_the_inbound_event_id()
     {
         var workflowRefId = Guid.NewGuid();

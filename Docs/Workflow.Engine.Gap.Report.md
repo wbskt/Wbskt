@@ -197,7 +197,7 @@ against current code** and worth working from directly.
 | WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
 | WF-30 | 🟡 | Analytics | ✅ `FlusherLag` gauge is hardcoded to zero |
 | WF-31 | 🟠 | Runtime | Cancellation state is cached per-host with no cross-host invalidation |
-| WF-32 | 🟠 | Runtime | Multi-registration dispatch reports only the first run started |
+| WF-32 | 🟠 | Runtime | ✅ Multi-registration dispatch reports only the first run started |
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
 | WF-34 | 🟡 | Hygiene | ◐ Resolved `[RJ]:` markers and duplicate assignments |
 | WF-35 | 🟡 | Hygiene | ◐ Shipped example generator emits a workflow that fails at runtime |
@@ -1606,6 +1606,37 @@ live bookmarks.
 ---
 
 ## WF-32 🟠 Multi-registration dispatch reports only the first run
+
+**Status:** ✅ Fixed 2026-08-07.
+
+**What landed.** `TriggerDispatchResult` gained `Registrations` — one
+`TriggerRegistrationDispatch(RegistrationId, WorkflowRefId, Outcome, RunId?, CorrelationKey)` per
+matched registration, in processing order — plus a `StartedRunIds` convenience. The dispatcher builds
+that list as it goes and *derives* the summary from it, so the two cannot disagree; the running
+`aggregateOutcome`/`firstStartedRunId` folding is gone.
+
+`WorkflowRefId` is on each entry deliberately: a registration id is opaque to an API caller, and the
+question a webhook caller actually has is "which workflows did my call fire?"
+
+**The summary stays lossy, on purpose.** `Outcome` is `StartedRun` if any registration started a run,
+else `Queued`, else `Dropped`, else `NoRegistration`; `RunId` is the first started run. Collapsing N
+outcomes into one value cannot be information-preserving, so the fix is not a cleverer fold — it is
+that the detail now exists alongside it. Both are documented on the record. A new
+`TriggerDispatchOutcome.Mixed` was considered and rejected: it would break every caller's switch while
+telling them less than the list already does.
+
+**Controllers.** `InboundManualController` and `InboundWebhookController` project the list into a
+`Registrations` array (`registrationId`, `workflowRefId`, `outcome`, `runRefId`, `runId`,
+`correlationKey`) via a shared `InboundDispatchProjection`, keeping their existing top-level
+`Outcome`/`RunRefId`/`RunId` fields unchanged so nothing that reads them breaks. Run ref ids come from
+the projection rather than a second lookup. **The signal and wake controllers were left alone** — those
+channels only ever resolve bookmarks (nothing publishes a trigger registration on them), so their list
+would always be empty; each carries a comment saying so rather than an empty array in the response.
+
+**Tests.** Three dispatcher cases (fan-out reports every registration with distinct run ids; a dropped
+registration stays visible next to a started one — the exact case the old fold erased; the bookmark
+path reports no registrations) and two controller cases. `Docs/API.Endpoints.md` §4 documents the
+response shape.
 
 **Symptom.** One inbound event matching several trigger registrations starts several runs, but the API
 response names only one, arbitrarily.

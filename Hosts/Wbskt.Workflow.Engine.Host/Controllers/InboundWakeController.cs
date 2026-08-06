@@ -26,6 +26,8 @@ public sealed class InboundWakeController(IInboundHub hub) : ControllerBase
             },
             default);
 
+        // As with the signal endpoint, http-wake only ever resolves bookmarks - no trigger registration
+        // is published on this channel - so there is no per-registration fan-out to project.
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, ct);
         return new InboundWakeResponse(result.Outcome.ToString(), result.Outcome == TriggerDispatchOutcome.ResumedBookmark);
     }

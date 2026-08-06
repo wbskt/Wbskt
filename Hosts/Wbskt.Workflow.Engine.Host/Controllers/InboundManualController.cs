@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Middleware;
@@ -34,14 +33,19 @@ public sealed class InboundManualController(IInboundHub hub, IRunProvider runPro
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
 
+        // A workflow may carry more than one manual trigger, so the event can start more than one run.
+        // Outcome/RunRefId/RunId summarise the first; Registrations carries all of them.
+        IReadOnlyList<InboundDispatchEntry> dispatches = await InboundDispatchProjection.ProjectAsync(result, runProvider, ct);
+
         if (result.RunId.HasValue)
         {
-            RunRow run = await runProvider.GetByIdAsync(result.RunId.Value, ct);
-            return new InboundManualResponse(result.Outcome.ToString(), run.RefId, result.RunId);
+            Guid runRefId = dispatches.FirstOrDefault(d => d.RunId == result.RunId)?.RunRefId
+                ?? (await runProvider.GetByIdAsync(result.RunId.Value, ct)).RefId;
+            return new InboundManualResponse(result.Outcome.ToString(), runRefId, result.RunId, dispatches);
         }
 
-        return new InboundManualResponse(result.Outcome.ToString(), null, null);
+        return new InboundManualResponse(result.Outcome.ToString(), null, null, dispatches);
     }
 }
 
-public sealed record InboundManualResponse(string Outcome, Guid? RunRefId, long? RunId);
+public sealed record InboundManualResponse(string Outcome, Guid? RunRefId, long? RunId, IReadOnlyList<InboundDispatchEntry> Registrations);

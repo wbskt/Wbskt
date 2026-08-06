@@ -28,6 +28,9 @@ public sealed class InboundSignalController(IInboundHub hub, ILogger<InboundSign
             },
             default);
 
+        // No per-registration projection here (unlike the webhook/manual endpoints): the signal channel
+        // only ever resolves bookmarks - nothing publishes a trigger registration on it - so a signal
+        // cannot fan out and result.Registrations is always empty.
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, ct);
         logger?.LogInformation("Signal request {SignalName} for scope {ScopeRunRefId} resulted in outcome {Outcome}", signalName, scopeRunRefId, result.Outcome);
         return new InboundSignalResponse(result.Outcome.ToString(), result.Outcome == TriggerDispatchOutcome.ResumedBookmark);

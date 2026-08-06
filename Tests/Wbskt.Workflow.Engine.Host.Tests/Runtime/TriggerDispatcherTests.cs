@@ -161,6 +161,80 @@ public sealed class TriggerDispatcherTests
         Assert.Equal([(501L, 801L, BranchExecutionReason.TriggerStarted)], runDispatcher.Requests);
     }
 
+    [Fact]
+    public async Task Dispatch_reports_an_outcome_for_every_matched_registration()
+    {
+        // Arrange: one event, two registrations on the same trigger key - the fan-out case that used
+        // to collapse into a single run id.
+        var first = CreateRegistration("AllowParallel", id: 5);
+        var second = CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"));
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(first, second));
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal([501L, 502L], result.StartedRunIds);
+        Assert.Collection(
+            result.Registrations,
+            entry =>
+            {
+                Assert.Equal(5L, entry.RegistrationId);
+                Assert.Equal(first.WorkflowRefId, entry.WorkflowRefId);
+                Assert.Equal(TriggerDispatchOutcome.StartedRun, entry.Outcome);
+                Assert.Equal(501L, entry.RunId);
+            },
+            entry =>
+            {
+                Assert.Equal(6L, entry.RegistrationId);
+                Assert.Equal(second.WorkflowRefId, entry.WorkflowRefId);
+                Assert.Equal(TriggerDispatchOutcome.StartedRun, entry.Outcome);
+                Assert.Equal(502L, entry.RunId);
+            });
+    }
+
+    [Fact]
+    public async Task Dispatch_keeps_a_dropped_registration_visible_when_another_starts_a_run()
+    {
+        // Arrange: the mixed case. The summary can only name one outcome, so the dropped registration
+        // must still be reported per-registration or it disappears entirely.
+        var dropped = CreateRegistration("DropIfRunning", id: 5);
+        var started = CreateRegistration("AllowParallel", id: 6);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(dropped, started),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(
+                new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, []),
+                new Dictionary<long, TriggerConcurrencyDecision>
+                {
+                    [5L] = new(TriggerConcurrencyOutcome.Dropped, [])
+                }));
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal(501L, result.RunId);
+        Assert.Equal(
+            [(5L, TriggerDispatchOutcome.Dropped, (long?)null), (6L, TriggerDispatchOutcome.StartedRun, (long?)501L)],
+            result.Registrations.Select(r => (r.RegistrationId, r.Outcome, r.RunId)));
+    }
+
+    [Fact]
+    public async Task Dispatch_reports_no_registrations_when_the_event_resumed_a_bookmark()
+    {
+        // Arrange: the bookmark path returns before registrations are read, so there is nothing to report.
+        var dispatcher = CreateDispatcher(bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(true, 77, false)));
+
+        // Act
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Empty(result.Registrations);
+        Assert.Empty(result.StartedRunIds);
+    }
+
     private static TriggerDispatcher CreateDispatcher(
         RecordingBookmarkResumer? bookmarkResumer = null,
         RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null,
@@ -204,13 +278,13 @@ public sealed class TriggerDispatcherTests
             DateTime.UtcNow);
     }
 
-    private static TriggerRegistrationRow CreateRegistration(string policy = "Queue")
+    private static TriggerRegistrationRow CreateRegistration(string policy = "Queue", int id = 5, Guid? workflowRefId = null)
     {
         return new TriggerRegistrationRow
         {
-            Id = 5,
+            Id = id,
             WorkflowDefinitionId = 42,
-            WorkflowRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            WorkflowRefId = workflowRefId ?? Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             WorkflowVersion = 3,
             TriggerNodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             TriggerKind = "client",
@@ -252,10 +326,17 @@ public sealed class TriggerDispatcherTests
         }
     }
 
-    private sealed class RecordingTriggerConcurrencyEnforcer(TriggerConcurrencyDecision decision) : ITriggerConcurrencyEnforcer
+    private sealed class RecordingTriggerConcurrencyEnforcer(
+        TriggerConcurrencyDecision decision,
+        IReadOnlyDictionary<long, TriggerConcurrencyDecision>? perRegistration = null) : ITriggerConcurrencyEnforcer
     {
         public Task<TriggerConcurrencyDecision> EvaluateAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
         {
+            if (perRegistration != null && perRegistration.TryGetValue(registration.Id, out TriggerConcurrencyDecision? specific))
+            {
+                return Task.FromResult(specific);
+            }
+
             return Task.FromResult(decision);
         }
     }
@@ -280,10 +361,14 @@ public sealed class TriggerDispatcherTests
 
     private sealed class RecordingRunStarter(List<string> operations) : IRunStarter
     {
+        private int _started;
+
         public Task<(long RunId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
         {
             operations.Add("start");
-            return Task.FromResult((501L, 801L));
+            // Distinct ids per call so a fan-out over several registrations is distinguishable.
+            int offset = _started++;
+            return Task.FromResult((501L + offset, 801L + offset));
         }
     }
 

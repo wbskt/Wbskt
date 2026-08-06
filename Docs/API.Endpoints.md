@@ -339,6 +339,14 @@ and every `/api/inbound/*` route additionally requires the shared key in `X-Wbsk
 Unlike the public front door, these return their real outcome (`Outcome`, `Matched`, `RunRefId`) —
 the caller is a trusted service, so there is no oracle to protect against.
 
+One event can match several trigger registrations — two workflows sharing a webhook path, or one
+workflow with two manual triggers — and each of them independently starts, queues or drops a run. The
+manual and webhook responses therefore carry a `Registrations` array (`registrationId`,
+`workflowRefId`, `outcome`, `runRefId`, `runId`, `correlationKey`) alongside the top-level `Outcome`
+and `RunRefId`, which summarise the *first* started run and stay for callers written against the
+single-run shape. The signal and wake endpoints have no such array: those channels only resolve
+bookmarks, so they cannot fan out.
+
 | Endpoint | What it does |
 |---|---|
 | `GET /healthz` | Liveness — the process is up. |

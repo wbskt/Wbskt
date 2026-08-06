@@ -29,17 +29,21 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
             default);
 
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, ct);
-        
+
+        // One path can match several registrations, so every outcome is reported. Outcome/RunId
+        // summarise the first started run and stay for callers written against the single-run shape.
+        IReadOnlyList<InboundDispatchEntry> dispatches = await InboundDispatchProjection.ProjectAsync(result, runProvider, ct);
+
         Guid? runRefId = null;
         if (result.RunId.HasValue)
         {
-            var run = await runProvider.GetByIdAsync(result.RunId.Value, ct);
-            runRefId = run.RefId;
+            runRefId = dispatches.FirstOrDefault(d => d.RunId == result.RunId)?.RunRefId
+                ?? (await runProvider.GetByIdAsync(result.RunId.Value, ct)).RefId;
         }
-        
-        logger?.LogInformation("Webhook request for channel {ChannelKind} resulted in outcome {Outcome} with RunRefId {RunRefId}", channelKind, result.Outcome, runRefId);
-        return new InboundWebhookResponse(result.Outcome.ToString(), runRefId);
+
+        logger?.LogInformation("Webhook request for channel {ChannelKind} resulted in outcome {Outcome} across {Count} registration(s) with RunRefId {RunRefId}", channelKind, result.Outcome, dispatches.Count, runRefId);
+        return new InboundWebhookResponse(result.Outcome.ToString(), runRefId, dispatches);
     }
 }
 
-public sealed record InboundWebhookResponse(string Outcome, Guid? RunId);
+public sealed record InboundWebhookResponse(string Outcome, Guid? RunId, IReadOnlyList<InboundDispatchEntry> Registrations);
