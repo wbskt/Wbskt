@@ -28,20 +28,24 @@ Three distinct failure shapes exist; a test asserting the wrong one passes for t
   It has no `code` field. Rows expecting this say **model-validation 400**.
 - **Empty body** — `204 No Content` from `MapResult(Result.Success())`. Most mutations return this.
 
-### Fixtures assumed
+### Fixture helpers the scenarios use
 
-Beyond today's `ServicesFixture`, the suite needs:
+All present on `ServicesFixture`. The ones worth knowing before writing a new scenario:
 
-- `RegisterAndLoginNewUserAsync()` → returns token **and** the user's `RefId` (needed to address the
-  user in tenant-admin routes). Today it returns the token only.
-- `LoginAsAdminAsync()` → already present; the seeded `root` is a **tenant-wide** Admin in tenant 1.
-- A raw `SendAsync` escape hatch that returns `HttpResponseMessage` without `EnsureSuccessStatusCode`,
-  so negative scenarios can assert status codes and read headers.
-- `GetTenantsAsync(token)` → the tenant `RefId` every `/api/tenants/{tenantRef}` route needs.
+- `CreateUserAsync(invitationToken?)` → registers and logs in a unique account. On its own this
+  makes an administrator **of a tenant of its own** — see the seed facts below.
+- `CreateUserInTenantAsync(adminToken, tenantRef)` → invites an account into someone else's tenant,
+  where it holds nothing. This is how you arrange an unprivileged caller.
+- `SendAsync(method, url, token?, body?)` → the raw escape hatch. Returns the response untouched, so
+  negative scenarios can read the status, the error body, or a header. The typed helpers all call
+  `EnsureSuccessStatusCode` and are for arranging, not asserting.
+- `ReadErrorCodeAsync(response)` → the `code` off an `Error` body, or null when the body is
+  `ValidationProblemDetails` instead.
+- `GetPageAsync(url, token)` → item count plus the `X-Total-Count` header.
+- `GetEffectivePermissionsAsync(token, workspaceRef)` → the resolved slug set, for asserting what an
+  assignment actually delivered.
 
 ### Seed facts the scenarios depend on
-
-Established by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`:
 
 Partly seeded by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`, partly a
 consequence of how registration works:
@@ -68,9 +72,10 @@ To arrange a non-privileged caller, invite them into someone else's tenant
 administrator of their own tenant instead.
 
 ### Known gaps in reachability
-- **Rate limiting is per-IP and shared across the whole suite** (§5). Running those scenarios in
-  parallel with the rest will cause unrelated 429s. Put them in their own xUnit collection, or point
-  them at a host started with a high `RateLimiting:Authentication:PermitLimit`.
+
+- **Rate limiting is per-IP and shared across the whole suite** (§7). Running those scenarios
+  alongside the rest will cause unrelated 429s for the remainder of the window, which is why they
+  are gated behind `E2E_RATE_LIMIT_TESTS=1` and meant to be run with a filter.
 - **Test data accumulates.** Registration, workspace creation and role creation have no cleanup path
   (no delete-user endpoint). Every scenario must use a unique suffix, and the tenant member list will
   grow monotonically across runs — assertions must be "contains", never "count equals".
