@@ -154,6 +154,83 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_records_a_resume_distinctly_from_a_start()
+    {
+        // A branch waking from a bookmark is not starting - often it parked hours ago. Logging both
+        // as BranchStarted made the two indistinguishable in the trace.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = CreateLoop(definition, new RecordingBranchProvider(nodeId), historyProvider,
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "BranchResumed");
+        Assert.DoesNotContain(historyProvider.Events, evt => evt.EventKind == "BranchStarted");
+    }
+
+    [Fact]
+    public async Task RunAsync_puts_the_node_duration_on_the_outcome_event()
+    {
+        // Deriving duration by subtracting the NodeStarted timestamp only works while both rows
+        // survive retention, and silently includes retry backoff.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = CreateLoop(definition, new RecordingBranchProvider(nodeId), historyProvider,
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Continue("next", CreatePatch("step", 1)))));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        var completed = Assert.Single(historyProvider.Events, evt => evt.EventKind == "NodeCompleted");
+        Assert.NotNull(completed.PayloadJson);
+        Assert.True(JsonDocument.Parse(completed.PayloadJson!).RootElement.TryGetProperty("durationMs", out _));
+    }
+
+    [Fact]
+    public async Task RunAsync_records_BranchFailed_alongside_NodeFailed()
+    {
+        // NodeFailed alone said which node broke, not that the branch ended nor how the failure was
+        // handled - FailBranch, FailRun and Compensate look identical from NodeFailed.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = CreateLoop(definition, new RecordingBranchProvider(nodeId), historyProvider,
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("BOOM", "blew up", false, null))));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "NodeFailed");
+        var branchFailed = Assert.Single(historyProvider.Events, evt => evt.EventKind == "BranchFailed");
+        Assert.Equal("Warn", branchFailed.Severity);
+        Assert.Contains("FailBranch", branchFailed.PayloadJson);
+    }
+
+    private static BranchLoop CreateLoop(
+        WorkflowDefinition definition,
+        RecordingBranchProvider branchProvider,
+        RecordingHistoryEventProvider historyProvider,
+        StubNodeExecutorRegistry registry)
+    {
+        return new BranchLoop(
+            branchProvider,
+            new StubRunProvider(),
+            new StubRunCountersProvider(),
+            new RecordingBookmarkProvider(),
+            historyProvider,
+            new StubWorkflowDefinitionCache(definition),
+            registry,
+            new RecordingRunDispatcher(),
+            new StubProviderComposite(),
+            new FixedClock(),
+            new SequentialIdGenerator());
+    }
+
+    [Fact]
     public async Task RunAsync_executes_two_Continue_nodes_then_Terminal()
     {
         // Arrange

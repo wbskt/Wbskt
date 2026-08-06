@@ -106,8 +106,8 @@ internal sealed class RunCancellationService : IRunCancellationService
                 RunId = checked((int)runId),
                 BranchRefId = null,
                 NodeId = null,
-                EventKind = "RunCancellationRequested",
-                Severity = "Info",
+                EventKind = HistoryEventKind.RunCancellationRequested,
+                Severity = HistoryEventKind.SeverityFor(HistoryEventKind.RunCancellationRequested),
                 PayloadJson = JsonSerializer.Serialize(new { Reason = reason }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 Timestamp = _clock.UtcNow
             }

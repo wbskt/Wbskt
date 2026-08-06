@@ -73,7 +73,7 @@ internal sealed class RunFinalizer : IRunFinalizer
                 RunId = updatedRun.Id,
                 BranchRefId = null,
                 NodeId = null,
-                EventKind = "RunFinalized",
+                EventKind = HistoryEventKind.RunFinalized,
                 Severity = GetSeverity(terminalStatus),
                 PayloadJson = JsonSerializer.Serialize(new { Status = terminalStatus }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 Timestamp = completedAt

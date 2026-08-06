@@ -11,6 +11,13 @@ using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Runtime;
 
+/// <summary>
+/// Called when a transient failure is about to be retried, before the backoff delay elapses. The
+/// retry executor has no history provider of its own, so the branch loop supplies this to record the
+/// attempt.
+/// </summary>
+internal delegate Task RetryNotification(int attempt, int maxAttempts, TimeSpan delay, string reason, CancellationToken ct);
+
 internal static class RetryExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -25,7 +32,8 @@ internal static class RetryExecutor
         IRunCountersProvider? runCountersProvider = null,
         ICreditCostCalculator? creditCostCalculator = null,
         WorkflowMetrics? workflowMetrics = null,
-        WorkflowDefinition? definition = null)
+        WorkflowDefinition? definition = null,
+        RetryNotification? onRetry = null)
     {
         _ = clock;
         RetryPolicy policy = GetPolicy(node);
@@ -294,6 +302,14 @@ internal static class RetryExecutor
                 }
 
                 TimeSpan delay = GetDelay(policy, attempt);
+
+                // Retries were invisible in the trace: a node retried four times looked like one slow
+                // node, and the backoff was indistinguishable from the node itself being slow.
+                if (onRetry is not null)
+                {
+                    await onRetry(attempt, policy.MaxAttempts, delay, ex.Message, ct);
+                }
+
                 if (delay > TimeSpan.Zero)
                 {
                     await Task.Delay(delay, ct);

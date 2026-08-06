@@ -99,7 +99,7 @@ against current code** and worth working from directly.
 | WF-26 | 🟠 | Analytics | No user-facing analytics endpoint at all |
 | WF-27 | 🟠 | Analytics | Metrics are not workspace-scoped and node timings are not per-node |
 | WF-28 | 🟠 | Analytics | Credit accounting is a stub — every node costs exactly 1.0 |
-| WF-29 | 🟠 | Analytics | History trace is missing inbound, retry, resume and charge events |
+| WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
 | WF-30 | 🟡 | Analytics | `FlusherLag` gauge is hardcoded to zero |
 | WF-31 | 🟠 | Runtime | Cancellation state is cached per-host with no cross-host invalidation |
 | WF-32 | 🟠 | Runtime | Multi-registration dispatch reports only the first run started |
@@ -1315,6 +1315,43 @@ a placeholder.
 ---
 
 ## WF-29 🟠 History trace is missing key events
+
+**Status:** ◐ Partial — everything except inbound events landed 2026-08-06. The inbound gap is a
+**schema blocker**, described below.
+
+**What landed.**
+- **`durationMs` on every node outcome** — the `Stopwatch` value was already measured and thrown
+  away. Deriving it by subtracting the `NodeStarted` timestamp only works while both rows survive
+  retention, and silently includes retry backoff. This is what per-node timing analytics (WF-26)
+  reads.
+- **`BranchResumed`** — a branch waking from a bookmark logged as `BranchStarted`, making a
+  parked-then-woken branch indistinguishable from a fresh one. Carries the dispatch reason.
+- **`BranchFailed`** — `NodeFailed` alone said which node broke, not that the branch ended nor how
+  the failure was handled; `FailBranch`, `FailRun` and `Compensate` were indistinguishable. Carries
+  the error, the `onFailure` outcome and whether compensation ran.
+- **`NodeRetrying`** — retries were invisible: a node retried four times looked like one slow node.
+  Carries attempt, max attempts, backoff delay and reason. `RetryExecutor` has no history provider,
+  so the branch loop passes a `RetryNotification` callback.
+- **`CompensationFailed`** — the orchestrator had a bare `catch {}`, so an undo that never happened
+  left no trace at all. Now logged and recorded (guarded, since the caller is already handling a
+  failure).
+- **Severity centralised** in `HistoryEventKind.SeverityFor`. It was an inline ternary that made
+  everything except `NodeFailed` `Info` — so `RunFaulted` (the engine failing) and `BranchCancelled`
+  were both filed as routine. Severity is not cosmetic: retention keeps `Warn`/`Error` far longer,
+  so a wrong severity discards the record of a failure. All emitters now use the shared constants.
+
+**⚠ Inbound events are not implemented, and cannot be without a schema change.**
+`HistoryEvents.RunId` is `NOT NULL` **and the leading column of the clustered primary key**, but at
+`InboundHub.HandleAsync` no run exists yet — dispatch may start one, resume a bookmark, queue, drop,
+or match nothing. Recording only the cases that produced a run would omit exactly the ones an operator
+needs ("I fired the webhook and nothing happened"). Fixing it means either making `RunId` nullable (a
+clustered-key change) or giving inbound events their own log. That is a schema decision, not wiring,
+so it is left with an accurate `TODO(arch)` rather than half-built.
+
+**Credit charges are also still absent.** The cost is computed inside `RetryExecutor`, which would
+need the same callback treatment as `NodeRetrying` to surface it. Deliberately deferred to **WF-28**:
+every node currently costs exactly `1.0`, so recording it today would add a row (or a payload field)
+per node execution that carries no information. Do it as part of giving the cost model real values.
 
 **Symptom (user).** The run trace cannot explain *why* a node took 40 seconds, whether it was retried,
 or when an inbound event arrived. A UI rendering the trace has to diff `NodeStarted`/`NodeCompleted`

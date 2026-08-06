@@ -94,7 +94,19 @@ internal sealed class BranchLoop : IBranchLoop
         RunRow runRow = await _runProvider.GetByIdAsync(runId, ct);
         WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(runRow.WorkflowDefinitionId, ct);
 
-        await AppendEventAsync(runRow.Id, branchRow.RefId, null, "BranchStarted", ct);
+        // A branch waking from a bookmark is not starting - it is resuming, often hours later. Logging
+        // both as "BranchStarted" made a parked-then-woken branch indistinguishable from a fresh one
+        // in the trace, and hid how long it had been parked.
+        string entryKind = reason == BranchExecutionReason.BookmarkResumed
+            ? HistoryEventKind.BranchResumed
+            : HistoryEventKind.BranchStarted;
+        await AppendEventAsync(
+            runRow.Id,
+            branchRow.RefId,
+            null,
+            entryKind,
+            JsonSerializer.Serialize(new { reason = reason.ToString() }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            ct);
         _logger?.LogInformation("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
         // Spec §2.10 Branch Loop (pseudocode)
@@ -137,7 +149,7 @@ internal sealed class BranchLoop : IBranchLoop
             }
             else
             {
-                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "NodeStarted", ct);
+                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.NodeStarted, ct);
                 _logger?.LogInformation("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
 
                 System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -162,7 +174,16 @@ internal sealed class BranchLoop : IBranchLoop
                         _runCountersProvider,
                         _creditCostCalculator,
                         workflowMetrics: _workflowMetrics,
-                        definition: definition);
+                        definition: definition,
+                        onRetry: (attempt, maxAttempts, delay, reason, retryCt) => AppendEventAsync(
+                            runRow.Id,
+                            branchRow.RefId,
+                            node.NodeId,
+                            HistoryEventKind.NodeRetrying,
+                            JsonSerializer.Serialize(
+                                new { attempt, maxAttempts, delayMs = delay.TotalMilliseconds, reason },
+                                new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                            retryCt));
                 }
                 catch (EngineFaultException ex)
                 {
@@ -170,7 +191,7 @@ internal sealed class BranchLoop : IBranchLoop
                     outcome = "Failed";
                     await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", null, null, ct);
                     string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                    await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, "RunFaulted", faultJson, ct);
+                    await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.RunFaulted, faultJson, ct);
                     // Faulted is terminal for the run (the Run_SetTerminal guard now protects it from being
                     // overwritten by sibling completions), so drain this branch's slot directly instead of
                     // going through the finalizer.
@@ -222,15 +243,20 @@ internal sealed class BranchLoop : IBranchLoop
                     return;
                 }
 
+                // durationMs travels on every node outcome. Deriving it by subtracting the NodeStarted
+                // timestamp only works while both rows survive retention, and it silently includes any
+                // retry backoff; this is the executor's own elapsed time and is what per-node timing
+                // analytics reads.
+                double durationMs = stopwatch.Elapsed.TotalMilliseconds;
                 string? eventPayload = result switch
                 {
-                    NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    _ => null
+                    NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message, durationMs }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch, durationMs }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    _ => JsonSerializer.Serialize(new { durationMs }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
                 };
-                
+
                 _logger?.LogInformation("Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);
-                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? "NodeFailed" : "NodeCompleted", eventPayload, ct);
+                await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? HistoryEventKind.NodeFailed : HistoryEventKind.NodeCompleted, eventPayload, ct);
             }
 
             if (result is not NodeExecutionResult.Terminal)
@@ -319,7 +345,7 @@ internal sealed class BranchLoop : IBranchLoop
                 {
                     string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, wait.LocalStatePatch));
                     branchRow = await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Waiting", localJson, branchRow.LastOutputJson, ct);
-                    await AppendEventAsync(runRow.Id, branchRow.RefId, branchRow.NodeId, "BranchParked", ct);
+                    await AppendEventAsync(runRow.Id, branchRow.RefId, branchRow.NodeId, HistoryEventKind.BranchParked, ct);
 
                     // Single-row model (design §3.5): one bookmark row per wait. A TTL, if present,
                     // lives on the same row (ExpiresAt/TtlPort) rather than a separate companion timer
@@ -383,6 +409,19 @@ internal sealed class BranchLoop : IBranchLoop
                         // branches stop instead of continuing to burn (already-exhausted) budget.
                         await _runCancellationService.RequestCancellationAsync(runRow.Id, "OUT_OF_CREDITS", ct);
                     }
+
+                    // The branch is over. Only NodeFailed was recorded before, so a reader could see
+                    // which node failed but not that the branch itself ended, nor how it was handled -
+                    // FailBranch, FailRun and Compensate look identical from NodeFailed alone.
+                    await AppendEventAsync(
+                        runRow.Id,
+                        branchRow.RefId,
+                        node.NodeId,
+                        HistoryEventKind.BranchFailed,
+                        JsonSerializer.Serialize(
+                            new { fail.ErrorCode, fail.Message, onFailure = outcome.ToString(), compensated = shouldCompensate },
+                            new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                        ct);
 
                     // This branch is dying, so it will never reach its Join. Contribute on its behalf,
                     // otherwise a Mode=All cohort never reaches ExpectedCount and everything after the
@@ -490,7 +529,7 @@ internal sealed class BranchLoop : IBranchLoop
                 RowVersion = Array.Empty<byte>()
             }, ct);
 
-            await AppendEventAsync(runRow.Id, continuation.RefId, joinNodeId, "JoinContinuationSpawned", ct);
+            await AppendEventAsync(runRow.Id, continuation.RefId, joinNodeId, HistoryEventKind.JoinContinuationSpawned, ct);
             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runRow.Id, continuation.Id, BranchExecutionReason.ForkChild), ct);
         }
         catch (Exception ex)
@@ -503,7 +542,7 @@ internal sealed class BranchLoop : IBranchLoop
     {
         await _branchProvider.SetCompletedAsync(branchId, ct);
         int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
-        await AppendEventAsync(runId, branchRefId, null, "BranchCompleted", ct);
+        await AppendEventAsync(runId, branchRefId, null, HistoryEventKind.BranchCompleted, ct);
 
         if (postDecrementCount == 0 && _runFinalizer is not null)
         {
@@ -515,7 +554,7 @@ internal sealed class BranchLoop : IBranchLoop
     {
         await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Cancelled", branchRow.LocalJson, branchRow.LastOutputJson, ct);
         int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
-        await AppendEventAsync(runId, branchRow.RefId, null, "BranchCancelled", ct);
+        await AppendEventAsync(runId, branchRow.RefId, null, HistoryEventKind.BranchCancelled, ct);
 
         if (postDecrementCount == 0 && _runFinalizer is not null)
         {
@@ -538,7 +577,7 @@ internal sealed class BranchLoop : IBranchLoop
                 BranchRefId = branchRefId,
                 NodeId = nodeId,
                 EventKind = eventKind,
-                Severity = eventKind == "NodeFailed" ? "Warn" : "Info",
+                Severity = HistoryEventKind.SeverityFor(eventKind),
                 PayloadJson = payloadJson,
                 Timestamp = _clock.UtcNow
             }

@@ -120,8 +120,8 @@ internal sealed class RunStarter : IRunStarter
                 RunId = createdRun.Id,
                 BranchRefId = createdBranch.RefId,
                 NodeId = Guid.Parse(triggerNodeId),
-                EventKind = "RunStarted",
-                Severity = "Info",
+                EventKind = HistoryEventKind.RunStarted,
+                Severity = HistoryEventKind.SeverityFor(HistoryEventKind.RunStarted),
                 // [RJ]: TODO: dont we need the actual payload here?
                 PayloadJson = JsonSerializer.Serialize(new { triggerEvent.InboundEventId, CorrelationKey = correlationKey }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 Timestamp = nowUtc

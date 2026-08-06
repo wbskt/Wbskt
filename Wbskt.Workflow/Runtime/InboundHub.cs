@@ -35,7 +35,15 @@ internal sealed class InboundHub : IInboundHub
         try
         {
             _logger.LogDebug("Handling inbound event {InboundEventId} on channel {ChannelKind}", normalizedEvent.InboundEventId, normalizedEvent.ChannelKind);
-            // TODO: Append engine-host inbound history entry per Workflow.Engine.V3.Design.md §4.3/§6.1 when Phase 8 history wiring lands.
+
+            // TODO(arch): inbound events are not in the run history, and cannot be as the schema
+            // stands. HistoryEvents.RunId is NOT NULL and is the leading column of the clustered
+            // primary key, but at this point no run exists yet - dispatch may start one, resume a
+            // bookmark, queue, drop, or match nothing at all. Recording only the cases that produced
+            // a run would omit exactly the ones an operator needs ("I fired the webhook and nothing
+            // happened"). Fixing it properly means either making RunId nullable (a clustered-key
+            // change) or giving inbound events their own log; either is a schema decision, not a
+            // wiring one. Until then this level is the only record. See design §4.3/§6.1.
             var result = await _triggerDispatcher.DispatchAsync(normalizedEvent, ct);
             _logger.LogInformation("Successfully dispatched inbound event {InboundEventId} with outcome {Outcome}", normalizedEvent.InboundEventId, result.Outcome);
             return result;

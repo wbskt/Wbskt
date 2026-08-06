@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -17,6 +18,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
     private readonly IProviderComposite _providerComposite;
     private readonly IClock _clock;
+    private readonly ILogger<CompensationOrchestrator>? _logger;
 
     public CompensationOrchestrator(
         IRunProvider runProvider,
@@ -25,7 +27,8 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         IWorkflowDefinitionCache workflowDefinitionCache,
         INodeExecutorRegistry nodeExecutorRegistry,
         IProviderComposite providerComposite,
-        IClock clock)
+        IClock clock,
+        ILogger<CompensationOrchestrator>? logger = null)
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
@@ -34,6 +37,35 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         _nodeExecutorRegistry = nodeExecutorRegistry;
         _providerComposite = providerComposite;
         _clock = clock;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Records a compensation step that failed. Guarded: the caller is already handling a failure and
+    /// must not be derailed by the attempt to write about it.
+    /// </summary>
+    private async Task TryAppendCompensationFailedAsync(int runId, Guid branchRefId, Guid? nodeId, Exception cause, CancellationToken ct)
+    {
+        try
+        {
+            await _historyEventProvider.InsertBatchAsync([
+                new HistoryEventRow
+                {
+                    HistoryEventId = 0,
+                    RunId = runId,
+                    BranchRefId = branchRefId,
+                    NodeId = nodeId,
+                    EventKind = HistoryEventKind.CompensationFailed,
+                    Severity = HistoryEventKind.SeverityFor(HistoryEventKind.CompensationFailed),
+                    PayloadJson = JsonSerializer.Serialize(new { cause.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    Timestamp = _clock.UtcNow
+                }
+            ], ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to record a CompensationFailed history event for run {RunId}.", runId);
+        }
     }
 
     public async Task RunAsync(long runId, long branchId, CancellationToken ct)
@@ -59,9 +91,13 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 await ExecuteCompensationAsync(run, branch, item.Node!, item.Event, definition.WorkspaceId, ct);
                 await AppendCompensationEventAsync(run.Id, branch.RefId, item.Event.NodeId, item.Node!.Compensation!, ct);
             }
-            catch
+            catch (Exception ex)
             {
-                // Spec: success-or-failure of compensation steps does not block
+                // Per spec a failed compensation step does not block the others - but swallowing it
+                // silently meant an undo that never happened left no trace at all, which is exactly
+                // the thing an operator needs to know about.
+                _logger?.LogWarning(ex, "Compensation for node {NodeId} on run {RunId} failed: {Message}", item.Event.NodeId, run.Id, ex.Message);
+                await TryAppendCompensationFailedAsync(run.Id, branch.RefId, item.Event.NodeId, ex, ct);
             }
         });
         await Task.WhenAll(tasks);
@@ -143,8 +179,8 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 RunId = runId,
                 BranchRefId = branchRefId,
                 NodeId = nodeId,
-                EventKind = "CompensationExecuted",
-                Severity = "Info",
+                EventKind = HistoryEventKind.CompensationExecuted,
+                Severity = HistoryEventKind.SeverityFor(HistoryEventKind.CompensationExecuted),
                 PayloadJson = JsonSerializer.Serialize(new { compensation.Kind }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 Timestamp = _clock.UtcNow
             }
