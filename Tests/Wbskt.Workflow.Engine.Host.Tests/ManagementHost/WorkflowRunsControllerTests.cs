@@ -186,6 +186,62 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
+    public async Task GetWorkspaceStatsAsync_reports_a_run_weighted_rate_with_the_breakdown_that_explains_it()
+    {
+        // The decision this endpoint turns on. A run-weighted workspace rate is dominated by whichever
+        // workflow runs most, so a busy workflow at 100% hides a quiet one at 0%. The rate is still the
+        // literal answer to "what fraction of the work succeeded" - the per-workflow rows are what make
+        // it safe to read, and this test pins that they are present and disagree with the headline.
+        var busy = Guid.NewGuid();
+        var quiet = Guid.NewGuid();
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(x => x.GetWorkspaceStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 102, succeeded: 100, failed: 2, active: 0));
+        runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new WorkflowRunSummaryRow { WorkflowRefId = busy, TotalRuns = 100, SucceededCount = 100, FailedCount = 0, ActiveCount = 0, AvgDurationMs = 50 },
+                new WorkflowRunSummaryRow { WorkflowRefId = quiet, TotalRuns = 2, SucceededCount = 0, FailedCount = 2, ActiveCount = 0, AvgDurationMs = 10 }
+            ]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.True(response.IsSuccess);
+        Assert.Equal(100d / 102d, response.Value.SuccessRate!.Value, 6);
+
+        // The workflow that is actually broken is 0%, and visible, despite the headline reading 98%.
+        Assert.Equal(1d, response.Value.Workflows.Single(w => w.WorkflowRefId == busy).SuccessRate);
+        Assert.Equal(0d, response.Value.Workflows.Single(w => w.WorkflowRefId == quiet).SuccessRate);
+    }
+
+    [Fact]
+    public async Task GetWorkspaceStatsAsync_reports_no_rate_when_nothing_has_finished()
+    {
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(x => x.GetWorkspaceStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateStats(total: 4, succeeded: 0, failed: 0, active: 4));
+        runProvider.Setup(x => x.GetPerWorkflowStatsAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var service = new WorkflowRunQueryService(runProvider.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow.AddDays(-7), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.Null(response.Value.SuccessRate);
+    }
+
+    [Fact]
+    public async Task GetWorkspaceStatsAsync_rejects_an_inverted_window()
+    {
+        var service = new WorkflowRunQueryService(Mock.Of<IRunProvider>(), Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowRunQueryService>>());
+
+        var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+        Assert.Equal("INVALID_WINDOW", response.Error.Code);
+    }
+
+    [Fact]
     public async Task GetStatsAsync_reports_no_success_rate_when_nothing_has_finished()
     {
         // A rate of 0 would read as "everything failed" rather than "nothing to report".

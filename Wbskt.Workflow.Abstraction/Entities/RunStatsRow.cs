@@ -20,6 +20,24 @@ public sealed record RunStatsRow
     public required double AvgDurationMs { get; init; }
 }
 
+/// <summary>
+/// One workflow's contribution to a workspace rollup. Failure counts are collapsed into a single
+/// <see cref="FailedCount"/> - the breakdown belongs on the per-workflow endpoint, and a dashboard row
+/// only needs to know whether this workflow is the one dragging the workspace down.
+/// </summary>
+public sealed record WorkflowRunSummaryRow
+{
+    public required Guid WorkflowRefId { get; init; }
+    public required int TotalRuns { get; init; }
+    public required int SucceededCount { get; init; }
+
+    /// <summary>Failed, PartiallyFailed, Faulted and OutOfCredits together - every way of not succeeding.</summary>
+    public required int FailedCount { get; init; }
+
+    public required int ActiveCount { get; init; }
+    public required double AvgDurationMs { get; init; }
+}
+
 /// <summary>One error code seen at one node, with how often and how recently.</summary>
 public sealed record RunFailureBucketRow
 {

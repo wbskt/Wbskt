@@ -11,6 +11,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     private const int TopFailures = 10;
     private const int TopSlowNodes = 20;
 
+    /// <summary>Enough rows for a dashboard to show the workspace's real shape without paging.</summary>
+    private const int TopWorkflows = 50;
+
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
@@ -142,6 +145,64 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             _logger.LogTrace(ex, "GetStatsAsync exception stack trace for '{WorkflowRefId}'", workflowRefId);
             return Result<WorkflowStatsResponse>.Failure(Error.Failure("RUN_STATS_ERROR", ex.Message));
         }
+    }
+
+    public async Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        _logger.LogDebug("Querying stats for WorkspaceId: {WorkspaceId}", workspaceId);
+
+        if (toUtc <= fromUtc)
+        {
+            return Result<WorkspaceStatsResponse>.Failure(Error.Validation("INVALID_WINDOW", "'to' must be later than 'from'."));
+        }
+
+        try
+        {
+            // No per-workflow ownership check to repeat: both procedures scope by workspace themselves,
+            // so a workflow from another workspace cannot appear in the result at all.
+            RunStatsRow stats = await _runProvider.GetWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, ct);
+            IReadOnlyCollection<WorkflowRunSummaryRow> perWorkflow = await _runProvider.GetPerWorkflowStatsAsync(workspaceId, fromUtc, toUtc, TopWorkflows, ct);
+
+            return Result<WorkspaceStatsResponse>.Success(new WorkspaceStatsResponse(
+                fromUtc,
+                toUtc,
+                new RunOutcomeCountsDto(
+                    stats.TotalRuns,
+                    stats.SucceededCount,
+                    stats.FailedCount,
+                    stats.PartiallyFailedCount,
+                    stats.CancelledCount,
+                    stats.FaultedCount,
+                    stats.OutOfCreditsCount,
+                    stats.ActiveCount),
+                new RunDurationsDto(stats.P50DurationMs, stats.P95DurationMs, stats.MaxDurationMs, stats.AvgDurationMs),
+                SuccessRate(stats.TotalRuns, stats.ActiveCount, stats.SucceededCount),
+                perWorkflow.Select(w => new WorkflowRunSummaryDto(
+                    w.WorkflowRefId,
+                    w.TotalRuns,
+                    w.SucceededCount,
+                    w.FailedCount,
+                    w.ActiveCount,
+                    w.AvgDurationMs,
+                    SuccessRate(w.TotalRuns, w.ActiveCount, w.SucceededCount))).ToList()));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query stats for WorkspaceId: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
+            _logger.LogTrace(ex, "GetWorkspaceStatsAsync exception stack trace for {WorkspaceId}", workspaceId);
+            return Result<WorkspaceStatsResponse>.Failure(Error.Failure("RUN_STATS_ERROR", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Succeeded ÷ finished. In-flight runs are excluded from the denominator, or an active workflow
+    /// reads as broken; null rather than 0 when nothing has finished, because 0 reads as "everything
+    /// failed" rather than "nothing to report".
+    /// </summary>
+    private static double? SuccessRate(int total, int active, int succeeded)
+    {
+        int finished = total - active;
+        return finished > 0 ? (double)succeeded / finished : null;
     }
 
     public async Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct)

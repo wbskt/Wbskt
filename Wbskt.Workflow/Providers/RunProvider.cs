@@ -113,6 +113,51 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<RunStatsRow> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Run_GetStatsBy_WorkspaceId",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+            },
+            MapStats,
+            new InvalidOperationException("Run_GetStatsBy_WorkspaceId did not return a row."),
+            ct
+        );
+    }
+
+    public async Task<IReadOnlyCollection<WorkflowRunSummaryRow>> GetPerWorkflowStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetStatsPerWorkflowBy_WorkspaceId",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@FromUtc", fromUtc);
+                p.AddWithValue("@ToUtc", toUtc);
+                p.AddWithValue("@Top", top);
+            },
+            MapWorkflowSummary,
+            ct
+        );
+    }
+
+    internal static WorkflowRunSummaryRow MapWorkflowSummary(DbDataReader reader)
+    {
+        return new WorkflowRunSummaryRow
+        {
+            WorkflowRefId = reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
+            TotalRuns = reader.GetInt32(reader.GetOrdinal("TotalRuns")),
+            SucceededCount = reader.GetInt32(reader.GetOrdinal("SucceededCount")),
+            FailedCount = reader.GetInt32(reader.GetOrdinal("FailedCount")),
+            ActiveCount = reader.GetInt32(reader.GetOrdinal("ActiveCount")),
+            AvgDurationMs = Convert.ToDouble(reader.GetValue(reader.GetOrdinal("AvgDurationMs")))
+        };
+    }
+
     public async Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
@@ -263,7 +308,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             ct
         );
     }
-
+
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

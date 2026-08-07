@@ -65,6 +65,33 @@ public sealed class WorkflowRunsController : ApiControllerBase
     }
 
     /// <summary>
+    /// How a whole workspace is doing. The top-level success rate is run-weighted, so it is dominated
+    /// by whichever workflow runs most; the per-workflow breakdown is what makes it readable. Defaults
+    /// to the last 30 days.
+    /// </summary>
+    [HttpGet("stats")]
+    public async Task<ActionResult<WorkspaceStatsResponse>> GetWorkspaceStats(
+        Guid workspaceRef,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("API: Workspace stats requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<WorkspaceStatsResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        DateTime toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
+        DateTime fromUtc = (from ?? toUtc.AddDays(-30)).ToUniversalTime();
+
+        var result = await _runQueryService.GetWorkspaceStatsAsync(workspaceIdResult.Value, fromUtc, toUtc, ct);
+        return MapResult(result);
+    }
+
+    /// <summary>
     /// How a workflow is doing: outcome counts, duration percentiles, success rate, the error codes
     /// that actually occur, and which nodes are slowest. Defaults to the last 30 days.
     /// </summary>

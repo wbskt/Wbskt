@@ -19,6 +19,18 @@ public interface IRunProvider
     /// <summary>Outcome counts and duration percentiles for runs started in the window.</summary>
     Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
 
+    /// <summary>The same figures across every workflow in a workspace. Defaulted so the ~15 test doubles need no stub.</summary>
+    Task<RunStatsRow> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+        => throw new NotSupportedException();
+
+    /// <summary>
+    /// Per-workflow rows behind a workspace rollup, highest volume first. A workspace-wide success rate
+    /// is run-weighted, so one busy workflow at 99% hides a quiet one at 0%; this is what makes the
+    /// rollup safe to read.
+    /// </summary>
+    Task<IReadOnlyCollection<WorkflowRunSummaryRow>> GetPerWorkflowStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<WorkflowRunSummaryRow>>(Array.Empty<WorkflowRunSummaryRow>());
+
     /// <summary>The error codes that actually occur, most frequent first.</summary>
     Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct);
 

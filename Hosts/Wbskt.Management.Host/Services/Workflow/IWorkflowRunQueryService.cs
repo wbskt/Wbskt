@@ -15,6 +15,10 @@ public interface IWorkflowRunQueryService
     /// error codes that actually occur, and which nodes are slowest.
     /// </summary>
     Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+
+    /// <summary>The same question across a whole workspace, plus the per-workflow rows that keep the
+    /// run-weighted rate honest.</summary>
+    Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
     Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct);
     Task<Result> CancelAsync(int workspaceId, Guid runRefId, string reason, CancellationToken ct);
     Task<Result<int>> EnsureRunInWorkspaceAsync(int workspaceId, Guid runRefId, CancellationToken ct);

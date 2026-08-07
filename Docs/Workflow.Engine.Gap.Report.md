@@ -196,7 +196,7 @@ against current code** and worth working from directly.
 | WF-23 | 🟠 | Database | ✅ Four missing indexes, one of them on the user-facing run list |
 | WF-24 | 🟡 | Database | ✅ Unbounded `Warn`/`Error` history growth |
 | WF-25 | 🟡 | Database | ✅ Three dead stored procedures |
-| WF-26 | 🟠 | Analytics | ◐ No user-facing analytics endpoint at all |
+| WF-26 | 🟠 | Analytics | ✅ No user-facing analytics endpoint at all |
 | WF-27 | 🟠 | Analytics | ✅ Metrics are not workspace-scoped and node timings are not per-node |
 | WF-28 | 🟠 | Analytics | ✅ Credit accounting is a stub — every node costs exactly 1.0 |
 | WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
@@ -1510,8 +1510,28 @@ throughout. Migration is invasive (FKs everywhere) and was explicitly deferred b
 
 ## WF-26 🟠 No user-facing analytics endpoint at all
 
-**Status:** ◐ Partial — per-workflow stats landed 2026-08-07. The workspace-level rollup is **not**
-built; see below.
+**Status:** ✅ Fixed — per-workflow stats 2026-08-07, workspace rollup the same day.
+**⚠ DACPAC redeploy required** — two new procedures.
+
+**`GET /api/workspaces/{ws}/stats?from=&to=`** (permission `workflows.read`, last 30 days by default),
+backed by `Run_GetStatsBy_WorkspaceId` and `Run_GetStatsPerWorkflowBy_WorkspaceId`. Both scope by
+workspace themselves — joining through `WorkflowDefinitionId`, as WF-14's list does — so there is no
+per-workflow ownership check to repeat and no way for another workspace's workflow to appear.
+
+**What a cross-workflow success rate means — the decision this item was left open on.** The rate is
+**run-weighted**: succeeded ÷ finished across every workflow, which is the literal answer to "what
+fraction of the work in this workspace succeeded". It is therefore dominated by whichever workflow runs
+most, and a busy workflow at 99% *will* hide a quiet one at 0%. Averaging per-workflow rates instead
+was rejected: it lets a workflow with two runs count as much as one with two hundred thousand. Both
+mislead alone, so the response ships a **per-workflow breakdown** (highest volume first) beside the
+headline, which is where the hidden failure is visible — the same summary-plus-detail shape as WF-32.
+A test pins exactly that case: a workspace reading 98% overall with a 0% workflow plainly listed.
+
+`SuccessRate` is nullable everywhere, per-workflow and overall, for the reason already established:
+`0` reads as "everything failed" rather than "nothing to report".
+
+**Not built:** a time-bucketed series for sparklines. It is a different query shape (grouped by day),
+nothing else depends on it, and no caller has asked — worth adding when a dashboard actually needs it.
 
 **`GET /api/workspaces/{ws}/workflows/{refId}/stats?from=&to=`** (permission `workflows.read`,
 defaulting to the last 30 days) answers "how is this workflow doing?":
