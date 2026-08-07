@@ -86,7 +86,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
         foreach (TriggerRegistrationRow registration in registrations)
         {
-            // [RJ]: this is where the co-relation key for co-relating existing runs are evaluated. I still wonder how bookmarks above plays a role.
+            // The per-registration correlation key, which is what the concurrency policy correlates
+            // *existing runs* against. Bookmarks played their part above and are done with: the bookmark
+            // match runs first and returns early, so reaching this line means the event resumed nothing
+            // and is being considered for starting something new.
             string? correlationValue = EvaluateCorrelationExpression(registration.CorrelationExpression, resolvedEvent)
                 ?? defaultCorrelation;
             _logger?.LogDebug("Evaluated correlation expression for registration {RegistrationId} to {CorrelationValue}", registration.Id, correlationValue);
@@ -237,7 +240,16 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private static readonly IReadOnlyDictionary<string, JsonElement> EmptyState = new Dictionary<string, JsonElement>();
 
-    // [RJ]: I'm gonna trust this for now. will review later.
+    /// <summary>
+    /// Resolves a registration's correlation expression against the arriving payload.
+    /// </summary>
+    /// <remarks>
+    /// Two forms, and only two: a <c>$trigger.</c>-prefixed dotted path into the payload, or any other
+    /// string taken as a constant. Anything that walks off the end of the payload returns null, and the
+    /// caller falls back to the trigger key - so a mistyped path silently correlates everything together
+    /// rather than nothing. That is why the validator warns (`SUSPICIOUS_CORRELATION_KEY`) on a
+    /// correlation key that is neither <c>$trigger.</c>-prefixed nor an obvious constant.
+    /// </remarks>
     private static string? EvaluateCorrelationExpression(string? expression, InboundEvent evt)
     {
         if (string.IsNullOrWhiteSpace(expression))

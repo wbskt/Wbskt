@@ -33,37 +33,16 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         string idempotencyKey = $"inbound-event:{evt.InboundEventId}";
         Guid claimToken = Guid.NewGuid();
         
-        /* [RJ]: For my information. (yes this is AI explanation. but this is correct)
-        Deciphering Inbound Idempotency
-          
-          I've realized the random GUID is a lock or claim token for inbound events, used before knowing the target branch(es). The `IdempotencyKeys` table's `branchRefId` column, originally for outbound executions, is repurposed here. Since inbound events may
-          resume multiple branches or spawn new runs via `TriggerDispatcher`, a random GUID acts as a placeholder for concurrency control. This allows for deduplication without prior branch knowledge.
-          No, it's not a typo—it's actually a clever (though slightly hacky) way to use that column as a distributed lock token!
-
-          Here's why it does that:
-
-          The  IdempotencyKeys  table was originally designed to deduplicate outbound side-effects (e.g., executing a  SendEmail  node). In those cases, the engine knows exactly which  RunId ,  BranchRefId , and  NodeId  is executing, so it fills those
-          columns out accurately.
-
-          However, for inbound events, the engine needs to deduplicate the event before it even knows what it's going to do. At the moment  MatchInboundAsync  runs:
-
-          • We don't know if the event will resume a bookmark.
-          • We don't know if it will resume multiple bookmarks.
-          • We don't know if it will start a brand new run via the  TriggerDispatcher .
-
-          Because there is no "real" branch yet, the code mints a  Guid.NewGuid()  and passes it into the  branchRefId  parameter. It acts purely as a claim token for a race condition:
-
-          1. Server A and Server B both receive the exact same webhook delivery at the same millisecond.
-          2. Server A mints  Guid-A  and calls  UpsertPendingAsync .
-          3. Server B mints  Guid-B  and calls  UpsertPendingAsync .
-          4. The database enforces a  HOLDLOCK  in the stored procedure. Server A's insert succeeds, storing  Guid-A  in the  BranchRefId  column.
-          5. Server B's insert is blocked, and then it simply reads the existing row.
-          6. The database returns the row to both servers.
-          7. Server A checks  if (claim.BranchRefId != claimToken) . It matches  Guid-A , so Server A proceeds to process the event.
-          8. Server B checks  if (claim.BranchRefId != claimToken) . It sees  Guid-A  instead of its own  Guid-B , knows it lost the race, and safely drops the event ( Idempotent = true ).
-
-          So while the parameter is named  branchRefId , in the context of inbound events it is just being used as a unique lock identifier for the current thread/process!
-        */
+        // claimToken is passed as branchRefId, which reads like a mistake and is not. IdempotencyKeys was
+        // built to deduplicate *outbound* work, where the run, branch and node are all known. An inbound
+        // event has to be deduplicated before any of that is decided - it may resume one bookmark,
+        // several, start a new run, or match nothing - so there is no branch to name, and the column is
+        // used as a claim token instead.
+        //
+        // That is what makes the race safe: two hosts receiving the same delivery each mint their own
+        // token, the procedure's HOLDLOCK lets exactly one insert win, and both then read back the same
+        // row. Whichever host sees its own token owns the event; the other sees a stranger's and drops
+        // the delivery as a duplicate.
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {

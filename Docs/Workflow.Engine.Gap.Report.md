@@ -204,7 +204,7 @@ against current code** and worth working from directly.
 | WF-31 | 🟠 | Runtime | ✅ Cancellation state is cached per-host with no cross-host invalidation |
 | WF-32 | 🟠 | Runtime | ✅ Multi-registration dispatch reports only the first run started |
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
-| WF-34 | 🟡 | Hygiene | ◐ Resolved `[RJ]:` markers and duplicate assignments |
+| WF-34 | 🟡 | Hygiene | ✅ Resolved `[RJ]:` markers and duplicate assignments |
 | WF-35 | 🟡 | Hygiene | ✅ Shipped example generator emits a workflow that fails at runtime |
 | WF-36 | 🟡 | Runtime | `INT` primary keys modelled as `long` with checked casts |
 | WF-37 | 🟠 | Runtime | ✅ A run's `CancellationToken` can never be cancelled (found 2026-08-07 during WF-31) |
@@ -1956,8 +1956,8 @@ guarded; if containment itself fails the run is left to the `RunReaper`.
 
 ## WF-34 🟡 Resolved markers and small hygiene
 
-**Status:** ◐ Partial — the behavioural items landed 2026-08-07; some `[RJ]` markers deliberately
-remain.
+**Status:** ✅ Fixed — behavioural items 2026-08-07, the RetryExecutor cleanup and the remaining
+markers the same day.
 
 **`RetryOn` is now applied** — this was a real behaviour gap, not tidying. `policy.RetryOn` was
 collected and never consulted, so a policy saying "only retry these" retried *everything* transient. A
@@ -1977,9 +1977,27 @@ read `TODO(WF-31)` and the dispatch-aggregation ones `TODO(WF-32)`, so they poin
 will fix them instead of looking like stray musings. `BaseNode`'s polymorphism note became
 `TODO(arch)` with a note that the hand-rolled converter works.
 
-**Still open:** the duplicated try/catch blocks in `RetryExecutor` and its unreachable
-side-effect-free branches, plus a handful of genuinely-open `[RJ]` questions in `RunStarter` and
-`BookmarkResumer`.
+**Completed 2026-08-07.** `RetryExecutor`'s six identical idempotency blocks collapsed into one local
+`RecordOutcomeAsync` — 120 lines removed, 36 added. **The duplication was hiding a real finding**: each
+block carried an `isSideEffectFree` branch that could never execute, because `idempotencyKeyProvider`
+is only ever assigned when the node is *not* side-effect-free. Those branches wrote two rows per
+execution that nothing could read. They are gone, and the helper says once what the six blocks each
+implied — a provider that does not support this is disabled for the rest of the call rather than
+retried into.
+
+**The remaining `[RJ]` markers are resolved into explanations**, none deleted without an answer:
+`RunStarter`'s correlation-key fallback (kept because it is a public runtime entry point and a null
+correlation key would break every concurrency policy), `RowVersion` (a SQL Server `ROWVERSION` the
+engine maps but never compares — recorded as the hook if a branch ever stops being driven by one host
+at a time), the publisher wrapper, `TriggerDispatcher`'s bookmark question (bookmarks are matched and
+returned on *before* this line, so reaching it means the event resumed nothing), and
+`EvaluateCorrelationExpression` — now documented as exactly two forms, with the note that a mistyped
+path falls back to the trigger key and so correlates everything together, which is what the validator's
+`SUSPICIOUS_CORRELATION_KEY` warning exists to catch. `BookmarkResumer`'s long pasted explanation is
+now four lines saying the same thing.
+
+The one marker left in the tree, `IdentityService.cs:10`, is in `Wbskt.Infrastructure` and outside this
+report's scope.
 
 ---
 

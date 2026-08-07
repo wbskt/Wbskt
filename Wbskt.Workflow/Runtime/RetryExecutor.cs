@@ -66,6 +66,36 @@ internal static class RetryExecutor
             string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{attempt}";
             IdempotencyKeyRow? existingRow = null;
 
+            // Recording an attempt's outcome was written out six times, identically. The duplication hid
+            // two things worth stating once: a provider that does not support this is disabled for the
+            // rest of the call rather than retried into, and there is no side-effect-free path here at
+            // all - a side-effect-free node never claims a key, so idempotencyKeyProvider is null for
+            // one and every call below is a no-op. (The old code had an isSideEffectFree branch inside
+            // each block that could therefore never run, and which wrote two rows nothing ever read.)
+            async Task RecordOutcomeAsync(bool succeeded, string json)
+            {
+                if (idempotencyKeyProvider is null)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (succeeded)
+                    {
+                        await idempotencyKeyProvider.MarkSucceededAsync(keyValue, json, ct);
+                    }
+                    else
+                    {
+                        await idempotencyKeyProvider.MarkFailedAsync(keyValue, json, ct);
+                    }
+                }
+                catch (NotSupportedException)
+                {
+                    idempotencyKeyProvider = null;
+                }
+            }
+
             if (idempotencyKeyProvider != null)
             {
                 try
@@ -167,26 +197,7 @@ internal static class RetryExecutor
                     var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
                     string errorJson = JsonSerializer.Serialize(outOfCreditsResult, JsonOptions);
 
-                    if (idempotencyKeyProvider != null)
-                    {
-                        try
-                        {
-                            if (!isSideEffectFree)
-                            {
-                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                            }
-                            else
-                            {
-                                await idempotencyKeyProvider.UpsertPendingAsync(
-                                    keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
-                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                            }
-                        }
-                        catch (NotSupportedException)
-                        {
-                            idempotencyKeyProvider = null;
-                        }
-                    }
+                    await RecordOutcomeAsync(false, errorJson);
 
                     return outOfCreditsResult;
                 }
@@ -218,26 +229,7 @@ internal static class RetryExecutor
                 if (result is NodeExecutionResult.Fail fail)
                 {
                     string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
-                    if (idempotencyKeyProvider != null)
-                    {
-                        try
-                        {
-                            if (!isSideEffectFree)
-                            {
-                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                            }
-                            else
-                            {
-                                await idempotencyKeyProvider.UpsertPendingAsync(
-                                    keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
-                                await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                            }
-                        }
-                        catch (NotSupportedException)
-                        {
-                            idempotencyKeyProvider = null;
-                        }
-                    }
+                    await RecordOutcomeAsync(false, errorJson);
 
                     if (!fail.Retryable || attempt >= policy.MaxAttempts)
                     {
@@ -258,26 +250,7 @@ internal static class RetryExecutor
                 }
 
                 string resultJson = JsonSerializer.Serialize(result, JsonOptions);
-                if (idempotencyKeyProvider != null)
-                {
-                    try
-                    {
-                        if (!isSideEffectFree)
-                        {
-                            await idempotencyKeyProvider.MarkSucceededAsync(keyValue, resultJson, ct);
-                        }
-                        else
-                        {
-                            await idempotencyKeyProvider.UpsertPendingAsync(
-                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
-                            await idempotencyKeyProvider.MarkSucceededAsync(keyValue, resultJson, ct);
-                        }
-                    }
-                    catch (NotSupportedException)
-                    {
-                        idempotencyKeyProvider = null;
-                    }
-                }
+                await RecordOutcomeAsync(true, resultJson);
 
                 return result;
             }
@@ -286,26 +259,7 @@ internal static class RetryExecutor
                 var fail = new NodeExecutionResult.Fail("TRANSIENT_ERROR", ex.Message, true, ex);
                 string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
 
-                if (idempotencyKeyProvider != null)
-                {
-                    try
-                    {
-                        if (!isSideEffectFree)
-                        {
-                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                        }
-                        else
-                        {
-                            await idempotencyKeyProvider.UpsertPendingAsync(
-                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
-                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                        }
-                    }
-                    catch (NotSupportedException)
-                    {
-                        idempotencyKeyProvider = null;
-                    }
-                }
+                await RecordOutcomeAsync(false, errorJson);
 
                 // policy.RetryOn was collected but never consulted, so a policy saying "only retry
                 // these" retried everything transient. An empty list still means "retry anything".
@@ -338,26 +292,7 @@ internal static class RetryExecutor
                 var fail = new NodeExecutionResult.Fail(ex.ErrorCode, ex.Message, false, ex);
                 string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
 
-                if (idempotencyKeyProvider != null)
-                {
-                    try
-                    {
-                        if (!isSideEffectFree)
-                        {
-                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                        }
-                        else
-                        {
-                            await idempotencyKeyProvider.UpsertPendingAsync(
-                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
-                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                        }
-                    }
-                    catch (NotSupportedException)
-                    {
-                        idempotencyKeyProvider = null;
-                    }
-                }
+                await RecordOutcomeAsync(false, errorJson);
 
                 return fail;
             }
@@ -379,26 +314,7 @@ internal static class RetryExecutor
                 var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
                 string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
 
-                if (idempotencyKeyProvider != null)
-                {
-                    try
-                    {
-                        if (!isSideEffectFree)
-                        {
-                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                        }
-                        else
-                        {
-                            await idempotencyKeyProvider.UpsertPendingAsync(
-                                keyValue, (int)context.RunId, Guid.NewGuid(), node.NodeId, attempt, ct);
-                            await idempotencyKeyProvider.MarkFailedAsync(keyValue, errorJson, ct);
-                        }
-                    }
-                    catch (NotSupportedException)
-                    {
-                        idempotencyKeyProvider = null;
-                    }
-                }
+                await RecordOutcomeAsync(false, errorJson);
 
                 return fail;
             }

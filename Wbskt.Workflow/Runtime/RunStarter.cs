@@ -60,7 +60,11 @@ internal sealed class RunStarter : IRunStarter
             _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
             decimal creditBudget = ResolveCreditBudget(definition.DefinitionJson);
             DateTime nowUtc = _clock.UtcNow;
-        string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent); // [RJ]: we actually will always have c-key in the trigger event at this point. don't need to use resolver.
+        // In practice the dispatcher has always set this by now - it normalizes the event per
+        // registration before starting a run. The fallback is kept because this is a public entry point
+        // on the runtime: a caller reaching it another way would otherwise persist a null correlation
+        // key, and every concurrency policy is keyed on that.
+        string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent);
 
         RunRow createdRun = await _runProvider.CreateAsync(new RunRow
         {
@@ -110,7 +114,12 @@ internal sealed class RunStarter : IRunStarter
             CompensationStackJson = null,
             CreatedAt = nowUtc,
             UpdatedAt = nowUtc,
-            RowVersion = Array.Empty<byte>() // [RJ]: TODO: bytes? also not used anywhere.
+            // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it, so nothing sent on
+            // insert is used. It is mapped on read for completeness, but Branch_Update does not yet
+            // compare it, so the engine has no optimistic-concurrency check on a branch row. That is
+            // survivable because a branch is only ever driven by one host at a time (the pump claims it),
+            // and it is the obvious hook if that ever stops being true.
+            RowVersion = Array.Empty<byte>()
         }, ct);
 
         await _historyEventProvider.InsertBatchAsync([
@@ -144,7 +153,9 @@ internal sealed class RunStarter : IRunStarter
             }
         ], ct);
 
-            // [RJ]: TODO: just fire the freaking event through the e-bus here. why wrap it in another service?
+            // Wrapped rather than calling the bus directly so Wbskt.Workflow carries no event-bus
+            // dependency: the engine host supplies a publisher that forwards to MassTransit, and the
+            // management host and every unit test get a no-op without needing a broker.
             await _runStartedPublisher.PublishAsync(createdRun, ct);
 
             return (createdRun.Id, createdBranch.Id);
