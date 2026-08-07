@@ -58,6 +58,16 @@ public sealed class RunStarterTests
         Assert.Contains("\"trigger\"", branchProvider.CreatedBranch.LocalJson, StringComparison.Ordinal);
         Assert.Equal("RunStarted", historyProvider.Events.Single().EventKind);
         Assert.Equal(new WorkflowEngineOptions().DefaultCreditBudgetPerRun, runProvider.CreatedRun.CreditBudget);
+
+        // The arrival that caused the run is described on RunStarted: which channel, which key, when.
+        // Without these the trace could not answer "what fired this?" - only "something did".
+        string payload = historyProvider.Events.Single().PayloadJson!;
+        Assert.Contains("\"channelKind\":\"client\"", payload, StringComparison.Ordinal);
+        Assert.Contains("client:serial-1:telemetry", payload, StringComparison.Ordinal);
+        Assert.Contains("\"receivedAt\"", payload, StringComparison.Ordinal);
+        // The trigger body is not: it is caller-controlled, unbounded, and can carry credentials. It is
+        // already persisted on the run, which is where to read it from.
+        Assert.DoesNotContain("\"messageType\"", payload, StringComparison.Ordinal);
     }
 
     [Fact]

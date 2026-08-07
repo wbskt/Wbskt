@@ -36,14 +36,18 @@ internal sealed class InboundHub : IInboundHub
         {
             _logger.LogDebug("Handling inbound event {InboundEventId} on channel {ChannelKind}", normalizedEvent.InboundEventId, normalizedEvent.ChannelKind);
 
-            // TODO(arch): inbound events are not in the run history, and cannot be as the schema
-            // stands. HistoryEvents.RunId is NOT NULL and is the leading column of the clustered
-            // primary key, but at this point no run exists yet - dispatch may start one, resume a
-            // bookmark, queue, drop, or match nothing at all. Recording only the cases that produced
-            // a run would omit exactly the ones an operator needs ("I fired the webhook and nothing
-            // happened"). Fixing it properly means either making RunId nullable (a clustered-key
-            // change) or giving inbound events their own log; either is a schema decision, not a
-            // wiring one. Until then this level is the only record. See design §4.3/§6.1.
+            // Arrivals that produce a run ARE now in that run's trace: RunStarted carries the channel,
+            // the match keys and the received-at, and a bookmark wake carries its dispatch reason on
+            // BranchResumed. There is nothing left to add here for those.
+            //
+            // TODO(arch): arrivals that produce NO run - filtered, secret mismatch, dropped, queued, or
+            // matching nothing - still have no durable record; this log line is it. They cannot go in
+            // HistoryEvents, whose clustered key leads with a NOT NULL RunId, so they need their own
+            // table. That is a schema decision with an access question attached (an arrival that matched
+            // nothing has no workspace to scope it to, so a per-workspace endpoint over it would leak
+            // across workspaces) and a volume one (an insert per inbound event, on the hottest path).
+            // The API-level version of the same question is already answered: TriggerDispatchResult
+            // reports every registration's outcome, so a caller is told why nothing ran.
             var result = await _triggerDispatcher.DispatchAsync(normalizedEvent, ct);
             _logger.LogInformation("Successfully dispatched inbound event {InboundEventId} with outcome {Outcome}", normalizedEvent.InboundEventId, result.Outcome);
             return result;

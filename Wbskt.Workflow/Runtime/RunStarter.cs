@@ -122,8 +122,24 @@ internal sealed class RunStarter : IRunStarter
                 NodeId = Guid.Parse(triggerNodeId),
                 EventKind = HistoryEventKind.RunStarted,
                 Severity = HistoryEventKind.SeverityFor(HistoryEventKind.RunStarted),
-                // [RJ]: TODO: dont we need the actual payload here?
-                PayloadJson = JsonSerializer.Serialize(new { triggerEvent.InboundEventId, CorrelationKey = correlationKey }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                // Describes the arrival that caused this run: which channel it came in on, which key it
+                // matched and when it was received. That is the inbound record the trace was missing;
+                // a separate InboundEventReceived row would say the same thing one line earlier.
+                //
+                // The trigger body itself is deliberately NOT recorded. It is caller-controlled and
+                // unbounded - the public callback caps a request body, not the history table - and it can
+                // carry anything the caller sends, including credentials. The run's trigger payload is
+                // already persisted on the run and is where to read it from.
+                PayloadJson = JsonSerializer.Serialize(
+                    new
+                    {
+                        triggerEvent.InboundEventId,
+                        CorrelationKey = correlationKey,
+                        triggerEvent.ChannelKind,
+                        MatchKeys = triggerEvent.MatchKeys,
+                        triggerEvent.ReceivedAt
+                    },
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 Timestamp = nowUtc
             }
         ], ct);

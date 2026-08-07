@@ -1684,8 +1684,25 @@ a placeholder.
 
 ## WF-29 🟠 History trace is missing key events
 
-**Status:** ◐ Partial — everything except inbound events landed 2026-08-06. The inbound gap is a
-**schema blocker**, described below.
+**Status:** ◐ Partial — everything except **arrivals that produce no run** landed (2026-08-06, plus the
+inbound enrichment and credit record 2026-08-07). What remains is a schema decision, stated at the
+bottom; it is deliberately not guessed at.
+
+**Inbound arrivals that produce a run are now in the trace** (2026-08-07). `RunStarted`'s payload
+gained `channelKind`, `matchKeys` and `receivedAt` alongside the inbound event id and correlation key,
+so a trace can answer "what fired this?" rather than only "something did". A separate
+`InboundEventReceived` row was considered and rejected — it would say the same thing one line earlier,
+at the cost of a row per run. A bookmark wake was already covered by `BranchResumed`'s dispatch reason.
+
+**The trigger body is deliberately not recorded**, which settles the `[RJ]` TODO that sat on that line.
+It is caller-controlled and unbounded — the public callback caps a *request* body, not the history
+table — and it can carry whatever the caller sends, credentials included. The run's trigger payload is
+already persisted on the run, which is where to read it from.
+
+**Credit charges landed with WF-28.** `creditsCharged` travels on the `NodeCompleted`/`NodeFailed`
+payload, summed across attempts. Now that costs differ per kind it carries information; a row per
+charge was rejected as roughly doubling history write volume for a number that belongs on the outcome
+event.
 
 **What landed.**
 - **`durationMs` on every node outcome** — the `Stopwatch` value was already measured and thrown
@@ -1708,18 +1725,26 @@ a placeholder.
   were both filed as routine. Severity is not cosmetic: retention keeps `Warn`/`Error` far longer,
   so a wrong severity discards the record of a failure. All emitters now use the shared constants.
 
-**⚠ Inbound events are not implemented, and cannot be without a schema change.**
-`HistoryEvents.RunId` is `NOT NULL` **and the leading column of the clustered primary key**, but at
-`InboundHub.HandleAsync` no run exists yet — dispatch may start one, resume a bookmark, queue, drop,
-or match nothing. Recording only the cases that produced a run would omit exactly the ones an operator
-needs ("I fired the webhook and nothing happened"). Fixing it means either making `RunId` nullable (a
-clustered-key change) or giving inbound events their own log. That is a schema decision, not wiring,
-so it is left with an accurate `TODO(arch)` rather than half-built.
+**⚠ Still open: a durable record of arrivals that produce *no* run** — filtered, secret mismatch,
+dropped, queued, or matching nothing. These cannot go in `HistoryEvents`, whose clustered key leads
+with a `NOT NULL RunId`, so they need their own table. **Three things make this an owner decision
+rather than wiring**, and guessing at any of them would be worse than the log line that records them
+today:
 
-**Credit charges are also still absent.** The cost is computed inside `RetryExecutor`, which would
-need the same callback treatment as `NodeRetrying` to surface it. Deliberately deferred to **WF-28**:
-every node currently costs exactly `1.0`, so recording it today would add a row (or a payload field)
-per node execution that carries no information. Do it as part of giving the cost model real values.
+1. **Access.** An arrival that matched nothing has no workspace to scope it to, so a per-workspace
+   endpoint over such a table would leak one workspace's arrivals to another. Either it is an
+   operator-only table with no user-facing route, or it needs a scoping rule invented for it.
+2. **Volume.** It is one insert per inbound event, on the hottest path in the engine — the same path a
+   chatty telemetry trigger hammers. That is a real cost to accept deliberately, with a retention
+   window chosen alongside it.
+3. **It is no longer the only answer to the question.** WF-32 made the dispatch result report *every*
+   registration's outcome, and WF-15/16 added `Filtered` and `SecretMismatch` to that set — so a caller
+   firing a webhook is now told, in the response, exactly why nothing ran. The durable log adds
+   after-the-fact forensics, not first-line diagnosis.
+
+Making `RunId` nullable was considered and rejected outright: it is the leading column of the clustered
+index, so nullable-leading-key clustering would be paid on every existing per-run history query, to
+store rows that are not run history.
 
 **Symptom (user).** The run trace cannot explain *why* a node took 40 seconds, whether it was retried,
 or when an inbound event arrived. A UI rendering the trace has to diff `NodeStarted`/`NodeCompleted`
