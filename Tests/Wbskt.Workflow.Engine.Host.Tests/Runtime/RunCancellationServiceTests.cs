@@ -40,6 +40,105 @@ public sealed class RunCancellationServiceTests
     }
 
     [Fact]
+    public async Task RequestCancellation_also_cancels_a_run_that_is_already_Failing()
+    {
+        // A run whose first branch failed sits in 'Failing' while its siblings keep going. Refusing to
+        // cancel that was silent and inexplicable from the outside.
+        var runProvider = new RecordingRunProvider("Failing", transitionResult: true, onlyFrom: "Failing");
+        var historyProvider = new RecordingHistoryEventProvider();
+        var service = new RunCancellationService(runProvider, historyProvider, new MemoryCache(new MemoryCacheOptions()), new FixedClock(), new DummyServiceProvider());
+
+        bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
+
+        Assert.True(cancelled);
+        Assert.Equal((42L, "Failing", "Cancelling"), runProvider.TransitionRequest);
+        Assert.Single(historyProvider.Events);
+    }
+
+    [Fact]
+    public async Task RequestCancellation_does_the_local_work_for_a_run_another_host_already_transitioned()
+    {
+        // The cross-host case: the management host moved the status and published the event, but it has
+        // no finalizer and does not own this host's bookmarks or branches. Short-circuiting on "I did not
+        // transition it" left a parked cancelled run holding live bookmarks until the 30-minute reaper.
+        var runProvider = new RecordingRunProvider("Cancelling", transitionResult: false);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var branchProvider = new CancellationTestBranchProvider();
+        var bookmarkProvider = new CancellationTestBookmarkProvider();
+        var service = new RunCancellationService(
+            runProvider,
+            historyProvider,
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new DummyServiceProvider(),
+            branchProvider,
+            bookmarkProvider);
+
+        bool cancelled = await service.RequestCancellationAsync(42, "from-the-bus", CancellationToken.None);
+
+        Assert.True(cancelled);
+        Assert.Equal(42, branchProvider.CancelledRunId);
+        Assert.Equal(42, bookmarkProvider.DeletedRunId);
+        // No duplicate history entry: this call transitioned nothing, so it has nothing new to record.
+        Assert.Empty(historyProvider.Events);
+    }
+
+    [Fact]
+    public async Task MarkCancellationRequested_makes_the_local_view_flip_immediately()
+    {
+        // Cancellation is read through a short per-host cache. Without this, a host that learns of a
+        // cancel from the event bus keeps answering with whatever it cached before it.
+        var runProvider = new RecordingRunProvider("Running", transitionResult: false);
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new RunCancellationService(runProvider, new RecordingHistoryEventProvider(), cache, new FixedClock(), new DummyServiceProvider());
+
+        Assert.False(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
+
+        service.MarkCancellationRequested(42);
+
+        Assert.True(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
+        Assert.True(service.GetToken(42).IsCancellationRequested);
+    }
+
+    [Fact]
+    public void The_token_registry_is_shared_across_scopes()
+    {
+        // WF-37. The service is Scoped and the pump runs each branch in its own scope, so a per-instance
+        // registry meant the branch loop watched one token source while every canceller cancelled a
+        // different, unobserved one - cancellation only ever took effect at the between-nodes check.
+        var registry = new RunCancellationTokenRegistry();
+        RunCancellationService branchScope = CreateService(registry);
+        RunCancellationService cancellerScope = CreateService(registry);
+
+        CancellationToken observed = branchScope.GetToken(42);
+        cancellerScope.CancelCts(42);
+
+        Assert.True(observed.IsCancellationRequested);
+    }
+
+    [Fact]
+    public void A_cancel_that_arrives_before_the_branch_asks_for_its_token_is_not_lost()
+    {
+        var registry = new RunCancellationTokenRegistry();
+        RunCancellationService service = CreateService(registry);
+
+        service.CancelCts(42);
+
+        Assert.True(service.GetToken(42).IsCancellationRequested);
+    }
+
+    private static RunCancellationService CreateService(RunCancellationTokenRegistry registry)
+    {
+        return new RunCancellationService(
+            new RecordingRunProvider("Running", transitionResult: true),
+            new RecordingHistoryEventProvider(),
+            new MemoryCache(new MemoryCacheOptions()),
+            new FixedClock(),
+            new DummyServiceProvider(),
+            tokenRegistry: registry);
+    }
+
+    [Fact]
     public async Task IsCancellationRequested_returns_true_for_cancelling()
     {
         var service = new RunCancellationService(new RecordingRunProvider("Cancelling", transitionResult: false), new RecordingHistoryEventProvider(), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), new DummyServiceProvider());

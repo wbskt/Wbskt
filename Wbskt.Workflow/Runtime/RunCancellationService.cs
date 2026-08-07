@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Wbskt.EventBus.Abstractions;
@@ -20,7 +19,11 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IRunCountersProvider? _runCountersProvider;
     private readonly IServiceProvider _serviceProvider;
     private readonly IEventBus? _eventBus;
-    private readonly ConcurrentDictionary<long, CancellationTokenSource> _ctsRegistry = new();
+
+    // Singleton, not per-instance: this service is Scoped and the pump runs each branch in its own
+    // scope, so a per-instance registry meant the branch loop watched one token source while every
+    // canceller cancelled another. See RunCancellationTokenRegistry.
+    private readonly RunCancellationTokenRegistry _tokenRegistry;
 
     public RunCancellationService(
         IRunProvider runProvider,
@@ -31,8 +34,13 @@ internal sealed class RunCancellationService : IRunCancellationService
         IBranchProvider? branchProvider = null,
         IBookmarkProvider? bookmarkProvider = null,
         IRunCountersProvider? runCountersProvider = null,
-        IEventBus? eventBus = null)
+        IEventBus? eventBus = null,
+        RunCancellationTokenRegistry? tokenRegistry = null)
     {
+        // Optional so the many hand-built test instances need no extra argument; the engine always
+        // supplies the singleton, and a hand-built instance gets its own private registry, which is
+        // exactly the isolation a test wants.
+        _tokenRegistry = tokenRegistry ?? new RunCancellationTokenRegistry();
         _runProvider = runProvider;
         _historyEventProvider = historyEventProvider;
         _memoryCache = memoryCache;
@@ -46,22 +54,12 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     public CancellationToken GetToken(long runId)
     {
-        var cts = _ctsRegistry.GetOrAdd(runId, _ => new CancellationTokenSource());
-        return cts.Token;
+        return _tokenRegistry.GetToken(runId);
     }
 
     public void RemoveCts(long runId)
     {
-        if (_ctsRegistry.TryRemove(runId, out var cts))
-        {
-            try
-            {
-                cts.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
+        _tokenRegistry.Remove(runId);
     }
 
     /// <summary>
@@ -80,21 +78,7 @@ internal sealed class RunCancellationService : IRunCancellationService
     // cancelled without being moved to 'Cancelling'.
     public void CancelCts(long runId)
     {
-        var cts = _ctsRegistry.GetOrAdd(runId, _ => {
-            var newCts = new CancellationTokenSource();
-            newCts.Cancel();
-            return newCts;
-        });
-        if (!cts.IsCancellationRequested)
-        {
-            try
-            {
-                cts.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        }
+        _tokenRegistry.Cancel(runId);
     }
 
     public async Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)

@@ -33,6 +33,8 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
+        // The token registry is process-wide - the service that reads it is per-scope.
+        services.AddSingleton<RunCancellationTokenRegistry>();
         services.AddScoped<IRunCancellationService, RunCancellationService>();
 
         WorkflowEngineOptions options = configuration.GetSection("WorkflowEngine").Get<WorkflowEngineOptions>() ?? new WorkflowEngineOptions();
@@ -129,6 +131,8 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IBookmarkResumer, BookmarkResumer>();
         services.AddScoped<ITriggerConcurrencyEnforcer, TriggerConcurrencyEnforcer>();
         services.AddScoped<IRunFinalizer, RunFinalizer>();
+        // The token registry is process-wide - the service that reads it is per-scope.
+        services.AddSingleton<RunCancellationTokenRegistry>();
         services.AddScoped<IRunCancellationService, RunCancellationService>();
         services.AddScoped<ICompensationOrchestrator, CompensationOrchestrator>();
         services.AddScoped<IRunCompletedPublisher, NullRunCompletedPublisher>();

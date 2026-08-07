@@ -122,6 +122,64 @@ public sealed class RetryExecutorTests
             9);
     }
 
+    [Fact]
+    public async Task Cancellation_propagates_instead_of_becoming_an_executor_crash()
+    {
+        // Only BranchLoop can tell a run cancel from a host shutdown - it holds both tokens - and it
+        // turns the first into a clean Cancelled branch and leaves the second Active for recovery.
+        // Swallowing this into EXECUTOR_CRASH would turn every interrupted node into a failed one.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        using var cts = new CancellationTokenSource();
+        var executor = new ThrowingExecutor(() =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            new FixedClock(),
+            cts.Token));
+
+        // And it is not retried: a cancelled run does not want two more attempts.
+        Assert.Equal(1, executor.AttemptCount);
+    }
+
+    [Fact]
+    public async Task An_uncancelled_OperationCanceledException_is_still_a_crash()
+    {
+        // An executor that throws OCE for its own reasons, with nothing actually cancelled, is a bug in
+        // that executor - not a cancellation - and must not masquerade as one.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new ThrowingExecutor(() => throw new OperationCanceledException("nothing was cancelled"));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            new FixedClock(),
+            CancellationToken.None);
+
+        Assert.Equal("EXECUTOR_CRASH", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
+    }
+
+    private sealed class ThrowingExecutor(Func<NodeExecutionResult> behaviour) : INodeExecutor
+    {
+        public int AttemptCount { get; private set; }
+
+        public string Kind => NodeKind.ActionClientMessage;
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            AttemptCount++;
+            return Task.FromResult(behaviour());
+        }
+    }
+
     private sealed class RecordingExecutor(params NodeExecutionResult[] results) : INodeExecutor
     {
         private readonly Queue<NodeExecutionResult> _results = new(results);

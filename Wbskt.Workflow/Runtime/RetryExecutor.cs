@@ -365,6 +365,15 @@ internal static class RetryExecutor
             {
                 throw;
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // A genuine cancellation - a run cancel or host shutdown - is not a crash and must not
+                // be retried. BranchLoop is the only place that can tell those two apart (it holds both
+                // tokens), and it turns the first into a clean Cancelled branch and leaves the second
+                // Active for recovery. Swallowing this into EXECUTOR_CRASH here would have turned every
+                // interrupted node into a failed one the moment run tokens started actually firing.
+                throw;
+            }
             catch (Exception ex)
             {
                 var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);

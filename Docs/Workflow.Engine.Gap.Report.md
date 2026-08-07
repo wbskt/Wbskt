@@ -207,7 +207,7 @@ against current code** and worth working from directly.
 | WF-34 | 🟡 | Hygiene | ◐ Resolved `[RJ]:` markers and duplicate assignments |
 | WF-35 | 🟡 | Hygiene | ◐ Shipped example generator emits a workflow that fails at runtime |
 | WF-36 | 🟡 | Runtime | `INT` primary keys modelled as `long` with checked casts |
-| WF-37 | 🟠 | Runtime | A run's `CancellationToken` can never be cancelled (found 2026-08-07 during WF-31) |
+| WF-37 | 🟠 | Runtime | ✅ A run's `CancellationToken` can never be cancelled (found 2026-08-07 during WF-31) |
 
 ---
 
@@ -1967,7 +1967,37 @@ side-effect-free branches, plus a handful of genuinely-open `[RJ]` questions in 
 
 ## WF-37 🟠 A run's `CancellationToken` can never be cancelled
 
-**Status:** ☐ Open. **Found 2026-08-07 while doing WF-31**, not part of the original review.
+**Status:** ✅ Fixed 2026-08-07. Found earlier the same day while doing WF-31; not part of the original
+review.
+
+**What landed.** A `RunCancellationTokenRegistry` holds the dictionary and is registered `Singleton`;
+the scoped `RunCancellationService` takes it. A `static` field would have fixed the lifetime just as
+well and been worse — xUnit runs test classes in one process, so a static registry leaks cancellations
+between them. The constructor parameter is optional, so a hand-built test instance gets its own private
+registry, which is the isolation a test wants.
+
+`Cancel` on an unknown run id creates the source **already cancelled**, so a cancel arriving before the
+branch asks for its token is not lost.
+
+**The behaviour change turned out to be one line, in the other direction than expected.** `BranchLoop`
+already classified an `OperationCanceledException` correctly — run cancel → clean `Terminal(Cancelled)`,
+host shutdown → leave the branch `Active` for recovery — so the interrupted-node path was already
+right. But **`RetryExecutor`'s catch-all swallowed the exception into `EXECUTOR_CRASH`** before it could
+reach that classification. It now rethrows when `ct.IsCancellationRequested`, and only then: an executor
+throwing `OperationCanceledException` with nothing actually cancelled is a bug in that executor, not a
+cancellation, and must not masquerade as one. Both cases are pinned by tests, as is the fact that a
+cancelled node is not retried.
+
+Outbound executors needed no change: `WebhookNodeExecutor` and `TelegramNodeExecutor` catch only
+`HttpRequestException`, and `EmailNodeExecutor` explicitly excludes `OperationCanceledException`, so
+cancellation propagates from all three.
+
+**Tests.** Registry shared across two service instances (the scope case); a cancel that lands before the
+token is handed out; `RetryExecutor` rethrowing versus crashing.
+
+---
+
+**Original write-up, for the record:**
 
 **Symptom.** `CancelCts` appears to cancel a running branch's work and does not. Cancellation only ever
 takes effect at the *between-nodes* `IsCancellationRequestedAsync` check, so a cancel issued during a
