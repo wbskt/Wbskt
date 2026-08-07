@@ -5,16 +5,12 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests;
 
 /// <summary>Task 13.1 — Smoke tests: SQL Edge reachable + workflow schema deployed.</summary>
 [Collection("SqlEdge")]
-public sealed class SmokeTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class SmokeTests(SqlEdgeFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public async Task Sql_edge_is_reachable()
     {
-        if (!fixture.IsAvailable)
-        {
-            output.WriteLine("SKIPPED: SQL Edge not available. Start SQL Edge with sa/Welcome1234 on port 1433.");
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         await using var conn = new SqlConnection(fixture.ConnectionString);
         await conn.OpenAsync();
@@ -26,14 +22,10 @@ public sealed class SmokeTests(SqlEdgeFixture fixture, ITestOutputHelper output)
         result.Should().Be(1);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Schema_deployed_workflow_tables_exist()
     {
-        if (!fixture.IsAvailable)
-        {
-            output.WriteLine("SKIPPED: SQL Edge not available.");
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var expectedTables = new[]
         {
@@ -57,14 +49,10 @@ public sealed class SmokeTests(SqlEdgeFixture fixture, ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Schema_deployed_stored_procedures_exist()
     {
-        if (!fixture.IsAvailable)
-        {
-            output.WriteLine("SKIPPED: SQL Edge not available.");
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var expectedSprocs = new[]
         {

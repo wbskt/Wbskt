@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// dequeues via DELETE OUTPUT return distinct rows (no double-dequeue).
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixture)
 {
     private async Task<(Guid WorkflowRefId, int WorkflowDefinitionId)> CreateWorkflowAsync()
     {
@@ -25,10 +25,10 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         return (wd.RefId, wd.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DequeueOldest_returns_null_when_queue_empty()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
@@ -39,10 +39,10 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         dequeued.Should().BeNull();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DequeueOldest_returns_oldest_first()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
@@ -79,10 +79,10 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         d2.EnqueuedAt.Should().BeBefore(d3!.EnqueuedAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Dequeue_does_not_cross_trigger_nodes()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
@@ -112,10 +112,10 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         fromB.InboundEventJson.Should().Contain("B");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Concurrent_dequeues_return_distinct_rows()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var (workflowRefId, _) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);

@@ -5,7 +5,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>Task 13.2 — WorkflowDefinitionProvider: insert, retrieve, deprecate round-trips.</summary>
 [Collection("SqlEdge")]
-public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fixture)
 {
     private static WorkflowDefinitionRow BuildRow(Guid refId) => new()
     {
@@ -21,10 +21,10 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         CreatedAt = DateTime.UtcNow
     };
 
-    [Fact]
+    [SkippableFact]
     public async Task Insert_then_GetByRefIdVersion_round_trips()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
         Guid refId = Guid.NewGuid();
@@ -42,10 +42,10 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         retrieved.DefinitionJson.Should().Be("""{"nodes":[],"edges":[]}""");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Publish_then_GetCurrent_returns_published_row()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
         Guid refId = Guid.NewGuid();
@@ -59,10 +59,10 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         current.RefId.Should().Be(refId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Deprecate_changes_IsEnabled_to_false()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
         Guid refId = Guid.NewGuid();
@@ -76,10 +76,10 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         retrieved.IsEnabled.Should().BeFalse();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Duplicate_Insert_same_RefId_increments_version()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
         Guid refId = Guid.NewGuid();
@@ -90,10 +90,10 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         v2.Version.Should().Be(v1.Version + 1);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task FindByRefIdVersionAsync_returns_id_for_existing_row()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
         Guid refId = Guid.NewGuid();
@@ -105,10 +105,10 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         id.Should().Be(inserted.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task FindByRefIdVersionAsync_returns_null_for_missing_row()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
 

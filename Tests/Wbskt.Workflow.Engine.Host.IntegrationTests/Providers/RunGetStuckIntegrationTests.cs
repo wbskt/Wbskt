@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// active/waiting/compensating branch), not merely "old and non-terminal".
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
 {
     private async Task<(WorkflowDefinitionRow Wd, RunRow Run)> CreateRunAsync(DateTime createdAt)
     {
@@ -43,10 +43,10 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture, ITestOut
         return (wd, run);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetStuckRuns_excludes_run_with_a_live_bookmark()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         DateTime old = DateTime.UtcNow.AddHours(-1);
         (_, RunRow run) = await CreateRunAsync(old);
@@ -73,10 +73,10 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture, ITestOut
         stuck.Should().NotContain(r => r.Id == run.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetStuckRuns_excludes_run_with_an_active_branch()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         DateTime old = DateTime.UtcNow.AddHours(-1);
         (_, RunRow run) = await CreateRunAsync(old);
@@ -106,10 +106,10 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture, ITestOut
         stuck.Should().NotContain(r => r.Id == run.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetStuckRuns_returns_run_with_no_bookmarks_and_no_live_branches()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         DateTime old = DateTime.UtcNow.AddHours(-1);
         (_, RunRow run) = await CreateRunAsync(old);
@@ -120,10 +120,10 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture, ITestOut
         stuck.Should().Contain(r => r.Id == run.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetStuckRuns_excludes_run_not_yet_past_cutoff()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         DateTime recent = DateTime.UtcNow;
         (_, RunRow run) = await CreateRunAsync(recent);

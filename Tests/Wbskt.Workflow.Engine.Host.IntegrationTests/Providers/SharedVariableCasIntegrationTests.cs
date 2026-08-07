@@ -8,12 +8,12 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// value) returns 0 rows affected and does not overwrite the stored value.
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public async Task Initialize_then_Get_round_trips()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
         Guid workflowRefId = Guid.NewGuid();
@@ -32,10 +32,10 @@ public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture, IT
         retrieved.ValueJson.Should().Be("0");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SetAsync_overwrites_value()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
         Guid workflowRefId = Guid.NewGuid();
@@ -50,10 +50,10 @@ public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture, IT
         result.ValueJson.Should().Be("\"world\"");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CompareAndSet_with_correct_expected_value_succeeds()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
         Guid workflowRefId = Guid.NewGuid();
@@ -71,10 +71,10 @@ public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture, IT
         result.ValueJson.Should().Be("\"updated\"");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CompareAndSet_with_stale_expected_value_returns_zero_rows_affected()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
         Guid workflowRefId = Guid.NewGuid();
@@ -92,10 +92,10 @@ public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture, IT
         result.ValueJson.Should().Be("\"v1\"", "value should be unchanged after failed CAS");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Concurrent_writers_exactly_one_wins_the_cas()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
         Guid workflowRefId = Guid.NewGuid();

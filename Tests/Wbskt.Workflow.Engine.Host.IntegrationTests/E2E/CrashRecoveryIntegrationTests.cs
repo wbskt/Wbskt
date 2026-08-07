@@ -24,10 +24,10 @@ public sealed class RecordingRunDispatcher : IRunDispatcher
 [Collection("SqlEdge")]
 public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public async Task StartupRecoveryService_RecoversOrphanedBranch_AndDispatchesIt()
     {
-        if (!fixture.IsAvailable) return;
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var services = new ServiceCollection();
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
@@ -143,10 +143,10 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         mockDispatcher.DispatchedBranches[0].Reason.Should().Be(Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task StartupRecoveryService_RecoversOrphanedCompensatingBranch_AndDispatchesIt()
     {
-        if (!fixture.IsAvailable) return;
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var services = new ServiceCollection();
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);

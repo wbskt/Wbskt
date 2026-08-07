@@ -9,7 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// on a single RefId (the signal-vs-TTL race the single-row bookmark model relies on).
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture)
 {
     private async Task<int> SeedRunAsync()
     {
@@ -45,10 +45,10 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture, ITestO
         ExpiresAt = expiresAt, TtlPort = null, CreatedAt = DateTime.UtcNow
     };
 
-    [Fact]
+    [SkippableFact]
     public async Task ClaimDue_returns_and_removes_due_bookmarks()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await SeedRunAsync();
         var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
@@ -69,10 +69,10 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture, ITestO
         second.Select(b => b.RefId).Should().NotIntersectWith(due.Select(b => b.RefId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ClaimDue_with_concurrent_callers_returns_disjoint_sets()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         const int totalBookmarks = 50;
         const int callerCount = 5;
@@ -110,10 +110,10 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture, ITestO
             "claim-by-delete should give each caller distinct rows — no RefId duplicates");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ClaimDue_returns_empty_when_no_due_bookmarks()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var bookmarkProvider = ProviderFactory.Bookmark(fixture.ConnectionString);
 
@@ -125,12 +125,12 @@ public sealed class BookmarkClaimIntegrationTests(SqlEdgeFixture fixture, ITestO
         due.Should().BeEmpty();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task TryClaimAsync_concurrent_calls_on_same_RefId_exactly_one_wins()
     {
         // The single-row bookmark model relies on this: a signal/http match and a TTL expiry
         // racing on the same bookmark row must never both succeed.
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await SeedRunAsync();
         var seedProvider = ProviderFactory.Bookmark(fixture.ConnectionString);

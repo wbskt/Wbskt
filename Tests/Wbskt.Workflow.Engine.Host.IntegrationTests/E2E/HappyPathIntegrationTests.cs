@@ -50,14 +50,10 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
 
     private static readonly Guid TriggerNodeId = new("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
-    [Fact]
+    [SkippableFact]
     public async Task Publish_start_execute_run_reaches_Succeeded()
     {
-        if (!fixture.IsAvailable)
-        {
-            output.WriteLine("SKIPPED: SQL Edge not available. Start SQL Edge with sa/Welcome1234 on port 1433.");
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         // ── 1. Build a scoped DI container wired to the integration DB ──
         var services = new ServiceCollection();
@@ -144,14 +140,10 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         finalRun.CompletedAt.Should().NotBeNull();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Publish_start_execute_history_events_written()
     {
-        if (!fixture.IsAvailable)
-        {
-            output.WriteLine("SKIPPED: SQL Edge not available.");
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         var services = new ServiceCollection();
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);

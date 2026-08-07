@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// one concurrent decrement observes ActiveBranchCount == 0 (the "last branch" race).
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class RunCountersIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class RunCountersIntegrationTests(SqlEdgeFixture fixture)
 {
     private async Task<int> CreateRunAsync()
     {
@@ -43,10 +43,10 @@ public sealed class RunCountersIntegrationTests(SqlEdgeFixture fixture, ITestOut
         return run.Id;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task IncrementActiveBranches_returns_post_update_value()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await CreateRunAsync();
         var provider = ProviderFactory.RunCounters(fixture.ConnectionString);
@@ -60,10 +60,10 @@ public sealed class RunCountersIntegrationTests(SqlEdgeFixture fixture, ITestOut
         result3.Should().Be(1);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Concurrent_decrements_exactly_one_caller_observes_zero()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         const int branchCount = 20;
 

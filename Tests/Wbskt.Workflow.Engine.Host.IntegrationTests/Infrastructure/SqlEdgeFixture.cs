@@ -6,8 +6,11 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 /// Per-collection xunit fixture that provisions a unique integration-test database,
 /// deploys the workflow DACPAC, and tears the database down on dispose.
 ///
-/// SQL Edge must be running and reachable. If it is not, <see cref="IsAvailable"/>
-/// is set to <c>false</c> and all tests that depend on this fixture skip silently.
+/// SQL Edge must be running and reachable. If it is not, <see cref="IsAvailable"/> is set to
+/// <c>false</c> and every test on this fixture reports as <b>Skipped</b> — each one opens with
+/// <c>Skip.IfNot(fixture.IsAvailable, …)</c> under a <c>[SkippableFact]</c>. Keep that shape for new
+/// tests: a plain <c>[Fact]</c> that returns early instead would report as <i>passed</i> without
+/// having run, which is how a whole suite can go green against no database at all.
 ///
 /// Connection defaults:  Server=localhost,1433  User=sa  Password=Welcome1234
 /// Override via env var: WBSKT_INTEGRATION_CONNSTR (full ADO.NET connection string to master DB).

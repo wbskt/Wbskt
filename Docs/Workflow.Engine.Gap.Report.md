@@ -74,8 +74,10 @@
 > - **The integration fixture builds its own database.** `SqlEdgeFixture` connects to **`master`**
 >   (default `localhost,1433`, `sa`/`Welcome1234`, override with `WBSKT_INTEGRATION_CONNSTR`),
 >   creates a throwaway DB, deploys the DACPAC, and drops it. Pointing it at a pre-deployed database
->   does nothing. When it cannot connect, **34 of 36 tests silently "pass" by skipping** — check with
->   `--logger "console;verbosity=detailed"` and grep for `SKIPPED`.
+>   does nothing. When it cannot connect the run now reports **`Skipped! … Skipped: 36`** rather than
+>   `Passed!` — every test is a `[SkippableFact]` opening with `Skip.IfNot(fixture.IsAvailable, …)`.
+>   (It used to return early under a plain `[Fact]`, so a suite with no database reachable went green.
+>   Keep the `Skip.IfNot` shape for new tests.)
 > - **Adding a method to `IRunProvider`/`IHistoryEventProvider` means patching ~15 test doubles.**
 >   Expect it; batch it.
 > - Commands:
@@ -179,9 +181,9 @@ against current code** and worth working from directly.
 - Tests: xUnit + Moq + FluentAssertions. Unit tests in `Tests/Wbskt.Workflow.Engine.Host.Tests`, DB
   integration in `Tests/Wbskt.Workflow.Engine.Host.IntegrationTests`, full E2E in
   `Tests/Wbskt.E2E.FeatureTests`.
-- DACPAC redeploy is required before integration tests can validate new or changed SPs. DB integration
-  tests silently no-op without a live SQL Server (pre-existing `if (!fixture.IsAvailable) return;`
-  pattern — not a regression).
+- DACPAC redeploy is required before integration tests can validate new or changed SPs. Without a live
+  SQL Server the DB integration tests report as **Skipped**, not passed — `[SkippableFact]` plus
+  `Skip.IfNot(fixture.IsAvailable, …)`. New tests on that fixture must use the same shape.
 
 ---
 

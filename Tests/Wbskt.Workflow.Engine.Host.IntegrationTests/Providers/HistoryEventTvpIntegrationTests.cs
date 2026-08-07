@@ -9,7 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// produce monotonically increasing HistoryEventIds.
 /// </summary>
 [Collection("SqlEdge")]
-public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture, ITestOutputHelper output)
+public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture)
 {
     private async Task<int> CreateRunAsync()
     {
@@ -52,10 +52,10 @@ public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture, ITes
         }).ToList();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AppendBatch_inserts_all_events()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await CreateRunAsync();
         var provider = ProviderFactory.HistoryEvent(fixture.ConnectionString);
@@ -74,10 +74,10 @@ public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture, ITes
         Convert.ToInt32(result).Should().Be(count);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AppendBatch_assigns_monotone_HistoryEventIds()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await CreateRunAsync();
         var provider = ProviderFactory.HistoryEvent(fixture.ConnectionString);
@@ -108,10 +108,10 @@ public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture, ITes
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AppendBatch_multiple_calls_continue_monotone_sequence()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await CreateRunAsync();
         var provider = ProviderFactory.HistoryEvent(fixture.ConnectionString);
@@ -140,10 +140,10 @@ public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture, ITes
         ids.Should().BeInAscendingOrder();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AppendBatch_concurrent_for_same_RunId_does_not_produce_duplicate_HistoryEventIds()
     {
-        if (!fixture.IsAvailable) { output.WriteLine("SKIPPED: SQL Edge not available."); return; }
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
         int runId = await CreateRunAsync();
         const int concurrency = 5;
