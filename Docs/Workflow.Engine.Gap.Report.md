@@ -5,32 +5,55 @@
 > **This document is self-sufficient. You do not need any prior conversation.**
 >
 > A user-perspective review of the workflow engine catalogued 36 gaps (`WF-01`…`WF-36`), and a 37th
-> was found while fixing WF-31. **23 are done, 6 are partly done, 8 are untouched.** Work through the
-> remaining ones by ID — each item below carries symptom, root cause with `file:line`, fix, tests and
-> acceptance criteria.
+> was found while fixing WF-31. **34 are done, 2 are partly done, 1 is deferred by design.** Each item
+> below carries symptom, root cause with `file:line`, fix, tests and acceptance criteria.
+>
+> **What is actually left**, and both are owner decisions rather than unwritten code:
+>
+> | Item | What remains | Why it was not just done |
+> |---|---|---|
+> | **WF-10** | Windowed `MaxConcurrency` on `ParallelForEach`. The hard `MaxFanOut` ceiling landed and meets the acceptance criterion. | Needs pending items on the aggregator row, an atomic pop inside `JoinAggregator_Contribute`, and a branch spawn on both contribution paths — surgery on exactly the code WF-03 fixed, **unverifiable without a live SQL Server**. Getting it wrong ships as "cohorts hang". Full design sketch is in the item. |
+> | **WF-29** | A durable record of arrivals that produce *no* run. Everything else landed. | Needs its own table; an arrival that matched nothing has no workspace to scope an endpoint to, it costs an insert on the hottest path, and WF-32 already tells a caller *why* nothing ran. Three decisions, all the owner's. |
+> | **WF-36** | Nothing — deferred by design. `INT` keys modelled as `long`, contained by `checked` casts so the ceiling is loud rather than silent. | Document only, do not action. |
 >
 > ### Where the work lives
 >
 > Branch `claude/workflow-engine-gap-report-e12741`, in a worktree at
-> `C:\dev\wbskt\Wbskt\.claude\worktrees\sleepy-shaw-b56b7c`. Nine commits from `3389998`:
+> `C:\dev\wbskt\Wbskt\.claude\worktrees\sleepy-shaw-b56b7c`.
 >
 > | Commit | Covers |
 > |---|---|
 > | `da022d0` | WF-01, 02, 03, 04, 05, 06, 07, 17, 18, 19, 20, 21, 22, 33 |
 > | `b9703df` | WF-14, WF-23 |
 > | `613fea8` | WF-13 |
-> | `7ba1312` | WF-29 |
-> | `c1e4e95` | WF-26 |
+> | `7ba1312` | WF-29 (partial) |
+> | `c1e4e95` | WF-26 (per-workflow) |
 > | `ef7dc51` | WF-27, WF-30 |
-> | `6f77180` | WF-24, WF-25, WF-34 |
+> | `6f77180` | WF-24, WF-25, WF-34 (partial) |
 > | `fe7e8a3` | WF-32 |
-> | *(branch head)* | WF-31, and WF-37 written up — the commit that also carries this table |
+> | `5d14abf` | WF-31 |
+> | `2638858` | WF-15, WF-16 |
+> | `b3318df` | WF-09, WF-10 (ceiling) |
+> | `bc54888` | WF-07, WF-28 |
+> | `d52ec61` | WF-08 |
+> | `1ebd3af` | WF-37 |
+> | `3d6110e` | WF-35 |
+> | `342ea10` | WF-26 (workspace rollup) |
+> | `057c354` | WF-29 (inbound arrivals in the run trace) |
+> | `033fa10` | WF-34 (`RetryExecutor` cleanup, remaining markers) |
 >
 > ### ⚠️ Live caveats — do not lose these
 >
-> 1. **A DACPAC redeploy is outstanding.** The owner deployed after `d919bdd` and reported all tests
->    passing. `3078655` changed `HistoryEvent_DeleteForRetiredRuns`'s signature and deleted three
->    procedures **after** that deploy, so the database is currently behind the code.
+> 1. **A DACPAC redeploy is outstanding, and has grown.** The owner last deployed mid-way through the
+>    earlier commits. Since then the schema has changed as follows, and **none of it is deployed**:
+>    - `HistoryEvent_DeleteForRetiredRuns` — changed signature; three procedures deleted (WF-24, WF-25).
+>    - `TriggerRegistrations.WebhookSecret` — **new nullable column**, plus all four
+>      `TriggerRegistration_*` procedures updated (WF-16).
+>    - `Run_GetStatsBy_WorkspaceId`, `Run_GetStatsPerWorkflowBy_WorkspaceId` — **two new procedures**
+>      (WF-26).
+>
+>    Until it is deployed, webhook triggers and the workspace stats endpoint will fail against the
+>    live database.
 > 2. **The E2E suite has never been run in-session.** It needs live hosts and failed at fixture setup
 >    with HTTP 429 from the auth host. The owner plans to run it once the items are finished.
 >    Two known problems waiting there:
@@ -61,7 +84,9 @@
 >   dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj --nologo -v q
 >   dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj --nologo -v q
 >   ```
->   Current baseline: **574 unit tests, 36 DB integration tests, all passing.**
+>   Current baseline: **641 unit tests passing** (574 when this document was written). The 36 DB
+>   integration tests have **not** been re-run since the schema changes above — they need a live SQL
+>   Server, and silently skip without one.
 >
 > ### Decisions already taken — do not re-litigate
 >
@@ -73,30 +98,23 @@
 > | **`node_id` is deliberately not a metric tag** — unbounded cardinality. Per-node timings come from the history stream instead. | WF-27 |
 > | A `Fork` with no downstream `Join` is **legal**; only `ParallelForEach` requires one. | WF-03, WF-19 |
 > | Rollback republishes as a **new version**; history stays append-only. | WF-13 |
+> | A **secret or credential never lives in a workflow definition** — SMTP password, bot token, webhook secret. A definition is readable by the whole workspace and frozen into every published version. | WF-08, WF-16 |
+> | A trigger filter **fails closed**: one that cannot be evaluated has not been passed. | WF-15 |
+> | A **lossy summary plus full detail** beats a cleverer summary — dispatch outcomes, workspace success rate. | WF-32, WF-26 |
+> | Workspace success rate is **run-weighted**, with a per-workflow breakdown beside it. Averaging per-workflow rates was rejected. | WF-26 |
+> | Credit costs are **configuration**, not compiled in; outbound I/O costs more than bookkeeping. | WF-28 |
+> | `CompareAndSet` losing its race is a **normal outcome**, reported as `casSucceeded`, not a node failure. | WF-07 |
 >
-> ### Suggested order for what is left
+> ### Things that will bite the next person
 >
-> 1. **WF-15** and **WF-16** — trigger filters and webhook secrets (both need WF-02's evaluator, which
->    is done).
-> 2. **WF-37** — the token registry. Small wiring change, but it makes cancellation actually interrupt
->    node work for the first time, so budget for the executor paths that will start seeing
->    `OperationCanceledException`.
-> 3. **WF-09**, **WF-10**, **WF-28**.
-> 4. **WF-08** — no longer urgent: unimplemented kinds are now rejected at publish, so it is a missing
->    feature rather than a runtime trap. Finish line is: implement the executors, then delete the two
->    entries from `NodeKind.NotYetImplemented`.
-> 5. **WF-36** is deferred by design — document only, do not action.
->
-> ### The six partial items, and exactly what remains
->
-> | Item | What is left |
-> |---|---|
-> | **WF-07** | `CompareAndSet` only. Needs an `expected` field on `VariableConfig`; the provider method and SP already exist. |
-> | **WF-13** | Nothing — the remainder was decided against (see table above). Kept as ◐ because the item as originally written asked for more. |
-> | **WF-26** | Workspace-level rollup (`GET /workspaces/{ws}/stats`). Needs its own procedures and a decision on what a cross-workflow success rate means across wildly different volumes. |
-> | **WF-29** | Inbound events — **blocked on schema**: `HistoryEvents.RunId` is `NOT NULL` and the leading clustered-PK column, but no run exists when an inbound event arrives. Needs a nullable `RunId` or a separate log. Credit charges wait for WF-28. |
-> | **WF-34** | `RetryExecutor`'s duplicated try/catch blocks and unreachable side-effect-free branches; a few genuinely-open `[RJ]` questions in `RunStarter`/`BookmarkResumer`. |
-> | **WF-35** | Smoke test asserting every exported example validates *and* runs to `Succeeded`. The generator itself is fixed. |
+> - **`NodeKind.NotYetImplemented` is now empty.** The `NODE_KIND_NOT_IMPLEMENTED` validator rule stays
+>   for the next kind that lands ahead of its executor. `NodeExecutorRegistryTests` pins the set against
+>   the real DI container, so adding a kind without an executor fails there first.
+> - **Cancellation now really interrupts a running node** (WF-37). Any new executor must let
+>   `OperationCanceledException` propagate — `RetryExecutor` rethrows it rather than turning it into
+>   `EXECUTOR_CRASH`, and `BranchLoop` is the only place that can tell a run cancel from a host shutdown.
+> - **The E2E suite has still never been run** (see caveat 2), and now has more surface to cover:
+>   webhook secrets, trigger filters, sub-workflow inputs, and the two new notification nodes.
 
 ---
 
@@ -206,7 +224,7 @@ against current code** and worth working from directly.
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
 | WF-34 | 🟡 | Hygiene | ✅ Resolved `[RJ]:` markers and duplicate assignments |
 | WF-35 | 🟡 | Hygiene | ✅ Shipped example generator emits a workflow that fails at runtime |
-| WF-36 | 🟡 | Runtime | `INT` primary keys modelled as `long` with checked casts |
+| WF-36 | 🟡 | Runtime | ☐ `INT` primary keys modelled as `long` with checked casts |
 | WF-37 | 🟠 | Runtime | ✅ A run's `CancellationToken` can never be cancelled (found 2026-08-07 during WF-31) |
 
 ---
@@ -1500,9 +1518,29 @@ Verified zero references anywhere in the solution:
 
 ## WF-36 🟡 `INT` primary keys modelled as `long`
 
-`Runs.Id` and `Branches.Id` are `INT` while the code models them as `long` with `checked((int))` casts
-throughout. Migration is invasive (FKs everywhere) and was explicitly deferred by the owner
-(remediation plan §4.4). Recorded here as a known ceiling — revisit before production scale.
+**Status:** ☐ Deferred by design — **document only, do not action.** Reviewed 2026-08-07 and the
+deferral still holds; what follows is the detail a future migration will want.
+
+`Runs.Id` and `Branches.Id` are `INT` in the database while the code models them as `long`, so every
+provider call that takes a run or branch id narrows with `checked((int))`.
+
+**What that actually buys and costs.** The `checked` cast is the useful part: at 2.1 billion runs the
+engine will throw `OverflowException` at the boundary rather than silently wrap and write to the wrong
+run. So the ceiling is loud, not silent — which is why this is 🟡 and not a correctness bug. The cost
+is that the `long` in the signatures is a promise the schema does not keep, and every one of those
+casts is a line a reader has to check.
+
+**Why migrating is invasive.** `Runs.Id` and `Branches.Id` are referenced by foreign key from
+`Branches`, `Bookmarks`, `HistoryEvents`, `RunCounters`, `JoinAggregators` and `IdempotencyKeys`, and
+`HistoryEvents` clusters on `(RunId, HistoryEventId)` — widening it rewrites the largest table in the
+schema and every index on it. That is an offline migration on a table sized by retention, not a column
+alter.
+
+**When to revisit.** Before the run count is within an order of magnitude of `INT.MaxValue`, or at any
+point the schema is being rebuilt for another reason. Until then the honest position is: the types
+disagree, the disagreement is contained by `checked`, and it is written down here.
+
+Cross-ref remediation plan §4.4.
 
 ---
 
@@ -2128,6 +2166,10 @@ passes `WorkflowValidator` **and** executes to a terminal `Succeeded` in the E2E
 ---
 
 # Suggested order
+
+> **Historical.** This was the plan before any of it was done, and every wave below has now been worked
+> through. It is kept because the dependency reasoning is still the best explanation of *why* the items
+> landed in the order they did. For what is actually left, see the handoff block at the top.
 
 Dependencies are real here — this order avoids rework.
 
