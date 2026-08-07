@@ -64,6 +64,12 @@ public static class WorkflowServiceCollectionExtensions
     {
         WorkflowEngineOptions options = configuration.GetSection("WorkflowEngine").Get<WorkflowEngineOptions>() ?? new WorkflowEngineOptions();
         services.AddSingleton(Options.Create(options));
+
+        // Pricing is an operator decision that changes without a release, so the cost table is bound
+        // from configuration; anything not overridden keeps CreditCostOptions.BuiltIn.
+        CreditCostOptions creditCosts = configuration.GetSection("WorkflowEngine:CreditCosts").Get<CreditCostOptions>() ?? new CreditCostOptions();
+        services.AddSingleton(Options.Create(creditCosts));
+
         return AddWorkflowRuntime(services);
     }
 

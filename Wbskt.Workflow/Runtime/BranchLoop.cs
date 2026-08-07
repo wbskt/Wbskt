@@ -157,6 +157,8 @@ internal sealed class BranchLoop : IBranchLoop
                 System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 string outcome = "Succeeded";
                 bool hostShutdownInterrupted = false;
+                // Accumulated across attempts, so a node retried three times reports what all three cost.
+                decimal creditsCharged = 0m;
                 try
                 {
                     // Resolving the executor MUST stay inside this try. An unregistered node kind throws,
@@ -185,7 +187,10 @@ internal sealed class BranchLoop : IBranchLoop
                             JsonSerializer.Serialize(
                                 new { attempt, maxAttempts, delayMs = delay.TotalMilliseconds, reason },
                                 new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                            retryCt));
+                            retryCt),
+                        // Summed rather than written per attempt: a row per charge would roughly double
+                        // history volume for a number that belongs on the outcome event anyway.
+                        onCharge: cost => creditsCharged += cost);
                 }
                 catch (EngineFaultException ex)
                 {
@@ -252,9 +257,9 @@ internal sealed class BranchLoop : IBranchLoop
                 double durationMs = stopwatch.Elapsed.TotalMilliseconds;
                 string? eventPayload = result switch
                 {
-                    NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message, durationMs }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch, durationMs }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    _ => JsonSerializer.Serialize(new { durationMs }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                    NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message, durationMs, creditsCharged }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch, durationMs, creditsCharged }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    _ => JsonSerializer.Serialize(new { durationMs, creditsCharged }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
                 };
 
                 _logger?.LogInformation("Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);

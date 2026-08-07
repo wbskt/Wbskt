@@ -18,6 +18,14 @@ namespace Wbskt.Workflow.Runtime;
 /// </summary>
 internal delegate Task RetryNotification(int attempt, int maxAttempts, TimeSpan delay, string reason, CancellationToken ct);
 
+/// <summary>
+/// Called each time an attempt is charged against the run's credit budget. Reported back rather than
+/// recorded here for the same reason as <see cref="RetryNotification"/> - the retry executor has no
+/// history provider - and the branch loop folds the total onto the node's outcome event rather than
+/// writing a row per attempt, since history is written synchronously.
+/// </summary>
+internal delegate void CreditChargeNotification(decimal cost);
+
 internal static class RetryExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -33,7 +41,8 @@ internal static class RetryExecutor
         ICreditCostCalculator? creditCostCalculator = null,
         WorkflowMetrics? workflowMetrics = null,
         WorkflowDefinition? definition = null,
-        RetryNotification? onRetry = null)
+        RetryNotification? onRetry = null,
+        CreditChargeNotification? onCharge = null)
     {
         _ = clock;
         RetryPolicy policy = GetPolicy(node);
@@ -181,6 +190,8 @@ internal static class RetryExecutor
 
                     return outOfCreditsResult;
                 }
+
+                onCharge?.Invoke(cost);
 
                 if (workflowMetrics != null)
                 {

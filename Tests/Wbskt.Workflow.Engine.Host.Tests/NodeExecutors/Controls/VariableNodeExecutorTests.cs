@@ -157,9 +157,10 @@ public sealed class VariableNodeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_compare_and_set_is_rejected_with_an_explanation()
+    public async Task ExecuteAsync_compare_and_set_without_an_expected_value_is_rejected()
     {
-        // The provider primitive exists, but VariableConfig carries no "expected" value to compare.
+        // There is nothing to compare against; writing unconditionally would silently turn this into
+        // a Set, which is the exact race the operation exists to avoid.
         var provider = new RecordingSharedVariableProvider();
         var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
         NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "mode", Value = JsonSerializer.SerializeToElement("x") } });
@@ -167,8 +168,71 @@ public sealed class VariableNodeExecutorTests
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
 
         var failure = Assert.IsType<NodeExecutionResult.Fail>(result);
-        Assert.Equal("VARIABLE_OPERATION_NOT_SUPPORTED", failure.ErrorCode);
-        Assert.Contains("expected", failure.Message);
+        Assert.Equal("VARIABLE_EXPECTED_MISSING", failure.ErrorCode);
+        Assert.Empty(provider.CompareAndSetCalls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_shared_compare_and_set_passes_expected_and_new_value_to_the_provider()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "mode", Expected = JsonSerializer.SerializeToElement("idle"), Value = JsonSerializer.SerializeToElement("busy") } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        var call = Assert.Single(provider.CompareAndSetCalls);
+        Assert.Equal("mode", call.VarName);
+        Assert.Equal("\"idle\"", call.Expected);
+        Assert.Equal("\"busy\"", call.NewValue);
+        Assert.True(Assert.IsType<NodeExecutionResult.Continue>(result).LocalStatePatch["casSucceeded"].GetBoolean());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_shared_compare_and_set_reports_a_lost_race_without_failing_the_node()
+    {
+        // Losing is a normal outcome - somebody else won, which is what the operation is for. Failing
+        // the node would make the optimistic-concurrency retry pattern impossible to express.
+        var provider = new RecordingSharedVariableProvider { CompareAndSetRowsAffected = 0 };
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "mode", Expected = JsonSerializer.SerializeToElement("idle"), Value = JsonSerializer.SerializeToElement("busy") } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal("default", continuation.OutboundPort);
+        Assert.False(continuation.LocalStatePatch["casSucceeded"].GetBoolean());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_local_compare_and_set_writes_only_when_the_current_value_matches()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(
+            new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.CompareAndSet, Var = "mode", Expected = JsonSerializer.SerializeToElement("idle"), Value = JsonSerializer.SerializeToElement("busy") } },
+            new Dictionary<string, JsonElement> { ["mode"] = JsonSerializer.SerializeToElement("idle") });
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(context, CancellationToken.None));
+
+        Assert.True(continuation.LocalStatePatch["casSucceeded"].GetBoolean());
+        Assert.Equal("busy", continuation.LocalStatePatch["mode"].GetString());
+        Assert.Empty(provider.CompareAndSetCalls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_local_compare_and_set_leaves_a_mismatched_value_alone()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(
+            new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.CompareAndSet, Var = "mode", Expected = JsonSerializer.SerializeToElement("idle"), Value = JsonSerializer.SerializeToElement("busy") } },
+            new Dictionary<string, JsonElement> { ["mode"] = JsonSerializer.SerializeToElement("already-busy") });
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(context, CancellationToken.None));
+
+        Assert.False(continuation.LocalStatePatch["casSucceeded"].GetBoolean());
+        Assert.DoesNotContain("mode", continuation.LocalStatePatch.Keys);
     }
 
     private static NodeContext CreateContext(VariableNode node, IReadOnlyDictionary<string, JsonElement>? localState = null)
@@ -254,10 +318,13 @@ public sealed class VariableNodeExecutorTests
             return Task.FromResult((-delta).ToString());
         }
 
+        /// <summary>Rows the compare-and-set procedure reports updating; 0 means the race was lost.</summary>
+        public int CompareAndSetRowsAffected { get; init; } = 1;
+
         public Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct)
         {
             CompareAndSetCalls.Add((workflowRefId, varName, expected, newValue));
-            return Task.FromResult(1);
+            return Task.FromResult(CompareAndSetRowsAffected);
         }
 
         private static SharedVariableRow Row(Guid workflowRefId, string varName, string varType, string valueJson)

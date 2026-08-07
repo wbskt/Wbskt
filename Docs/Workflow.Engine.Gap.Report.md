@@ -177,7 +177,7 @@ against current code** and worth working from directly.
 | WF-04 | 🔴 | Control flow | ✅ `ForEach` is parallel, not sequential, and fires `done` before the body runs |
 | WF-05 | 🟠 | Control flow | ✅ A `Delay` inside a loop waits once and is skipped forever after |
 | WF-06 | 🟠 | Expressions | ✅ `$shared` variable refs and template interpolation throw at runtime |
-| WF-07 | 🟠 | Nodes | ◐ Variable node supports only `Set`; shared `Set` can fail under contention |
+| WF-07 | 🟠 | Nodes | ✅ Variable node supports only `Set`; shared `Set` can fail under contention |
 | WF-08 | 🟠 | Nodes | `action:email` and `action:telegram` are unimplemented stubs |
 | WF-09 | 🟠 | Nodes | ✅ Sub-workflow cannot receive input from its parent |
 | WF-10 | 🟠 | Nodes | ◐ No fan-out concurrency cap on `ForEach`/`ParallelForEach` |
@@ -198,7 +198,7 @@ against current code** and worth working from directly.
 | WF-25 | 🟡 | Database | ✅ Three dead stored procedures |
 | WF-26 | 🟠 | Analytics | ◐ No user-facing analytics endpoint at all |
 | WF-27 | 🟠 | Analytics | ✅ Metrics are not workspace-scoped and node timings are not per-node |
-| WF-28 | 🟠 | Analytics | Credit accounting is a stub — every node costs exactly 1.0 |
+| WF-28 | 🟠 | Analytics | ✅ Credit accounting is a stub — every node costs exactly 1.0 |
 | WF-29 | 🟠 | Analytics | ◐ History trace is missing inbound, retry, resume and charge events |
 | WF-30 | 🟡 | Analytics | ✅ `FlusherLag` gauge is hardcoded to zero |
 | WF-31 | 🟠 | Runtime | ✅ Cancellation state is cached per-host with no cross-host invalidation |
@@ -700,8 +700,21 @@ past deadline and continues immediately.
 
 ## WF-07 🟠 Variable node supports only `Set`
 
-**Status:** ◐ Partial — `Increment`/`Decrement` landed and `Set` is fixed (2026-08-06).
-`CompareAndSet` is **blocked on a config change**, see below.
+**Status:** ✅ Fixed — `Increment`/`Decrement` and `Set` landed 2026-08-06; `CompareAndSet` completed
+2026-08-07.
+
+**CompareAndSet.** `VariableConfig.Expected` (a literal or an expression, like `Value`) closed the
+blocker. Shared scope calls the existing `SharedVariable_CompareAndSet`; local scope compares against
+branch state. Both compare **serialized JSON text**, because that is exactly what the SQL does
+(`ValueJson = @Expected`) — matching it stops local quietly accepting a structural match the shared
+path would reject.
+
+**Losing the race is a normal outcome, not a node failure.** Somebody else won, which is the situation
+the operation exists to detect; failing the node would make the optimistic-concurrency retry pattern
+impossible to express. The result lands in branch state as `casSucceeded`, so a Logic gate can branch
+on it and loop back — the same convention as `childResult`. A `CompareAndSet` with no `expected` at all
+*is* rejected (`VARIABLE_EXPECTED_MISSING`): writing unconditionally would silently degrade it to a
+`Set`, which is the exact race it exists to avoid.
 
 **What landed.**
 - **`Increment`/`Decrement`, shared scope** — call the atomic `SharedVariable_Increment`/`_Decrement`
@@ -1580,6 +1593,33 @@ the API.
 ---
 
 ## WF-28 🟠 Credit accounting is a stub
+
+**Status:** ✅ Fixed 2026-08-07.
+
+`CreditCostOptions` prices each node kind, bound from `WorkflowEngine:CreditCosts` — **configuration,
+not compiled in**, because pricing is an operator decision that changes without a release. Anything not
+overridden keeps `CreditCostOptions.BuiltIn`; a kind absent from both falls back to `DefaultCost`
+rather than costing nothing.
+
+**The shape of the default table is the point.** Outbound I/O (`action:webhook`, `email`, `telegram`)
+is 5, in-process messaging 1, bookkeeping (logic, variable, join, the parking nodes) 0.1. A webhook
+occupies a connection, waits on somebody else's server and can retry; a local variable set is a
+dictionary write. Charging both `1.0` made `CreditBudget` a node-execution ceiling wearing a billing
+label — a thousand cheap control nodes and a thousand outbound calls were indistinguishable to the
+operator paying for them.
+
+**Retries are already attempt-weighted**: the charge sits inside `RetryExecutor`'s attempt loop, so
+three attempts at a webhook cost three webhooks. That needed no change — it just now means something.
+
+**This also closes WF-29's deferred credit record.** `creditsCharged` travels on the `NodeCompleted` /
+`NodeFailed` payload, summed across attempts, via a `CreditChargeNotification` callback (the same shape
+as `NodeRetrying`, since `RetryExecutor` has no history provider). **Deliberately not a row per
+charge** — that would roughly double history write volume for a number that belongs on the outcome
+event anyway.
+
+**Tests.** Outbound costs more than bookkeeping; configuration overrides the built-in; an unpriced kind
+falls back to the default; and every executable kind prices above zero, so nothing can become invisible
+to both the budget and the meter.
 
 **Symptom.** `CreditBudget` on a workflow is effectively a node-execution ceiling, not a cost control.
 `wbskt_workflow_credits_consumed_total` is a node counter wearing a billing label.
