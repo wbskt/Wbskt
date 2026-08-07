@@ -205,7 +205,7 @@ against current code** and worth working from directly.
 | WF-32 | 🟠 | Runtime | ✅ Multi-registration dispatch reports only the first run started |
 | WF-33 | 🟡 | Runtime | ✅ Branch worker limit is hardcoded; pump has no failure containment |
 | WF-34 | 🟡 | Hygiene | ◐ Resolved `[RJ]:` markers and duplicate assignments |
-| WF-35 | 🟡 | Hygiene | ◐ Shipped example generator emits a workflow that fails at runtime |
+| WF-35 | 🟡 | Hygiene | ✅ Shipped example generator emits a workflow that fails at runtime |
 | WF-36 | 🟡 | Runtime | `INT` primary keys modelled as `long` with checked casts |
 | WF-37 | 🟠 | Runtime | ✅ A run's `CancellationToken` can never be cancelled (found 2026-08-07 during WF-31) |
 
@@ -2033,9 +2033,26 @@ interrupted node ends its branch `Cancelled` rather than failed.
 
 ## WF-35 🟡 The shipped example generator emits a broken workflow
 
-**Status:** ◐ Partial — the generator was fixed as part of WF-02 B2 (it now emits a structured
-`BinaryExpression`, verified by running it). **Remaining:** the smoke test that every exported example
-passes `WorkflowValidator` *and* executes to a terminal `Succeeded` in the E2E harness.
+**Status:** ✅ Fixed — generator 2026-08-06 (WF-02 B2), smoke test 2026-08-07. **The "runs to
+`Succeeded`" half of the acceptance criterion was dropped deliberately**; see below.
+
+**What landed.** `Program.BuildExamples()` and `Program.SerializerOptions` are public, and the test
+project references the exporter, so `ExportedExampleSmokeTests` validates **exactly what gets
+exported** rather than a copy — a copy cannot drift with the original, which is the entire failure mode
+this item exists for. Each example is asserted to publish cleanly, **and to still validate after a JSON
+round trip**: what ships is the file, not the builder output, so a converter that loses a node's config
+would leave the in-memory definition valid and the shipped file broken. That is precisely the shape of
+the original defect.
+
+**⚠ "Executes to a terminal `Succeeded`" is not tested, and should not be.** The shipped examples are
+not self-completing by design: `LinearHappyPath` contains a one-minute `Delay`,
+`ErrorHandlingAndCompensation` waits up to an hour on an external signal, and all three send client
+messages to devices that do not exist in any harness. Driving them to `Succeeded` would require a
+controllable clock, an injected signal and stubbed device/webhook transports — at which point the test
+asserts that the stubs work, not that the examples do. The validation and round-trip assertions catch
+the regression class that actually occurred; the execution assertion would have caught nothing and cost
+a fragile harness. **If it is wanted, it belongs on a purpose-built self-completing example** added for
+that purpose, not on the illustrative ones.
 
 `Tools/Wbskt.Workflow.Exporter/Program.cs` `BuildBranchingWorkflow` calls
 `AddLogicGate("event.value > 100", …)`. Per WF-02 that condition can never evaluate — the exported

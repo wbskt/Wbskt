@@ -12,31 +12,43 @@ public class Program
         var outputDir = args.Length > 0 ? args[0] : "Examples";
         Directory.CreateDirectory(outputDir);
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-
         Console.WriteLine("Generating Workflow Examples...");
 
-        var examples = new[]
+        foreach (var (name, def) in BuildExamples())
         {
-            ("LinearHappyPath", BuildHappyPath()),
-            ("BranchingWithLogicAndForEach", BuildBranchingWorkflow()),
-            ("ErrorHandlingAndCompensation", BuildErrorHandlingWorkflow())
-        };
-
-        foreach (var (name, def) in examples)
-        {
-            var json = JsonSerializer.Serialize(def, options);
+            var json = JsonSerializer.Serialize(def, SerializerOptions);
             var path = Path.Combine(outputDir, $"{name}.json");
             File.WriteAllText(path, json);
             Console.WriteLine($"Exported: {path}");
         }
         
         Console.WriteLine("Done.");
+    }
+
+    /// <summary>The exact serializer settings the exported files are written with.</summary>
+    public static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
+    /// <summary>
+    /// Every example that ships, built the same way the exporter writes them.
+    /// </summary>
+    /// <remarks>
+    /// Public so the smoke test can validate exactly what gets exported. Duplicating these definitions
+    /// in the test would defeat the point: the failure this guards against is an example drifting into
+    /// something that no longer publishes, and a copy cannot drift with the original.
+    /// </remarks>
+    public static IReadOnlyList<(string Name, Wbskt.Workflow.Abstraction.Models.WorkflowDefinition Definition)> BuildExamples()
+    {
+        return
+        [
+            ("LinearHappyPath", BuildHappyPath()),
+            ("BranchingWithLogicAndForEach", BuildBranchingWorkflow()),
+            ("ErrorHandlingAndCompensation", BuildErrorHandlingWorkflow())
+        ];
     }
 
     private static Wbskt.Workflow.Abstraction.Models.WorkflowDefinition BuildHappyPath()
