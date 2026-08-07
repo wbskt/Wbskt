@@ -170,6 +170,45 @@ public sealed class WorkflowBuilder
         return this;
     }
 
+    /// <remarks>
+    /// No credentials here: the SMTP relay is host configuration (<c>WorkflowEngine:Email</c>), because a
+    /// definition is readable by the whole workspace and frozen into every published version.
+    /// </remarks>
+    public WorkflowBuilder AddEmail(string to, string subject, string body, string? name = null)
+    {
+        var id = Guid.NewGuid();
+        _nodes.Add(new EmailNotificationNode {
+            NodeId = id,
+            Name = name ?? subject,
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new EmailConfig { To = to, Subject = subject, Body = body },
+            Retry = null,
+            OnFailure = null,
+            Compensation = null });
+
+        ConnectToHead(id, PortNames.In);
+        _head = (id, PortNames.Default);
+        return this;
+    }
+
+    /// <remarks>The bot token is host configuration (<c>WorkflowEngine:Telegram</c>), not node config.</remarks>
+    public WorkflowBuilder AddTelegram(string chatId, string message, string? name = null)
+    {
+        var id = Guid.NewGuid();
+        _nodes.Add(new TelegramNotificationNode {
+            NodeId = id,
+            Name = name ?? "Telegram",
+            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new TelegramConfig { ChatId = chatId, Message = message },
+            Retry = null,
+            OnFailure = null,
+            Compensation = null });
+
+        ConnectToHead(id, PortNames.In);
+        _head = (id, PortNames.Default);
+        return this;
+    }
+
     public WorkflowBuilder AddParallelForEach(string collectionKey, out Guid nodeId, string? name = null)
     {
         var id = Guid.NewGuid();

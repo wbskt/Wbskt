@@ -41,11 +41,7 @@ public static class NodeKind
     /// Keep this in sync with the executors: when one of these is implemented, remove it here.
     /// <c>NodeExecutorRegistryTests</c> pins the relationship between this set and the registry.
     /// </summary>
-    public static readonly IReadOnlySet<string> NotYetImplemented = new HashSet<string>(StringComparer.Ordinal)
-    {
-        ActionEmail,
-        ActionTelegram
-    };
+    public static readonly IReadOnlySet<string> NotYetImplemented = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>Kinds that can actually run - what a published definition may contain.</summary>
     public static IEnumerable<string> Executable => All.Where(kind => !NotYetImplemented.Contains(kind));

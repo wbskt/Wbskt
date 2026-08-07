@@ -178,7 +178,7 @@ against current code** and worth working from directly.
 | WF-05 | 🟠 | Control flow | ✅ A `Delay` inside a loop waits once and is skipped forever after |
 | WF-06 | 🟠 | Expressions | ✅ `$shared` variable refs and template interpolation throw at runtime |
 | WF-07 | 🟠 | Nodes | ✅ Variable node supports only `Set`; shared `Set` can fail under contention |
-| WF-08 | 🟠 | Nodes | `action:email` and `action:telegram` are unimplemented stubs |
+| WF-08 | 🟠 | Nodes | ✅ `action:email` and `action:telegram` are unimplemented stubs |
 | WF-09 | 🟠 | Nodes | ✅ Sub-workflow cannot receive input from its parent |
 | WF-10 | 🟠 | Nodes | ◐ No fan-out concurrency cap on `ForEach`/`ParallelForEach` |
 | WF-11 | 🟠 | API | ✅ Normal outcomes on "start run" return HTTP 500 |
@@ -776,8 +776,32 @@ fails under contention.
 
 ## WF-08 🟠 `action:email` and `action:telegram` are unimplemented stubs
 
-**Status:** ☐ Open. Note WF-01 landed `ToastNodeExecutor`, so these two are now the only
-unimplemented `action:*` kinds — and `WorkflowBuilder` gained `AddToast`, leaving `AddEmail`/`AddTelegram` as the remaining builder gaps.
+**Status:** ✅ Fixed 2026-08-07. **`NodeKind.NotYetImplemented` is now empty** — every kind the model
+can express, the engine can run.
+
+**Credentials are host configuration, never node config.** `EmailOptions` (`WorkflowEngine:Email`) and
+`TelegramOptions` (`WorkflowEngine:Telegram`) carry the SMTP password and bot token. This is the load-
+bearing decision: a definition is stored, versioned and readable by anyone with `workflows.read`, so a
+token written into one leaks to every workspace member *and* is frozen into every published version,
+where deleting it later does nothing. The existing `EmailConfig`/`TelegramConfig` already carried only
+addressing and content, so nothing had to be taken away.
+
+- **Email** goes through a new `IEmailSender` (SMTP has no injectable seam of its own, so this is what
+  makes the node testable and lets a provider API be swapped in later). Bodies send as **plain text** —
+  the body is author-controlled and sanitised nowhere, so rendering it as HTML in a recipient's client
+  would hand them author-controlled markup. An unconfigured relay fails non-retryably with
+  `EMAIL_NOT_CONFIGURED`; a malformed address is permanent; everything else is retryable, because SMTP
+  is routinely transient.
+- **Telegram** posts to the Bot API on its own named `HttpClient`, so its timeout and handler lifetime
+  are not shared with arbitrary author-controlled webhook targets. No `IOutboundAddressGuard` — the
+  target is the configured API base, not an author-supplied URL, so there is no SSRF surface. 4xx is
+  permanent except **429**, which is exactly what retries are for. **The API response body is never
+  echoed into the failure message**: it can quote the request URL, and the request URL carries the bot
+  token. A test pins that.
+
+`WorkflowBuilder` gained `AddEmail` and `AddTelegram`, closing the last builder gap.
+
+**Acceptance.** Met — the nodes work.
 
 **Symptom (user).** Both node kinds publish successfully and then fail the run at execution with
 `EXECUTOR_CRASH: … not yet implemented - Phase 9 TODO`.

@@ -70,6 +70,11 @@ public static class WorkflowServiceCollectionExtensions
         CreditCostOptions creditCosts = configuration.GetSection("WorkflowEngine:CreditCosts").Get<CreditCostOptions>() ?? new CreditCostOptions();
         services.AddSingleton(Options.Create(creditCosts));
 
+        // Credentials for the notification channels. Bound here, never carried on a node - a definition
+        // is readable by the whole workspace and frozen into every published version.
+        services.AddSingleton(Options.Create(configuration.GetSection("WorkflowEngine:Email").Get<EmailOptions>() ?? new EmailOptions()));
+        services.AddSingleton(Options.Create(configuration.GetSection("WorkflowEngine:Telegram").Get<TelegramOptions>() ?? new TelegramOptions()));
+
         return AddWorkflowRuntime(services);
     }
 
@@ -94,6 +99,7 @@ public static class WorkflowServiceCollectionExtensions
         // executors) is itself Scoped, so this does not widen anything's lifetime.
         services.AddScoped<IExpressionEvaluator, ExpressionEvaluator>();
         services.AddSingleton<IOutboundAddressGuard, OutboundAddressGuard>();
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
         // The client/schedule/webhook/manual triggers all just record the payload and continue via
         // "default", so a single PassthroughTriggerExecutor serves them - one instance per kind.
         services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClient, sp.GetRequiredService<IClock>()));

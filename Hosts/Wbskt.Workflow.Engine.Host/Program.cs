@@ -43,6 +43,10 @@ public static class Program
         // address can't sidestep the OutboundAddressGuard SSRF check on the original target.
         builder.Services.AddHttpClient("workflow-webhook")
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        // Telegram goes to a fixed, configured API base rather than an author-supplied URL, so it needs
+        // no address guard - but it gets its own client so its timeout and handler lifetime are not
+        // shared with arbitrary author-controlled webhook targets.
+        builder.Services.AddHttpClient("workflow-telegram", client => client.Timeout = TimeSpan.FromSeconds(30));
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration);
         // Re-registers ILeaseHolder (AddWorkflowEngine defaults to AlwaysHoldsLeaseHolder for

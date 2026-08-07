@@ -1,5 +1,6 @@
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
@@ -168,9 +169,11 @@ public sealed class WorkflowValidatorRuleTests
     // --------------------------------------------------- WF-19.1 node kinds
 
     [Fact]
-    public void Validate_rejects_a_kind_that_is_not_implemented()
+    public void Validate_accepts_email_now_that_it_has_an_executor()
     {
-        // action:email publishes cleanly today and then fails the run at execution.
+        // action:email used to publish cleanly and then fail the run at execution, so the validator
+        // rejected it. WF-08 implemented the executor and emptied NotYetImplemented, so it must now
+        // publish - this is the test that would catch removing a kind from that set without wiring one.
         var def = ValidWorkflowBuilder.Build();
         var email = new EmailNotificationNode
         {
@@ -182,7 +185,17 @@ public sealed class WorkflowValidatorRuleTests
 
         var result = Validator.Validate(def with { Nodes = [.. def.Nodes, email] });
 
-        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "NODE_KIND_NOT_IMPLEMENTED");
+        Assert.DoesNotContain(result.Issues, i => i.Code == "NODE_KIND_NOT_IMPLEMENTED");
+    }
+
+    [Fact]
+    public void Every_modelled_kind_is_currently_executable()
+    {
+        // The NODE_KIND_NOT_IMPLEMENTED rule stays for the next kind that lands ahead of its executor;
+        // right now the set is empty, and NodeExecutorRegistryTests pins that every executable kind
+        // really does have an executor behind it.
+        Assert.Empty(NodeKind.NotYetImplemented);
+        Assert.Equal(NodeKind.All.OrderBy(k => k), NodeKind.Executable.OrderBy(k => k));
     }
 
     [Fact]
