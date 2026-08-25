@@ -24,7 +24,9 @@ internal static class AuthEmailTemplates
             to,
             Subject($"You have been invited to {tenantName} on {options.ProductName}"),
             Layout(options,
-                $"You have been invited to join {Field(tenantName)}",
+                // Not Field()-encoded: Layout encodes the heading. Doing it here as well renders
+                // an ampersand in a tenant name as "&amp;" in the recipient's client.
+                $"You have been invited to join {tenantName}",
                 $"""
                  <p>Someone has invited you to join the {Field(tenantName)} workspace on {Field(options.ProductName)}.</p>
                  {Button(url, "Accept the invitation")}
@@ -149,6 +151,11 @@ internal static class AuthEmailTemplates
                 """;
     }
 
+    /// <summary>
+    /// Wraps a rendered body. <paramref name="heading"/> is encoded here, so callers pass it raw;
+    /// <paramref name="body"/> is already markup, so callers are responsible for encoding every
+    /// user-supplied value they interpolate into it via <see cref="Field"/>.
+    /// </summary>
     private static string Layout(AuthEmailOptions options, string heading, string body)
     {
         var sb = new StringBuilder();
