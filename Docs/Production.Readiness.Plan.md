@@ -57,13 +57,19 @@ Baseline as of the Phase 0 merge: **664 unit tests passing, 39 integration tests
 clean apart from three pre-existing warnings (`Result.cs` CS0108, `TriggerRegistrationProvider.cs`
 CS8601, `RegisterRequest.cs` CS1587).
 
-The DB integration suite needs a live SQL Server:
+The DB integration suite needs a live SQL Server, and its mail-delivery tests need an SMTP sink:
 
 ```bash
 docker run -e "ACCEPT_EULA=1" -e "MSSQL_SA_PASSWORD=Welcome1234" -p 1433:1433 -d mcr.microsoft.com/mssql/server:2022-latest
+docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit
 dotnet tool install -g microsoft.sqlpackage
+dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj -c Debug --nologo
+dotnet build Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj -c Debug --nologo
 dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj --nologo -v q
 ```
+
+Both DACPACs, because the suite deploys the workflow database for the engine's provider tests and the
+auth database for the account-recovery procedures — separate databases, as in production.
 
 Without one, every test there **skips** (`[SkippableFact]` + `Skip.IfNot`). A skipped run is not a
 passing run — CI fails the job if the suite skips, and you should treat a local skip the same way.

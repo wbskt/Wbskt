@@ -4,19 +4,31 @@ using Microsoft.Data.SqlClient;
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Wraps a <c>sqlpackage /Action:Publish</c> invocation to deploy the workflow DACPAC
-/// against a freshly created integration-test database.
+/// Wraps a <c>sqlpackage /Action:Publish</c> invocation to deploy one of the two DACPACs against a
+/// freshly created integration-test database.
 /// </summary>
 public static class DatabaseDeployer
 {
+    /// <summary>The workflow/management database — tables, procedures and the engine's storage.</summary>
+    public const string WorkflowProject = "Wbskt.Database";
+
+    /// <summary>Users, tenants, roles, invitations and the account-recovery tokens.</summary>
+    public const string AuthProject = "Wbskt.Database.Auth";
+
+    /// <param name="projectName">
+    /// Which DACPAC to publish — <see cref="WorkflowProject"/> or <see cref="AuthProject"/>. The two
+    /// are separate databases in every environment, so a fixture deploys whichever one its tests
+    /// address rather than both.
+    /// </param>
     public static async Task DeployAsync(
         string masterConnectionString,
         string dbName,
-        string dbConnectionString)
+        string dbConnectionString,
+        string projectName = WorkflowProject)
     {
         await CreateDatabaseAsync(masterConnectionString, dbName);
 
-        string dacpacPath = FindDacpacPath();
+        string dacpacPath = FindDacpacPath(projectName);
         string sqlPackageExe = FindSqlPackage();
 
         var args = string.Join(" ", [
@@ -59,7 +71,7 @@ public static class DatabaseDeployer
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static string FindDacpacPath()
+    private static string FindDacpacPath(string projectName)
     {
         string baseDir = AppContext.BaseDirectory;
         DirectoryInfo? dir = new DirectoryInfo(baseDir);
@@ -76,33 +88,33 @@ public static class DatabaseDeployer
                 "Could not find solution root (Wbskt.slnx) while searching for DACPAC.");
         }
 
-        string binRoot = Path.Combine(dir.FullName, "Databases", "Wbskt.Database", "bin");
+        string binRoot = Path.Combine(dir.FullName, "Databases", projectName, "bin");
 
         // Searched recursively rather than by naming the configuration folder. MSBuild.Sdk.SqlProj
         // emits to bin/<Config>/<TFM>/, so the previous bin/<Config>/ candidates matched nothing —
         // the deploy threw, the fixture set IsAvailable = false, and all 36+ tests reported as
         // Skipped. That reads as "no SQL Server reachable" and hid the real cause completely.
-        string? found = FindDacpacUnder(binRoot);
+        string? found = FindDacpacUnder(binRoot, projectName);
         if (found is not null)
         {
             return found;
         }
 
         // Not built yet: build it, then look again.
-        BuildDacpac(dir.FullName);
+        BuildDacpac(dir.FullName, projectName);
 
-        return FindDacpacUnder(binRoot)
+        return FindDacpacUnder(binRoot, projectName)
                ?? throw new FileNotFoundException(
-                   $"Wbskt.Database.dacpac not found anywhere under '{binRoot}', including after a build. " +
-                   "Run: dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj");
+                   $"{projectName}.dacpac not found anywhere under '{binRoot}', including after a build. " +
+                   $"Run: dotnet build Databases/{projectName}/{projectName}.sqlproj");
     }
 
     /// <summary>
-    /// The most recently written <c>Wbskt.Database.dacpac</c> anywhere under <paramref name="binRoot"/>,
-    /// or <c>null</c> if there is none. Recursive so that a change to the SDK's output layout cannot
-    /// silently disable the whole integration suite again.
+    /// The most recently written <c>&lt;projectName&gt;.dacpac</c> anywhere under
+    /// <paramref name="binRoot"/>, or <c>null</c> if there is none. Recursive so that a change to the
+    /// SDK's output layout cannot silently disable the whole integration suite again.
     /// </summary>
-    private static string? FindDacpacUnder(string binRoot)
+    private static string? FindDacpacUnder(string binRoot, string projectName)
     {
         if (!Directory.Exists(binRoot))
         {
@@ -110,15 +122,15 @@ public static class DatabaseDeployer
         }
 
         return Directory
-            .EnumerateFiles(binRoot, "Wbskt.Database.dacpac", SearchOption.AllDirectories)
+            .EnumerateFiles(binRoot, $"{projectName}.dacpac", SearchOption.AllDirectories)
             .OrderByDescending(File.GetLastWriteTimeUtc)
             .FirstOrDefault();
     }
 
-    private static void BuildDacpac(string solutionRoot)
+    private static void BuildDacpac(string solutionRoot, string projectName)
     {
         string sqlprojPath = Path.Combine(
-            solutionRoot, "Databases", "Wbskt.Database", "Wbskt.Database.sqlproj");
+            solutionRoot, "Databases", projectName, $"{projectName}.sqlproj");
 
         var psi = new ProcessStartInfo("dotnet", $"build \"{sqlprojPath}\" -c Debug")
         {
