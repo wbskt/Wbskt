@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Hosts\Wbskt.Auth.Host\Wbskt.Auth.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Management.Host\Wbskt.Management.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Socket.Host\Wbskt.Socket.Host.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Workflow.Engine.Host\Wbskt.Workflow.Engine.Host.csproj" />
