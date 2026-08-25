@@ -86,8 +86,8 @@ either with an account (`POST /api/invitations/accept`) or while creating one (`
 leaked link is not by itself enough to join.
 
 - Only the SHA-256 hash of the token is stored. The raw value is returned once, by the call that
-  issued it, and is not recoverable — there is no mail transport in this codebase yet, so the
-  administrator delivers the link (`TODO(arch)`).
+  issued it, and is not recoverable. The invitee is mailed a link automatically; the raw token is
+  still returned so an administrator can deliver it by hand when mail is not an option.
 - `dbo.TenantInvitation_Accept` re-checks validity under `UPDLOCK, HOLDLOCK`, so two concurrent
   redemptions of one token cannot both succeed. Callers may look an invitation up first for a better
   error message, but that read is never the gate.

@@ -49,19 +49,25 @@ public sealed class RegistrationTests(ServicesFixture fixture)
         session.RefreshToken.Should().NotBeNullOrWhiteSpace();
     }
 
+    /// <summary>
+    /// A taken address is answered exactly like a successful registration. Whoever submitted the form
+    /// learns nothing; the address's real owner is mailed instead. Without this, registration is a
+    /// free oracle for "does this person have an account here".
+    /// </summary>
     [SkippableFact]
-    public async Task AUTH_REG_04_DuplicateEmail_Returns409()
+    public async Task AUTH_REG_04_DuplicateEmail_IsIndistinguishableFromSuccess()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var (username, email, password) = ServicesFixture.NewCredentials();
-        await fixture.RegisterAsync(username, email, password);
+        var first = await fixture.RegisterAsync(username, email, password);
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var (otherUsername, _, _) = ServicesFixture.NewCredentials();
         var response = await fixture.RegisterAsync(otherUsername, email, password);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_USER_CONFLICT");
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await response.Content.ReadAsStringAsync()).Should().BeEmpty();
     }
 
     [SkippableFact]
@@ -77,9 +83,10 @@ public sealed class RegistrationTests(ServicesFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
-        // Deliberately the same code as a duplicate email: the endpoint is anonymous, and telling a
-        // caller *which* field collided would let them enumerate registered usernames.
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_USER_CONFLICT");
+        // Reported plainly, unlike a duplicate address. A username collision discloses nothing about
+        // any email address, and answering 204 would leave the caller retrying a name that can never
+        // be accepted.
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_USERNAME_CONFLICT");
     }
 
     // ── Password bounds ───────────────────────────────────────────────────────────────────
@@ -270,10 +277,16 @@ public sealed class RegistrationTests(ServicesFixture fixture)
             fixture.RegisterAsync(username, email, password),
             fixture.RegisterAsync(otherUsername, email, password));
 
-        // The unique constraint is the arbiter — two accounts sharing an address would give two
-        // tenants reachable by one identity.
-        responses.Count(r => r.StatusCode == HttpStatusCode.NoContent).Should().Be(1);
-        responses.Count(r => r.StatusCode == HttpStatusCode.Conflict).Should().Be(1);
+        // UQ_Users_Email is still the arbiter — two accounts sharing an address would give two
+        // tenants reachable by one identity — but the loser is no longer told it lost. Both callers
+        // get the same 204, and the one that collided has an "you already have an account" mail sent
+        // to the address instead. A race that answered differently would reintroduce the oracle that
+        // AUTH_REG_04 exists to close.
+        responses.Should().AllSatisfy(r => r.StatusCode.Should().Be(HttpStatusCode.NoContent));
+
+        // And exactly one account came out of it: the address signs in, once, with that password.
+        var session = await fixture.LoginAsync(email, password);
+        session.AccessToken.Should().NotBeNullOrWhiteSpace();
     }
 
     [SkippableFact]

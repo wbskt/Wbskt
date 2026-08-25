@@ -98,6 +98,65 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
 
+    public async Task CreatePasswordResetTokenAsync(int userId, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.PasswordResetToken_Create", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+            p.AddWithValue("@ExpiresAt", expiresAt);
+            p.AddWithValue("@RequestedByIp", (object?)requestedByIp ?? DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task<int> ConsumePasswordResetTokenAsync(byte[] tokenHash, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var parameters = await ExecuteNonQueryAsync("dbo.PasswordResetToken_Consume", p =>
+            {
+                p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+                p.AddWithValue("@PasswordHash", passwordHash);
+                p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
+                p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
+            }, cancellationToken);
+
+            return (int)parameters["@UserId"].Value;
+        }
+        catch (SqlException ex) when (ex.Number == 50014)
+        {
+            throw new SecurityException("Password reset token is not valid.");
+        }
+    }
+
+    public async Task CreateEmailVerificationTokenAsync(int userId, byte[] tokenHash, DateTime expiresAt, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.EmailVerificationToken_Create", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+            p.AddWithValue("@ExpiresAt", expiresAt);
+        }, cancellationToken);
+    }
+
+    public async Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var parameters = await ExecuteNonQueryAsync("dbo.EmailVerificationToken_Consume", p =>
+            {
+                p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+                p.Add("@UserId", SqlDbType.Int).Direction = ParameterDirection.Output;
+            }, cancellationToken);
+
+            return (int)parameters["@UserId"].Value;
+        }
+        catch (SqlException ex) when (ex.Number == 50015)
+        {
+            throw new SecurityException("Email verification token is not valid.");
+        }
+    }
+
     public async Task SetUserActiveAsync(int userId, bool isActive, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.User_SetActive", p =>
@@ -192,7 +251,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
 
-    public async Task<Guid> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default)
+    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Create", p =>
         {
@@ -203,9 +262,10 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.AddWithValue("@ExpiresAt", expiresAt);
             p.AddWithValue("@InvitedByUserId", invitedByUserId);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
+            p.Add("@TenantName", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
         }, cancellationToken);
 
-        return (Guid)parameters["@RefId"].Value;
+        return new CreatedInvitation((Guid)parameters["@RefId"].Value, (string)parameters["@TenantName"].Value);
     }
 
     public async Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default)
@@ -662,7 +722,8 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             Username = reader.GetString(reader.GetOrdinal("Username")),
             Email = reader.GetString(reader.GetOrdinal("Email")),
             PasswordHash = reader.GetString(reader.GetOrdinal("PasswordHash")),
-            IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive"))
+            IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+            IsEmailVerified = reader.GetBoolean(reader.GetOrdinal("IsEmailVerified"))
         };
     }
 

@@ -2,9 +2,11 @@ using System.Diagnostics;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
+using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
@@ -25,23 +27,53 @@ internal sealed class AuthService : IAuthService
     private static readonly Error InvalidInvitation =
         Error.Validation("INVITATION_INVALID", "This invitation is not valid. It may have expired, been revoked, already been used, or been sent to a different email address.");
 
+    /// <summary>
+    /// One answer for an unknown, spent or expired recovery token, matching how the procedure that
+    /// consumes one reports all three. Anything more specific says whether a token ever existed.
+    /// </summary>
+    private static readonly Error InvalidResetToken =
+        Error.Validation("RESET_TOKEN_INVALID", "This password reset link is not valid. It may have expired or already been used. Request a new one.");
+
+    private static readonly Error InvalidVerificationToken =
+        Error.Validation("VERIFICATION_TOKEN_INVALID", "This confirmation link is not valid. It may have expired or already been used. Request a new one.");
+
+    /// <summary>
+    /// Short, because a reset link in an unattended inbox is a live credential for the account. An
+    /// hour is long enough to survive a user reading mail on another device.
+    /// </summary>
+    private static readonly TimeSpan PasswordResetLifetime = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Longer than a reset link, deliberately. This one is not a credential for an existing account -
+    /// it only ever turns an unusable account into a usable one - and sign-up commonly happens
+    /// minutes before someone stops looking at their inbox for the day. An hour here would mean
+    /// anyone who registers in the evening finds a dead link in the morning.
+    /// </summary>
+    private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromHours(24);
+
     private readonly IAuthProvider _provider;
     private readonly IJwtService _jwtService;
     private readonly IEventBus _eventBus;
+    private readonly IAuthMailer _mailer;
     private readonly ILogger<AuthService> _logger;
     private readonly AuthMetrics _metrics;
+    private readonly bool _requireVerifiedEmail;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(
         IAuthProvider provider, 
         IJwtService jwtService, 
         IEventBus eventBus,
+        IAuthMailer mailer,
+        IOptions<AuthEmailOptions> emailOptions,
         ILogger<AuthService> logger,
         AuthMetrics metrics)
     {
         _provider = provider;
         _jwtService = jwtService;
         _eventBus = eventBus;
+        _mailer = mailer;
+        _requireVerifiedEmail = emailOptions.Value.RequireVerifiedEmailForSignIn;
         _logger = logger;
         _metrics = metrics;
     }
@@ -86,6 +118,24 @@ internal sealed class AuthService : IAuthService
                 _metrics.RecordLogin("user_inactive");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive"), cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
+            }
+
+            // After the password check, not before: answering "verify your address" to someone who did
+            // not supply the right password would confirm the account exists to anyone who asks.
+            if (!user.IsEmailVerified && !_requireVerifiedEmail)
+            {
+                _logger.LogWarning(
+                    "Signing in user {Username} with an unconfirmed address because Auth:Email:RequireVerifiedEmailForSignIn is false. " +
+                    "This must not be the case outside local development.", user.Username);
+            }
+            else if (!user.IsEmailVerified)
+            {
+                _logger.LogWarning("Login refused: address not yet verified for user {Username} ({Email}). IP: {IpAddress}", user.Username, email, ipAddress);
+                _metrics.RecordLogin("email_unverified");
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Email not verified"), cancellationToken);
+                return Result<LoginResponse>.Failure(Error.Unauthorized(
+                    "AUTH_EMAIL_UNVERIFIED",
+                    "Confirm your email address before signing in. Check your inbox, or ask for a new confirmation link."));
             }
 
             _logger.LogDebug("Credentials verified successfully for user: {Username} ({Email}). Generating tokens...", user.Username, email);
@@ -302,11 +352,18 @@ internal sealed class AuthService : IAuthService
                 // the invitation could have been revoked or redeemed, in which case this throws and
                 // registration fails — the account and its own tenant survive, so the user can log in
                 // and ask for a fresh invitation rather than being stranded.
-                var tenantId = await _provider.AcceptInvitationAsync(InvitationTokens.Hash(invitationToken), userId, cancellationToken);
+                var tenantId = await _provider.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, cancellationToken);
                 _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, tenantId);
             }
 
             user = await _provider.GetByIdAsync(userId, cancellationToken);
+
+            // The account exists and is unusable until this link is followed. Issued as its own step
+            // rather than inside a transaction with the rows above, because there is no ambient
+            // transaction here to join - the user insert and Tenant_Create are already separate calls,
+            // and Tenant_Create is the only one that is atomic internally. If this step or the mail
+            // fails, resend-verification is the way back, which is why it is anonymous.
+            await IssueEmailVerificationAsync(user, cancellationToken);
 
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
             _logger.LogInformation("User {Username} registered successfully. RefId: {RefId}", username, user.RefId);
@@ -328,16 +385,223 @@ internal sealed class AuthService : IAuthService
 
             if (ex is SqlException { Number: 2601 or 2627 })
             {
-                _logger.LogWarning("User registration failed: Conflict on Username={Username} or Email={Email}. Error: {Message}", username, email, ex.Message);
-                _logger.LogTrace(ex, "User registration conflict stack trace for {Username}", username);
-                _metrics.RecordRegistration("conflict");
-                return Result.Failure(Error.Conflict("AUTH_USER_CONFLICT", "Username or email is already registered."));
+                return await HandleRegistrationConflictAsync(username, email, ex, cancellationToken);
             }
             _logger.LogError("Failed to register user: {Username} ({Email}). Error: {Message}", username, email, ex.Message);
             _logger.LogTrace(ex, "User registration failure stack trace for {Username}", username);
             _metrics.RecordRegistration("error");
             return Result.Failure(Error.Failure("AUTH_REGISTRATION_ERROR", ex.Message));
         }
+    }
+
+    public async Task<Result> ForgotPasswordAsync(string email, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        // 204 on every path below. Whether an address has an account is exactly what an attacker
+        // wants from this endpoint, so the status, the body and the absence of a body are identical
+        // for a real address, an unknown one, and a deactivated one.
+        //
+        // Timing is not equalised. The hit path does one extra insert, roughly a millisecond against
+        // a lookup that both paths pay - a signal, but a far smaller one than a different response,
+        // and closing it properly means doing fake work rather than less. Recorded rather than fixed.
+        User user;
+        try
+        {
+            user = await _provider.GetByEmailAsync(email, cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            _logger.LogInformation("Password reset requested for an address with no account. IP: {IpAddress}", ipAddress);
+            return Result.Success();
+        }
+
+        if (!user.IsActive)
+        {
+            // A deactivated account must not be recoverable by its former owner - reactivating is an
+            // administrator's decision. Answering identically keeps that from being discoverable.
+            _logger.LogWarning("Password reset requested for deactivated user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
+            return Result.Success();
+        }
+
+        try
+        {
+            var token = SecurityTokens.Generate();
+            var expiresAt = DateTime.UtcNow.Add(PasswordResetLifetime);
+
+            await _provider.CreatePasswordResetTokenAsync(user.Id, SecurityTokens.Hash(token), expiresAt, ipAddress, cancellationToken);
+            await _mailer.QueuePasswordResetAsync(user.Email, user.Username, token, expiresAt, cancellationToken);
+
+            // The raw token is not logged here or anywhere else.
+            _logger.LogInformation("Password reset issued for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
+        }
+        catch (Exception ex)
+        {
+            // Still 204. A failure here is ours, and reporting it would be a way to tell a real
+            // address from an unknown one by which requests can be made to fail.
+            _logger.LogError(ex, "Failed to issue a password reset for user {UserId}", user.Id);
+        }
+
+        return Result.Success();
+    }
+
+    public async Task<Result> ResetPasswordAsync(string token, string newPassword, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        // Hashed before the token is checked, so an invalid token costs the same work as a valid one
+        // and cannot be distinguished by how quickly it comes back. PasswordHasher<T> ignores the
+        // user argument when hashing, so a bare instance is correct here - there is no account yet.
+        var passwordHash = _passwordHasher.HashPassword(new User(), newPassword);
+
+        int userId;
+        try
+        {
+            // One call, one transaction: the new password and the revocation of every existing
+            // session land together or not at all. Whoever the victim is resetting away from is
+            // often already holding a session, and a gap between the two writes is that session
+            // surviving the reset.
+            userId = await _provider.ConsumePasswordResetTokenAsync(SecurityTokens.Hash(token), passwordHash, ipAddress, cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            _logger.LogWarning("Password reset rejected: the presented token is not valid. IP: {IpAddress}", ipAddress);
+            return Result.Failure(InvalidResetToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error consuming a password reset token. IP: {IpAddress}", ipAddress);
+            return Result.Failure(Error.Failure("AUTH_RESET_ERROR", ex.Message));
+        }
+
+        _logger.LogInformation("Password reset completed for user {UserId}; all refresh tokens revoked. IP: {IpAddress}", userId, ipAddress);
+        return Result.Success();
+    }
+
+    public async Task<Result> VerifyEmailAsync(string token, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var userId = await _provider.ConsumeEmailVerificationTokenAsync(SecurityTokens.Hash(token), cancellationToken);
+            _logger.LogInformation("Email address confirmed for user {UserId}", userId);
+            return Result.Success();
+        }
+        catch (SecurityException)
+        {
+            _logger.LogWarning("Email verification rejected: the presented token is not valid.");
+            return Result.Failure(InvalidVerificationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error consuming an email verification token.");
+            return Result.Failure(Error.Failure("AUTH_VERIFICATION_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> ResendVerificationAsync(string email, CancellationToken cancellationToken = default)
+    {
+        // Anonymous, and 204 on every path, for the same reason as ForgotPasswordAsync.
+        //
+        // Anonymous specifically because sign-in requires a verified address: an account that needs
+        // this endpoint is by definition one that cannot obtain a token to call an authenticated one.
+        User user;
+        try
+        {
+            user = await _provider.GetByEmailAsync(email, cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            return Result.Success();
+        }
+
+        if (user.IsEmailVerified || !user.IsActive)
+        {
+            return Result.Success();
+        }
+
+        try
+        {
+            await IssueEmailVerificationAsync(user, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to reissue an email verification for user {UserId}", user.Id);
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Issues a fresh verification token and queues the mail carrying it. Supersedes any token the
+    /// account already has, so the most recent link is always the one that works.
+    /// </summary>
+    private async Task IssueEmailVerificationAsync(User user, CancellationToken cancellationToken)
+    {
+        var token = SecurityTokens.Generate();
+        var expiresAt = DateTime.UtcNow.Add(EmailVerificationLifetime);
+
+        await _provider.CreateEmailVerificationTokenAsync(user.Id, SecurityTokens.Hash(token), expiresAt, cancellationToken);
+        await _mailer.QueueEmailVerificationAsync(user.Email, user.Username, token, expiresAt, cancellationToken);
+
+        _logger.LogInformation("Email verification issued for user {UserId}", user.Id);
+    }
+
+    /// <summary>
+    /// Answers a uniqueness conflict on registration without saying which address is taken.
+    /// </summary>
+    /// <remarks>
+    /// An address that already has an account gets the same 204 a successful registration gets, and
+    /// the fact that it is taken is delivered to the address itself rather than to whoever submitted
+    /// the form. A username collision is reported plainly: it says nothing about any address, and
+    /// answering 204 there would leave someone stuck retrying a name that will never be accepted.
+    /// </remarks>
+    /// <remarks>
+    /// Internal rather than private only so the suite can exercise it directly: the alternative is
+    /// fabricating a <see cref="SqlException"/>, which has no public constructor. <c>AuthService</c>
+    /// is itself internal, so this widens nothing outside the assembly.
+    /// </remarks>
+    internal async Task<Result> HandleRegistrationConflictAsync(string username, string email, Exception ex, CancellationToken cancellationToken)
+    {
+        _logger.LogWarning("User registration conflict for Username={Username}. Error: {Message}", username, ex.Message);
+        _logger.LogTrace(ex, "User registration conflict stack trace for {Username}", username);
+
+        User? existing;
+        try
+        {
+            existing = await _provider.GetByEmailAsync(email, cancellationToken);
+        }
+        catch (SecurityException)
+        {
+            // No account on this address, so the collision was on the username.
+            existing = null;
+        }
+        catch (Exception lookupEx)
+        {
+            // The lookup itself failed, so which field collided is unknown. Reporting a username
+            // conflict here would be a guess, and reporting 204 would tell the caller an account was
+            // created when none was. This is our fault and is answered as such - the method runs
+            // inside RegisterUserAsync's catch block, so returning rather than throwing keeps the
+            // metric and the error shape consistent with every other failure there.
+            _logger.LogError(lookupEx, "Could not determine which field collided while registering {Username}", username);
+            _metrics.RecordRegistration("error");
+            return Result.Failure(Error.Failure("AUTH_REGISTRATION_ERROR", lookupEx.Message));
+        }
+
+        if (existing is null)
+        {
+            _metrics.RecordRegistration("conflict");
+            return Result.Failure(Error.Conflict("AUTH_USERNAME_CONFLICT", "That username is already taken."));
+        }
+
+        try
+        {
+            await _mailer.QueueAccountAlreadyExistsAsync(existing.Email, existing.Username, cancellationToken);
+        }
+        catch (Exception mailEx)
+        {
+            _logger.LogError(mailEx, "Failed to notify user {UserId} that their address was used in a registration attempt", existing.Id);
+        }
+
+        // Counted separately from "success" so the metric does not claim accounts that were never
+        // created, and separately from "conflict" so this path stays visible.
+        _metrics.RecordRegistration("existing_address");
+        return Result.Success();
     }
 
     /// <summary>
@@ -350,7 +614,7 @@ internal sealed class AuthService : IAuthService
         InvitationLookup invitation;
         try
         {
-            invitation = await _provider.GetInvitationByTokenHashAsync(InvitationTokens.Hash(invitationToken), cancellationToken);
+            invitation = await _provider.GetInvitationByTokenHashAsync(SecurityTokens.Hash(invitationToken), cancellationToken);
         }
         catch (SecurityException)
         {

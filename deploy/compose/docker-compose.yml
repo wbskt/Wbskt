@@ -125,6 +125,17 @@ services:
       ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       Jwt__Key: ${JWT_KEY}
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+      # Mail. Leave SMTP_HOST empty and the host logs an error at startup and sends nothing - which,
+      # because sign-in requires a confirmed address, means no new account can be used. The links in
+      # that mail point at the console's public origin, never at an inbound Host header.
+      Auth__Email__Host: ${SMTP_HOST:-}
+      Auth__Email__Port: ${SMTP_PORT:-587}
+      Auth__Email__UseStartTls: ${SMTP_USE_STARTTLS:-true}
+      Auth__Email__UserName: ${SMTP_USERNAME:-}
+      Auth__Email__Password: ${SMTP_PASSWORD:-}
+      Auth__Email__FromAddress: ${SMTP_FROM_ADDRESS:-}
+      Auth__Email__FromDisplayName: ${SMTP_FROM_NAME:-Wbskt}
+      Auth__Email__ConsoleBaseUrl: ${CONSOLE_ORIGIN}
     volumes:
       - ../config:/Config:ro
     healthcheck:

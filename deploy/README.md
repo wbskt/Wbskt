@@ -279,6 +279,22 @@ with the secret they hold. What is destroyed is the plaintext, which is the poin
 Nothing is recoverable afterwards, so take a backup first — `deploy/scripts/backup.sh` — and confirm
 a device can still log in before moving on.
 
+### Email verification is additive, and needs no flag
+
+The change that added `Users.IsEmailVerified` adds a column and two tables, so an ordinary
+incremental run applies it. No `MIGRATE_ALLOW_DATA_LOSS` needed.
+
+Accounts that already existed are backfilled to verified by the pre-deployment script, in the same
+step that creates the column. That is deliberate: they were created when registering proved nothing
+about the address, and sign-in now requires a confirmed one — without the backfill the deploy would
+lock every existing user out of an account they have been using.
+
+**Configure `SMTP_HOST` before deploying this, or nobody new can sign up.** Sign-in refuses an
+unconfirmed address, and confirming one requires mail the auth host can only send through a relay.
+With none configured it logs an error at startup saying so, and accounts created in the meantime
+stay unusable until their owner asks for a fresh link through `POST /api/auth/resend-verification`.
+See the mail block in `.env.example`.
+
 ## SQL placement
 
 The `sql` service (container + volume) is the staging/dev path. For production, prefer a

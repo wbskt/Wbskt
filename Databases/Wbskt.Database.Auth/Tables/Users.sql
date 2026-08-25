@@ -5,6 +5,14 @@ CREATE TABLE dbo.Users (
     Email        NVARCHAR(100)    NOT NULL,
     PasswordHash NVARCHAR(255)    NOT NULL,
     IsActive     BIT              NOT NULL           DEFAULT 1,
+
+    -- Whether the owner of this address has proved they control it. Sign-in requires it, so the
+    -- default is 0 and only EmailVerificationToken_Consume ever sets it. Accounts that predate this
+    -- column are backfilled to 1 by the pre-deployment script -- they were created when registering
+    -- proved nothing, and locking them out retroactively would be a data migration that removes
+    -- access rather than adding a check.
+    IsEmailVerified BIT           NOT NULL           CONSTRAINT DF_Users_IsEmailVerified DEFAULT 0,
+
     CreatedAt    DATETIME2(3)     NOT NULL           DEFAULT SYSUTCDATETIME(),
 
     -- Constraints

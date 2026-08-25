@@ -11,6 +11,16 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 /// <summary>
 /// xUnit collection fixture shared across all E2E feature tests.
 ///
+/// <para>
+/// <b>The register-then-sign-in helpers below depend on a development setting.</b> Sign-in refuses an
+/// unconfirmed address, and confirming one means following a link out of an inbox this environment
+/// does not have. <c>Auth:Email:RequireVerifiedEmailForSignIn</c> is false in the auth host's
+/// <c>appsettings.Development.json</c>, which is what lets these helpers work; against a host running
+/// as Production they will get 401 <c>AUTH_EMAIL_UNVERIFIED</c> instead. Standing a mail catcher
+/// (MailHog exposes an HTTP API for reading what it received) beside the hosts would let the fixture
+/// do the real round trip and remove the dependency — see Scenarios/Auth/AccountRecoveryTests.
+/// </para>
+///
 /// On construction the fixture probes each of the four dev hosts with a short
 /// timeout and sets <see cref="HostsAvailable"/> accordingly. All helper methods
 /// are safe to call only when hosts are available; individual tests guard this

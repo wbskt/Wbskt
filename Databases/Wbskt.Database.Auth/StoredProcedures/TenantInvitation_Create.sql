@@ -8,7 +8,10 @@ CREATE PROCEDURE dbo.TenantInvitation_Create
     @TokenHash VARBINARY(32),
     @ExpiresAt DATETIME2(3),
     @InvitedByUserId INT,
-    @RefId UNIQUEIDENTIFIER OUTPUT
+    @RefId UNIQUEIDENTIFIER OUTPUT,
+    -- The invitation mail names the tenant the invitee is being asked to join. Returned from here
+    -- rather than fetched separately: the caller already has the tenant id and this costs nothing.
+    @TenantName NVARCHAR(100) OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -27,6 +30,8 @@ BEGIN
     BEGIN
         THROW 50012, 'That user is already a member of this tenant.', 1;
     END
+
+    SELECT @TenantName = Name FROM dbo.Tenants WHERE Id = @TenantId;
 
     SET @RefId = NEWID();
 
