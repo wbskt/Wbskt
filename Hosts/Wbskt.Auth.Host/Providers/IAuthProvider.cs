@@ -26,6 +26,26 @@ internal interface IAuthProvider : IReferenceProvider
     Task<int> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default);
 
     Task<int> RevokeAllRefreshTokensForUserAsync(int userId, string ipAddress, CancellationToken cancellationToken = default);
+
+    // Account recovery and address verification. As with invitations, the raw token never reaches
+    // this layer -- the service hashes it, so a provider that logged its parameters could not leak a
+    // usable one.
+    Task CreatePasswordResetTokenAsync(int userId, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes the new password and revokes every refresh token the account has, in one transaction,
+    /// and returns the user id. Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/>
+    /// when the token is unknown, spent or expired -- one answer for all three.
+    /// </summary>
+    Task<int> ConsumePasswordResetTokenAsync(byte[] tokenHash, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default);
+
+    Task CreateEmailVerificationTokenAsync(int userId, byte[] tokenHash, DateTime expiresAt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks the account's address verified and returns the user id. Throws
+    /// <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when the token is not valid.
+    /// </summary>
+    Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
     Task SetUserActiveAsync(int userId, bool isActive, CancellationToken cancellationToken = default);
 
     Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default);
@@ -46,7 +66,7 @@ internal interface IAuthProvider : IReferenceProvider
 
     // Invitations. The token is never stored or accepted in raw form here — the service hashes it,
     // so a provider that logged its parameters could not leak a usable one.
-    Task<Guid> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default);
+    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default);
     /// <summary>Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when no invitation carries that hash.</summary>
     Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
     Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default);

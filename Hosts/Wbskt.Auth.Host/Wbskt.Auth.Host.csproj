@@ -9,6 +9,18 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>Wbskt.Workflow.Engine.Host.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <!-- Moq proxies internal interfaces (IAuthProvider, IAuthMailer) through Castle, which emits
+             them into this assembly. Without the grant the proxy is refused at runtime and every test
+             that mocks one fails in its constructor. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
         <PackageReference Include="Microsoft.OpenApi" />
@@ -36,6 +48,10 @@
         </Content>
         <Content Include="..\..\Config\jwt.json">
             <Link>jwt.json</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="..\..\Config\email.json">
+            <Link>email.json</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
     </ItemGroup>

@@ -48,14 +48,27 @@ password hasher cannot be used as a work amplifier.
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `POST register` | anonymous | Creates an account **and its own tenant** — the tenant row, its `Admin`/`User` roles, the creator's membership, a tenant-wide Admin assignment and a default workspace, in one transaction. Accepts an optional `invitationToken` to join an existing tenant at the same time. |
-| `POST login` | anonymous | Exchanges credentials for an access/refresh token pair. Every failure mode answers identically, so the endpoint cannot be used to probe which addresses are registered. |
+| `POST register` | anonymous | Creates an account **and its own tenant** — the tenant row, its `Admin`/`User` roles, the creator's membership, a tenant-wide Admin assignment and a default workspace. Accepts an optional `invitationToken` to join an existing tenant at the same time. Mails a confirmation link; the account cannot sign in until it is followed. Answers **204 whether or not the address is already registered** — a taken address creates nothing and mails its real owner instead. A taken *username* is still a 409 `AUTH_USERNAME_CONFLICT`: it discloses nothing about any address. |
+| `POST login` | anonymous | Exchanges credentials for an access/refresh token pair. Every failure mode answers identically, so the endpoint cannot be used to probe which addresses are registered — except `AUTH_EMAIL_UNVERIFIED`, which is returned only *after* the password verifies and therefore tells a caller nothing they did not already prove. |
 | `POST refresh-token` | anonymous | Rotating refresh: issues a new pair and revokes the token presented. Presenting an already-revoked token is treated as a leak — every refresh token for that user is revoked and a `SecurityAlertEvent` is published. |
 | `POST logout` | anonymous | Revokes the one refresh token presented. Succeeds whether or not it existed. |
 | `POST logout-all` | authenticated | Revokes the caller's entire refresh-token set. |
+| `POST forgot-password` | anonymous | Mails a reset link if the address has a usable account. **Always 204** — same status, same empty body, for a registered address, an unknown one, a deactivated one, and a malformed one. |
+| `POST reset-password` | anonymous | Redeems a reset token, writes the new password, and revokes **every** refresh token the account holds — in one transaction, so a session an attacker already has cannot outlive the recovery. Unknown, spent and expired tokens are all `RESET_TOKEN_INVALID`. |
+| `POST verify-email` | anonymous | Redeems a confirmation token and marks the address verified. Single-use. |
+| `POST resend-verification` | anonymous | Mails a fresh confirmation link. Anonymous by necessity, not oversight: sign-in requires a confirmed address, so an account that needs this cannot hold a token with which to ask. Always 204, like `forgot-password`. |
 
 Access tokens last 60 minutes and are **not revocable**; refresh tokens last 7 days and are. A
 deactivated account keeps working until its current access token expires.
+
+Reset and confirmation tokens are stored only as a SHA-256 hash, are single-use, and supersede any
+predecessor for the same account. A reset link lasts 1 hour; a confirmation link lasts 24 hours —
+longer because it is not a credential for an existing account, and sign-up commonly happens shortly
+before someone stops reading their inbox for the day.
+
+Sign-in requires a confirmed address. `Auth:Email:RequireVerifiedEmailForSignIn` can turn that check
+off and is false in `appsettings.Development.json` so the end-to-end suite can run without an inbox;
+it must stay true anywhere real, and the host logs an error at startup while it is not.
 
 ### 1.2 Invitations — `api/invitations`
 
@@ -85,7 +98,7 @@ role or user belonging to another tenant reads as nonexistent.
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET {tenantRef}/invitations` | `users.read` | Lists outstanding invitations. |
-| `POST {tenantRef}/invitations` | `users.manage` | Issues one against an email address. Returns the raw token **once** — there is no mail transport yet, so an administrator delivers the link. |
+| `POST {tenantRef}/invitations` | `users.manage` | Issues one against an email address and mails the invitee a link. Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. |
 | `DELETE {tenantRef}/invitations/{invitationRef}` | `users.manage` | Revokes an unredeemed invitation. |
 
 **Roles and their permissions**

@@ -10,7 +10,8 @@ BEGIN
         Username, 
         Email, 
         PasswordHash, 
-        IsActive
+        IsActive,
+        IsEmailVerified
     FROM dbo.Users
     WHERE Id = @Id;
 END

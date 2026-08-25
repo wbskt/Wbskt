@@ -126,6 +126,13 @@ public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string
 /// </summary>
 public record CreatedInvitationResponse(Guid RefId, string Email, DateTime ExpiresAt, string Token);
 
+/// <summary>
+/// What <c>TenantInvitation_Create</c> hands back: the new invitation's reference and the display
+/// name of the tenant it belongs to, which the invitation mail needs in order to say what the
+/// recipient is being invited to.
+/// </summary>
+public record CreatedInvitation(Guid RefId, string TenantName);
+
 public record AcceptInvitationRequest(
     [Required]
     [StringLength(255)]

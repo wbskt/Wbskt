@@ -23,8 +23,16 @@ public class AuthController : ApiControllerBase
     }
 
     /// <summary>
-    /// Registers a new user in the system.
+    /// Registers a new user in the system and mails them a confirmation link. The account cannot
+    /// sign in until that link is followed.
     /// </summary>
+    /// <remarks>
+    /// Answers 204 whether or not the address already has an account. If it does, no account is
+    /// created and the existing owner is mailed instead — so this endpoint cannot be used to find
+    /// out who is registered. A username that is already taken is still reported as a 409: it
+    /// discloses nothing about any address, and a caller retrying a name that can never be accepted
+    /// needs to be told.
+    /// </remarks>
     /// <param name="request">The registration details (username, email, password).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
@@ -111,4 +119,73 @@ public class AuthController : ApiControllerBase
     }
 
     private string CallerIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    /// <summary>
+    /// Requests a password-reset link.
+    /// </summary>
+    /// <remarks>
+    /// Always answers 204, whether or not the address has an account. Telling a caller that an
+    /// address is unknown turns this endpoint into a way to enumerate the platform's users.
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        // The address is the subject of the request rather than a lookup key, and is logged as such.
+        _logger.LogInformation("API: ForgotPassword requested");
+        var result = await _authService.ForgotPasswordAsync(request.Email, CallerIpAddress(), cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Sets a new password using a reset link, and signs the account out everywhere.
+    /// </summary>
+    /// <remarks>
+    /// Every refresh token the account holds is revoked as part of the same transaction that writes
+    /// the password. Recovering an account is usually a response to losing control of it, and a
+    /// session the attacker already holds must not outlive the reset.
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        // The token is a bearer credential and is deliberately absent from this log line.
+        _logger.LogInformation("API: ResetPassword requested");
+        var result = await _authService.ResetPasswordAsync(request.Token, request.NewPassword, CallerIpAddress(), cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Confirms an email address using the link sent at registration. The account can sign in once
+    /// this succeeds.
+    /// </summary>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HttpPost("verify-email")]
+    public async Task<IActionResult> VerifyEmail(VerifyEmailRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: VerifyEmail requested");
+        var result = await _authService.VerifyEmailAsync(request.Token, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Sends a fresh confirmation link.
+    /// </summary>
+    /// <remarks>
+    /// Anonymous, not authenticated: an account that has not confirmed its address cannot sign in,
+    /// so it cannot hold a token with which to ask. Answers 204 regardless, like
+    /// <see cref="ForgotPassword"/> and for the same reason.
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HttpPost("resend-verification")]
+    public async Task<IActionResult> ResendVerification(ResendVerificationRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: ResendVerification requested");
+        var result = await _authService.ResendVerificationAsync(request.Email, cancellationToken);
+        return MapResult(result);
+    }
 }

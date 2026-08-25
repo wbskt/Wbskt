@@ -1,0 +1,18 @@
+{
+  "Auth": {
+    "Email": {
+      "// SMTP": "Bound to Wbskt.Infrastructure.Email.EmailOptions. Leave Host empty and this host sends nothing; because sign-in requires a verified address, that also means no new account can be used, and the auth host logs an error saying so at startup.",
+      "Host": "",
+      "Port": 587,
+      "UseStartTls": true,
+      "UserName": "",
+      "Password": "",
+      "FromAddress": "",
+      "FromDisplayName": "Wbskt",
+
+      "// Links": "Bound to AuthEmailOptions. Where the links in our mail point - the console's public origin, never derived from an inbound request.",
+      "ConsoleBaseUrl": "http://localhost:5173",
+      "ProductName": "Wbskt"
+    }
+  }
+}

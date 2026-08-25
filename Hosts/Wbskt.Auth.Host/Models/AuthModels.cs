@@ -27,3 +27,38 @@ public record RefreshTokenRequest(
     [Required]
     [StringLength(255)]
     string RefreshToken);
+
+/// <summary>
+/// Asks for a password-reset link. Deliberately no <c>[EmailAddress]</c>: the endpoint answers
+/// identically for every address, and a 400 for a malformed one would be the one response that
+/// differs.
+/// </summary>
+public record ForgotPasswordRequest(
+    [Required]
+    [StringLength(100)]
+    string Email);
+
+/// <summary>
+/// Redeems a reset link. The password constraints mirror <see cref="RegisterRequest"/> — a reset is
+/// the other way a password gets set, and the two must not disagree about what is acceptable.
+/// </summary>
+public record ResetPasswordRequest(
+    [Required]
+    [StringLength(255)]
+    string Token,
+
+    [Required]
+    [StringLength(128, MinimumLength = 12, ErrorMessage = "Password must be at least 12 characters.")]
+    string NewPassword);
+
+public record VerifyEmailRequest(
+    [Required]
+    [StringLength(255)]
+    string Token);
+
+/// <summary>Asks for a fresh confirmation link. Same non-disclosure reasoning as
+/// <see cref="ForgotPasswordRequest"/>.</summary>
+public record ResendVerificationRequest(
+    [Required]
+    [StringLength(100)]
+    string Email);

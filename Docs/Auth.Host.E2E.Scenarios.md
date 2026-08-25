@@ -113,8 +113,8 @@ Highest priority: these encode defects that shipped, so they must fail against t
 | `AUTH_REG_01` | + | Unique username + email + 12-char password | **204** |
 | `AUTH_REG_02` | + | Registered user can immediately log in | **200** with both tokens |
 | `AUTH_REG_03` | + | New user appears in the admin's `GET /api/tenants/{t}/members` | Present, `isActive: true` |
-| `AUTH_REG_04` | − | Email already registered | **409** `AUTH_USER_CONFLICT` |
-| `AUTH_REG_05` | − | Username already registered, different email | **409** `AUTH_USER_CONFLICT` |
+| `AUTH_REG_04` | − | Email already registered | **204** — identical to success; the address's owner is mailed instead |
+| `AUTH_REG_05` | − | Username already registered, different email | **409** `AUTH_USERNAME_CONFLICT` |
 | `AUTH_REG_06` | − | Password of 11 characters | model-validation 400 |
 | `AUTH_REG_07` | + | Password of exactly 12 characters | **204** — boundary |
 | `AUTH_REG_08` | − | Password of 129 characters | model-validation 400 |

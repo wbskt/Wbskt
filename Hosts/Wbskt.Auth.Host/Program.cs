@@ -8,13 +8,16 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using Serilog;
+using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
+using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
+using Wbskt.Infrastructure.Email;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
@@ -39,7 +42,7 @@ public static class Program
             ContentRootPath = Directory.GetCurrentDirectory()
         });
         
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "jwt.json");
+        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "jwt.json", "email.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
 
@@ -53,6 +56,17 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
         builder.Services.AddHttpContextAccessor();
+
+        // Mail. Both option types bind from Auth:Email - the SMTP half describes the relay, the
+        // AuthEmailOptions half describes what the messages say and where their links point. The
+        // relay is this host's own: sharing WorkflowEngine:Email would mean a workflow author's
+        // misconfiguration could take password resets down with it.
+        builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:Email").Get<EmailOptions>() ?? new EmailOptions()));
+        builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:Email").Get<AuthEmailOptions>() ?? new AuthEmailOptions()));
+        builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        builder.Services.AddSingleton<OutboundMailQueue>();
+        builder.Services.AddSingleton<IAuthMailer, QueuedAuthMailer>();
+        builder.Services.AddHostedService<OutboundMailDispatcher>();
 
         builder.Services.AddOpenTelemetry()
             .WithMetrics(metrics => metrics
@@ -142,6 +156,15 @@ public static class Program
         builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
+
+        // Loud, at startup, every time. A control that can be switched off from configuration is only
+        // safe if turning it off is impossible to do quietly.
+        if (!app.Services.GetRequiredService<IOptions<AuthEmailOptions>>().Value.RequireVerifiedEmailForSignIn)
+        {
+            app.Logger.LogError(
+                "Auth:Email:RequireVerifiedEmailForSignIn is false: accounts can sign in without confirming their address. " +
+                "This is intended for local development and the end-to-end suite only.");
+        }
 
         await app.RunStartupTasksAsync();
 

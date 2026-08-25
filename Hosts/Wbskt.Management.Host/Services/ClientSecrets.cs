@@ -6,7 +6,7 @@ namespace Wbskt.Management.Host.Services;
 
 /// <summary>
 /// Generation, hashing and comparison of the secret a device authenticates with. One place, for the
-/// same reason <c>InvitationTokens</c> in the auth host is one place: a second copy
+/// same reason <c>SecurityTokens</c> in the auth host is one place: a second copy
 /// of the hash that drifted from this one would reject every device on the platform at once, and by
 /// then the plaintext needed to diagnose it is gone.
 /// </summary>

@@ -1,3 +1,4 @@
+using Wbskt.Auth.Host.Services.Email;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
@@ -28,17 +29,20 @@ internal sealed class ManagementService : IManagementService
     private readonly IAuthProvider _provider;
     private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IEventBus _eventBus;
+    private readonly IAuthMailer _mailer;
     private readonly ILogger<ManagementService> _logger;
 
     public ManagementService(
         IAuthProvider provider,
         IWorkspaceProvider workspaceProvider,
         IEventBus eventBus,
+        IAuthMailer mailer,
         ILogger<ManagementService> logger)
     {
         _provider = provider;
         _workspaceProvider = workspaceProvider;
         _eventBus = eventBus;
+        _mailer = mailer;
         _logger = logger;
     }
 
@@ -123,16 +127,21 @@ internal sealed class ManagementService : IManagementService
             roleId = resolvedRoleId;
         }
 
-        var token = InvitationTokens.Generate();
+        var token = SecurityTokens.Generate();
         var expiresAt = DateTime.UtcNow.Add(InvitationLifetime);
 
         return await GuardAsync("CreateInvitation", async () =>
         {
-            var refId = await _provider.CreateInvitationAsync(scope.Value, request.Email, roleId, InvitationTokens.Hash(token), expiresAt, callerId, cancellationToken);
-            _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", refId, scope.Value, callerId);
+            var created = await _provider.CreateInvitationAsync(scope.Value, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, cancellationToken);
+            _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, scope.Value, callerId);
+
+            // Queued, not awaited: an unreachable relay must not fail an invitation that has already
+            // been recorded. The administrator still gets the raw token back below and can deliver it
+            // by hand, which is how every invitation worked before this host could send mail at all.
+            await _mailer.QueueInvitationAsync(request.Email, created.TenantName, token, expiresAt, cancellationToken);
 
             // The raw token appears here and nowhere else — not in the store, and not in this log line.
-            return new CreatedInvitationResponse(refId, request.Email, expiresAt, token);
+            return new CreatedInvitationResponse(created.RefId, request.Email, expiresAt, token);
         });
     }
 
@@ -163,7 +172,7 @@ internal sealed class ManagementService : IManagementService
 
     public async Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, string token, CancellationToken cancellationToken = default)
     {
-        var tokenHash = InvitationTokens.Hash(token);
+        var tokenHash = SecurityTokens.Hash(token);
 
         InvitationLookup invitation;
         try

@@ -179,8 +179,11 @@ GO
 IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Id = 1)
 BEGIN
     -- Password is 'Password123!'
-    INSERT INTO dbo.Users (Id, Username, Email, PasswordHash, IsActive)
-    VALUES (1, 'root', 'admin@wbskt.com', 'AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ==', 1);
+    -- IsEmailVerified = 1: nothing will ever mail root a verification link, and sign-in requires a
+    -- verified address, so seeding it unverified would ship a database whose only administrator
+    -- cannot log in.
+    INSERT INTO dbo.Users (Id, Username, Email, PasswordHash, IsActive, IsEmailVerified)
+    VALUES (1, 'root', 'admin@wbskt.com', 'AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ==', 1, 1);
 END
 GO
 
