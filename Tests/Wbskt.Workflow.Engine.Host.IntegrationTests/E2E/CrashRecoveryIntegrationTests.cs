@@ -29,11 +29,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
-        var services = new ServiceCollection();
-        IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
-        services.AddSingleton(config);
-        services.AddWorkflowEngine(config);
-        services.AddLogging();
+        ServiceCollection services = EngineTestHost.BuildServices(fixture.ConnectionString);
         
         await using ServiceProvider sp = services.BuildServiceProvider();
         
@@ -152,11 +148,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
-        var services = new ServiceCollection();
-        IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
-        services.AddSingleton(config);
-        services.AddWorkflowEngine(config);
-        services.AddLogging();
+        ServiceCollection services = EngineTestHost.BuildServices(fixture.ConnectionString);
 
         await using ServiceProvider sp = services.BuildServiceProvider();
 
