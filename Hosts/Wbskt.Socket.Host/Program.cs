@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Serilog;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
@@ -50,7 +51,13 @@ public static class Program
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            // Default-deny, matching the management host. This host has no controllers today, so it
+            // changes nothing now; it exists so that the first one added cannot ship anonymous by
+            // accident. /ws opts out explicitly below - see the note there.
+            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+        });
 
         builder.Services.AddControllers();
         builder.Services.AddCustomOpenApi();
@@ -63,7 +70,8 @@ public static class Program
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi();
+            // Dev-only API docs are exempt from the default-deny fallback policy.
+            app.MapOpenApi().AllowAnonymous();
             app.MapCustomScalarApiReference();
         }
 
@@ -78,10 +86,18 @@ public static class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
+        // Exempt from the fallback policy because this route authenticates itself, earlier in the
+        // pipeline: WebSocketAuthMiddleware validates the token, rejects anything that is not a
+        // client token, and assigns context.User before UseAuthentication runs. Letting the
+        // authorization pipeline also gate it would make the browser upgrade path - which carries
+        // its token in ?access_token= rather than a header, so the JWT bearer handler never sees
+        // one - depend on that middleware-assigned principal surviving UseAuthentication. It does
+        // survive today, but nothing enforces that, and the failure mode is every browser client
+        // silently failing to connect.
         app.Map("/ws", async (HttpContext context, ISocketHandler handler) =>
         {
             await handler.HandleAsync(context);
-        });
+        }).AllowAnonymous();
 
         app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
         app.MapControllers();

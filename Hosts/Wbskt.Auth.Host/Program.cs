@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -86,7 +87,16 @@ public static class Program
             };
         });
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            // Default-deny, matching the management host. Every controller here is already correctly
+            // attributed - AuthController's four public methods carry [AllowAnonymous] individually,
+            // logout-all carries [Authorize], and the other three controllers are class-level
+            // [Authorize] - so this changes no existing behaviour. It exists for the next endpoint
+            // added to the host that owns tenants, roles and permissions, which would otherwise ship
+            // anonymous by default.
+            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+        });
 
         builder.Services.AddCors(options =>
         {
@@ -151,7 +161,8 @@ public static class Program
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi();
+            // Dev-only API docs are exempt from the default-deny fallback policy.
+            app.MapOpenApi().AllowAnonymous();
 
             app.MapCustomScalarApiReference();
         }
