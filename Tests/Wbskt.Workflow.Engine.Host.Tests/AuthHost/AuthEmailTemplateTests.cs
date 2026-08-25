@@ -39,6 +39,21 @@ public sealed class AuthEmailTemplateTests
     /// lines are not markup, so they are not encoded — but they must not be able to inject a header,
     /// which is what a newline would do.
     /// </summary>
+    /// <summary>
+    /// Encoded once, not twice. The heading is the only place a template interpolates a user value
+    /// into text that <c>Layout</c> then encodes itself, so it is the one place double-encoding can
+    /// happen — and it renders as a literal "&amp;amp;" in the recipient's client rather than
+    /// failing anywhere a developer would see.
+    /// </summary>
+    [Fact]
+    public void A_name_in_the_heading_is_encoded_exactly_once()
+    {
+        var mail = AuthEmailTemplates.Invitation(Options, "invitee@example.test", "Smith & Sons", "tok", Expiry);
+
+        Assert.Contains("<h1>You have been invited to join Smith &amp; Sons</h1>", mail.HtmlBody);
+        Assert.DoesNotContain("&amp;amp;", mail.HtmlBody);
+    }
+
     [Fact]
     public void A_subject_line_carries_no_line_breaks()
     {
