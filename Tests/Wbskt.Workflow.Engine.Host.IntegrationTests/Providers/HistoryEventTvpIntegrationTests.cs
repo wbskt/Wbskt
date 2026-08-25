@@ -163,7 +163,7 @@ public sealed class HistoryEventTvpIntegrationTests(SqlEdgeFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT COUNT(*) AS Total,
-                   COUNT(DISTINCT HistoryEventId) AS Distinct
+                   COUNT(DISTINCT HistoryEventId) AS [Distinct]
             FROM dbo.HistoryEvents
             WHERE RunId = @RunId
             """;

@@ -137,10 +137,14 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         await recoveryService.RecoverAsync(CancellationToken.None);
         
         // 4. Verify it was dispatched
-        mockDispatcher.DispatchedBranches.Should().ContainSingle();
-        mockDispatcher.DispatchedBranches[0].RunId.Should().Be(createdRun.Id);
-        mockDispatcher.DispatchedBranches[0].BranchId.Should().Be(createdBranch.Id);
-        mockDispatcher.DispatchedBranches[0].Reason.Should().Be(Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
+        // Containment, not ContainSingle: recovery deliberately picks up every orphaned branch in
+        // the database, and every test in the SqlEdge collection shares one database - so branches
+        // this test did not create are legitimately dispatched in the same pass. What this test is
+        // about is that its own orphaned branch was among them, with the right reason.
+        mockDispatcher.DispatchedBranches.Should().Contain(dispatched =>
+            dispatched.RunId == createdRun.Id
+            && dispatched.BranchId == createdBranch.Id
+            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
     }
 
     [SkippableFact]
@@ -251,10 +255,14 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
 
         await recoveryService.RecoverAsync(CancellationToken.None);
 
-        mockDispatcher.DispatchedBranches.Should().ContainSingle();
-        mockDispatcher.DispatchedBranches[0].RunId.Should().Be(createdRun.Id);
-        mockDispatcher.DispatchedBranches[0].BranchId.Should().Be(createdBranch.Id);
-        mockDispatcher.DispatchedBranches[0].Reason.Should().Be(Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
+        // Containment, not ContainSingle: recovery deliberately picks up every orphaned branch in
+        // the database, and every test in the SqlEdge collection shares one database - so branches
+        // this test did not create are legitimately dispatched in the same pass. What this test is
+        // about is that its own orphaned branch was among them, with the right reason.
+        mockDispatcher.DispatchedBranches.Should().Contain(dispatched =>
+            dispatched.RunId == createdRun.Id
+            && dispatched.BranchId == createdBranch.Id
+            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
     }
 }
 

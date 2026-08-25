@@ -60,6 +60,9 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
         services.AddSingleton(config);
         services.AddWorkflowEngine(config);
+        // Supplied here because AddWorkflowEngine registers CommandNodeExecutor but not its
+        // publisher - that adapter belongs to the host, not the workflow library.
+        services.AddScoped<IDeviceCommandPublisher, NoopDeviceCommandPublisher>();
         services.AddLogging();
 
         await using ServiceProvider sp = services.BuildServiceProvider();
@@ -149,6 +152,9 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         IConfiguration config = ProviderFactory.BuildConfiguration(fixture.ConnectionString);
         services.AddSingleton(config);
         services.AddWorkflowEngine(config);
+        // Supplied here because AddWorkflowEngine registers CommandNodeExecutor but not its
+        // publisher - that adapter belongs to the host, not the workflow library.
+        services.AddScoped<IDeviceCommandPublisher, NoopDeviceCommandPublisher>();
         services.AddLogging();
 
         await using ServiceProvider sp = services.BuildServiceProvider();
