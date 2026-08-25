@@ -14,6 +14,7 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
+using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
@@ -190,6 +191,13 @@ public static class Program
             });
         });
 
+        // Readiness probes. Redis is deliberately not among them: it backs the SignalR fan-out
+        // across scaled instances, so losing it degrades cross-instance delivery rather than
+        // stopping this instance serving - and because readiness now drives Traefik's routing
+        // table, a probe on a non-essential dependency could take the API offline for a fault
+        // that does not warrant it. The bus check comes from AddMassTransit.
+        builder.Services.AddHealthChecks().AddSqlServerCheck("DefaultConnection");
+
         builder.Services.AddControllers();
         var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options =>
         {
@@ -247,8 +255,7 @@ public static class Program
         app.UseAuthentication();
         app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
-        app.MapGet("/api/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTimeOffset.UtcNow })).AllowAnonymous();
-        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
+        app.MapWbsktHealthChecks();
 
         app.MapControllers();
         app.MapHub<NotificationHub>("/hubs/notifications");

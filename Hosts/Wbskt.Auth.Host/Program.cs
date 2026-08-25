@@ -15,6 +15,7 @@ using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
+using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
@@ -132,6 +133,10 @@ public static class Program
                     }));
         });
 
+        // Readiness probes. The bus check is registered by AddMassTransit itself (masstransit-bus,
+        // tagged "ready"), so only SQL needs adding here.
+        builder.Services.AddHealthChecks().AddSqlServerCheck("AuthDBConnection");
+
         builder.Services.AddControllers();
 
         builder.Services.AddCustomOpenApi();
@@ -178,7 +183,7 @@ public static class Program
         // from the internet. Nothing in the stack scrapes it today; a future in-network Prometheus
         // can authenticate with a bearer token.
         app.MapPrometheusScrapingEndpoint().RequireAuthorization();
-        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
+        app.MapWbsktHealthChecks();
         app.MapControllers();
 
         await app.RunAsync();
