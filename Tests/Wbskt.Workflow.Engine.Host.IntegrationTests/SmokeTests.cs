@@ -66,7 +66,10 @@ public sealed class SmokeTests(SqlEdgeFixture fixture)
             "Branch_Upsert",
             "Branch_GetBy_RefId",
             "Bookmark_Create",
-            "Bookmark_GetDue",
+            // Bookmark_GetDue was replaced by the atomic claim pair when bookmarks moved to the
+            // single-row model; a read-then-act "get due" could hand the same bookmark to two hosts.
+            "Bookmark_ClaimDue",
+            "Bookmark_ClaimByRefId",
             "HistoryEvent_InsertBatch",
             "SharedVariable_Initialize",
             "SharedVariable_CompareAndSet",

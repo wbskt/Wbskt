@@ -27,7 +27,9 @@ jobs:
       # The project is named explicitly rather than running the solution: Tests/Wbskt.LoadTester is
       # an Exe, not a test project, and `dotnet test` on the solution would try to run it.
       - name: Unit tests
-        run: dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj --nologo -v q
+        run: |
+          dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj \
+            --nologo -v q --logger "console;verbosity=normal"
 
   integration:
     runs-on: ubuntu-latest
@@ -68,12 +70,13 @@ jobs:
         run: |
           set -o pipefail
           dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj \
-            --nologo -v q 2>&1 | tee test-output.txt
+            --nologo -v q --logger "console;verbosity=detailed" 2>&1 | tee test-output.txt
 
       # Every test here is a [SkippableFact] that skips itself when SQL Edge is unreachable, and a
       # fully-skipped run still exits 0. Without this check CI would report green for a suite that
       # never executed — exactly the failure mode the fixture's own comments warn about.
       - name: Fail if the suite did not actually run
+        if: always()
         run: |
           skipped=$(grep -oP 'Skipped:\s*\K\d+' test-output.txt | head -1)
           passed=$(grep -oP 'Passed:\s*\K\d+' test-output.txt | head -1)

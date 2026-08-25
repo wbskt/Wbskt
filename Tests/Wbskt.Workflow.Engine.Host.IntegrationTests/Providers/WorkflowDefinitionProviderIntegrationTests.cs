@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
@@ -39,7 +40,19 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
 
         retrieved.Id.Should().Be(inserted.Id);
         retrieved.RefId.Should().Be(refId);
-        retrieved.DefinitionJson.Should().Be("""{"nodes":[],"edges":[]}""");
+
+        // Not compared byte-for-byte with the input: WorkflowDefinition_Publish is the single
+        // authority on the version number and stamps it into the JSON under the same HOLDLOCK that
+        // computed it, alongside isEnabled. So the stored document is the submitted one plus those
+        // two properties, and asserting equality with the input would be asserting that the stamping
+        // does not happen.
+        using JsonDocument stored = JsonDocument.Parse(retrieved.DefinitionJson);
+        JsonElement root = stored.RootElement;
+
+        root.GetProperty("nodes").GetArrayLength().Should().Be(0);
+        root.GetProperty("edges").GetArrayLength().Should().Be(0);
+        root.GetProperty("version").GetInt32().Should().Be(inserted.Version);
+        root.GetProperty("isEnabled").GetBoolean().Should().BeTrue();
     }
 
     [SkippableFact]
