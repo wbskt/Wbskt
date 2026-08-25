@@ -47,8 +47,21 @@ jobs:
           --health-timeout 10s
           --health-retries 10
           --health-start-period 30s
+
+      # A real SMTP relay for the delivery tests. Everything else in the suite stops at "the message
+      # was queued", which leaves the whole SMTP boundary unverified until production - and since
+      # sign-in requires a confirmed address, mail that does not leave means nobody can sign up.
+      # 1025 is SMTP, 8025 is the HTTP API the tests read messages back from.
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       WBSKT_INTEGRATION_CONNSTR: Server=localhost,1433;Database=master;User Id=sa;Password=Welcome1234;TrustServerCertificate=True;Connect Timeout=30;
+      WBSKT_SMTP_TEST_HOST: localhost
+      WBSKT_SMTP_TEST_PORT: "1025"
+      WBSKT_SMTP_TEST_API: http://localhost:8025
     steps:
       - uses: actions/checkout@v4
 
@@ -61,10 +74,14 @@ jobs:
           dotnet tool install -g microsoft.sqlpackage
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
+      # Both DACPACs: the suite deploys the workflow database for the engine's provider tests and the
+      # auth database for the account-recovery procedures, into separate databases as in production.
       # Built explicitly rather than left to the fixture's on-the-fly fallback, so a broken .sqlproj
       # fails here with a real compiler error instead of surfacing as "DACPAC not found".
-      - name: Build DACPAC
-        run: dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj -c Debug --nologo
+      - name: Build DACPACs
+        run: |
+          dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj -c Debug --nologo
+          dotnet build Databases/Wbskt.Database.Auth/Wbskt.Database.Auth.sqlproj -c Debug --nologo
 
       - name: Integration tests
         run: |

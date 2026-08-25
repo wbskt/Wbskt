@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow\Wbskt.Workflow.csproj" />
     <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
     <ProjectReference Include="..\..\Hosts\Wbskt.Management.Host\Wbskt.Management.Host.csproj" />
