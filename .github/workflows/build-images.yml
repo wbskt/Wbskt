@@ -12,6 +12,105 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Nothing below publishes an image until these pass. The gate lives in this workflow rather than a
+  # separate one so that `needs:` can enforce it directly — a `workflow_run` chain would let a red
+  # commit publish first and report second.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The project is named explicitly rather than running the solution: Tests/Wbskt.LoadTester is
+      # an Exe, not a test project, and `dotnet test` on the solution would try to run it.
+      - name: Unit tests
+        run: dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj --nologo -v q
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Welcome1234
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Welcome1234 -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+    env:
+      WBSKT_INTEGRATION_CONNSTR: Server=localhost,1433;Database=master;User Id=sa;Password=Welcome1234;TrustServerCertificate=True;Connect Timeout=30;
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install sqlpackage
+        run: |
+          dotnet tool install -g microsoft.sqlpackage
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      # Built explicitly rather than left to the fixture's on-the-fly fallback, so a broken .sqlproj
+      # fails here with a real compiler error instead of surfacing as "DACPAC not found".
+      - name: Build DACPAC
+        run: dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj -c Debug --nologo
+
+      - name: Integration tests
+        run: |
+          set -o pipefail
+          dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj \
+            --nologo -v q 2>&1 | tee test-output.txt
+
+      # Every test here is a [SkippableFact] that skips itself when SQL Edge is unreachable, and a
+      # fully-skipped run still exits 0. Without this check CI would report green for a suite that
+      # never executed — exactly the failure mode the fixture's own comments warn about.
+      - name: Fail if the suite did not actually run
+        run: |
+          skipped=$(grep -oP 'Skipped:\s*\K\d+' test-output.txt | head -1)
+          passed=$(grep -oP 'Passed:\s*\K\d+' test-output.txt | head -1)
+          echo "passed=${passed:-0} skipped=${skipped:-0}"
+          if [[ "${skipped:-0}" -gt 0 ]]; then
+            echo "::error::${skipped} integration tests were skipped; they must run against the SQL service container"
+            exit 1
+          fi
+          if [[ "${passed:-0}" -eq 0 ]]; then
+            echo "::error::no integration tests executed"
+            exit 1
+          fi
+
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Restore first: `list package --vulnerable` reports nothing useful against an unrestored tree.
+      # Parsed as JSON rather than by grepping the human-readable output — only projects that
+      # actually have findings carry a "frameworks" key, so this cannot be broken by a wording change.
+      - name: Vulnerable packages
+        run: |
+          dotnet restore Wbskt.slnx
+          dotnet list Wbskt.slnx package --vulnerable --include-transitive --format json > vuln.json
+          count=$(jq '[.projects[] | select(has("frameworks"))] | length' vuln.json)
+          if [[ "$count" -gt 0 ]]; then
+            echo "::error::vulnerable NuGet packages found in ${count} project(s)"
+            jq -r '.projects[] | select(has("frameworks")) | .path' vuln.json
+            exit 1
+          fi
+          echo "no vulnerable packages"
+
   meta:
     runs-on: ubuntu-latest
     outputs:
@@ -28,7 +127,7 @@ jobs:
           echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
 
   hosts:
-    needs: meta
+    needs: [meta, test, integration, scan]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,7 +176,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   migrator:
-    needs: meta
+    needs: [meta, test, integration, scan]
     runs-on: ubuntu-latest
     permissions:
       contents: read

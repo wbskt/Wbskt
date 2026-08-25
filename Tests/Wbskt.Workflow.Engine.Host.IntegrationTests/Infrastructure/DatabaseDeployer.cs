@@ -76,35 +76,43 @@ public static class DatabaseDeployer
                 "Could not find solution root (Wbskt.slnx) while searching for DACPAC.");
         }
 
-        // Try Debug first, then Release
-        string[] candidates =
-        [
-            Path.Combine(dir.FullName, "Databases", "Wbskt.Database", "bin", "Debug", "Wbskt.Database.dacpac"),
-            Path.Combine(dir.FullName, "Databases", "Wbskt.Database", "bin", "Release", "Wbskt.Database.dacpac"),
-        ];
+        string binRoot = Path.Combine(dir.FullName, "Databases", "Wbskt.Database", "bin");
 
-        foreach (string path in candidates)
+        // Searched recursively rather than by naming the configuration folder. MSBuild.Sdk.SqlProj
+        // emits to bin/<Config>/<TFM>/, so the previous bin/<Config>/ candidates matched nothing —
+        // the deploy threw, the fixture set IsAvailable = false, and all 36+ tests reported as
+        // Skipped. That reads as "no SQL Server reachable" and hid the real cause completely.
+        string? found = FindDacpacUnder(binRoot);
+        if (found is not null)
         {
-            if (File.Exists(path))
-            {
-                return path;
-            }
+            return found;
         }
 
-        // Attempt to build it on the fly
+        // Not built yet: build it, then look again.
         BuildDacpac(dir.FullName);
 
-        foreach (string path in candidates)
+        return FindDacpacUnder(binRoot)
+               ?? throw new FileNotFoundException(
+                   $"Wbskt.Database.dacpac not found anywhere under '{binRoot}', including after a build. " +
+                   "Run: dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj");
+    }
+
+    /// <summary>
+    /// The most recently written <c>Wbskt.Database.dacpac</c> anywhere under <paramref name="binRoot"/>,
+    /// or <c>null</c> if there is none. Recursive so that a change to the SDK's output layout cannot
+    /// silently disable the whole integration suite again.
+    /// </summary>
+    private static string? FindDacpacUnder(string binRoot)
+    {
+        if (!Directory.Exists(binRoot))
         {
-            if (File.Exists(path))
-            {
-                return path;
-            }
+            return null;
         }
 
-        throw new FileNotFoundException(
-            $"Wbskt.Database.dacpac not found. Tried: {string.Join(", ", candidates)}. " +
-            "Run: dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj");
+        return Directory
+            .EnumerateFiles(binRoot, "Wbskt.Database.dacpac", SearchOption.AllDirectories)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
     }
 
     private static void BuildDacpac(string solutionRoot)
@@ -126,39 +134,64 @@ public static class DatabaseDeployer
 
     private static string FindSqlPackage()
     {
-        // Check system PATH first
+        // An explicit path wins. CI installs the tool to a known location and should not depend on
+        // probing succeeding.
+        string? configured = Environment.GetEnvironmentVariable("WBSKT_SQLPACKAGE_PATH");
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
+        {
+            return configured;
+        }
+
+        // PATH lookup. The lookup command is itself platform-specific: `where` exists only on
+        // Windows, so probing with it unconditionally made this method Windows-only — on Linux both
+        // attempts threw, and the .exe-suffixed fallback below could never match either.
+        string locator = OperatingSystem.IsWindows() ? "where" : "which";
+
         foreach (string name in new[] { "sqlpackage", "sqlpackage.exe" })
         {
             try
             {
-                var which = new ProcessStartInfo("where", name)
+                var lookup = new ProcessStartInfo(locator, name)
                 {
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                using var proc = Process.Start(which);
+
+                using var proc = Process.Start(lookup);
                 string result = proc?.StandardOutput.ReadLine() ?? string.Empty;
                 proc?.WaitForExit();
+
                 if (!string.IsNullOrWhiteSpace(result) && File.Exists(result.Trim()))
                 {
                     return result.Trim();
                 }
             }
-            catch { /* ignore */ }
+            catch
+            {
+                // Locator absent or not executable here — fall through to the well-known paths.
+            }
         }
 
-        // Windows dotnet tools path
-        string dotnetToolsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dotnet", "tools", "sqlpackage.exe");
+        // Where `dotnet tool install -g microsoft.sqlpackage` puts it. The Windows build carries the
+        // .exe suffix; the Unix build does not.
+        string toolsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "tools");
 
-        if (File.Exists(dotnetToolsPath))
+        foreach (string candidate in new[]
+                 {
+                     Path.Combine(toolsDir, "sqlpackage"),
+                     Path.Combine(toolsDir, "sqlpackage.exe")
+                 })
         {
-            return dotnetToolsPath;
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
         }
 
         throw new FileNotFoundException(
-            "sqlpackage not found. Install via: dotnet tool install -g microsoft.sqlpackage");
+            "sqlpackage not found. Install via: dotnet tool install -g microsoft.sqlpackage, " +
+            "or set WBSKT_SQLPACKAGE_PATH to its full path.");
     }
 }
