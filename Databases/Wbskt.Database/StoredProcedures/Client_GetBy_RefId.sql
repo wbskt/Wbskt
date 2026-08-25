@@ -11,7 +11,6 @@ BEGIN
         p.RefId AS PolicyRefId,
         c.WorkspaceId,
         c.Name,
-        c.Secret,
         c.Status,
         c.IsConnected,
         c.ConnectedAt,

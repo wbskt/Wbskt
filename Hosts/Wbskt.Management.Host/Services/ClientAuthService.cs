@@ -26,10 +26,10 @@ internal sealed class ClientAuthService : IClientAuthService
 
         try
         {
-            Client client;
+            ClientCredential credential;
             try
             {
-                client = await _provider.VerifyAsync(request.ClientRefId, request.Secret, cancellationToken);
+                credential = await _provider.GetCredentialAsync(request.ClientRefId, cancellationToken);
             }
             catch (SecurityException ex)
             {
@@ -37,6 +37,17 @@ internal sealed class ClientAuthService : IClientAuthService
                 _logger.LogTrace(ex, "Client credentials verification failure stack trace for ClientRefId {ClientRefId}", request.ClientRefId);
                 return Result<ClientLoginResponse>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Invalid client credentials."));
             }
+
+            // The comparison the database used to do, moved here: the stored value is a hash now, and
+            // it is checked in fixed time rather than by SQL's `=`, which is neither constant-time nor
+            // case-sensitive under the default collation.
+            if (!ClientSecrets.Matches(credential.SecretHash, request.Secret))
+            {
+                _logger.LogWarning("Client credentials verification failed for ClientRefId: {ClientRefId}. Secret did not match.", request.ClientRefId);
+                return Result<ClientLoginResponse>.Failure(Error.Unauthorized("CLIENT_UNAUTHORIZED", "Invalid client credentials."));
+            }
+
+            Client client = credential.Client;
 
             if (client.Status != ClientStatus.Registered)
             {

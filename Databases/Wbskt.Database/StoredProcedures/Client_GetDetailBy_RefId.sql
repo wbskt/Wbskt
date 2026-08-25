@@ -14,7 +14,6 @@ BEGIN
         p.RefId AS PolicyRefId,
         p.Name AS PolicyName,
         c.Name,
-        '********' AS Secret,
         c.Status,
         c.IsConnected,
         c.ConnectedAt,

@@ -81,7 +81,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, string secret,
+    public async Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, byte[] secretHash,
         ClientStatus status, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Client_Create", p =>
@@ -89,7 +89,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             p.AddWithValue("@WorkspaceId", workspaceId);
             p.AddWithValue("@PolicyId", policyId);
             p.AddWithValue("@Name", name);
-            p.AddWithValue("@Secret", secret);
+            p.Add("@SecretHash", SqlDbType.VarBinary, ClientCredential.SecretHashBytes).Value = secretHash;
             p.AddWithValue("@Status", (byte)status);
             
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
@@ -101,16 +101,12 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return await GetByRefIdAsync(refId, cancellationToken);
     }
 
-    public async Task<Client> VerifyAsync(Guid refId, string secret, CancellationToken cancellationToken = default)
+    public async Task<ClientCredential> GetCredentialAsync(Guid refId, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
-            "dbo.Client_Verify",
-            p => 
-            {
-                p.AddWithValue("@RefId", refId);
-                p.AddWithValue("@Secret", secret);
-            },
-            MapClient,
+            "dbo.Client_GetCredentialBy_RefId",
+            p => p.AddWithValue("@RefId", refId),
+            MapCredential,
             new SecurityException("Invalid client credentials."),
             cancellationToken
         );
@@ -231,7 +227,6 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             PolicyId = reader.GetInt32(reader.GetOrdinal("PolicyId")),
             PolicyRefId = reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
-            Secret = reader.GetString(reader.GetOrdinal("Secret")),
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
             IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
             ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),
@@ -240,6 +235,13 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
+    }
+
+    private static ClientCredential MapCredential(SqlDataReader reader)
+    {
+        return new ClientCredential(
+            MapClient(reader),
+            (byte[])reader[reader.GetOrdinal("SecretHash")]);
     }
 
     private static ClientStateVariable MapStateVariable(SqlDataReader reader)
@@ -266,7 +268,6 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             PolicyRefId = reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
             PolicyName = reader.GetString(reader.GetOrdinal("PolicyName")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
-            Secret = reader.GetString(reader.GetOrdinal("Secret")),
             Status = (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")),
             IsConnected = reader.GetBoolean(reader.GetOrdinal("IsConnected")),
             ConnectedAt = reader.IsDBNull(reader.GetOrdinal("ConnectedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConnectedAt")),

@@ -266,6 +266,19 @@ sqlpackage reported, and if the loss is intended, rerun with:
 MIGRATE_ALLOW_DATA_LOSS=true docker compose --profile migrate run --rm migrator
 ```
 
+### The device-secret migration needs this flag, once
+
+The change that moved `Clients.Secret` (plaintext) to `Clients.SecretHash` (SHA-256) drops a column,
+so the deploy carrying it fails the incremental publish until you pass `MIGRATE_ALLOW_DATA_LOSS=true`
+for that one run. This is the only migration so far that needs it.
+
+The loss is intended and bounded: the pre-deployment script hashes every existing secret into the
+new column *before* the schema diff drops the old one, so devices already registered keep working
+with the secret they hold. What is destroyed is the plaintext, which is the point.
+
+Nothing is recoverable afterwards, so take a backup first — `deploy/scripts/backup.sh` — and confirm
+a device can still log in before moving on.
+
 ## SQL placement
 
 The `sql` service (container + volume) is the staging/dev path. For production, prefer a
