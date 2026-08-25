@@ -24,6 +24,8 @@ there. See [Build and release flow](#build-and-release-flow).
   and the migrator carry both `image:` (what the VM pulls) and `build:` (local development).
 - `config/serilog.json` — console-only Serilog sink, mounted at `/Config` (replaces the
   Windows-dev config, which also writes to a rolling file).
+- `scripts/backup.sh` / `scripts/restore.sh` — run **on the VM**: nightly full backups of both
+  databases and the restore/rehearsal path for them. See [Backups](#backups).
 - `scripts/deploy.sh` — runs **on the VM**: resets the checkout to the deployed commit, pulls the
   requested images, optionally migrates, restarts only the named services, waits for health.
 - `scripts/ssh-forced-command.sh` — what the CI deploy key is pinned to in `authorized_keys`, so
@@ -272,6 +274,67 @@ story, not performance, since both DBs stay on one SQL instance regardless (no p
 ~5k devices; `WorkspaceId` is the future partition key). Either way it must be reachable as
 `sql:1433` on the `backend` network so `ConnectionStrings__DefaultConnection` /
 `ConnectionStrings__AuthDBConnection` don't need to change.
+
+## Backups
+
+Nightly full backups of both databases, run by `scripts/backup.sh` from cron on the VM. Configured
+entirely from `compose/.env` (see `.env.example`); nothing is hardcoded to a cloud provider.
+
+```cron
+0 2 * * *  /home/<user>/Wbskt/deploy/scripts/backup.sh >> /var/log/wbskt-backup.log 2>&1
+```
+
+Three stages, because a backup that never leaves the machine is not a backup:
+
+1. `BACKUP DATABASE ... WITH CHECKSUM, COMPRESSION` into a staging directory on the `sql-data`
+   volume — a subdirectory of `/var/opt/mssql` specifically, because that path is already owned by
+   the non-root `mssql` user the image runs as.
+2. `RESTORE VERIFYONLY WITH CHECKSUM`, then the file is copied out to `BACKUP_DIR` on the host and
+   the staged copy deleted. A backup that does not verify is treated as no backup at all.
+3. `BACKUP_UPLOAD_CMD` pushes `BACKUP_DIR` off the box.
+
+**Stage 3 is mandatory.** Without `BACKUP_UPLOAD_CMD` set, `backup.sh` refuses to run rather than
+quietly producing same-disk copies that would be destroyed by the very failure they exist for. Set
+`BACKUP_ALLOW_LOCAL_ONLY=true` to override that deliberately while you are setting the upload up.
+
+`BACKUP_UPLOAD_CMD` and `BACKUP_ALERT_CMD` must each name a **single executable** taking one
+argument — a value with spaces is not parsed as a command line. Wrap anything more involved:
+
+```bash
+#!/usr/bin/env bash
+exec rclone copy "$1" remote:wbskt-backups --immutable
+```
+
+Local copies are pruned after `BACKUP_RETENTION_DAYS` (default 14). Retention at the off-box
+destination is that system's job — expiring remote copies from the VM would mean this script could
+destroy the only surviving backups.
+
+Set `BACKUP_ALERT_CMD`. A backup that silently stops running is the ordinary way this goes wrong,
+and nothing else in the stack will notice.
+
+### Restoring, and rehearsing the restore
+
+```bash
+# Rehearsal - restores into a scratch database, touches nothing live, prints row counts to compare.
+deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_20260825T020000Z.bak
+
+# Real recovery - overwrites an existing database, which is why it needs --force.
+deploy/scripts/restore.sh --file <path> --target Wbskt.Database --force
+```
+
+`restore.sh` verifies the backup before touching any database, and redirects the restored files so
+a copy restored under a scratch name cannot collide with the live database's files.
+
+**Rehearse it at least once, and confirm the row counts.** Until a restore has actually been
+performed, what exists is a backup script, not a backup.
+
+### What is deliberately not backed up
+
+Both decisions, written down so the next person does not have to guess:
+
+- **Redis** — a SignalR backplane and cache. Losing it costs reconnects, nothing durable.
+- **RabbitMQ** — holds in-flight events only. Losing it drops whatever was queued at that instant,
+  which is a real but bounded loss; the durable record of every run lives in SQL.
 
 ## Rollout phases + verification
 
