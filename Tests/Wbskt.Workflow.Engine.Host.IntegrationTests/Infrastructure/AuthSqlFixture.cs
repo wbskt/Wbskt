@@ -107,9 +107,3 @@ public sealed class AuthSqlFixture : IAsyncLifetime
         }
     }
 }
-
-[CollectionDefinition(Name)]
-public sealed class AuthSqlCollection : ICollectionFixture<AuthSqlFixture>
-{
-    public const string Name = "auth-sql";
-}
