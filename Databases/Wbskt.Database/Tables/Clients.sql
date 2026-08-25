@@ -4,7 +4,7 @@ CREATE TABLE dbo.Clients (
     WorkspaceId    INT              NOT NULL,
     PolicyId       INT              NOT NULL,
     Name           NVARCHAR(100)    NOT NULL,
-    Secret         NVARCHAR(255)    NOT NULL,
+    SecretHash     VARBINARY(32)    NOT NULL, -- SHA-256 of the secret; the plaintext is shown once, at registration, and never stored
     Status         TINYINT          NOT NULL           DEFAULT 0, -- 0: Pending, 1: Registered, 2: Revoked
     IsConnected    BIT              NOT NULL           DEFAULT 0,
     ConnectedAt    DATETIME2(3)     NULL, -- set on connect, cleared on disconnect; uptime = now - ConnectedAt

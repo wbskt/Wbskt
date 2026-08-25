@@ -2,7 +2,7 @@ CREATE PROCEDURE dbo.Client_Create
     @WorkspaceId INT,
     @PolicyId INT,
     @Name NVARCHAR(100),
-    @Secret NVARCHAR(255),
+    @SecretHash VARBINARY(32),
     @Status TINYINT,
     @Id INT OUTPUT,
     @RefId UNIQUEIDENTIFIER OUTPUT
@@ -14,14 +14,14 @@ BEGIN
         WorkspaceId,
         PolicyId,
         Name,
-        Secret,
+        SecretHash,
         Status
     )
     VALUES (
         @WorkspaceId,
         @PolicyId,
         @Name,
-        @Secret,
+        @SecretHash,
         @Status
     );
 

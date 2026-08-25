@@ -8,7 +8,6 @@ public class Client
     public int PolicyId { get; set; }
     public Guid PolicyRefId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string Secret { get; set; } = string.Empty;
     public ClientStatus Status { get; set; }
     public bool IsConnected { get; set; }
     public DateTime? ConnectedAt { get; set; }

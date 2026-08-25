@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
@@ -68,10 +67,10 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
                 }
             }
 
-            var secret = GenerateSecret();
+            var secret = ClientSecrets.Generate();
             var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
-            var client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, secret, initialStatus, cancellationToken);
+            var client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, cancellationToken);
             _logger.LogInformation("Client '{ClientName}' record created with status: '{ClientStatus}'", request.Name, initialStatus);
 
             await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, client.Name), cancellationToken);
@@ -85,7 +84,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
                 await _eventBus.PublishAsync(new ClientPendingApprovalEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId), cancellationToken);
             }
 
-            return Result<ClientRegistrationResponse>.Success(new ClientRegistrationResponse(client.RefId, client.Secret, client.Status));
+            return Result<ClientRegistrationResponse>.Success(new ClientRegistrationResponse(client.RefId, secret, client.Status));
         }
         catch (Exception ex)
         {
@@ -95,12 +94,4 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         }
     }
 
-    private static string GenerateSecret()
-    {
-        var buffer = new byte[32];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(buffer);
-
-        return Convert.ToBase64String(buffer);
-    }
 }
