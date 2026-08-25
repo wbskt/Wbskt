@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Infrastructure.Email;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
@@ -34,7 +35,11 @@ internal sealed class EmailNodeExecutor(IEmailSender emailSender) : INodeExecuto
 
         try
         {
-            await emailSender.SendAsync(config.To, config.Subject, config.Body, ct);
+            // Plain text, deliberately: the body comes from a workflow author and is not sanitised
+            // anywhere, so rendering it as HTML in a recipient's client would be handing them
+            // author-controlled markup. Host-authored mail (invitations, password resets) is the
+            // only caller that may pass Html.
+            await emailSender.SendAsync(config.To, config.Subject, config.Body, EmailBodyFormat.PlainText, ct);
         }
         catch (FormatException ex)
         {

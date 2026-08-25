@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Email;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,10 @@ public sealed class NotificationExecutorTests
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
         Assert.Equal("default", cont.OutboundPort);
-        Assert.Equal([("ops@example.test", "Tank low", "Refill it.")], sender.Sent);
+        // PlainText is the security-relevant half of this assertion: the body is written by a workflow
+        // author and is sanitised nowhere, so the node must never ask a recipient's client to render it
+        // as markup.
+        Assert.Equal([("ops@example.test", "Tank low", "Refill it.", EmailBodyFormat.PlainText)], sender.Sent);
     }
 
     [Fact]
@@ -172,18 +176,18 @@ public sealed class NotificationExecutorTests
     {
         public bool Configured { get; init; } = true;
         public Exception? Throw { get; init; }
-        public List<(string To, string Subject, string Body)> Sent { get; } = [];
+        public List<(string To, string Subject, string Body, EmailBodyFormat Format)> Sent { get; } = [];
 
         public bool IsConfigured => Configured;
 
-        public Task SendAsync(string to, string subject, string body, CancellationToken ct)
+        public Task SendAsync(string to, string subject, string body, EmailBodyFormat format, CancellationToken ct)
         {
             if (Throw is not null)
             {
                 throw Throw;
             }
 
-            Sent.Add((to, subject, body));
+            Sent.Add((to, subject, body, format));
             return Task.CompletedTask;
         }
     }
