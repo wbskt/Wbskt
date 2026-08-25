@@ -220,6 +220,41 @@ public sealed class AccountRecoveryTests
     }
 
     [Fact]
+    public async Task VerifyEmail_consumes_the_token_and_reports_success()
+    {
+        var harness = new Harness();
+        harness.Provider
+            .Setup(p => p.ConsumeEmailVerificationTokenAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(42);
+
+        var result = await harness.Service.VerifyEmailAsync("a-token");
+
+        Assert.True(result.IsSuccess);
+        harness.Provider.Verify(p => p.ConsumeEmailVerificationTokenAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// The token reaches the provider as a hash, never as the string the user pasted in. A provider
+    /// that logged its arguments must not be able to leak a usable credential.
+    /// </summary>
+    [Fact]
+    public async Task VerifyEmail_hashes_the_token_before_it_leaves_the_service()
+    {
+        var harness = new Harness();
+        byte[]? seen = null;
+        harness.Provider
+            .Setup(p => p.ConsumeEmailVerificationTokenAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<byte[], CancellationToken>((hash, _) => seen = hash)
+            .ReturnsAsync(42);
+
+        await harness.Service.VerifyEmailAsync("a-token");
+
+        Assert.NotNull(seen);
+        Assert.Equal(32, seen!.Length);
+        Assert.Equal(SecurityTokens.Hash("a-token"), seen);
+    }
+
+    [Fact]
     public async Task ResendVerification_reissues_for_an_unverified_account()
     {
         var harness = new Harness();
@@ -253,6 +288,65 @@ public sealed class AccountRecoveryTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(harness.Mailer.Sent);
+    }
+
+    // ---------------------------------------------------------------- registration
+
+    /// <summary>
+    /// A new account is unusable until its address is confirmed, so registration that did not issue
+    /// the link would create accounts nobody could ever sign in to.
+    /// </summary>
+    [Fact]
+    public async Task Registration_issues_a_verification_link()
+    {
+        var harness = new Harness();
+        harness.WithSuccessfulRegistration();
+
+        var result = await harness.Service.RegisterUserAsync("someone", "someone@example.test", "a perfectly long password");
+
+        Assert.True(result.IsSuccess);
+        harness.Provider.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["verify:someone@example.test"], harness.Mailer.Sent);
+    }
+
+    /// <summary>
+    /// Long enough to survive someone signing up in the evening and reading their mail the next
+    /// morning. A reset link is short-lived because it is a credential for an existing account; this
+    /// one only ever turns an unusable account into a usable one.
+    /// </summary>
+    [Fact]
+    public async Task A_verification_link_outlives_a_night()
+    {
+        var harness = new Harness();
+        harness.WithSuccessfulRegistration();
+        DateTime? expiry = null;
+        harness.Provider
+            .Setup(p => p.CreateEmailVerificationTokenAsync(It.IsAny<int>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<int, byte[], DateTime, CancellationToken>((_, _, e, _) => expiry = e)
+            .Returns(Task.CompletedTask);
+
+        await harness.Service.RegisterUserAsync("someone", "someone@example.test", "a perfectly long password");
+
+        Assert.NotNull(expiry);
+        Assert.True(expiry!.Value - DateTime.UtcNow > TimeSpan.FromHours(12));
+    }
+
+    /// <summary>A reset link, by contrast, must not sit live in an unattended inbox for long.</summary>
+    [Fact]
+    public async Task A_reset_link_is_short_lived()
+    {
+        var harness = new Harness();
+        harness.WithUser(Verified(true));
+        DateTime? expiry = null;
+        harness.Provider
+            .Setup(p => p.CreatePasswordResetTokenAsync(It.IsAny<int>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback<int, byte[], DateTime, string?, CancellationToken>((_, _, e, _, _) => expiry = e)
+            .Returns(Task.CompletedTask);
+
+        await harness.Service.ForgotPasswordAsync("someone@example.test", "10.0.0.1");
+
+        Assert.NotNull(expiry);
+        Assert.True(expiry!.Value - DateTime.UtcNow <= TimeSpan.FromHours(1));
     }
 
     // ---------------------------------------------------------------- support
@@ -298,6 +392,24 @@ public sealed class AccountRecoveryTests
         /// The provider throws for an unknown address rather than returning null — that is the shape
         /// the real one has, and the difference is what every non-disclosure test here turns on.
         /// </summary>
+        /// <summary>Enough of the provider stubbed for RegisterUserAsync to reach its success path.</summary>
+        public void WithSuccessfulRegistration()
+        {
+            var created = new User
+            {
+                Id = 42,
+                RefId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                Username = "someone",
+                Email = "someone@example.test",
+                IsActive = true
+            };
+
+            Provider.Setup(p => p.InsertUserAsync(It.IsAny<User>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
+            Provider.Setup(p => p.CreateTenantAsync(It.IsAny<string>(), It.IsAny<string>(), 42, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Guid.NewGuid());
+            Provider.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(created);
+        }
+
         public void WithNoUser() =>
             Provider.Setup(p => p.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new SecurityException("User not found."));
