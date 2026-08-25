@@ -50,6 +50,7 @@
     <File Path="Docs/Auth.Host.E2E.Scenarios.md" />
     <File Path="Docs/Clients.Feature.V1.Design.md" />
     <File Path="Docs/Coding.Conventions.md" />
+    <File Path="Docs/Production.Readiness.Plan.md" />
     <File Path="Docs/RoughFeatures.md" />
     <File Path="Docs/UI.Mockup.Prompt.md" />
     <File Path="Docs/Workflow.Engine.V3.Design.md" />
