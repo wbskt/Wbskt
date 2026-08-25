@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Wbskt.Infrastructure.Email;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;

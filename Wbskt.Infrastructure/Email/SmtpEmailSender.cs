@@ -1,15 +1,13 @@
 using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Options;
-using Wbskt.Workflow.Abstraction.Configuration;
-using Wbskt.Workflow.Abstraction.Runtime;
 
-namespace Wbskt.Workflow.Runtime;
+namespace Wbskt.Infrastructure.Email;
 
 /// <summary>
 /// Sends through a plain SMTP relay configured on the host.
 /// </summary>
-internal sealed class SmtpEmailSender : IEmailSender
+public sealed class SmtpEmailSender : IEmailSender
 {
     private readonly EmailOptions _options;
 
@@ -20,11 +18,11 @@ internal sealed class SmtpEmailSender : IEmailSender
 
     public bool IsConfigured => _options.IsConfigured;
 
-    public async Task SendAsync(string to, string subject, string body, CancellationToken ct)
+    public async Task SendAsync(string to, string subject, string body, EmailBodyFormat format, CancellationToken ct)
     {
         if (!IsConfigured)
         {
-            throw new InvalidOperationException("No SMTP host or from-address is configured (WorkflowEngine:Email).");
+            throw new InvalidOperationException("No SMTP host or from-address is configured for this host's email section.");
         }
 
         using var client = new SmtpClient(_options.Host, _options.Port)
@@ -48,9 +46,7 @@ internal sealed class SmtpEmailSender : IEmailSender
                 : new MailAddress(_options.FromAddress!, _options.FromDisplayName),
             Subject = subject,
             Body = body,
-            // Plain text: the body comes from a workflow author and is not sanitised anywhere, so
-            // rendering it as HTML in a recipient's client would be handing them author-controlled markup.
-            IsBodyHtml = false
+            IsBodyHtml = format == EmailBodyFormat.Html
         };
 
         // Multiple recipients are ordinary; MailAddressCollection parses a comma-separated list.
