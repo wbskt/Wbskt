@@ -110,11 +110,11 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
 
         output.WriteLine($"Started run RunId={runId} BranchId={branchId}");
 
-        // ── 4. Seed the RunCounters to 1 (initial branch) ──
-        // RunStarter does not call IncrementActiveBranchesAsync; set it here so
-        // CompleteBranchAsync can decrement to 0 and fire RunFinalizer.
-        var countersProvider = scope.ServiceProvider.GetRequiredService<IRunCountersProvider>();
-        await countersProvider.IncrementActiveBranchesAsync((int)runId, 1, CancellationToken.None);
+        // No manual RunCounters seeding here. This used to increment the active-branch count by one,
+        // compensating for a RunStarter that did not - it now does: Run_Create seeds the counter row
+        // and StartAsync increments it for the initial branch. Doing it again left the count at 2, so
+        // completing the single branch decremented to 1 rather than 0, RunFinalizer never fired, and
+        // the run sat in Running forever.
 
         // ── 5. Execute the branch via BranchLoop ──
         var branchLoop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
@@ -174,9 +174,6 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
                 CorrelationKey = "hist-test"
             },
             CancellationToken.None);
-
-        var countersProvider = scope.ServiceProvider.GetRequiredService<IRunCountersProvider>();
-        await countersProvider.IncrementActiveBranchesAsync((int)runId, 1, CancellationToken.None);
 
         var branchLoop = scope.ServiceProvider.GetRequiredService<IBranchLoop>();
         await branchLoop.RunAsync(runId, branchId, BranchExecutionReason.TriggerStarted, CancellationToken.None);
