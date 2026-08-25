@@ -12,20 +12,23 @@ semantics, resolution precedence, where the checks live — see [AccessControl.m
 | **Socket** (`Wbskt.Socket.Host`) | yes | device SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
 | **Workflow Engine** (`Wbskt.Workflow.Engine.Host`) | **no** — backend network only | management host | shared API key header on `/api/inbound/*` |
 
-**Only the management host default-denies.** It sets an authorization `FallbackPolicy`, so a
-controller that forgets `[Authorize]` still cannot be reached anonymously and the anonymous surface
-is an explicit, auditable choice. The other three rely on attributes and middleware instead, which
-is worth knowing when adding an endpoint to them:
+**The three publicly routed hosts default-deny.** Management, Auth and Socket each set an
+authorization `FallbackPolicy`, so a controller that forgets `[Authorize]` cannot be reached
+anonymously and the anonymous surface is an explicit, auditable choice:
 
-- **Auth host** — `AddAuthorization()` with no fallback. `InvitationsController`,
-  `ManagementController` and `WorkspacesController` carry class-level `[Authorize]`;
-  `AuthController` does not, so its methods are anonymous unless individually marked. A new
-  controller here is **anonymous by default**.
-- **Socket host** — `WebSocketAuthMiddleware` gates `/ws` by path, before the pipeline's
-  authentication runs. It guards that one route and nothing else.
-- **Engine host** — `InboundApiKeyMiddleware` gates only endpoints carrying `[InboundEndpoint]`.
-  A controller without that attribute is reachable unauthenticated by anything on the backend
-  network.
+- **Management host** — the original; the other two were brought into line with it.
+- **Auth host** — every controller was already correctly attributed when the fallback was added, so
+  it changed no behaviour. It exists for the next endpoint added to the host that owns tenants,
+  roles and permissions. `AuthController`'s credential endpoints carry `[AllowAnonymous]`
+  individually.
+- **Socket host** — has no controllers at all. `/ws` opts out with `AllowAnonymous` because it
+  authenticates itself earlier in the pipeline: `WebSocketAuthMiddleware` validates the token and
+  assigns `context.User` before `UseAuthentication` runs, and the browser upgrade path carries its
+  token in `?access_token=` rather than a header, so the bearer handler never sees one.
+  `EndpointAuthorizationTests` fails if a controller appears here without stating its posture.
+- **Engine host** — the exception, and it is not publicly routed. `InboundApiKeyMiddleware` gates
+  only endpoints carrying `[InboundEndpoint]`; a controller without that attribute is reachable
+  unauthenticated by anything on the backend network.
 
 Two conventions run through every table below:
 
@@ -149,7 +152,8 @@ List endpoints take `skip`/`take`, clamped to 200 rather than rejected, and retu
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `GET /healthz` | anonymous | Liveness. |
+| `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
+| `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
 | `GET /metrics` | **authenticated** | Prometheus scrape. Requires authorization because this host is publicly routed and the metrics would otherwise be world-readable. Nothing scrapes it today; an in-network Prometheus would authenticate with a bearer token. |
 | `GET /openapi`, Scalar reference | anonymous, **development only** | API docs. Anonymous by consequence rather than by declaration — this host has no fallback policy, so an unmarked endpoint is already open. |
 
@@ -301,8 +305,8 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `GET /api/health` | anonymous | Health with a timestamp. |
-| `GET /healthz` | anonymous | Liveness. |
+| `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
+| `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
 | `GET /openapi`, `/scalar` | anonymous, **development only** | API docs. Explicitly exempted from the default-deny fallback policy. |
 
 ---
@@ -314,7 +318,8 @@ The device data plane. One long-lived WebSocket per client; everything else is a
 | Endpoint | Auth | What it does |
 |---|---|---|
 | `GET /ws` (upgrade) | client JWT, `Authorization: Bearer` **or** `?access_token=` | Establishes the client's connection. The query fallback exists for browser WebSocket clients, which cannot set headers. Rejects the upgrade with 401 before any socket is opened. |
-| `GET /healthz` | anonymous | Liveness. |
+| `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
+| `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
 
 Once open, the connection carries the platform protocol — `sys.ping`/`sys.pong`, command frames and
 their `sys.ack`, state and capability reports. Commands arrive from the management host over the bus
@@ -359,4 +364,4 @@ bookmarks, so they cannot fan out.
 | Endpoint | What it does |
 |---|---|
 | `GET /healthz` | Liveness — the process is up. |
-| `GET /healthz/ready` | Readiness, gated on leadership state. The engine runs active/passive; only the leader reports ready. |
+| `GET /healthz/ready` | Readiness: SQL reachable, bus started, and this instance holds the engine lease. The engine runs active/passive, so only the leader reports ready — that is what keeps a standby out of Traefik's routing table. |

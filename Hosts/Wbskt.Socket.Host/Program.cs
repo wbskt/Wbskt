@@ -3,6 +3,7 @@ using Serilog;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
+using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
@@ -59,6 +60,10 @@ public static class Program
             options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
         });
 
+        // Bus only: this host holds no database connection. The check itself comes from
+        // AddMassTransit (masstransit-bus, tagged "ready").
+        builder.Services.AddHealthChecks();
+
         builder.Services.AddControllers();
         builder.Services.AddCustomOpenApi();
 
@@ -99,7 +104,7 @@ public static class Program
             await handler.HandleAsync(context);
         }).AllowAnonymous();
 
-        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
+        app.MapWbsktHealthChecks();
         app.MapControllers();
 
         await app.RunAsync();

@@ -3,6 +3,7 @@ using Serilog;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
+using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
@@ -10,6 +11,7 @@ using Wbskt.Infrastructure.Mappers;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.Engine.Host.Extensions;
+using Wbskt.Workflow.Engine.Host.HealthChecks;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
 using Wbskt.Workflow.Engine.Host.Middleware;
@@ -78,6 +80,15 @@ public static class Program
         // The bus is started manually by EngineLeadershipCoordinator once this instance is leader,
         // so a standby never attaches to the shared engine queues.
         builder.Services.RemoveMassTransitHostedService();
+
+        // Readiness gates traffic to the current leader: Traefik's load-balancer health check
+        // already points at /healthz/ready, and a standby must never receive an inbound trigger.
+        // The bus check comes from AddMassTransit and is unhealthy on a standby anyway, but
+        // leadership is asserted explicitly rather than inferred from it.
+        builder.Services.AddHealthChecks()
+            .AddSqlServerCheck("DefaultConnection")
+            .AddCheck<LeadershipHealthCheck>("engine-leadership", tags: ["ready"]);
+
         builder.Services.AddAuthorization();
         builder.Services.AddControllers();
 
@@ -90,10 +101,7 @@ public static class Program
         app.UseAuthorization();
         app.UseMiddleware<InboundApiKeyMiddleware>();
         app.UseMiddleware<LeaderOnlyMiddleware>();
-        app.MapGet("/healthz", () => Results.Ok()).AllowAnonymous();
-        app.MapGet("/healthz/ready", (LeadershipState leadershipState) =>
-            leadershipState.IsLeader && leadershipState.BusStarted ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable))
-            .AllowAnonymous();
+        app.MapWbsktHealthChecks();
         app.MapControllers();
 
         await app.RunAsync();
