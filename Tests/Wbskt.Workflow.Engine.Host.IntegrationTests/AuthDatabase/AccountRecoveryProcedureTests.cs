@@ -13,13 +13,19 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 /// never that they do what their names say. A procedure that consumed a token twice, or wrote the
 /// password without revoking anything, would pass every test in the other project.
 /// </summary>
-[Collection(AuthSqlCollection.Name)]
+[Collection("SqlEdge")]
 public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
 {
     private const string Skipped = "SQL Server not reachable — skipping.";
 
-    private static readonly byte[] TokenA = Enumerable.Repeat((byte)0xA1, 32).ToArray();
-    private static readonly byte[] TokenB = Enumerable.Repeat((byte)0xB2, 32).ToArray();
+    /// <summary>
+    /// A fresh 32-byte hash per call. Not a constant shared between tests: UQ_*_TokenHash is
+    /// table-wide rather than filtered — correctly, since a token is looked up by its hash alone and
+    /// two rows sharing one would be ambiguous — and every test in this class runs against the same
+    /// database, so a reused value collides with whichever test ran first.
+    /// </summary>
+    private static byte[] NewTokenHash() =>
+        System.Security.Cryptography.SHA256.HashData(Guid.NewGuid().ToByteArray());
 
     // ---------------------------------------------------------------- password reset
 
@@ -28,14 +34,15 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("reset-happy");
         int otherId = await SeedUserAsync("reset-bystander");
         await SeedRefreshTokenAsync(userId, "live-1");
         await SeedRefreshTokenAsync(userId, "live-2");
         await SeedRefreshTokenAsync(otherId, "someone-elses");
 
-        await CreateResetTokenAsync(userId, TokenA);
-        int consumedFor = await ConsumeResetTokenAsync(TokenA, "the-new-hash");
+        await CreateResetTokenAsync(userId, token);
+        int consumedFor = await ConsumeResetTokenAsync(token, "the-new-hash");
 
         Assert.Equal(userId, consumedFor);
         Assert.Equal("the-new-hash", await ScalarAsync<string>("SELECT PasswordHash FROM dbo.Users WHERE Id = @p0", userId));
@@ -54,12 +61,13 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("reset-single-use");
-        await CreateResetTokenAsync(userId, TokenA);
+        await CreateResetTokenAsync(userId, token);
 
-        await ConsumeResetTokenAsync(TokenA, "first-hash");
+        await ConsumeResetTokenAsync(token, "first-hash");
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeResetTokenAsync(TokenA, "second-hash"));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeResetTokenAsync(token, "second-hash"));
         Assert.Equal(50014, ex.Number);
 
         // The second attempt changed nothing.
@@ -71,10 +79,11 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("reset-expired");
-        await CreateResetTokenAsync(userId, TokenA, expiresAt: DateTime.UtcNow.AddMinutes(-1));
+        await CreateResetTokenAsync(userId, token, expiresAt: DateTime.UtcNow.AddMinutes(-1));
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeResetTokenAsync(TokenA, "hash"));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeResetTokenAsync(token, "hash"));
         Assert.Equal(50014, ex.Number);
     }
 
@@ -88,14 +97,16 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] first = NewTokenHash();
+        byte[] second = NewTokenHash();
         int userId = await SeedUserAsync("reset-supersede");
-        await CreateResetTokenAsync(userId, TokenA);
-        await CreateResetTokenAsync(userId, TokenB);
+        await CreateResetTokenAsync(userId, first);
+        await CreateResetTokenAsync(userId, second);
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeResetTokenAsync(TokenA, "from-the-old-link"));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeResetTokenAsync(first, "from-the-old-link"));
         Assert.Equal(50014, ex.Number);
 
-        Assert.Equal(userId, await ConsumeResetTokenAsync(TokenB, "from-the-new-link"));
+        Assert.Equal(userId, await ConsumeResetTokenAsync(second, "from-the-new-link"));
     }
 
     /// <summary>
@@ -107,12 +118,13 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("reset-race");
-        await CreateResetTokenAsync(userId, TokenA);
+        await CreateResetTokenAsync(userId, token);
 
         var results = await Task.WhenAll(
-            AttemptAsync(() => ConsumeResetTokenAsync(TokenA, "hash-one")),
-            AttemptAsync(() => ConsumeResetTokenAsync(TokenA, "hash-two")));
+            AttemptAsync(() => ConsumeResetTokenAsync(token, "hash-one")),
+            AttemptAsync(() => ConsumeResetTokenAsync(token, "hash-two")));
 
         Assert.Equal(1, results.Count(r => r));
     }
@@ -124,11 +136,12 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("verify-happy");
         Assert.False(await ScalarAsync<bool>("SELECT IsEmailVerified FROM dbo.Users WHERE Id = @p0", userId));
 
-        await CreateVerificationTokenAsync(userId, TokenA);
-        Assert.Equal(userId, await ConsumeVerificationTokenAsync(TokenA));
+        await CreateVerificationTokenAsync(userId, token);
+        Assert.Equal(userId, await ConsumeVerificationTokenAsync(token));
 
         Assert.True(await ScalarAsync<bool>("SELECT IsEmailVerified FROM dbo.Users WHERE Id = @p0", userId));
     }
@@ -138,11 +151,12 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("verify-single-use");
-        await CreateVerificationTokenAsync(userId, TokenA);
-        await ConsumeVerificationTokenAsync(TokenA);
+        await CreateVerificationTokenAsync(userId, token);
+        await ConsumeVerificationTokenAsync(token);
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeVerificationTokenAsync(TokenA));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeVerificationTokenAsync(token));
         Assert.Equal(50015, ex.Number);
     }
 
@@ -151,10 +165,11 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] token = NewTokenHash();
         int userId = await SeedUserAsync("verify-expired");
-        await CreateVerificationTokenAsync(userId, TokenA, expiresAt: DateTime.UtcNow.AddMinutes(-1));
+        await CreateVerificationTokenAsync(userId, token, expiresAt: DateTime.UtcNow.AddMinutes(-1));
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeVerificationTokenAsync(TokenA));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeVerificationTokenAsync(token));
         Assert.Equal(50015, ex.Number);
 
         Assert.False(await ScalarAsync<bool>("SELECT IsEmailVerified FROM dbo.Users WHERE Id = @p0", userId));
@@ -165,14 +180,16 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
 
+        byte[] first = NewTokenHash();
+        byte[] second = NewTokenHash();
         int userId = await SeedUserAsync("verify-supersede");
-        await CreateVerificationTokenAsync(userId, TokenA);
-        await CreateVerificationTokenAsync(userId, TokenB);
+        await CreateVerificationTokenAsync(userId, first);
+        await CreateVerificationTokenAsync(userId, second);
 
-        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeVerificationTokenAsync(TokenA));
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ConsumeVerificationTokenAsync(first));
         Assert.Equal(50015, ex.Number);
 
-        Assert.Equal(userId, await ConsumeVerificationTokenAsync(TokenB));
+        Assert.Equal(userId, await ConsumeVerificationTokenAsync(second));
     }
 
     /// <summary>

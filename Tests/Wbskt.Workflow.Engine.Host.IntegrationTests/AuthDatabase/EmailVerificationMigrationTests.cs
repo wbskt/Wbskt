@@ -17,7 +17,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 /// The script under test is the shipped one, read off disk rather than restated here, so a change to
 /// it that forgets the backfill fails this test rather than agreeing with a copy.
 /// </summary>
-[Collection(AuthSqlCollection.Name)]
+[Collection("SqlEdge")]
 public sealed class EmailVerificationMigrationTests
 {
     /// <summary>The shape of <c>dbo.Users</c> immediately before the column was added.</summary>
