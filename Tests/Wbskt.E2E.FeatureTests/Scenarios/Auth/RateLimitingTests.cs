@@ -11,11 +11,13 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// <para>
 /// <b>These are opt-in and meant to be run alone.</b> The limiter partitions on the caller's IP,
 /// which every test in this suite shares, so exhausting the budget here makes unrelated scenarios
-/// fail with a 429 for the rest of the window. Set <c>E2E_RATE_LIMIT_TESTS=1</c> to enable, and
-/// prefer running them with a filter rather than alongside the rest:
+/// fail with a 429 for the rest of the window, and that includes the next scenario in this class.
+/// Set <c>E2E_RATE_LIMIT_TESTS=1</c> to enable, and run them one at a time against an auth host
+/// freshly restarted with the production limit (the Development settings raise it; see the README):
 /// </para>
 /// <code>
-/// E2E_RATE_LIMIT_TESTS=1 dotnet test --filter FullyQualifiedName~RateLimitingTests
+/// RateLimiting__Authentication__PermitLimit=10 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+/// E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 dotnet test --filter FullyQualifiedName~RateLimitingTests.AUTH_RL_01
 /// </code>
 /// <para>
 /// The limit is a brake on bulk attempts rather than per-account lockout — an unauthenticated

@@ -107,6 +107,123 @@ jobs:
             exit 1
           fi
 
+  # The black-box suite in Tests/Wbskt.E2E.FeatureTests, against all four hosts started from source
+  # as Development. That environment is what raises the auth host's per-IP rate limit (every test
+  # shares the runner's address) and lets freshly registered users sign in without a mailbox.
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Welcome1234
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Welcome1234 -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+      rabbitmq:
+        image: rabbitmq:4-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 20s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install sqlpackage
+        run: |
+          dotnet tool install -g microsoft.sqlpackage
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Deploy databases
+        run: pwsh ./Deploy-Databases.ps1
+
+      # The hosts serve HTTPS on their dev ports with the development certificate, and it has to be
+      # trusted system-wide: the client SDK the tests drive validates it, and so does Management when
+      # it calls the engine on https://localhost:7030. `dotnet dev-certs https --trust` only half
+      # does this on Linux (it exits non-zero), so the certificate goes into the OS store directly.
+      - name: Trust the development certificate
+        run: |
+          dotnet dev-certs https
+          dotnet dev-certs https --export-path "$RUNNER_TEMP/aspnet-dev.crt" --format PEM
+          sudo cp "$RUNNER_TEMP/aspnet-dev.crt" /usr/local/share/ca-certificates/aspnet-dev.crt
+          sudo update-ca-certificates
+
+      - name: Start hosts
+        id: hosts
+        run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
+
+      - name: E2E tests
+        run: |
+          set -o pipefail
+          dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj \
+            --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee e2e-output.txt
+
+      # Then the rate-limit scenarios, which the run above skips. They exhaust the shared per-IP budget
+      # on purpose, and the budget outlives a test (AUTH_RL_01 leaves the next one unable to even
+      # register its user), so each gets an auth host restarted with the production limit. A restart
+      # is a fresh window: the limiter is in memory.
+      # Runs even when the main pass failed, so one red scenario there does not hide these.
+      - name: Rate-limit tests
+        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        env:
+          RateLimiting__Authentication__PermitLimit: "10"
+          E2E_AUTH_PERMIT_LIMIT: "10"
+          E2E_RATE_LIMIT_TESTS: "1"
+        run: |
+          set -o pipefail
+          project=Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj
+          tests=$(dotnet test "$project" --no-build --list-tests | grep -oP 'RateLimitingTests\.\K\w+')
+          if [[ -z "$tests" ]]; then
+            echo "::error::no RateLimitingTests found"
+            exit 1
+          fi
+          status=0
+          for t in $tests; do
+            Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+            dotnet test "$project" --no-build --filter "FullyQualifiedName~RateLimitingTests.$t" \
+              --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee -a rl-output.txt || status=1
+          done
+          exit $status
+
+      # Every test is a [SkippableFact] that skips itself when the hosts are unreachable, and a
+      # fully skipped run exits 0, so a host that never came up would otherwise report green.
+      # A handful of scenarios skip by design (an engine-only route, an opt-in gate), so this
+      # checks that the suite ran rather than demanding zero skips.
+      - name: Fail if the suite did not actually run
+        if: always()
+        run: |
+          for f in e2e-output.txt rl-output.txt; do
+            passed=$(grep -oP 'Passed:\s*\K\d+' "$f" 2>/dev/null | awk '{ n += $1 } END { print n + 0 }')
+            echo "$f: passed=${passed:-0}"
+            if [[ "${passed:-0}" -eq 0 ]]; then
+              echo "::error::no tests executed in $f"
+              exit 1
+            fi
+          done
+
+      - name: Host logs
+        if: failure()
+        run: |
+          for f in e2e-hosts/*.log; do
+            echo "::group::$f"
+            tail -n 300 "$f"
+            echo "::endgroup::"
+          done
+
   scan:
     runs-on: ubuntu-latest
     steps:
