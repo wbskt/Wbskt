@@ -170,22 +170,28 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_OUT_11_AccessTokenSurvivesLogoutAllUntilExpiry()
+    public async Task AUTH_OUT_11_LogoutAllEndsTheAccessTokensToo()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var user = await fixture.CreateUserAsync();
         var session = await fixture.LoginAsync(user.Email, user.Password);
+        var other = await fixture.LoginAsync(user.Email, user.Password);
 
+        // iat has second resolution and a token from the revocation's own second is let through
+        // (see AccessTokenRevocation), so the tokens must be at least a second old to be revoked.
+        await Task.Delay(TimeSpan.FromSeconds(1.1));
         await fixture.LogoutAllAsync(session.AccessToken);
 
-        // Only refresh tokens are revocable. "Sign out everywhere" therefore leaves a window of up
-        // to the access token's remaining hour — the same window MEM_37 and AUTH_TK_10 describe,
-        // and the reason it is not a containment measure on its own.
-        var response = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl("/api/workspaces"), session.AccessToken);
+        // "Sign out everywhere" is a containment measure only if it reaches the access tokens
+        // already handed out - including the one that asked, and one from another device.
+        foreach (var token in new[] { session.AccessToken, other.AccessToken })
+        {
+            var response = await fixture.SendAsync(
+                HttpMethod.Get, ServicesFixture.AuthUrl("/api/workspaces"), token);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
     }
 
     [SkippableFact]
@@ -197,7 +203,10 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
         var session = await fixture.LoginAsync(user.Email, user.Password);
 
         await fixture.LogoutAllAsync(session.AccessToken);
-        var second = await fixture.LogoutAllAsync(session.AccessToken);
+
+        // A fresh session, because logout-all also revokes the access token that called it.
+        var again = await fixture.LoginAsync(user.Email, user.Password);
+        var second = await fixture.LogoutAllAsync(again.AccessToken);
 
         second.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }

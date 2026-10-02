@@ -57,6 +57,8 @@ internal sealed class AuthService : IAuthService
     private readonly IAuthMailer _mailer;
     private readonly ILogger<AuthService> _logger;
     private readonly AuthMetrics _metrics;
+    private readonly IAccessTokenRevocation _accessTokens;
+    private readonly TimeSpan _accessTokenLifetime;
     private readonly bool _requireVerifiedEmail;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
@@ -67,8 +69,12 @@ internal sealed class AuthService : IAuthService
         IAuthMailer mailer,
         IOptions<AuthEmailOptions> emailOptions,
         ILogger<AuthService> logger,
-        AuthMetrics metrics)
+        AuthMetrics metrics,
+        IAccessTokenRevocation accessTokens,
+        IOptions<AccessTokenOptions> accessTokenOptions)
     {
+        _accessTokens = accessTokens;
+        _accessTokenLifetime = accessTokenOptions.Value.AccessTokenLifetime;
         _provider = provider;
         _jwtService = jwtService;
         _eventBus = eventBus;
@@ -192,6 +198,7 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Token refresh failed: Replay of a revoked token for user ID {UserId}. Revoking all sessions. IP: {IpAddress}", existingToken.UserId, ipAddress);
                 await _provider.RevokeAllRefreshTokensForUserAsync(existingToken.UserId, ipAddress, cancellationToken);
+                await _accessTokens.RevokeUserAsync(existingToken.UserId, cancellationToken);
                 _metrics.RecordRefresh("token_replayed");
 
                 await _eventBus.PublishAsync(new SecurityAlertEvent(
@@ -298,6 +305,7 @@ internal sealed class AuthService : IAuthService
         try
         {
             var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
+            await _accessTokens.RevokeUserAsync(userId, cancellationToken);
             _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
             return Result.Success();
         }
@@ -470,7 +478,11 @@ internal sealed class AuthService : IAuthService
             return Result.Failure(Error.Failure("AUTH_RESET_ERROR", ex.Message));
         }
 
-        _logger.LogInformation("Password reset completed for user {UserId}; all refresh tokens revoked. IP: {IpAddress}", userId, ipAddress);
+        // Outside the transaction above, and best effort: the password and the refresh tokens are what
+        // the reset is for, and they are already done. This only shortens the life of access tokens
+        // that were already issued.
+        await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+        _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", userId, ipAddress);
         return Result.Success();
     }
 
@@ -643,7 +655,7 @@ internal sealed class AuthService : IAuthService
             new Claim("type", "user")
         };
 
-        return _jwtService.GenerateToken(claims, JwtAudiences.Api, TimeSpan.FromMinutes(60));
+        return _jwtService.GenerateToken(claims, JwtAudiences.Api, _accessTokenLifetime);
     }
 
     private RefreshToken GenerateRefreshToken(int userId)

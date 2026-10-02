@@ -58,8 +58,11 @@ password hasher cannot be used as a work amplifier.
 | `POST verify-email` | anonymous | Redeems a confirmation token and marks the address verified. Single-use. |
 | `POST resend-verification` | anonymous | Mails a fresh confirmation link. Anonymous by necessity, not oversight: sign-in requires a confirmed address, so an account that needs this cannot hold a token with which to ask. Always 204, like `forgot-password`. |
 
-Access tokens last 60 minutes and are **not revocable**; refresh tokens last 7 days and are. A
-deactivated account keeps working until its current access token expires.
+Access tokens last 15 minutes (`Jwt:AccessTokenLifetime`); refresh tokens last 7 days. Logout-all,
+deactivation, a password reset and a replayed refresh token each revoke the user's refresh tokens
+and, through a per-user watermark shared in Redis, the access tokens already issued, on the auth and
+management hosts alike. Revoking access tokens is best effort: with Redis unreachable they live out
+their 15 minutes.
 
 Reset and confirmation tokens are stored only as a SHA-256 hash, are single-use, and supersede any
 predecessor for the same account. A reset link lasts 1 hour; a confirmation link lasts 24 hours —

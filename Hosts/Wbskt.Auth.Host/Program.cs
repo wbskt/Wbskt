@@ -52,6 +52,7 @@ public static class Program
         // Signs user tokens and is the only host that can; validates them with its own keys.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Auth);
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
+        builder.Services.AddAccessTokenRevocation(builder.Configuration);
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IManagementService, ManagementService>();
@@ -133,6 +134,21 @@ public static class Program
                     {
                         PermitLimit = builder.Configuration.GetValue("RateLimiting:Authentication:PermitLimit", 10),
                         Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Authentication:WindowMinutes", 1)),
+                        QueueLimit = 0
+                    }));
+
+            // Refresh gets its own, looser bucket. Access tokens last minutes, so every signed-in
+            // console refreshes several times an hour, and a shared office address would otherwise
+            // spend the login budget on routine refreshes and lock its own users out. A refresh
+            // costs no password hash and needs a 64-byte random token, so there is nothing for a
+            // tighter limit to protect.
+            options.AddPolicy(RateLimitPolicies.TokenRefresh, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = builder.Configuration.GetValue("RateLimiting:TokenRefresh:PermitLimit", 120),
+                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:TokenRefresh:WindowMinutes", 1)),
                         QueueLimit = 0
                     }));
         });

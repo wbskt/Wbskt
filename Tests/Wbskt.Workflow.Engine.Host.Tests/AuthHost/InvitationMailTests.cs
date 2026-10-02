@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
@@ -101,7 +102,8 @@ public sealed class InvitationMailTests
                 Mock.Of<IWorkspaceProvider>(),
                 Mock.Of<IEventBus>(),
                 Mailer,
-                NullLogger<ManagementService>.Instance);
+                NullLogger<ManagementService>.Instance,
+                Mock.Of<IAccessTokenRevocation>());
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();

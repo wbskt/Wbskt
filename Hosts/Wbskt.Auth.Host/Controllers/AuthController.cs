@@ -70,7 +70,7 @@ public class AuthController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A new set of access and refresh tokens.</returns>
     [AllowAnonymous]
-    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [EnableRateLimiting(RateLimitPolicies.TokenRefresh)]
     [HttpPost("refresh-token")]
     public async Task<ActionResult<LoginResponse>> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {

@@ -56,6 +56,7 @@ public static class Program
         // whose public keys it fetches from Jwt:TrustedJwksUrl.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
+        builder.Services.AddAccessTokenRevocation(builder.Configuration);
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
