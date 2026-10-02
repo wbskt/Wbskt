@@ -23,12 +23,27 @@ volumes:
   rabbitmq-data:
   redis-data:
   traefik-acme:
+  prometheus-data:
+  alertmanager-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
+
+# Every container's stdout is capped. Docker's default json-file driver never rotates, so on one VM
+# a chatty host eventually fills the disk SQL Server writes to. Logs worth keeping longer go to Loki.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
 
 x-host-env: &host-env
   ASPNETCORE_ENVIRONMENT: Production
   RabbitMQ__HostName: rabbitmq
   RabbitMQ__UserName: ${RABBITMQ_USER}
   RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+  # Traces, metrics and logs, all to the collector below. Each service sets its own OTEL_SERVICE_NAME.
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
 
 services:
   traefik:
@@ -75,6 +90,7 @@ services:
       backend:
         ipv4_address: 172.28.1.2
     restart: unless-stopped
+    logging: *default-logging
 
   console:
     # No build: key - the console is an artifact of the Dashboard repo, which owns its Dockerfile
@@ -102,6 +118,7 @@ services:
       retries: 5
     networks: [edge]
     restart: unless-stopped
+    logging: *default-logging
     labels:
       - traefik.enable=true
       - traefik.http.routers.console.rule=Host(`console.${DOMAIN}`)
@@ -122,6 +139,7 @@ services:
         HOST_DLL: Wbskt.Auth.Host.dll
     environment:
       <<: *host-env
+      OTEL_SERVICE_NAME: wbskt-auth
       ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       # Signs user tokens. Its public half is served at /.well-known/jwks.json for management.
       Jwt__SigningKey: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required - see .env.example}
@@ -157,6 +175,7 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    logging: *default-logging
     labels:
       - traefik.enable=true
       - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)
@@ -174,6 +193,7 @@ services:
         HOST_DLL: Wbskt.Management.Host.dll
     environment:
       <<: *host-env
+      OTEL_SERVICE_NAME: wbskt-management
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       ConnectionStrings__Redis: redis:6379
       # Signs client tokens for the socket host, and validates user tokens against auth's public keys.
@@ -203,6 +223,7 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       replicas: ${MANAGEMENT_REPLICAS:-1}
     labels:
@@ -226,6 +247,7 @@ services:
         HOST_DLL: Wbskt.Socket.Host.dll
     environment:
       <<: *host-env
+      OTEL_SERVICE_NAME: wbskt-socket
       # Signs nothing; validates client tokens against management's public keys, fetched on first use.
       Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
     volumes:
@@ -241,6 +263,7 @@ services:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped
+    logging: *default-logging
     # Declared rather than left to `--scale`, because `docker compose up -d socket` converges to
     # whatever is declared here - a deploy that omitted --scale would silently drop a 3-replica
     # tier back to 1.
@@ -265,6 +288,7 @@ services:
         HOST_DLL: Wbskt.Workflow.Engine.Host.dll
     environment:
       <<: *host-env
+      OTEL_SERVICE_NAME: wbskt-engine
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       Engine__InboundApiKey: ${ENGINE_INBOUND_API_KEY}
     volumes:
@@ -287,6 +311,7 @@ services:
         condition: service_healthy
     networks: [backend]
     restart: unless-stopped
+    logging: *default-logging
     # Keep at 1 until the engine remediation prerequisite lands (Docs\Workflow.Engine.V3.Remediation.Plan.md).
     deploy:
       replicas: ${ENGINE_REPLICAS:-1}
@@ -311,6 +336,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      # Adds rabbitmq_prometheus (port 15692, backend network only) for the dead-letter alert.
+      - ../observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -319,6 +346,7 @@ services:
       start_period: 20s
     networks: [backend]
     restart: unless-stopped
+    logging: *default-logging
 
   redis:
     image: redis:7
@@ -333,6 +361,7 @@ services:
       retries: 5
     networks: [backend]
     restart: unless-stopped
+    logging: *default-logging
 
   sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -350,6 +379,113 @@ services:
       start_period: 30s
     networks: [backend]
     restart: unless-stopped
+    logging: *default-logging
+
+
+  # --- Observability -------------------------------------------------------------------------------
+  # Nothing here is on the edge network or behind Traefik. Grafana, Alertmanager and the
+  # Pushgateway are published on the VM's loopback only; reach Grafana with
+  #   ssh -L 3000:127.0.0.1:3000 <vm>   and open http://localhost:3000
+  # See "Observability" in deploy/README.md.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.130.0
+    container_name: wbskt-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [prometheus, loki, tempo]
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: wbskt-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${METRICS_RETENTION:-15d}
+      - --web.enable-otlp-receiver
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: wbskt-alertmanager
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-true}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+    volumes:
+      - ../observability/alertmanager-entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - alertmanager-data:/alertmanager
+    # Loopback only: deploy/scripts/alert.sh posts backup failures here from the VM itself.
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    container_name: wbskt-pushgateway
+    # Loopback only: backup.sh runs from cron on the VM and pushes its success timestamp here.
+    ports:
+      - "127.0.0.1:9091:9091"
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  loki:
+    image: grafana/loki:3.5.3
+    container_name: wbskt-loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ../observability/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: wbskt-tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ../observability/tempo.yaml:/etc/tempo/config.yaml:ro
+      - tempo-data:/var/tempo
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: wbskt-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required - see .env.example}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, loki, tempo]
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
 
   migrator:
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-migrator:${IMAGE_TAG:-latest}

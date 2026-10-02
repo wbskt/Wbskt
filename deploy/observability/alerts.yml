@@ -1,0 +1,99 @@
+# The handful of conditions that mean a customer is affected or data is at risk. Each one names
+# what to look at first. Thresholds are starting points: tune them once there is a baseline.
+#
+# Deliberately absent: an alert on engine readiness. Only the leader reports ready; a standby is a
+# healthy process that is not ready by design, and alerting on it pages for normal behaviour.
+# EngineNotReporting below covers "no engine at all".
+groups:
+  - name: wbskt
+    rules:
+      - alert: WorkflowRunFailureRateHigh
+        expr: |
+          (
+            sum(increase(wbskt_workflow_runs_completed_total{status=~"Failed|PartiallyFailed"}[15m]))
+              / sum(increase(wbskt_workflow_runs_completed_total[15m]))
+          ) > 0.25
+          and sum(increase(wbskt_workflow_runs_completed_total[15m])) >= 20
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of workflow runs failed over the last 15 minutes"
+          description: >-
+            Break it down by workspace_id and workflow_ref in Grafana to tell one tenant's broken
+            workflow from a platform fault, then follow a failed run's trace in Tempo.
+
+      - alert: WorkflowWakeBacklog
+        # Timers and timeouts that fell due over a minute ago and nobody claimed. max, not sum: every
+        # engine replica reports the same database-wide count.
+        expr: max(wbskt_workflow_bookmarks_overdue) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} workflow wake-ups are overdue and unclaimed"
+          description: >-
+            The engine leader is stuck, behind, or absent. Check the engine logs and which replica
+            holds leadership.
+
+      - alert: WorkflowDispatchBacklog
+        expr: max(wbskt_workflow_dispatcher_queue_depth) > 500
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value }} branches are queued for execution in the engine"
+
+      - alert: DeadLetteredMessages
+        # MassTransit moves a message that exhausted its retries to <queue>_error, and one with no
+        # consumer to <queue>_skipped. Either is an event some host never handled.
+        expr: sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~".+_(error|skipped)"}) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} messages dead-lettered in {{ $labels.queue }}"
+          description: >-
+            Inspect them in the RabbitMQ management UI (or the logs for the consumer's exception),
+            fix the cause, then move them back to the source queue.
+
+      - alert: SocketDisconnectRateHigh
+        # Abnormal disconnects only: client_closed is a device signing off, server_stopping a deploy.
+        expr: |
+          sum(increase(wbskt_socket_disconnects_total{reason=~"aborted|error"}[10m]))
+            / clamp_min(sum(wbskt_socket_connections_open), 10)
+          > 0.5
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Devices are dropping off the socket tier faster than usual"
+          description: >-
+            More abnormal disconnects in 10 minutes than half the connected devices. Look for a
+            network or proxy problem in front of ws.<domain>, or a socket host restarting.
+
+      - alert: BackupMissing
+        # backup.sh pushes this timestamp only after a verified backup has been uploaded.
+        expr: time() - max(wbskt_backup_last_success_timestamp_seconds) > 26 * 3600
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "No successful database backup for over 26 hours"
+          description: Check /var/log/wbskt-backup.log on the VM and that the cron entry still exists.
+
+      - alert: BackupNeverReported
+        expr: absent(wbskt_backup_last_success_timestamp_seconds)
+        for: 26h
+        labels:
+          severity: page
+        annotations:
+          summary: "The backup job has never reported a success to this Prometheus"
+
+      - alert: EngineNotReporting
+        expr: absent(wbskt_workflow_dispatcher_queue_depth)
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "No workflow engine has reported metrics for 5 minutes"

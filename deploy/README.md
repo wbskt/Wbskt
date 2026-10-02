@@ -20,10 +20,15 @@ there. See [Build and release flow](#build-and-release-flow).
   repo owns its `Dockerfile`/`nginx.conf` and publishes `wbskt-console` itself. The `console`
   service below is the only reference to it, and it has no `build:` key.
 - `compose/docker-compose.yml` + `compose/.env.example` — the full stack: Traefik, the 4 hosts,
-  console, RabbitMQ, Redis, SQL Server, and a one-shot `migrator` (profile `migrate`). The 4 hosts
-  and the migrator carry both `image:` (what the VM pulls) and `build:` (local development).
-- `config/serilog.json` — console-only Serilog sink, mounted at `/Config` (replaces the
-  Windows-dev config, which also writes to a rolling file).
+  console, RabbitMQ, Redis, SQL Server, the observability stack, and a one-shot `migrator`
+  (profile `migrate`). The 4 hosts and the migrator carry both `image:` (what the VM pulls) and
+  `build:` (local development).
+- `observability/` — config for the OTLP collector, Prometheus and its alert rules, Alertmanager,
+  Loki, Tempo and Grafana. See [Observability](#observability).
+- `config/serilog.json` — the Serilog console sink, mounted at `/Config` (replaces the
+  Windows-dev config, which also writes to a rolling file). Hosts add an OTLP sink themselves
+  when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+- `scripts/alert.sh` — raises an alert in the stack's Alertmanager; `BACKUP_ALERT_CMD` points at it.
 - `scripts/backup.sh` / `scripts/restore.sh` — run **on the VM**: nightly full backups of both
   databases and the restore/rehearsal path for them. See [Backups](#backups).
 - `scripts/deploy.sh` — runs **on the VM**: resets the checkout to the deployed commit, pulls the
@@ -129,7 +134,7 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER   # log out/in, or keep using sudo
 
 # Checkout + registry login + .env - see One-time setup above. Fill in DOMAIN, ACME_EMAIL, and
-# generate real secrets for SQL_SA_PASSWORD, RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY,
+# generate real secrets for SQL_SA_PASSWORD, RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, GRAFANA_ADMIN_PASSWORD,
 # AUTH_JWT_SIGNING_KEY and MANAGEMENT_JWT_SIGNING_KEY (see JWT signing keys below), CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
 # ACME_CASERVER to the Let's Encrypt staging directory first (see .env.example) to avoid burning
 # production rate limits while you're still iterating.
@@ -142,6 +147,7 @@ MIGRATE_FRESH=true docker compose --profile migrate run --rm migrator   # first 
 
 docker compose pull auth management socket engine
 docker compose up -d rabbitmq redis
+docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana
 docker compose up -d --no-build auth management socket engine traefik
 docker compose ps                                           # everything should report healthy
 ```
@@ -279,6 +285,50 @@ Compose has no rolling-update primitive like Swarm/K8s, so there's brief downtim
 unless you script "bring up one new, remove one old, repeat" manually. Traefik's Docker provider
 watches for label changes on its own, so it only needs a restart if you changed Traefik's *own*
 static config (entrypoints, ACME settings, etc.), not for routine host redeploys.
+
+## Observability
+
+Every host sends traces, metrics and logs over OTLP to `otel-collector`, which fans them out to
+Tempo (traces, 72h), Prometheus (metrics, `METRICS_RETENTION`, default 15d) and Loki (logs, 7d).
+MassTransit carries the trace context in message headers, so one trace follows a device message
+from the socket host, across the bus, into the engine and the management host. Logs carry the
+trace and span ids, and Grafana links the two both ways. `docker compose logs` keeps working too:
+the hosts still write to stdout, now rotated (20 MB x 5 per container).
+
+None of it is publicly routed. Grafana, Alertmanager and the Pushgateway listen on the VM's
+loopback only:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 <vm>
+# Grafana: http://localhost:3000 (admin / GRAFANA_ADMIN_PASSWORD), Alertmanager: http://localhost:9093
+```
+
+The stack adds seven containers and roughly 1 GB of memory at idle. On a 4 GB VM, add swap first
+(see Fresh install).
+
+### Alerts
+
+Rules live in `observability/alerts.yml`, delivered by Alertmanager to `ALERT_EMAIL_TO` (through the
+same `SMTP_*` relay the auth host uses) and/or `ALERT_WEBHOOK_URL`. Set at least one: with neither,
+alerts fire and reach nobody, and Alertmanager says so in its log.
+
+| Alert | Fires when |
+|---|---|
+| `WorkflowRunFailureRateHigh` | over 25% of at least 20 runs failed in 15 minutes |
+| `WorkflowWakeBacklog` | timers or timeouts are over a minute past due and unclaimed |
+| `WorkflowDispatchBacklog` | over 500 branches queued in the engine for 10 minutes |
+| `DeadLetteredMessages` | any MassTransit `_error` or `_skipped` queue holds messages |
+| `SocketDisconnectRateHigh` | abnormal device disconnects exceed half the connected devices in 10 minutes |
+| `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
+| `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
+| `EngineNotReporting` | no engine has reported metrics for 5 minutes |
+
+Engine readiness is deliberately not alerted on: a standby engine is not ready by design.
+
+For backups, set `BACKUP_ALERT_CMD` to `deploy/scripts/alert.sh` in `.env`. A failed run then
+raises `BackupFailed` straight away, and every successful run pushes its timestamp to the
+Pushgateway. That timestamp is what lets `BackupMissing` catch the failure no command can report,
+which is cron not running the script at all.
 
 ## Scaling
 

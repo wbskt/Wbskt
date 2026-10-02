@@ -1,0 +1,41 @@
+# Metrics from the four hosts arrive over OTLP from the collector (--web.enable-otlp-receiver);
+# nothing scrapes a host, so no host exposes a metrics endpoint on a public router. The only scrape
+# targets are infrastructure on the backend network.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+otlp:
+  # job = service.name (wbskt-auth, wbskt-engine, ...) and instance = service.instance.id come for
+  # free; this keeps the environment too, so a staging stack can share a Grafana without confusion.
+  promote_resource_attributes:
+    - deployment.environment.name
+
+storage:
+  tsdb:
+    # OTLP pushes are batched per host, so samples can arrive slightly out of order.
+    out_of_order_time_window: 30m
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+scrape_configs:
+  # Per-queue depth, which is what the dead-letter alert needs. The plain /metrics endpoint is
+  # aggregated across queues and cannot tell an _error queue from a busy one.
+  - job_name: rabbitmq
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics]
+    static_configs:
+      - targets: [rabbitmq:15692]
+
+  # The backup job's last-success timestamp, pushed by deploy/scripts/backup.sh.
+  - job_name: pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: [pushgateway:9091]

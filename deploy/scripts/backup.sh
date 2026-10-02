@@ -128,6 +128,16 @@ prune() {
     find "$BACKUP_DIR" -maxdepth 1 -name '*.bak' -type f -mtime "+$BACKUP_RETENTION_DAYS" -print -delete
 }
 
+# Records the moment of the last good backup in the Pushgateway, where Prometheus picks it up. The
+# BackupMissing alert fires when this goes stale, which is what catches the failure no alert command
+# can report: cron not running the script at all. Best effort, like alert().
+report_success() {
+    local url="${BACKUP_METRICS_URL:-http://127.0.0.1:9091}"
+    printf 'wbskt_backup_last_success_timestamp_seconds %s\n' "$(date +%s)" \
+        | curl -fsS --max-time 10 --data-binary @- "$url/metrics/job/wbskt_backup" \
+        || echo "backup: could not report success to $url" >&2
+}
+
 main() {
     load_env
     cd "$COMPOSE_DIR"
@@ -143,6 +153,7 @@ main() {
 
     upload
     prune
+    report_success
 
     log "done ($STAMP)"
 }
