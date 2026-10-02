@@ -91,11 +91,14 @@ public sealed class NestedLoopE2ETests(ServicesFixture fixture)
                       {
                           pfe.OnBody(b2 =>
                           {
+                              // Both paths converge, so the iteration has a tail for the ParallelForEach's
+                              // own Join to collect; without one the cohort could never converge, and the
+                              // validator rejects the definition (PARALLEL_FOREACH_WITHOUT_JOIN).
                               b2.AddFork(["path1", "path2"], fork =>
                               {
                                   fork.Branch("path1", b3 => b3.AddClientMessage(clientRef, "ReachEnd"));
                                   fork.Branch("path2", b3 => b3.AddClientMessage(clientRef, "ReachEnd"));
-                              });
+                              }, JoinMode.All);
                           });
                       });
                 });

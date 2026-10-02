@@ -247,6 +247,25 @@ public sealed class ServicesFixture : IDisposable
     }
 
     /// <summary>
+    /// Sends a JSON request whose body is empty. This is what "no body" looks like from a JSON client:
+    /// the content type is declared, so model binding runs and rejects it with a 400. A request with
+    /// no content type at all never reaches model binding; it gets a 415 from the input formatter.
+    /// </summary>
+    public async Task<HttpResponseMessage> SendEmptyJsonAsync(HttpMethod method, string url, string? token = null)
+    {
+        using var req = new HttpRequestMessage(method, url);
+
+        if (token is not null)
+        {
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        req.Content = new StringContent(string.Empty, Encoding.UTF8, "application/json");
+
+        return await _http.SendAsync(req);
+    }
+
+    /// <summary>
     /// Sends a request with a verbatim Authorization header, bypassing the well-formedness checks
     /// that <see cref="AuthenticationHeaderValue"/> applies. Needed to present a malformed header.
     /// </summary>

@@ -69,6 +69,57 @@ public sealed class JoinNodeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_hands_the_winner_back_to_the_enclosing_cohort()
+    {
+        // A Fork inside a ParallelForEach body: the inner Join's winner must reach the outer Join
+        // carrying the outer token, or it contributes to the inner cohort twice and the outer one
+        // never converges.
+        Guid innerToken = Guid.NewGuid();
+        Guid outerToken = Guid.NewGuid();
+        var aggregatorMock = new Mock<IJoinAggregatorProvider>();
+        aggregatorMock
+            .Setup(a => a.ContributeAsync(innerToken, "succeeded", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JoinContributionResult(true, 2, 2, 0, 2));
+
+        var executor = new JoinNodeExecutor(aggregatorMock.Object);
+        NodeContext ctx = CreateContext(
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig { Mode = JoinMode.All } },
+            JoinTokens.ForChild(
+                new Dictionary<string, JsonElement> { ["__join_token"] = JsonSerializer.SerializeToElement(outerToken.ToString()) },
+                JsonSerializer.SerializeToElement(innerToken.ToString())));
+
+        NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal(outerToken.ToString(), cont.LocalStatePatch["__join_token"].GetString());
+        Assert.Contains("__join_outer", cont.RemoveKeys!);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_leaves_the_token_alone_at_the_outermost_cohort()
+    {
+        Guid joinToken = Guid.NewGuid();
+        var aggregatorMock = new Mock<IJoinAggregatorProvider>();
+        aggregatorMock
+            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JoinContributionResult(true, 3, 3, 0, 3));
+
+        var executor = new JoinNodeExecutor(aggregatorMock.Object);
+        NodeContext ctx = CreateContext(
+            new JoinNode { NodeId = Guid.NewGuid(), Name = "join", Ports = CreatePorts(), Config = new JoinConfig { Mode = JoinMode.All } },
+            new Dictionary<string, JsonElement>
+            {
+                ["__join_token"] = JsonSerializer.SerializeToElement(joinToken.ToString())
+            });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(ctx, CancellationToken.None);
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.False(cont.LocalStatePatch.ContainsKey("__join_token"));
+        Assert.Empty(cont.RemoveKeys!);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_returns_terminal_completed_when_ShouldContinue_false()
     {
         Guid joinToken = Guid.NewGuid();

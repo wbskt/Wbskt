@@ -231,6 +231,39 @@ public sealed class RetryExecutorTests
     }
 
     [Fact]
+    public async Task RunWithRetryAsync_keys_each_visit_to_a_node_separately()
+    {
+        // A sequential ForEach brings the branch back to the same node on every lap. Each lap is a
+        // new visit with its own key, so it runs the side effect rather than replaying lap one's
+        // cached result; a crash-and-recover replay of one visit still shares that visit's key.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+
+        var keys = new List<string>();
+        var idempotencyMock = new Mock<IIdempotencyKeyProvider>();
+        idempotencyMock.Setup(p => p.GetByKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((string key, CancellationToken _) => keys.Add(key))
+            .ThrowsAsync(new KeyNotFoundException());
+        idempotencyMock.Setup(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, int runId, Guid claimToken, Guid nodeId, int attempt, CancellationToken _) => new IdempotencyKeyRow
+            {
+                Id = 1, KeyValue = key, RunId = runId, BranchRefId = claimToken, NodeId = nodeId, Attempt = attempt, Status = "Pending", CreatedAt = DateTime.UtcNow, ResultJson = null, ErrorJson = null, CompletedAt = null
+            });
+
+        var services = new TestNodeExecutionServices(idempotencyMock.Object);
+
+        foreach (string visit in new[] { "00000000000007D1", "00000000000007D9", "00000000000007D1" })
+        {
+            await RetryExecutor.RunWithRetryAsync(
+                node, CreateContext() with { VisitToken = visit }, executor, services, new FixedClock(), CancellationToken.None);
+        }
+
+        Assert.Equal(3, keys.Count);
+        Assert.NotEqual(keys[0], keys[1]);
+        Assert.Equal(keys[0], keys[2]);
+    }
+
+    [Fact]
     public async Task RunWithRetryAsync_does_not_cache_WaitForBookmark_result()
     {
         var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
