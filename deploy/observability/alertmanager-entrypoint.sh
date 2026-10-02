@@ -13,6 +13,15 @@ set -eu
 config=/tmp/alertmanager.yml
 receivers=""
 
+# A YAML single-quoted scalar: a quote inside is written twice, and nothing else is special. printf
+# rather than echo, because dash's echo would expand a backslash sequence in a password.
+q() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+}
+
+# The auth host reads the same setting and accepts True/False in any case; YAML wants a bare boolean.
+require_tls="$(printf '%s' "${SMTP_USE_STARTTLS:-true}" | tr '[:upper:]' '[:lower:]')"
+
 {
     echo "route:"
     echo "  receiver: default"
@@ -24,15 +33,19 @@ receivers=""
     echo "  - name: default"
 
     if [ -n "${ALERT_EMAIL_TO:-}" ]; then
+        case "$require_tls" in
+            true|false) ;;
+            *) echo "alertmanager: SMTP_USE_STARTTLS must be true or false, not '${SMTP_USE_STARTTLS}'" >&2; exit 1 ;;
+        esac
         receivers="email"
         echo "    email_configs:"
-        echo "      - to: '${ALERT_EMAIL_TO}'"
-        echo "        from: '${SMTP_FROM_ADDRESS:?ALERT_EMAIL_TO needs SMTP_FROM_ADDRESS}'"
-        echo "        smarthost: '${SMTP_HOST:?ALERT_EMAIL_TO needs SMTP_HOST}:${SMTP_PORT:-587}'"
-        echo "        require_tls: ${SMTP_USE_STARTTLS:-true}"
+        printf '      - to: %s\n' "$(q "$ALERT_EMAIL_TO")"
+        printf '        from: %s\n' "$(q "${SMTP_FROM_ADDRESS:?ALERT_EMAIL_TO needs SMTP_FROM_ADDRESS}")"
+        printf '        smarthost: %s\n' "$(q "${SMTP_HOST:?ALERT_EMAIL_TO needs SMTP_HOST}:${SMTP_PORT:-587}")"
+        echo "        require_tls: $require_tls"
         if [ -n "${SMTP_USERNAME:-}" ]; then
-            echo "        auth_username: '${SMTP_USERNAME}'"
-            echo "        auth_password: '${SMTP_PASSWORD:-}'"
+            printf '        auth_username: %s\n' "$(q "$SMTP_USERNAME")"
+            printf '        auth_password: %s\n' "$(q "${SMTP_PASSWORD:-}")"
         fi
         echo "        send_resolved: true"
     fi
@@ -40,7 +53,7 @@ receivers=""
     if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
         receivers="${receivers:+$receivers, }webhook"
         echo "    webhook_configs:"
-        echo "      - url: '${ALERT_WEBHOOK_URL}'"
+        printf '      - url: %s\n' "$(q "$ALERT_WEBHOOK_URL")"
         echo "        send_resolved: true"
     fi
 } > "$config"
