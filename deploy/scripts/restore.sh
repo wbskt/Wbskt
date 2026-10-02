@@ -140,9 +140,26 @@ main() {
 
     [[ -n "$move_clauses" ]] || die "could not read the file list from the backup"
 
+    # RESTORE ... WITH REPLACE needs exclusive access, and on a real recovery the hosts are still
+    # connected to the database being replaced. Taking it SINGLE_USER in the same batch as the
+    # RESTORE ejects them and keeps the window for a host's reconnect to take the one connection as
+    # small as it can be; stopping the hosts first closes it entirely. The restored database takes its access mode from the backup, so it
+    # comes back MULTI_USER; only a failed restore leaves the original SINGLE_USER, and that is put
+    # back below.
+    local exclusive=""
+    if [[ "$FORCE" == true ]]; then
+        exclusive="IF DB_ID(N'${TARGET_DB}') IS NOT NULL ALTER DATABASE [${TARGET_DB}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;"
+    fi
+
     log "restoring into $TARGET_DB"
-    sqlcmd "RESTORE DATABASE [${TARGET_DB}] FROM DISK = N'${staged}' WITH REPLACE, RECOVERY${move_clauses}, STATS = 25;" \
-        || die "RESTORE DATABASE failed"
+    if ! sqlcmd "${exclusive}
+                 RESTORE DATABASE [${TARGET_DB}] FROM DISK = N'${staged}' WITH REPLACE, RECOVERY${move_clauses}, STATS = 25;"; then
+        if [[ -n "$exclusive" ]]; then
+            sqlcmd "IF DB_ID(N'${TARGET_DB}') IS NOT NULL ALTER DATABASE [${TARGET_DB}] SET MULTI_USER;" \
+                || log "warning: could not return $TARGET_DB to MULTI_USER; run ALTER DATABASE [$TARGET_DB] SET MULTI_USER by hand"
+        fi
+        die "RESTORE DATABASE failed"
+    fi
 
     docker compose exec -T sql rm -f "$staged" || log "warning: could not remove $staged"
 
