@@ -172,7 +172,7 @@ public sealed class WorkspaceResolutionTests(ServicesFixture fixture)
 
         var user = await fixture.CreateUserAsync();
 
-        var response = await fixture.SendAsync(
+        var response = await fixture.SendEmptyJsonAsync(
             HttpMethod.Post, ServicesFixture.AuthUrl("/api/workspaces/resolve"), user.Token);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);

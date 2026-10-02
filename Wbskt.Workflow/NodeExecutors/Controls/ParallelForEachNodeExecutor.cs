@@ -94,12 +94,10 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
         List<ForkSpec> children = [];
         for (int i = 0; i < items.Count; i++)
         {
-            children.Add(new ForkSpec("body", new Dictionary<string, JsonElement>
-            {
-                ["item"] = items[i].Clone(),
-                ["__join_token"] = joinTokenElement,
-                ["__join_index"] = JsonSerializer.SerializeToElement(i)
-            }));
+            Dictionary<string, JsonElement> childState = JoinTokens.ForChild(ctx.Branch.LocalState, joinTokenElement);
+            childState["item"] = items[i].Clone();
+            childState["__join_index"] = JsonSerializer.SerializeToElement(i);
+            children.Add(new ForkSpec("body", childState));
         }
 
         return new NodeExecutionResult.Fork(children, null, new Dictionary<string, JsonElement>());

@@ -537,7 +537,7 @@ public sealed class TenantGroupTests(ServicesFixture fixture)
 
         // The scope body is mandatory even for a tenant-wide assignment, so "assign this role
         // everywhere" cannot be expressed as a bodyless POST. Pinning the current shape.
-        var response = await fixture.SendAsync(
+        var response = await fixture.SendEmptyJsonAsync(
             HttpMethod.Post,
             ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
             admin.Token);

@@ -63,7 +63,10 @@ internal static class RetryExecutor
 
         for (int attempt = 1; attempt <= policy.MaxAttempts; attempt++)
         {
-            string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{attempt}";
+            // The visit token is what lets a node run again when a loop brings the branch back to it.
+            // Without it, every lap of a sequential ForEach shares the first lap's key, so laps two
+            // onwards return the cached result and their side effect never happens.
+            string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{context.VisitToken}:{attempt}";
             IdempotencyKeyRow? existingRow = null;
 
             // Recording an attempt's outcome was written out six times, identically. The duplication hid

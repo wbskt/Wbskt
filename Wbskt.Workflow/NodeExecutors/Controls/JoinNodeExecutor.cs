@@ -26,7 +26,7 @@ internal sealed class JoinNodeExecutor : INodeExecutor
             return new NodeExecutionResult.Fail("JOIN_CONFIG_INVALID", "Join node config is required.", false, null);
         }
 
-        if (!ctx.Branch.LocalState.TryGetValue("__join_token", out JsonElement tokenElement)
+        if (!ctx.Branch.LocalState.TryGetValue(JoinTokens.TokenKey, out JsonElement tokenElement)
             || tokenElement.ValueKind != JsonValueKind.String
             || !Guid.TryParse(tokenElement.GetString(), out Guid joinToken))
         {
@@ -41,12 +41,13 @@ internal sealed class JoinNodeExecutor : INodeExecutor
 
         if (result.ShouldContinue)
         {
-            return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
-            {
-                ["joinContributed"] = JsonSerializer.SerializeToElement(result.ContributedCount),
-                ["joinSucceeded"] = JsonSerializer.SerializeToElement(result.SucceededCount),
-                ["joinFailed"] = JsonSerializer.SerializeToElement(result.FailedCount)
-            });
+            // The winner rejoins the enclosing cohort, if there is one, so the next Join it reaches
+            // counts it there rather than in the cohort this Join just closed.
+            (Dictionary<string, JsonElement> patch, List<string> removeKeys) = JoinTokens.AfterJoin(ctx.Branch.LocalState);
+            patch["joinContributed"] = JsonSerializer.SerializeToElement(result.ContributedCount);
+            patch["joinSucceeded"] = JsonSerializer.SerializeToElement(result.SucceededCount);
+            patch["joinFailed"] = JsonSerializer.SerializeToElement(result.FailedCount);
+            return new NodeExecutionResult.Continue("default", patch, removeKeys);
         }
 
         return new NodeExecutionResult.Terminal(BranchTerminalReason.Completed);

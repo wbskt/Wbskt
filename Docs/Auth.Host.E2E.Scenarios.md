@@ -170,7 +170,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_07` | − | Garbage token string | **401** `AUTH_INVALID_TOKEN` |
 | `AUTH_RT_08` | − | Empty-string token | model-validation 400 |
 | `AUTH_RT_09` | − | Another user's valid refresh token | Succeeds as *that* user (tokens are bearer) — assert the returned access token's `nameid` is the token's owner, never the caller's |
-| `AUTH_RT_10` | − | Access token submitted as a refresh token | **401** `AUTH_INVALID_TOKEN` |
+| `AUTH_RT_10` | − | Access token submitted as a refresh token | model-validation 400 — a JWT is longer than the 255-character bound on `RefreshToken`, so it never reaches the lookup |
 | `AUTH_RT_11` | − | Refresh after `logout` revoked the token | **401** `AUTH_TOKEN_INACTIVE` |
 | `AUTH_RT_12` | − | Refresh after `logout-all` | **401** |
 | `AUTH_RT_13` | − | Refresh for a user deactivated since issuance | **401** `AUTH_TOKEN_INACTIVE` — *not* `AUTH_USER_INACTIVE`. Deactivation revokes every refresh token first, so rotation trips on the revoked token and never reaches the `IsActive` check. That branch is unreachable on this path, since a token issued after deactivation cannot exist |

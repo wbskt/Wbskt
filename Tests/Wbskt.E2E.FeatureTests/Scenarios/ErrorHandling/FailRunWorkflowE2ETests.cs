@@ -147,11 +147,14 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
             {
                 pfe.OnBody(b1 =>
                 {
+                    // Only one side of the gate runs per item, so Any lets the healthy side through to
+                    // the ParallelForEach's Join (which the validator requires) without waiting on the
+                    // side that was not taken.
                     b1.AddLogicGate("item", gate =>
                     {
                         gate.OnTrue(b2 => b2.AddClientMessage(clientRef, "OpenVent"));
                         gate.OnFalse(b2 => b2.AddFailRun("intentional sibling failure"));
-                    });
+                    }, JoinMode.Any);
                 });
             });
 

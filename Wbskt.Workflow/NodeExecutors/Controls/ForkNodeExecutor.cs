@@ -53,10 +53,7 @@ internal sealed class ForkNodeExecutor(IJoinAggregatorProvider aggregators) : IN
         var children = new List<ForkSpec>();
         foreach (var branch in node.Config.Branches)
         {
-            children.Add(new ForkSpec(branch, new Dictionary<string, JsonElement>
-            {
-                ["__join_token"] = joinTokenElement
-            }));
+            children.Add(new ForkSpec(branch, JoinTokens.ForChild(ctx.Branch.LocalState, joinTokenElement)));
         }
 
         return new NodeExecutionResult.Fork(children, null, new Dictionary<string, JsonElement>());

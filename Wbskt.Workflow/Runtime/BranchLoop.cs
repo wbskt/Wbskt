@@ -622,7 +622,8 @@ internal sealed class BranchLoop : IBranchLoop
             workspaceId)
         {
             RunRefId = runRow.RefId,
-            BranchRefId = branchRow.RefId
+            BranchRefId = branchRow.RefId,
+            VisitToken = Convert.ToHexString(branchRow.RowVersion)
         };
     }
 
