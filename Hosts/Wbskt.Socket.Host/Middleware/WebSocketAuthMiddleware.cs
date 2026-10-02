@@ -11,7 +11,7 @@ public sealed class WebSocketAuthMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, IJwtService jwtService)
+    public async Task InvokeAsync(HttpContext context, JwtTrust trust)
     {
         if (context.Request.Path == "/ws")
         {
@@ -38,9 +38,10 @@ public sealed class WebSocketAuthMiddleware
 
             try
             {
-                var principal = await jwtService.ValidateToken(token);
-                
-                // Ensure it's a client token
+                // Issuer and audience already rule out a user token - only the management host
+                // signs for wbskt-socket. The type check stays as a second, independent guard.
+                var principal = await trust.ValidateAsync(token);
+
                 var typeClaim = principal.FindFirst("type")?.Value;
                 if (typeClaim != "client")
                 {

@@ -33,7 +33,7 @@ COPY --from=build /app/publish .
 # The host .csproj files copy Config\*.json into the publish output at content root, which loads
 # at HIGHER precedence than the /Config bind mount (see SharedConfigurationExtension.cs). Remove
 # them so the mounted /Config (and env vars) are what actually apply in the container.
-RUN rm -f jwt.json rabbitmq.json serilog.json connectionstrings.json workflow-engine.json
+RUN rm -f rabbitmq.json serilog.json connectionstrings.json workflow-engine.json
 
 ARG HOST_DLL
 ENV HOST_DLL=${HOST_DLL}

@@ -8,11 +8,12 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// Section 8 of Docs/Auth.Host.E2E.Scenarios.md — what the auth host will and will not accept as
 /// proof of identity.
 ///
-/// The scenarios that matter most here are AUTH_TK_06 and AUTH_TK_07. Every host in the stack signs
-/// with one shared key and validates neither issuer nor audience, so a *client* token minted by the
-/// management host carries a signature this host accepts. It is refused only because a client's
-/// subject is a Guid and the identity middleware needs an int — an accident of ID types, not a
-/// control. These tests pin that behaviour so it cannot quietly become a privilege escalation.
+/// The scenarios that matter most here are AUTH_TK_06 and AUTH_TK_07. A *client* token is minted by
+/// the management host with its own key, as issuer wbskt-management for audience wbskt-socket; this
+/// host accepts only wbskt-auth tokens for wbskt-api, so the token fails on issuer, audience and
+/// signature alike. Before the keys were split every host shared one secret and checked neither
+/// claim, and the refusal rested on a client's subject being a Guid where the identity middleware
+/// needs an int. These tests pin the refusal whichever layer provides it.
 ///
 /// Requires the auth and management hosts running. Skips gracefully when they are down.
 /// </summary>
@@ -95,8 +96,8 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, clientToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
-            "a device credential must never be accepted as a user identity — the shared signing key "
-            + "and the absent audience check mean the signature alone does not distinguish them");
+            "a device credential must never be accepted as a user identity — it is signed by another "
+            + "issuer, for another audience");
     }
 
     [SkippableFact]

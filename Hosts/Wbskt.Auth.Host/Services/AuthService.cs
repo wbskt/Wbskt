@@ -643,7 +643,7 @@ internal sealed class AuthService : IAuthService
             new Claim("type", "user")
         };
 
-        return _jwtService.GenerateToken(claims, TimeSpan.FromMinutes(60));
+        return _jwtService.GenerateToken(claims, JwtAudiences.Api, TimeSpan.FromMinutes(60));
     }
 
     private RefreshToken GenerateRefreshToken(int userId)
