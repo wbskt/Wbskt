@@ -14,8 +14,11 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 /// existing user out of an account they have been using — and it is not the kind of failure that
 /// shows up in a smoke test, because a fresh database looks perfect.
 ///
-/// The script under test is the shipped one, read off disk rather than restated here, so a change to
-/// it that forgets the backfill fails this test rather than agreeing with a copy.
+/// The deploy under test is the real one: the shipped DACPAC published by sqlpackage, the way the
+/// production migrator does it, onto a database holding the old table. Running the pre-deployment
+/// script on its own once passed here while the real publish failed (Msg 2714 on
+/// DF_Users_IsEmailVerified): sqlpackage plans the schema change before that script runs, so only a
+/// real publish shows how the two interact.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class EmailVerificationMigrationTests
@@ -57,11 +60,15 @@ public sealed class EmailVerificationMigrationTests
                     ('existing-two', 'two@example.test', 'hash');
                 """);
 
-            await RunPreDeploymentScriptAsync(connectionString);
+            await PublishAsync(dbName, connectionString);
 
             // Both survive the deploy able to sign in.
-            Assert.Equal(2, await ScalarAsync<int>(connectionString, "SELECT COUNT(*) FROM dbo.Users WHERE IsEmailVerified = 1"));
-            Assert.Equal(0, await ScalarAsync<int>(connectionString, "SELECT COUNT(*) FROM dbo.Users WHERE IsEmailVerified = 0"));
+            Assert.Equal(2, await ScalarAsync<int>(connectionString,
+                "SELECT COUNT(*) FROM dbo.Users WHERE Username LIKE 'existing-%' AND IsEmailVerified = 1"));
+
+            // And the scratch table that carried them across is gone.
+            Assert.Equal(0, await ScalarAsync<int>(connectionString,
+                "SELECT COUNT(*) FROM sys.tables WHERE name = '__EmailVerifiedBackfill'"));
         }
         finally
         {
@@ -70,7 +77,7 @@ public sealed class EmailVerificationMigrationTests
     }
 
     /// <summary>
-    /// The pre-deployment script runs on <b>every</b> deploy, not just the one that adds the column.
+    /// The migration runs on <b>every</b> deploy, not just the one that adds the column.
     /// If the guard were wrong, the second deploy would verify every account that had signed up since
     /// the first — silently turning the check off for exactly the accounts it exists for.
     /// </summary>
@@ -89,7 +96,7 @@ public sealed class EmailVerificationMigrationTests
             await ExecuteAsync(connectionString,
                 "INSERT INTO dbo.Users (Username, Email, PasswordHash) VALUES ('grandfathered', 'old@example.test', 'hash');");
 
-            await RunPreDeploymentScriptAsync(connectionString);
+            await PublishAsync(dbName, connectionString);
 
             // Someone signs up after the migration. They are unverified, correctly.
             await ExecuteAsync(connectionString,
@@ -97,7 +104,7 @@ public sealed class EmailVerificationMigrationTests
             Assert.False(await ScalarAsync<bool>(connectionString, "SELECT IsEmailVerified FROM dbo.Users WHERE Username = 'newcomer'"));
 
             // The next deploy.
-            await RunPreDeploymentScriptAsync(connectionString);
+            await PublishAsync(dbName, connectionString);
 
             Assert.True(await ScalarAsync<bool>(connectionString, "SELECT IsEmailVerified FROM dbo.Users WHERE Username = 'grandfathered'"));
             Assert.False(await ScalarAsync<bool>(connectionString, "SELECT IsEmailVerified FROM dbo.Users WHERE Username = 'newcomer'"));
@@ -134,6 +141,11 @@ public sealed class EmailVerificationMigrationTests
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private static Task PublishAsync(string dbName, string connectionString) =>
+        DatabaseDeployer.DeployAsync(
+            AuthSqlFixture.MasterConnectionString, dbName, connectionString,
+            DatabaseDeployer.AuthProject, blockOnPossibleDataLoss: true);
 
     /// <summary>
     /// Executes <c>Databases/Wbskt.Database.Auth/Scripts/Script.PreDeployment.sql</c> as sqlpackage
