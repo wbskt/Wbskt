@@ -136,6 +136,18 @@ jobs:
           --health-timeout 10s
           --health-retries 10
           --health-start-period 20s
+      # Carries access-token revocations from the auth host to management (AUTH_TK_10).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ConnectionStrings__Redis: localhost:6379
     steps:
       - uses: actions/checkout@v4
 
@@ -182,6 +194,8 @@ jobs:
         env:
           RateLimiting__Authentication__PermitLimit: "10"
           E2E_AUTH_PERMIT_LIMIT: "10"
+          RateLimiting__TokenRefresh__PermitLimit: "120"
+          E2E_REFRESH_PERMIT_LIMIT: "120"
           E2E_RATE_LIMIT_TESTS: "1"
         run: |
           set -o pipefail

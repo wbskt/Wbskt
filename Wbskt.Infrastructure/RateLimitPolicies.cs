@@ -8,4 +8,10 @@ public static class RateLimitPolicies
     /// write, so they are the natural target for credential stuffing and sign-up spam.
     /// </summary>
     public const string Authentication = "authentication";
+
+    /// <summary>
+    /// The refresh-token exchange. Separate from <see cref="Authentication"/> because short-lived
+    /// access tokens make refreshing routine traffic rather than a credential attempt.
+    /// </summary>
+    public const string TokenRefresh = "token-refresh";
 }

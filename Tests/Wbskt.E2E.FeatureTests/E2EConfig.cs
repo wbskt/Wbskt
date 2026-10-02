@@ -34,6 +34,10 @@ internal static class E2EConfig
     public static int AuthPermitLimit =>
         int.TryParse(Environment.GetEnvironmentVariable("E2E_AUTH_PERMIT_LIMIT"), out var limit) ? limit : 10;
 
+    /// <summary>Must match RateLimiting:TokenRefresh:PermitLimit on the host under test.</summary>
+    public static int RefreshPermitLimit =>
+        int.TryParse(Environment.GetEnvironmentVariable("E2E_REFRESH_PERMIT_LIMIT"), out var limit) ? limit : 120;
+
     /// <summary>Must match RateLimiting:Authentication:WindowMinutes on the host under test.</summary>
     public static int AuthWindowMinutes =>
         int.TryParse(Environment.GetEnvironmentVariable("E2E_AUTH_WINDOW_MINUTES"), out var minutes) ? minutes : 1;

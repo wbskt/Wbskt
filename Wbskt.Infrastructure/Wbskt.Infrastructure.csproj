@@ -28,6 +28,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
         <PackageReference Include="Serilog" />
+        <PackageReference Include="StackExchange.Redis" />
         <PackageReference Include="Serilog.Settings.Configuration" />
     </ItemGroup>
 

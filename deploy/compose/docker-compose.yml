@@ -126,6 +126,8 @@ services:
       # Signs user tokens. Its public half is served at /.well-known/jwks.json for management.
       Jwt__SigningKey: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required - see .env.example}
       Jwt__AdditionalPublicKeys__0: ${AUTH_JWT_PREVIOUS_PUBLIC_KEY:-}
+      # Publishes access-token revocations (logout-all, deactivation, password reset) to management.
+      ConnectionStrings__Redis: redis:6379
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
       # Mail. Leave SMTP_HOST empty and the host logs an error at startup and sends nothing - which,
       # because sign-in requires a confirmed address, means no new account can be used. The links in
@@ -150,6 +152,8 @@ services:
       rabbitmq:
         condition: service_healthy
       sql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [edge, backend]
     restart: unless-stopped

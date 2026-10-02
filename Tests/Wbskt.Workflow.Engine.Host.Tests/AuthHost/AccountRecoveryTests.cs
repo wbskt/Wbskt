@@ -203,6 +203,32 @@ public sealed class AccountRecoveryTests
         harness.Provider.Verify(p => p.RevokeAllRefreshTokensForUserAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ResetPassword_ends_the_access_tokens_already_issued()
+    {
+        var harness = new Harness();
+        harness.Provider
+            .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(42);
+
+        await harness.Service.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
+
+        harness.AccessTokens.Verify(r => r.RevokeUserAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_rejected_reset_revokes_nothing()
+    {
+        var harness = new Harness();
+        harness.Provider
+            .Setup(p => p.ConsumePasswordResetTokenAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new SecurityException("no such token"));
+
+        await harness.Service.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
+
+        harness.AccessTokens.Verify(r => r.RevokeUserAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ---------------------------------------------------------------- verification
 
     [Fact]
@@ -376,10 +402,14 @@ public sealed class AccountRecoveryTests
                 Mailer,
                 Options.Create(new AuthEmailOptions { RequireVerifiedEmailForSignIn = requireVerifiedEmail }),
                 NullLogger<AuthService>.Instance,
-                new AuthMetrics());
+                new AuthMetrics(),
+                AccessTokens.Object,
+                Options.Create(new AccessTokenOptions()));
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();
+
+        public Mock<IAccessTokenRevocation> AccessTokens { get; } = new();
 
         public RecordingMailer Mailer { get; } = new();
 
@@ -514,10 +544,14 @@ public sealed class RegistrationDisclosureTests
                 Mailer,
                 Options.Create(new AuthEmailOptions()),
                 NullLogger<AuthService>.Instance,
-                new AuthMetrics());
+                new AuthMetrics(),
+                AccessTokens.Object,
+                Options.Create(new AccessTokenOptions()));
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();
+
+        public Mock<IAccessTokenRevocation> AccessTokens { get; } = new();
 
         public ThrowingMailer Mailer { get; }
 

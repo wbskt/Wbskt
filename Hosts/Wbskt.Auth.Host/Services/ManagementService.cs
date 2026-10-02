@@ -5,6 +5,7 @@ using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
@@ -31,14 +32,17 @@ internal sealed class ManagementService : IManagementService
     private readonly IEventBus _eventBus;
     private readonly IAuthMailer _mailer;
     private readonly ILogger<ManagementService> _logger;
+    private readonly IAccessTokenRevocation _accessTokens;
 
     public ManagementService(
         IAuthProvider provider,
         IWorkspaceProvider workspaceProvider,
         IEventBus eventBus,
         IAuthMailer mailer,
-        ILogger<ManagementService> logger)
+        ILogger<ManagementService> logger,
+        IAccessTokenRevocation accessTokens)
     {
+        _accessTokens = accessTokens;
         _provider = provider;
         _workspaceProvider = workspaceProvider;
         _eventBus = eventBus;
@@ -392,11 +396,12 @@ internal sealed class ManagementService : IManagementService
             var user = await _provider.GetByIdAsync(userId, cancellationToken);
             await _provider.SetUserActiveAsync(userId, isActive, cancellationToken);
 
-            // The access token stays valid until it expires, so deactivation only fully takes hold
-            // once the refresh tokens are gone and the current access token lapses.
+            // Both halves: the refresh tokens so no new access token can be minted, and the access
+            // tokens already out there so the account stops working now rather than when they lapse.
             if (!isActive)
             {
                 var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
+                await _accessTokens.RevokeUserAsync(userId, cancellationToken);
                 _logger.LogInformation("Deactivated user ID {UserId} and revoked {RevokedCount} refresh token(s)", userId, revoked);
 
                 await _eventBus.PublishAsync(new SecurityAlertEvent(

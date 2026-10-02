@@ -116,7 +116,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_TK_10_AccessTokenOfDeactivatedUser_RemainsValidUntilExpiry()
+    public async Task AUTH_TK_10_AccessTokenOfDeactivatedUser_IsRefusedOnEveryHost()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -129,16 +129,44 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         var userRef = await fixture.FindTenantMemberRefAsync(adminToken, tenantRef, user.Email);
         userRef.Should().NotBeNull();
 
+        // The management host validates the same token independently, so it is the one that proves
+        // the revocation travelled rather than being remembered by the host that recorded it.
+        var ownWorkspace = (await fixture.GetWorkspaceRefsAsync(user.Token)).First();
+        var managementEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{ownWorkspace}/registration-policies");
+        (await fixture.SendAsync(HttpMethod.Get, managementEndpoint, user.Token)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "the token works before the account is deactivated");
+
+        // iat has second resolution and a token from the revocation's own second is let through
+        // (see AccessTokenRevocation), so the token must be at least a second old to be revoked.
+        await Task.Delay(TimeSpan.FromSeconds(1.1));
         await fixture.SetUserActiveAsync(adminToken, tenantRef, userRef!.Value, isActive: false);
 
-        var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, user.Token);
+        (await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, user.Token)).StatusCode
+            .Should().Be(HttpStatusCode.Unauthorized,
+                "deactivation revokes the access tokens already issued, not just the refresh tokens");
+        (await EventuallyAsync(() => fixture.SendAsync(HttpMethod.Get, managementEndpoint, user.Token), HttpStatusCode.Unauthorized))
+            .Should().Be(HttpStatusCode.Unauthorized, "the revocation reaches the management host through Redis");
+    }
 
-        // Deactivation revokes refresh tokens; an access token is self-contained and nothing
-        // consults the database on the authentication path. The account is therefore reachable for
-        // up to the token's remaining hour. Documented deliberately — this is the window an
-        // operator disabling a compromised account is actually working with.
-        response.StatusCode.Should().Be(HttpStatusCode.OK,
-            "no revocation check exists on the access-token path");
+    /// <summary>
+    /// Another host learns of a revocation by pub/sub, so allow it a moment rather than racing the
+    /// message. Returns the last status seen.
+    /// </summary>
+    internal static async Task<HttpStatusCode> EventuallyAsync(Func<Task<HttpResponseMessage>> call, HttpStatusCode expected)
+    {
+        var status = HttpStatusCode.OK;
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            status = (await call()).StatusCode;
+            if (status == expected)
+            {
+                break;
+            }
+
+            await Task.Delay(100);
+        }
+
+        return status;
     }
 
     /// <summary>

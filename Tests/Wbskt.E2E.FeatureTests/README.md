@@ -5,7 +5,7 @@ Tests exercise the **public HTTP APIs** and the real `WbsktClient` SDK end-to-en
 
 ## Prerequisites
 
-All four dev hosts, RabbitMQ, and SQL Edge must be running **before** executing these tests.
+All four dev hosts, RabbitMQ, Redis and SQL Edge must be running **before** executing these tests.
 
 ### 1. Start infrastructure (Docker)
 
@@ -13,7 +13,10 @@ All four dev hosts, RabbitMQ, and SQL Edge must be running **before** executing 
 # From Scripts.bat — run SQL Edge and RabbitMQ containers
 docker run -e "ACCEPT_EULA=1" -e "MSSQL_SA_PASSWORD=Welcome1234" -p 1433:1433 -d mcr.microsoft.com/azure-sql-edge
 docker run -d --hostname wbskt-rabbit --name wbskt-rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+docker run -d --name wbskt-redis -p 6379:6379 redis:7-alpine
 ```
+
+The hosts find Redis through `ConnectionStrings__Redis=localhost:6379`. It carries access-token revocations between the auth and management hosts, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`) fail.
 
 ### 2. Deploy databases
 
@@ -42,7 +45,7 @@ Or, from the repo root, build and start all four in the background as Developmen
 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
 ```
 
-The hosts must run as **Development**. `appsettings.Development.json` is what lets a freshly registered user sign in without confirming an address, and what raises the auth host's credential rate limit (`RateLimiting:Authentication:PermitLimit`) from the production default of 10 a minute to 1000. That limit is per IP, every test shares one, so at 10 the suite starts failing with `429 Too Many Requests` within a few scenarios.
+The hosts must run as **Development**. `appsettings.Development.json` is what lets a freshly registered user sign in without confirming an address, and what raises the auth host's credential rate limit (`RateLimiting:Authentication:PermitLimit`) from the production default of 10 a minute to 1000, and its refresh limit (`RateLimiting:TokenRefresh:PermitLimit`) from 120 to 1000. That limit is per IP, every test shares one, so at 10 the suite starts failing with `429 Too Many Requests` within a few scenarios.
 
 ### 4. Run the E2E tests
 
@@ -62,11 +65,11 @@ E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
   dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~RateLimitingTests.AUTH_RL_01
 ```
 
-`E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with.
+`E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with. `AUTH_RL_04` exhausts the separate refresh bucket instead, so restart the auth host with `RateLimiting__TokenRefresh__PermitLimit=120` for it (`E2E_REFRESH_PERMIT_LIMIT` defaults to 120 and must match).
 
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs both passes on every pull request and push to master, against SQL Server and RabbitMQ service containers and the four hosts started with `start-hosts.sh`. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs both passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the four hosts started with `start-hosts.sh`. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
 
 ---
 

@@ -196,7 +196,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_OUT_08` | − | `logout-all` with no token | **401** |
 | `AUTH_OUT_09` | − | `logout-all` with an expired/garbage bearer token | **401** |
 | `AUTH_OUT_10` | + | `logout-all` does not affect other users | A second user's session survives |
-| `AUTH_OUT_11` | + | Access token remains usable after `logout-all` until expiry | Documents the intended window |
+| `AUTH_OUT_11` | − | Access tokens (the caller's and another device's) after `logout-all` | **401** — logout-all revokes issued access tokens too |
 | `AUTH_OUT_12` | + | `logout-all` is idempotent | Second call also **204** |
 
 ---
@@ -229,11 +229,11 @@ Run isolated — the partition key is the client IP and these will otherwise poi
 | `AUTH_TK_03` | − | Token signed with the wrong key | **401** |
 | `AUTH_TK_04` | − | Structurally valid but expired access token | **401** |
 | `AUTH_TK_05` | − | Token with the signature stripped (`alg: none`) | **401** |
-| `AUTH_TK_06` | − | **A client token** (from `POST /api/client-auth/login` on the management host) used against `GET /api/workspaces` | **401**. All hosts share one signing key and neither issuer nor audience is validated, so the signature *passes*; the request is currently refused only because the client token's subject is a Guid and `IdentityMiddleware` needs an int. This test pins that behaviour so the accident cannot silently become a privilege escalation |
+| `AUTH_TK_06` | − | **A client token** (from `POST /api/client-auth/login` on the management host) used against `GET /api/workspaces` | **401**. The client token is signed by the management host's key as issuer `wbskt-management` for audience `wbskt-socket`, so it fails on issuer, audience and signature. (Before the keys were split it was refused only because a client's subject is a Guid where `IdentityMiddleware` needs an int.) |
 | `AUTH_TK_07` | − | Client token against `GET /api/tenants` | **401** |
 | `AUTH_TK_08` | − | `Authorization` header without the `Bearer ` prefix | **401** |
 | `AUTH_TK_09` | + | Token from a *rotated* refresh still authorizes | **200** |
-| `AUTH_TK_10` | − | Access token belonging to a deactivated user | Still authorizes until expiry — assert and document; deactivation only kills refresh tokens |
+| `AUTH_TK_10` | − | Access token belonging to a deactivated user, on the auth and management hosts | **401** on both — deactivation revokes issued access tokens through Redis, not just refresh tokens |
 
 ---
 

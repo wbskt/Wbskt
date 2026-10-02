@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.IdentityModel.JsonWebTokens;
+using StackExchange.Redis;
 
 namespace Wbskt.Infrastructure.Security;
 
@@ -31,6 +34,36 @@ public static class JwtServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Per-user access-token revocation shared through Redis (<c>ConnectionStrings:Redis</c>), and the
+    /// access-token lifetime it is sized for. Hosts that also call <see cref="AddWbsktJwtBearer"/> refuse
+    /// revoked user tokens.
+    /// </summary>
+    public static IServiceCollection AddAccessTokenRevocation(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<AccessTokenOptions>(configuration.GetSection("Jwt"));
+        services.TryAddSingleton(TimeProvider.System);
+
+        var redis = configuration.GetConnectionString("Redis");
+        if (!string.IsNullOrWhiteSpace(redis))
+        {
+            // Not AbortOnConnectFail: Redis being down at startup must not take the host with it -
+            // revocation degrades to this host alone and the resync catches up once it is back.
+            var options = ConfigurationOptions.Parse(redis);
+            options.AbortOnConnectFail = false;
+            services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(options));
+        }
+
+        services.AddSingleton(sp => new AccessTokenRevocation(
+            sp.GetService<IConnectionMultiplexer>(),
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AccessTokenOptions>>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AccessTokenRevocation>>()));
+        services.AddSingleton<IAccessTokenRevocation>(sp => sp.GetRequiredService<AccessTokenRevocation>());
+        services.AddHostedService(sp => sp.GetRequiredService<AccessTokenRevocation>());
+        return services;
+    }
+
     /// <summary>The bearer scheme, validating against the registered <see cref="JwtTrust"/>.</summary>
     public static AuthenticationBuilder AddWbsktJwtBearer(this AuthenticationBuilder builder, Action<JwtBearerOptions>? configure = null)
     {
@@ -49,9 +82,32 @@ public static class JwtServiceCollectionExtensions
                 {
                     options.ConfigurationManager = trust.ConfigurationManager;
                 }
+
+                // Composed with, not replacing, whatever the host's own configure delegate set.
+                var validated = options.Events.OnTokenValidated;
+                options.Events.OnTokenValidated = async context =>
+                {
+                    await validated(context);
+                    if (context.Result is null && IsRevoked(context))
+                    {
+                        context.Fail("The access token has been revoked.");
+                    }
+                };
             });
 
         return builder;
+    }
+
+    private static bool IsRevoked(TokenValidatedContext context)
+    {
+        var revocation = context.HttpContext.RequestServices.GetService<IAccessTokenRevocation>();
+        if (revocation is null || context.SecurityToken is not JsonWebToken token)
+        {
+            return false;
+        }
+
+        var subject = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return int.TryParse(subject, out var userId) && revocation.IsRevoked(userId, token.IssuedAt);
     }
 
     /// <summary>Publishes this host's public keys, anonymously, for every host that validates its tokens.</summary>

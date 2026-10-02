@@ -36,12 +36,12 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
     }
 
     /// <summary>Hammers an endpoint past the permit limit and reports the statuses seen.</summary>
-    private async Task<IReadOnlyList<HttpStatusCode>> ExhaustAsync(Func<Task<HttpResponseMessage>> call)
+    private async Task<IReadOnlyList<HttpStatusCode>> ExhaustAsync(Func<Task<HttpResponseMessage>> call, int? permitLimit = null)
     {
         var statuses = new List<HttpStatusCode>();
 
         // A couple past the limit, so the transition is unambiguous rather than borderline.
-        for (var i = 0; i < E2EConfig.AuthPermitLimit + 3; i++)
+        for (var i = 0; i < (permitLimit ?? E2EConfig.AuthPermitLimit) + 3; i++)
         {
             statuses.Add((await call()).StatusCode);
         }
@@ -97,7 +97,8 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
     {
         SkipUnlessEnabled();
 
-        var statuses = await ExhaustAsync(() => fixture.RefreshAsync($"bogus-{Guid.NewGuid():N}"));
+        // Its own, larger bucket: with access tokens lasting minutes, refreshing is routine traffic.
+        var statuses = await ExhaustAsync(() => fixture.RefreshAsync($"bogus-{Guid.NewGuid():N}"), E2EConfig.RefreshPermitLimit);
 
         statuses.Should().Contain(HttpStatusCode.TooManyRequests);
     }
