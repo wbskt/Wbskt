@@ -87,6 +87,45 @@ public sealed class AccessTokenRevocationTests
         Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-1)));
     }
 
+    [Fact]
+    public async Task A_revocation_from_another_host_is_kept_for_that_hosts_token_lifetime_not_this_ones()
+    {
+        // The issuer's tokens live an hour; this validating host is configured for five minutes.
+        var (revocation, time) = Create(TimeSpan.FromMinutes(5));
+        long revokedAt = Now.ToUnixTimeSeconds();
+        revocation.OnMessage($"7:{revokedAt}:{revokedAt + (long)TimeSpan.FromMinutes(62).TotalSeconds}");
+
+        time.Advance(TimeSpan.FromMinutes(30));
+        await revocation.ResyncAsync();
+
+        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+    }
+
+    [Fact]
+    public async Task A_later_revocation_with_a_shorter_expiry_does_not_shorten_the_entry()
+    {
+        var (revocation, time) = Create(TimeSpan.FromMinutes(5));
+        long revokedAt = Now.ToUnixTimeSeconds();
+        revocation.OnMessage($"7:{revokedAt}:{revokedAt + 3600}");
+        revocation.OnMessage($"7:{revokedAt + 1}:{revokedAt + 60}");
+
+        time.Advance(TimeSpan.FromMinutes(30));
+        await revocation.ResyncAsync();
+
+        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+    }
+
+    [Fact]
+    public void A_malformed_message_is_ignored()
+    {
+        var (revocation, _) = Create();
+
+        revocation.OnMessage("7:not-a-number:1");
+        revocation.OnMessage("garbage");
+
+        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+    }
+
     private static (AccessTokenRevocation Revocation, ManualTime Time) Create(TimeSpan? lifetime = null)
     {
         var time = new ManualTime(Now);
