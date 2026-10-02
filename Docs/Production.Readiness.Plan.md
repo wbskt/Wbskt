@@ -567,6 +567,10 @@ on the engine's `healthcheck:` block before changing it.
 
 **Effort.** Days to weeks depending on **D2**.
 
+**Status.** D2 was answered *self-hosted* (2026-10-02), so this item is deliberately deferred and was
+left out of the Phase 2 PR. The engine replica work is independent of D2 and can still be picked up
+on its own.
+
 ---
 
 ## Phase 3 — Market fit and revenue
@@ -684,7 +688,7 @@ Ask before guessing — each changes the shape of the work.
 | | Decision | Blocks | Notes |
 |---|---|---|---|
 | **D1** | Where does the integration master key live — configuration, cloud KMS, or a secrets manager? | P1-3 | Config is simplest and rotates worst. A KMS makes P2-5's managed-infra move easier. |
-| **D2** | Managed SQL/RabbitMQ, or stay self-hosted? | P2-5, and retroactively F4 | Phase 0 chose self-hosted with nightly backups. Revisit before the second customer. |
+| **D2** | Managed SQL/RabbitMQ, or stay self-hosted? | P2-5, and retroactively F4 | **Answered 2026-10-02: stay self-hosted.** P2-5 stays documented future work; the nightly verified, off-box backups (Phase 0) and P2-1's backup and dead-letter alerts carry the risk until it is revisited. |
 | **D3** | What may an unverified account do — nothing, or read-only until verified? | P1-2 | Affects registration UX and the console. |
 | **D4** | Audit log retention, and who can read it? | P1-5 | `HistoryRetentionGc` is the existing model for the job. |
 | **D5** | Does the positioning hold — connected-device automation, integrators and OEMs first? | All of Phase 3 | If it does, P3-1 outranks everything else in that phase. |
