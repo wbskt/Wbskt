@@ -46,10 +46,6 @@
             <Link>rabbitmq.json</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
-        <Content Include="..\..\Config\jwt.json">
-            <Link>jwt.json</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
         <Content Include="..\..\Config\email.json">
             <Link>email.json</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

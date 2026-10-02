@@ -65,7 +65,7 @@ internal sealed class ClientAuthService : IClientAuthService
                 new Claim("type", "client")
             };
 
-            var token = _jwtService.GenerateToken(claims, TimeSpan.FromHours(1));
+            var token = _jwtService.GenerateToken(claims, JwtAudiences.Socket, TimeSpan.FromHours(1));
             _logger.LogInformation("Client logged in successfully. ClientRefId: {ClientRefId}, ClientId: {ClientId}", request.ClientRefId, client.Id);
 
             return Result<ClientLoginResponse>.Success(new ClientLoginResponse(token, 3600));

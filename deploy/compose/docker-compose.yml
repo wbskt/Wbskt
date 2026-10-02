@@ -123,7 +123,9 @@ services:
     environment:
       <<: *host-env
       ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
-      Jwt__Key: ${JWT_KEY}
+      # Signs user tokens. Its public half is served at /.well-known/jwks.json for management.
+      Jwt__SigningKey: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required - see .env.example}
+      Jwt__AdditionalPublicKeys__0: ${AUTH_JWT_PREVIOUS_PUBLIC_KEY:-}
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
       # Mail. Leave SMTP_HOST empty and the host logs an error at startup and sends nothing - which,
       # because sign-in requires a confirmed address, means no new account can be used. The links in
@@ -170,7 +172,10 @@ services:
       <<: *host-env
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       ConnectionStrings__Redis: redis:6379
-      Jwt__Key: ${JWT_KEY}
+      # Signs client tokens for the socket host, and validates user tokens against auth's public keys.
+      Jwt__SigningKey: ${MANAGEMENT_JWT_SIGNING_KEY:?MANAGEMENT_JWT_SIGNING_KEY is required - see .env.example}
+      Jwt__AdditionalPublicKeys__0: ${MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY:-}
+      Jwt__TrustedJwksUrl: http://auth:8080/.well-known/jwks.json
       Services__Auth: http://auth:8080
       Services__WorkflowEngine: http://traefik:8081
       Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY}
@@ -217,7 +222,8 @@ services:
         HOST_DLL: Wbskt.Socket.Host.dll
     environment:
       <<: *host-env
-      Jwt__Key: ${JWT_KEY}
+      # Signs nothing; validates client tokens against management's public keys, fetched on first use.
+      Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
     volumes:
       - ../config:/Config:ro
     healthcheck:

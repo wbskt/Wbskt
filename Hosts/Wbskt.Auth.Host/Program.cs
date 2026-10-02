@@ -42,14 +42,16 @@ public static class Program
             ContentRootPath = Directory.GetCurrentDirectory()
         });
         
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "jwt.json", "email.json");
+        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "email.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
         builder.Services.AddSingleton<AuthMetrics>();
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
-        builder.Services.AddScoped<IJwtService, JwtService>();
+        // Signs user tokens and is the only host that can; validates them with its own keys.
+        builder.Services.AddWbsktTokenIssuer(JwtIssuers.Auth);
+        builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IManagementService, ManagementService>();
@@ -83,24 +85,12 @@ public static class Program
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
 
-        var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>
         {
             x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
             x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
         })
-        .AddJwtBearer(x =>
-        {
-            x.RequireHttpsMetadata = false;
-            x.SaveToken = true;
-            x.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(key),
-                ValidateIssuer = false,
-                ValidateAudience = false
-            };
-        });
+        .AddWbsktJwtBearer();
 
         builder.Services.AddAuthorization(options =>
         {
@@ -207,6 +197,7 @@ public static class Program
         // can authenticate with a bearer token.
         app.MapPrometheusScrapingEndpoint().RequireAuthorization();
         app.MapWbsktHealthChecks();
+        app.MapWbsktJwks();
         app.MapControllers();
 
         await app.RunAsync();

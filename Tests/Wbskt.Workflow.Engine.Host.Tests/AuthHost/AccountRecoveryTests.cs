@@ -367,7 +367,7 @@ public sealed class AccountRecoveryTests
         public Harness(bool requireVerifiedEmail = true)
         {
             var jwt = new Mock<IJwtService>();
-            jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<TimeSpan>())).Returns("access-token");
+            jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns("access-token");
 
             Service = new AuthService(
                 Provider.Object,

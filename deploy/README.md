@@ -129,8 +129,8 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER   # log out/in, or keep using sudo
 
 # Checkout + registry login + .env - see One-time setup above. Fill in DOMAIN, ACME_EMAIL, and
-# generate real secrets for SQL_SA_PASSWORD, RABBITMQ_PASSWORD, JWT_KEY, ENGINE_INBOUND_API_KEY,
-# CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
+# generate real secrets for SQL_SA_PASSWORD, RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY,
+# AUTH_JWT_SIGNING_KEY and MANAGEMENT_JWT_SIGNING_KEY (see JWT signing keys below), CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
 # ACME_CASERVER to the Let's Encrypt staging directory first (see .env.example) to avoid burning
 # production rate limits while you're still iterating.
 # Set IMAGE_TAG to the sha-<short> you want; deploy.sh rewrites it from then on.
@@ -184,6 +184,43 @@ Nothing stops a deploy that is missing it, so check it yourself:
 `Auth:Email:RequireVerifiedEmailForSignIn=false` turns the requirement off, and the auth host logs
 an error when it is off. It is meant for local development. Do not use it to get around a missing
 relay in production.
+
+### JWT signing keys
+
+Two hosts sign tokens, each with its own EC P-256 key, and neither key leaves its host:
+
+| Key | Signs | Validated by |
+|---|---|---|
+| `AUTH_JWT_SIGNING_KEY` | user tokens (issuer `wbskt-auth`, audience `wbskt-api`) | auth itself; management, via `http://auth:8080/.well-known/jwks.json` |
+| `MANAGEMENT_JWT_SIGNING_KEY` | device tokens (issuer `wbskt-management`, audience `wbskt-socket`) | socket, via `http://management:8080/.well-known/jwks.json` |
+
+So a user token is useless at `/ws` and a device token is useless at the API, and the socket host
+holds no secret at all. Generate each key with
+
+```bash
+openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0
+```
+
+Compose refuses to start without both. Replicas of one host share its key.
+
+**Upgrading from the shared `JWT_KEY`.** Set both keys and delete `JWT_KEY`. Every access token
+issued before the deploy stops validating. The console refreshes on the 401 (refresh tokens are
+not JWTs and are unaffected), and the device SDK logs in afresh on every connect, so nobody is
+signed out; expect one burst of 401s in the logs.
+
+**Rotating a key.** Validators refetch the issuer's keys when they see a token signed by one they do
+not know, so only the issuing host restarts:
+
+```bash
+# 1. Keep the old key's public half published while its tokens are still live.
+echo "$AUTH_JWT_SIGNING_KEY" | base64 -d | openssl ec -pubout 2>/dev/null | base64 -w0   # -> AUTH_JWT_PREVIOUS_PUBLIC_KEY
+# 2. Put a freshly generated key in AUTH_JWT_SIGNING_KEY, then restart auth alone.
+docker compose up -d --no-deps auth
+# 3. Once the longest-lived token signed by the old key has expired, clear
+#    AUTH_JWT_PREVIOUS_PUBLIC_KEY and restart auth again.
+```
+
+The same steps apply to management with the `MANAGEMENT_` variables.
 
 ## Incremental deployment (already running, you've changed something)
 

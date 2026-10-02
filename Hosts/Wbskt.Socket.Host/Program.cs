@@ -31,14 +31,15 @@ public static class Program
             ContentRootPath = Directory.GetCurrentDirectory()
         });
         
-        builder.AddSharedConfiguration("serilog.json", "rabbitmq.json", "jwt.json");
+        builder.AddSharedConfiguration("serilog.json", "rabbitmq.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
         
         // Add services to the container.
         builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
         builder.Services.AddSingleton<IRevocationCache, RevocationCache>();
-        builder.Services.AddScoped<IJwtService, JwtService>();
+        // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
+        builder.Services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
 
         // Event Bus — per-instance fan-out so every socket instance sees every client event

@@ -46,13 +46,16 @@ public static class Program
             ContentRootPath = Directory.GetCurrentDirectory()
         });
         
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "jwt.json");
+        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
 
         // Add services to the container.
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
-        builder.Services.AddScoped<IJwtService, JwtService>();
+        // Signs client (device) tokens for the socket host; accepts user tokens signed by the auth host,
+        // whose public keys it fetches from Jwt:TrustedJwksUrl.
+        builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);
+        builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
@@ -104,23 +107,13 @@ public static class Program
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
 
-        var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
         builder.Services.AddAuthentication(x =>
         {
             x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
             x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
         })
-        .AddJwtBearer(x =>
+        .AddWbsktJwtBearer(x =>
         {
-            x.RequireHttpsMetadata = false;
-            x.SaveToken = true;
-            x.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(key),
-                ValidateIssuer = false,
-                ValidateAudience = false
-            };
             x.Events = new JwtBearerEvents
             {
                 OnMessageReceived = context =>
@@ -256,6 +249,7 @@ public static class Program
         app.UseMiddleware<IdentityMiddleware>();
         app.UseAuthorization();
         app.MapWbsktHealthChecks();
+        app.MapWbsktJwks();
 
         app.MapControllers();
         app.MapHub<NotificationHub>("/hubs/notifications");
