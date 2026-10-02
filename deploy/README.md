@@ -130,8 +130,9 @@ sudo usermod -aG docker $USER   # log out/in, or keep using sudo
 
 # Checkout + registry login + .env - see One-time setup above. Fill in DOMAIN, ACME_EMAIL, and
 # generate real secrets for SQL_SA_PASSWORD, RABBITMQ_PASSWORD, JWT_KEY, ENGINE_INBOUND_API_KEY,
-# CONSOLE_ORIGIN. Consider setting ACME_CASERVER to the Let's Encrypt staging directory first
-# (see .env.example) to avoid burning production rate limits while you're still iterating.
+# CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
+# ACME_CASERVER to the Let's Encrypt staging directory first (see .env.example) to avoid burning
+# production rate limits while you're still iterating.
 # Set IMAGE_TAG to the sha-<short> you want; deploy.sh rewrites it from then on.
 cd ~/Wbskt/deploy/compose
 
@@ -159,6 +160,30 @@ Then bring up the console, which is already published by the Dashboard repo:
 ```bash
 docker compose pull console && docker compose up -d --no-build console
 ```
+
+### Mail relay: required before production
+
+**Production needs `SMTP_HOST` and `SMTP_FROM_ADDRESS` set in `compose/.env`.** Sign-in refuses an
+email address that has not been confirmed, and the only way to confirm one is a link the auth host
+mails out. With no relay, the stack starts and reports healthy, registration succeeds, and nobody
+who registers can ever sign in. Invitations and password resets fail the same way.
+
+Nothing stops a deploy that is missing it, so check it yourself:
+
+1. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USE_STARTTLS`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+   `SMTP_FROM_ADDRESS` and `SMTP_FROM_NAME` (see the mail block in `.env.example`).
+   `SMTP_FROM_ADDRESS` must be an address the relay will send as. The auth host treats mail as
+   unconfigured unless both it and `SMTP_HOST` are set.
+2. `CONSOLE_ORIGIN` must be the public console URL, because every link in that mail points there.
+3. Restart auth (`docker compose up -d --no-build auth`) and check that its log does **not**
+   contain `No SMTP relay is configured`. The host logs that error at startup when either value is
+   missing.
+4. Register a throwaway account on the console, confirm that the verification mail arrives and its
+   link opens the console, and sign in.
+
+`Auth:Email:RequireVerifiedEmailForSignIn=false` turns the requirement off, and the auth host logs
+an error when it is off. It is meant for local development. Do not use it to get around a missing
+relay in production.
 
 ## Incremental deployment (already running, you've changed something)
 
@@ -293,7 +318,7 @@ lock every existing user out of an account they have been using.
 unconfirmed address, and confirming one requires mail the auth host can only send through a relay.
 With none configured it logs an error at startup saying so, and accounts created in the meantime
 stay unusable until their owner asks for a fresh link through `POST /api/auth/resend-verification`.
-See the mail block in `.env.example`.
+See [Mail relay: required before production](#mail-relay-required-before-production).
 
 ## SQL placement
 
@@ -353,6 +378,11 @@ deploy/scripts/restore.sh --file <path> --target Wbskt.Database --force
 
 `restore.sh` verifies the backup before touching any database, and redirects the restored files so
 a copy restored under a scratch name cannot collide with the live database's files.
+
+With `--force`, the target is taken `SINGLE_USER WITH ROLLBACK IMMEDIATE` immediately before the
+restore, which disconnects the hosts. The restored database comes back `MULTI_USER`, and so does
+the original if the restore fails. To be sure no host reconnects in between, stop them first
+(`docker compose stop auth management socket engine`) and start them again afterwards.
 
 **Rehearse it at least once, and confirm the row counts.** Until a restore has actually been
 performed, what exists is a backup script, not a backup.
