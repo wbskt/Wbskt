@@ -5,6 +5,17 @@ Post-Deployment Script Template
 --------------------------------------------------------------------------------------
 */
 
+-- Users.IsEmailVerified backfill: the accounts the pre-deployment script recorded, from before the
+-- column existed, are marked verified, and the scratch table goes. Through EXEC because the table is
+-- not part of the model.
+IF OBJECT_ID('dbo.__EmailVerifiedBackfill', 'U') IS NOT NULL
+BEGIN
+    PRINT 'Backfilling dbo.Users.IsEmailVerified for accounts that predate it.';
+    EXEC('UPDATE u SET IsEmailVerified = 1 FROM dbo.Users u JOIN dbo.__EmailVerifiedBackfill b ON b.Id = u.Id;');
+    EXEC('DROP TABLE dbo.__EmailVerifiedBackfill;');
+END
+GO
+
 -- DEFAULT Tenant (WITH enforced ID) - must exist before Roles/Groups/Workspaces (TenantId default = 1)
 SET IDENTITY_INSERT dbo.Tenants ON;
 GO
