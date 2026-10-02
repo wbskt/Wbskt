@@ -53,13 +53,19 @@ bytes, while the C# side hashes Encoding.UTF8.GetBytes. The secrets are base64 a
 ASCII, so the VARCHAR conversion makes the two byte-identical. Without it every device on the
 platform fails to authenticate at once, and the plaintext needed to diagnose it is already gone.
 ClientSecretHashingIntegrationTests pins the two against each other.
+
+The guard is on Secret still existing, not on SecretHash being absent. The three steps are not
+atomic, so a run that dies after adding SecretHash leaves a database where it exists but is
+partly NULL; guarding on its absence would skip the backfill on the re-run and let the diff drop
+the plaintext with nothing hashed. Recomputing every row from Secret is idempotent, so re-running
+the whole block is always safe for as long as Secret is there to read.
 */
 IF COL_LENGTH('dbo.Clients', 'Secret') IS NOT NULL
-   AND COL_LENGTH('dbo.Clients', 'SecretHash') IS NULL
 BEGIN
-    PRINT '>>> Clients: adding SecretHash and backfilling it from Secret';
+    PRINT '>>> Clients: backfilling SecretHash from Secret';
 
-    EXEC sp_executesql N'ALTER TABLE dbo.Clients ADD SecretHash VARBINARY(32) NULL;';
+    IF COL_LENGTH('dbo.Clients', 'SecretHash') IS NULL
+        EXEC sp_executesql N'ALTER TABLE dbo.Clients ADD SecretHash VARBINARY(32) NULL;';
 
     EXEC sp_executesql N'UPDATE dbo.Clients
                          SET SecretHash = HASHBYTES(''SHA2_256'', CONVERT(VARCHAR(255), Secret));';
@@ -71,4 +77,16 @@ BEGIN
 END
 ELSE
     PRINT '>>> Clients: no Secret column to migrate';
+GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: drop Client_Verify
+--------------------------------------------------------------------------------------
+Client_Verify was replaced by Client_GetCredentialBy_RefId when secrets moved to SecretHash, and
+its file removed from the project. migrate.sh leaves DropObjectsNotInSource at its default of False, so the
+diff never removes it: every migrated database would keep a procedure that reads the dropped
+Clients.Secret column. Nothing calls it, and leaving it invites a later publish to fail validating
+it. Dropped here explicitly, which is a no-op on a fresh database.
+*/
+DROP PROCEDURE IF EXISTS dbo.Client_Verify;
 GO
