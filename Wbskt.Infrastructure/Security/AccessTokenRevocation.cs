@@ -29,17 +29,21 @@ public interface IAccessTokenRevocation
 /// </summary>
 /// <remarks>
 /// <para>
-/// The watermarks live in one Redis sorted set (member: user id, score: unix seconds) and in a local
-/// copy on every validating host, so the check on the request path is a dictionary lookup and Redis
-/// being slow or down never adds latency or fails a request. A revocation is published as well as
-/// stored, so other hosts apply it within moments; a periodic resync from the set covers anything
-/// published while a subscriber was disconnected, and a host that starts later picks up the lot.
+/// The watermarks live in one Redis sorted set and in a local copy on every validating host, so the
+/// check on the request path is a dictionary lookup and Redis being slow or down never adds latency
+/// or fails a request. A revocation is published as well as stored, so other hosts apply it within
+/// moments; a periodic resync from the set covers anything published while a subscriber was
+/// disconnected, and a host that starts later picks up the lot.
 /// </para>
 /// <para>
-/// An entry is only useful while a token issued before it could still be alive, so entries older
-/// than the token lifetime plus clock skew are pruned, here and in Redis. Revocation is best effort:
-/// if Redis is unreachable the refresh tokens are still revoked in the database, and the cost is
-/// that already-issued access tokens live out their (short) lifetime.
+/// An entry is only useful while a token issued before it could still be alive. How long that is
+/// depends on the lifetime of the tokens being revoked, which only the issuing host knows - a host
+/// that merely validates them may be configured differently, or not at all. So the host recording a
+/// revocation (always the issuer: the auth host) stamps it with an expiry of its own token lifetime
+/// plus clock skew, and every host, here and in Redis, prunes by that stamp rather than by its own
+/// configuration. In the set the member is <c>userId:watermark</c> and the score is the expiry.
+/// Revocation is best effort: if Redis is unreachable the refresh tokens are still revoked in the
+/// database, and the cost is that already-issued access tokens live out their (short) lifetime.
 /// </para>
 /// <para>
 /// <c>iat</c> has second resolution, so a token issued in the same second as the revocation cannot be
@@ -59,7 +63,7 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     private readonly TimeProvider _time;
     private readonly ILogger<AccessTokenRevocation> _logger;
     private readonly TimeSpan _retention;
-    private readonly ConcurrentDictionary<int, long> _watermarks = new();
+    private readonly ConcurrentDictionary<int, Watermark> _watermarks = new();
     private CancellationTokenSource? _stopping;
     private Task? _resync;
 
@@ -74,7 +78,8 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     public async Task RevokeUserAsync(int userId, CancellationToken cancellationToken = default)
     {
         long now = _time.GetUtcNow().ToUnixTimeSeconds();
-        Apply(userId, now);
+        long expiresAt = now + (long)_retention.TotalSeconds;
+        Apply(userId, new Watermark(now, expiresAt));
 
         if (_redis is null)
         {
@@ -84,8 +89,8 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         try
         {
             IDatabase db = _redis.GetDatabase();
-            await db.SortedSetAddAsync(SetKey, userId, now);
-            await db.PublishAsync(RedisChannel.Literal(Channel), $"{userId}:{now}");
+            await db.SortedSetAddAsync(SetKey, $"{userId}:{now}", expiresAt);
+            await db.PublishAsync(RedisChannel.Literal(Channel), $"{userId}:{now}:{expiresAt}");
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)
         {
@@ -95,12 +100,12 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
 
     public bool IsRevoked(int userId, DateTimeOffset issuedAt)
     {
-        if (!_watermarks.TryGetValue(userId, out long watermark))
+        if (!_watermarks.TryGetValue(userId, out Watermark? watermark))
         {
             return false;
         }
 
-        return issuedAt.ToUnixTimeSeconds() < watermark;
+        return issuedAt.ToUnixTimeSeconds() < watermark.RevokedAt;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -140,13 +145,13 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
 
     internal async Task ResyncAsync()
     {
-        long cutoff = _time.GetUtcNow().Subtract(_retention).ToUnixTimeSeconds();
+        long now = _time.GetUtcNow().ToUnixTimeSeconds();
 
-        foreach ((int userId, long watermark) in _watermarks)
+        foreach ((int userId, Watermark watermark) in _watermarks)
         {
-            if (watermark < cutoff)
+            if (watermark.ExpiresAt < now)
             {
-                _watermarks.TryRemove(new KeyValuePair<int, long>(userId, watermark));
+                _watermarks.TryRemove(new KeyValuePair<int, Watermark>(userId, watermark));
             }
         }
 
@@ -156,12 +161,12 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         }
 
         IDatabase db = _redis.GetDatabase();
-        await db.SortedSetRemoveRangeByScoreAsync(SetKey, double.NegativeInfinity, cutoff, Exclude.Stop);
-        foreach (SortedSetEntry entry in await db.SortedSetRangeByScoreWithScoresAsync(SetKey, cutoff, double.PositiveInfinity))
+        await db.SortedSetRemoveRangeByScoreAsync(SetKey, double.NegativeInfinity, now, Exclude.Stop);
+        foreach (SortedSetEntry entry in await db.SortedSetRangeByScoreWithScoresAsync(SetKey, now, double.PositiveInfinity))
         {
-            if (int.TryParse(entry.Element.ToString(), out int userId))
+            if (TryParse(entry.Element.ToString(), out int userId, out long revokedAt))
             {
-                Apply(userId, (long)entry.Score);
+                Apply(userId, new Watermark(revokedAt, (long)entry.Score));
             }
         }
     }
@@ -190,18 +195,34 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         }
     }
 
-    private void OnMessage(RedisValue message)
+    internal void OnMessage(RedisValue message)
     {
         string? text = message;
-        int separator = text?.IndexOf(':') ?? -1;
-        if (separator > 0
-            && int.TryParse(text.AsSpan(0, separator), out int userId)
-            && long.TryParse(text.AsSpan(separator + 1), out long watermark))
+        int last = text?.LastIndexOf(':') ?? -1;
+        if (last > 0
+            && TryParse(text.AsSpan(0, last), out int userId, out long revokedAt)
+            && long.TryParse(text.AsSpan(last + 1), out long expiresAt))
         {
-            Apply(userId, watermark);
+            Apply(userId, new Watermark(revokedAt, expiresAt));
         }
     }
 
-    private void Apply(int userId, long watermark) =>
-        _watermarks.AddOrUpdate(userId, watermark, (_, existing) => Math.Max(existing, watermark));
+    /// <summary>Parses <c>userId:revokedAt</c>.</summary>
+    private static bool TryParse(ReadOnlySpan<char> text, out int userId, out long revokedAt)
+    {
+        int separator = text.IndexOf(':');
+        revokedAt = 0;
+        userId = 0;
+        return separator > 0
+            && int.TryParse(text[..separator], out userId)
+            && long.TryParse(text[(separator + 1)..], out revokedAt);
+    }
+
+    private void Apply(int userId, Watermark watermark) =>
+        _watermarks.AddOrUpdate(userId, watermark, (_, existing) => new Watermark(
+            Math.Max(existing.RevokedAt, watermark.RevokedAt),
+            Math.Max(existing.ExpiresAt, watermark.ExpiresAt)));
+
+    /// <summary>Tokens issued before <see cref="RevokedAt"/> are refused until <see cref="ExpiresAt"/>, both unix seconds.</summary>
+    private sealed record Watermark(long RevokedAt, long ExpiresAt);
 }
