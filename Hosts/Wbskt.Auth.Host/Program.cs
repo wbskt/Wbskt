@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
-using OpenTelemetry.Metrics;
 using Serilog;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Extensions;
@@ -22,6 +21,7 @@ using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Infrastructure.Telemetry;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 
@@ -71,11 +71,7 @@ public static class Program
         builder.Services.AddSingleton<IAuthMailer, QueuedAuthMailer>();
         builder.Services.AddHostedService<OutboundMailDispatcher>();
 
-        builder.Services.AddOpenTelemetry()
-            .WithMetrics(metrics => metrics
-                .AddMeter(AuthMetrics.MeterName)
-                .AddAspNetCoreInstrumentation()
-                .AddPrometheusExporter());
+        builder.AddWbsktTelemetry(AuthMetrics.MeterName);
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>(ReferenceType.Workspace);
@@ -208,10 +204,6 @@ public static class Program
         // After UseForwardedHeaders so the partition key is the real client IP, not the proxy's.
         app.UseRateLimiter();
 
-        // Auth is publicly routed (auth.<domain>), so an anonymous /metrics would be scrapeable
-        // from the internet. Nothing in the stack scrapes it today; a future in-network Prometheus
-        // can authenticate with a bearer token.
-        app.MapPrometheusScrapingEndpoint().RequireAuthorization();
         app.MapWbsktHealthChecks();
         app.MapWbsktJwks();
         app.MapControllers();

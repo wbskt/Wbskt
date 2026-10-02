@@ -29,6 +29,8 @@ using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Abstraction.Validation;
 using Wbskt.Workflow.Extensions;
+using Wbskt.Infrastructure.Telemetry;
+
 namespace Wbskt.Management.Host;
 
 public static class Program
@@ -49,6 +51,7 @@ public static class Program
         builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
+        builder.AddWbsktTelemetry();
 
         // Add services to the container.
         builder.Services.AddSingleton<IIdentityService, IdentityService>();

@@ -147,6 +147,16 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         return result is long count ? count : Convert.ToInt64(result ?? 0L);
     }
 
+    public async Task<long> CountOverdueAsync(DateTime cutoffUtc, CancellationToken ct)
+    {
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Bookmark_CountOverdue",
+            p => p.AddWithValue("@Cutoff", cutoffUtc),
+            ct
+        );
+        return result is long count ? count : Convert.ToInt64(result ?? 0L);
+    }
+
     public async Task<int> DeleteOrphansAsync(CancellationToken ct)
     {
         return await ExecuteNonQueryResultAsync(

@@ -155,18 +155,18 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_RL_08_MetricsRequiresAuthorization()
+    public async Task AUTH_RL_08_MetricsAreNotServedAnonymously()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var response = await fixture.SendAsync(HttpMethod.Get, ServicesFixture.AuthUrl("/metrics"));
 
-        // This host is publicly routed, so an anonymous scrape endpoint would be world-readable.
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // This host is publicly routed, so a scrape endpoint here would be world-readable.
+        response.StatusCode.Should().NotBe(HttpStatusCode.OK);
     }
 
     [SkippableFact]
-    public async Task AUTH_RL_09_MetricsIsReadableWithAToken()
+    public async Task AUTH_RL_09_ThereIsNoScrapeEndpointEvenWithAToken()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -175,7 +175,8 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
         var response = await fixture.SendAsync(
             HttpMethod.Get, ServicesFixture.AuthUrl("/metrics"), user.Token);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.Content.ReadAsStringAsync()).Should().NotBeNullOrWhiteSpace();
+        // Metrics leave by OTLP push to the collector on the backend network; nothing is scraped
+        // from a host, so there is nothing to expose on a public router.
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

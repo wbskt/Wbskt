@@ -24,4 +24,7 @@ public interface IBookmarkProvider
     Task DeleteAllByRunIdAsync(int runId, CancellationToken ct);
     Task<IReadOnlyDictionary<string, long>> CountGroupedByWakeKindAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyDictionary<string, long>>(new Dictionary<string, long>());
+
+    /// <summary>Bookmarks that fell due at or before <paramref name="cutoffUtc"/> and have not been claimed.</summary>
+    Task<long> CountOverdueAsync(DateTime cutoffUtc, CancellationToken ct) => Task.FromResult(0L);
 }
