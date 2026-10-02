@@ -20,11 +20,16 @@ public static class DatabaseDeployer
     /// are separate databases in every environment, so a fixture deploys whichever one its tests
     /// address rather than both.
     /// </param>
+    /// <param name="blockOnPossibleDataLoss">
+    /// True to publish the way the production migrator does, which refuses a change that could drop
+    /// data. Test fixtures start from an empty database, where it makes no difference.
+    /// </param>
     public static async Task DeployAsync(
         string masterConnectionString,
         string dbName,
         string dbConnectionString,
-        string projectName = WorkflowProject)
+        string projectName = WorkflowProject,
+        bool blockOnPossibleDataLoss = false)
     {
         await CreateDatabaseAsync(masterConnectionString, dbName);
 
@@ -35,7 +40,7 @@ public static class DatabaseDeployer
             "/Action:Publish",
             $"/SourceFile:\"{dacpacPath}\"",
             $"/TargetConnectionString:\"{dbConnectionString}\"",
-            "/p:BlockOnPossibleDataLoss=False"
+            $"/p:BlockOnPossibleDataLoss={blockOnPossibleDataLoss}"
         ]);
 
         var psi = new ProcessStartInfo(sqlPackageExe, args)
