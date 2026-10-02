@@ -11,24 +11,28 @@ BEGIN
 END
 GO
 
--- Users.IsEmailVerified: added here rather than left to the schema compare so that existing accounts
--- can be backfilled in the same step that creates the column.
+-- Users.IsEmailVerified: existing accounts are backfilled to verified, exactly once.
 --
 -- The column defaults to 0, because that is right for every account created from now on. Accounts
 -- that already existed were created when registration proved nothing about the address, so switching
 -- sign-in to require verification would lock every one of them out of an account they have been
--- using. They are set to 1 exactly once, here, at the moment the column appears.
+-- using.
+--
+-- The column itself is left to the schema compare. Adding it here instead broke the first publish
+-- against any database that predates it: sqlpackage computes its plan before this script runs, so the
+-- plan still rebuilt dbo.Users to add the column and collided with the one added here (Msg 2714 on
+-- DF_Users_IsEmailVerified), leaving the table's foreign keys dropped. So this script only records
+-- which accounts exist at the moment the column is missing, in a scratch table the post-deployment
+-- script consumes and drops once the column is there.
 --
 -- Guarded on the table existing as well as the column, because on a fresh database this script runs
--- before Users.sql has created anything.
+-- before Users.sql has created anything. Everything goes through EXEC so the DACPAC tool does not try
+-- to model the scratch table (SQL70645).
 IF OBJECT_ID('dbo.Users', 'U') IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Users') AND name = 'IsEmailVerified')
+   AND OBJECT_ID('dbo.__EmailVerifiedBackfill', 'U') IS NULL
 BEGIN
-    PRINT 'Adding dbo.Users.IsEmailVerified and backfilling existing accounts to verified.';
-    -- Both statements go through EXEC: the DACPAC tool parses this script when it builds the model,
-    -- and a literal ALTER TABLE ... ADD here makes it try to model the change (SQL70645). The UPDATE
-    -- needs it regardless, to parse before the column exists.
-    EXEC('ALTER TABLE dbo.Users ADD IsEmailVerified BIT NOT NULL CONSTRAINT DF_Users_IsEmailVerified DEFAULT 0;');
-    EXEC('UPDATE dbo.Users SET IsEmailVerified = 1;');
+    PRINT 'Recording existing accounts to backfill dbo.Users.IsEmailVerified once the column exists.';
+    EXEC('SELECT Id INTO dbo.__EmailVerifiedBackfill FROM dbo.Users;');
 END
 GO
