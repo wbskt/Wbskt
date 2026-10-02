@@ -87,7 +87,7 @@ public static class Program
         // leadership is asserted explicitly rather than inferred from it.
         builder.Services.AddHealthChecks()
             .AddSqlServerCheck("DefaultConnection")
-            .AddCheck<LeadershipHealthCheck>("engine-leadership", tags: ["ready"]);
+            .AddCheck<LeadershipHealthCheck>("engine-leadership", tags: [HealthCheckExtensions.ReadyTag]);
 
         builder.Services.AddAuthorization();
         builder.Services.AddControllers();

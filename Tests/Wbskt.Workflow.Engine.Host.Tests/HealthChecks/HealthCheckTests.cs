@@ -1,4 +1,9 @@
+using System.Net;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Workflow.Engine;
@@ -97,5 +102,56 @@ public sealed class SqlServerHealthCheckTests
         HealthCheckResult result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
+    }
+}
+
+/// <summary>
+/// The readiness endpoint as mapped, served over a real socket. Only checks carrying
+/// <see cref="HealthCheckExtensions.ReadyTag"/> may gate it: readiness drives Traefik's routing and
+/// deploy.sh, so a check registered for any other reason must not be able to take an instance out.
+/// </summary>
+public sealed class ReadinessEndpointTests
+{
+    [Fact]
+    public async Task An_untagged_failing_check_does_not_fail_readiness()
+    {
+        await using WebApplication app = await StartAsync(checks => checks
+            .AddCheck("diagnostic", () => HealthCheckResult.Unhealthy())
+            .AddCheck("dependency", () => HealthCheckResult.Healthy(), tags: [HealthCheckExtensions.ReadyTag]));
+
+        HttpResponseMessage response = await GetAsync(app, HealthCheckExtensions.ReadinessPath);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>The control: the filter must not have switched the endpoint off altogether.</summary>
+    [Fact]
+    public async Task A_ready_tagged_failing_check_fails_readiness()
+    {
+        await using WebApplication app = await StartAsync(checks => checks
+            .AddCheck("dependency", () => HealthCheckResult.Unhealthy(), tags: [HealthCheckExtensions.ReadyTag]));
+
+        HttpResponseMessage response = await GetAsync(app, HealthCheckExtensions.ReadinessPath);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    private static async Task<WebApplication> StartAsync(Action<IHealthChecksBuilder> configure)
+    {
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Logging.ClearProviders();
+        configure(builder.Services.AddHealthChecks());
+
+        WebApplication app = builder.Build();
+        app.MapWbsktHealthChecks();
+        await app.StartAsync();
+        return app;
+    }
+
+    private static async Task<HttpResponseMessage> GetAsync(WebApplication app, string path)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+        return await client.GetAsync(path);
     }
 }
