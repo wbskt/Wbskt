@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -26,6 +27,12 @@ public static class HealthCheckExtensions
     public const string ReadinessPath = "/healthz/ready";
 
     /// <summary>
+    /// The tag a check needs to gate readiness. MassTransit's bus check carries it by default; every
+    /// check registered here must state it explicitly, because an untagged one is not consulted.
+    /// </summary>
+    public const string ReadyTag = "ready";
+
+    /// <summary>
     /// Registers a <see cref="SqlServerHealthCheck"/> against a named connection string.
     /// </summary>
     public static IHealthChecksBuilder AddSqlServerCheck(
@@ -38,13 +45,18 @@ public static class HealthCheckExtensions
             provider => new SqlServerHealthCheck(
                 provider.GetRequiredService<IConfiguration>(), connectionStringName),
             HealthStatus.Unhealthy,
-            tags: ["ready"]));
+            tags: [ReadyTag]));
     }
 
     /// <summary>Maps both endpoints. Anonymous — every host default-denies, and neither can require a token.</summary>
     public static void MapWbsktHealthChecks(this WebApplication app)
     {
         app.MapGet(LivenessPath, () => Results.Ok()).AllowAnonymous();
-        app.MapHealthChecks(ReadinessPath).AllowAnonymous();
+        // Filtered on the tag, so a check added for some other purpose (a diagnostic, a degraded-mode
+        // signal) cannot silently pull an instance out of Traefik's rotation or fail deploy.sh.
+        app.MapHealthChecks(ReadinessPath, new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains(ReadyTag)
+        }).AllowAnonymous();
     }
 }
