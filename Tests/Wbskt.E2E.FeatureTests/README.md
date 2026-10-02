@@ -36,6 +36,14 @@ dotnet run --project Hosts/Wbskt.Socket.Host         # https://localhost:7020 / 
 dotnet run --project Hosts/Wbskt.Workflow.Engine.Host # https://localhost:7030
 ```
 
+Or, from the repo root, build and start all four in the background as Development and wait until they answer (this is what CI does; logs land in `e2e-hosts/`):
+
+```bash
+Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
+```
+
+The hosts must run as **Development**. `appsettings.Development.json` is what lets a freshly registered user sign in without confirming an address, and what raises the auth host's credential rate limit (`RateLimiting:Authentication:PermitLimit`) from the production default of 10 a minute to 1000. That limit is per IP, every test shares one, so at 10 the suite starts failing with `429 Too Many Requests` within a few scenarios.
+
 ### 4. Run the E2E tests
 
 ```bash
@@ -43,6 +51,22 @@ dotnet test Tests/Wbskt.E2E.FeatureTests
 ```
 
 When hosts are not reachable the tests **skip** automatically — they will never fail due to infrastructure being down.
+
+### 5. Rate-limit scenarios (opt-in)
+
+`RateLimitingTests` exhaust the per-IP budget on purpose, so they skip unless `E2E_RATE_LIMIT_TESTS=1`. The budget one scenario spends is still spent when the next starts (it cannot even register its user), so run them one at a time, each against an auth host freshly restarted with the production limit. The limiter is in memory, so a restart is a fresh window:
+
+```bash
+RateLimiting__Authentication__PermitLimit=10 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
+  dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~RateLimitingTests.AUTH_RL_01
+```
+
+`E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with.
+
+### CI
+
+The `e2e` job in `.github/workflows/build-images.yml` runs both passes on every pull request and push to master, against SQL Server and RabbitMQ service containers and the four hosts started with `start-hosts.sh`. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
 
 ---
 

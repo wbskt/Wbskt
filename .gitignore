@@ -375,3 +375,6 @@ deploy/compose/.env
 /.agents/mcp.json
 /.agents/mcp_config.json
 /class_metadata.json
+
+# E2E host logs and pids (Tests/Wbskt.E2E.FeatureTests/start-hosts.sh)
+e2e-hosts/
