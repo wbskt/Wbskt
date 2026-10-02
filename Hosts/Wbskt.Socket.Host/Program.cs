@@ -13,6 +13,8 @@ using Wbskt.Socket.Host.HostedServices;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Middleware;
 using Wbskt.Socket.Host.Services;
+using Wbskt.Infrastructure.Telemetry;
+using Wbskt.Socket.Host.Telemetry;
 
 namespace Wbskt.Socket.Host;
 
@@ -34,6 +36,8 @@ public static class Program
         builder.AddSharedConfiguration("serilog.json", "rabbitmq.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
+        builder.Services.AddSingleton<SocketMetrics>();
+        builder.AddWbsktTelemetry(SocketMetrics.MeterName);
         
         // Add services to the container.
         builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();

@@ -11,6 +11,7 @@ public sealed class WorkflowMetrics : IDisposable
     private long _activeBranches;
     private long _dispatcherQueueDepth;
     private long _pendingTriggerDepth;
+    private long _overdueBookmarks;
     private readonly ConcurrentDictionary<string, long> _bookmarksByWakeKind = new(StringComparer.OrdinalIgnoreCase);
 
     public WorkflowMetrics()
@@ -30,6 +31,11 @@ public sealed class WorkflowMetrics : IDisposable
             return measurements;
         });
 
+        // The backlog that matters: wakes that are due and nobody has claimed. Outstanding bookmarks
+        // above include every run legitimately waiting days for an approval, so their count alone
+        // says nothing about whether the engine is keeping up.
+        BookmarksOverdue = _meter.CreateObservableGauge("wbskt_workflow_bookmarks_overdue", () => { return _overdueBookmarks; });
+
         NodeDuration = _meter.CreateHistogram<double>("wbskt_workflow_node_duration_ms");
         DispatcherQueueDepth = _meter.CreateObservableGauge("wbskt_workflow_dispatcher_queue_depth", () => { return _dispatcherQueueDepth; });
         CreditsConsumed = _meter.CreateCounter<double>("wbskt_workflow_credits_consumed_total");
@@ -44,6 +50,7 @@ public sealed class WorkflowMetrics : IDisposable
     public Counter<long> RunsCompleted { get; }
     public ObservableGauge<long> BranchesActive { get; }
     public ObservableGauge<long> BookmarksOutstanding { get; }
+    public ObservableGauge<long> BookmarksOverdue { get; }
     public Histogram<double> NodeDuration { get; }
     public ObservableGauge<long> DispatcherQueueDepth { get; }
     public Counter<double> CreditsConsumed { get; }
@@ -59,6 +66,11 @@ public sealed class WorkflowMetrics : IDisposable
         {
             _bookmarksByWakeKind[kvp.Key] = kvp.Value;
         }
+    }
+
+    public void UpdateOverdueBookmarks(long overdue)
+    {
+        _overdueBookmarks = overdue;
     }
 
     // Every run-level metric carries workspace_id. Without it these series can only be read as a

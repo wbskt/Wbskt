@@ -7,6 +7,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
+using Wbskt.Socket.Host.Telemetry;
 
 namespace Wbskt.Socket.Host.Services;
 
@@ -25,6 +26,7 @@ internal sealed class SocketHandler : ISocketHandler
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
+    private readonly SocketMetrics _metrics;
     private readonly string _hostId;
 
     public SocketHandler(
@@ -33,8 +35,10 @@ internal sealed class SocketHandler : ISocketHandler
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime,
         IEventBus eventBus,
-        BusInstanceId busInstanceId)
+        BusInstanceId busInstanceId,
+        SocketMetrics metrics)
     {
+        _metrics = metrics;
         _connectionManager = connectionManager;
         _revocationCache = revocationCache;
         _logger = logger;
@@ -90,27 +94,34 @@ internal sealed class SocketHandler : ISocketHandler
         }
 
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
-        await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), cts.Token);
+        _metrics.Connected();
+        var disconnectReason = SocketMetrics.ClientClosed;
 
         try
         {
+            await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), cts.Token);
+
             // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
             await ReceiveLoopAsync(clientRefId, connection, cts.Token);
         }
         catch (OperationCanceledException)
         {
+            disconnectReason = _appLifetime.ApplicationStopping.IsCancellationRequested ? SocketMetrics.ServerStopping : SocketMetrics.Aborted;
             _logger.LogInformation("Connection for client {ClientRefId} was cancelled.", clientRefId);
         }
         catch (WebSocketException ex)
         {
+            disconnectReason = SocketMetrics.Aborted;
             _logger.LogWarning("WebSocket error for client {ClientRefId}: {Message}", clientRefId, ex.Message);
         }
         catch (Exception ex)
         {
+            disconnectReason = SocketMetrics.Error;
             _logger.LogError(ex, "Unexpected error in WebSocket loop for client {ClientRefId}.", clientRefId);
         }
         finally
         {
+            _metrics.Disconnected(disconnectReason);
             await _connectionManager.RemoveConnectionAsync(clientRefId, cancellationToken: CancellationToken.None);
             _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
             await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, "Socket closed", _hostId), CancellationToken.None);

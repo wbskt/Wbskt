@@ -66,12 +66,18 @@ internal sealed class MetricsExporter : BackgroundService
 
         _workflowMetrics.UpdateSnapshot(activeBranches, queueDepth, pendingTriggerDepth, bookmarksByWakeKind);
 
+        // A minute of grace: the poller claims on its own interval, so a bookmark a few seconds past
+        // due is normal; one a minute past due is not.
+        long overdueBookmarks = await bookmarkProvider.CountOverdueAsync(DateTime.UtcNow.AddMinutes(-1), ct);
+        _workflowMetrics.UpdateOverdueBookmarks(overdueBookmarks);
+
         _logger.LogInformation(
-            "Workflow metrics exported: ActiveBranches={ActiveBranches}, DispatcherQueueDepth={QueueDepth}, PendingTriggerDepth={PendingTriggerDepth}, BookmarksCount={BookmarksCount}",
+            "Workflow metrics exported: ActiveBranches={ActiveBranches}, DispatcherQueueDepth={QueueDepth}, PendingTriggerDepth={PendingTriggerDepth}, BookmarksCount={BookmarksCount}, OverdueBookmarks={OverdueBookmarks}",
             activeBranches,
             queueDepth,
             pendingTriggerDepth,
-            bookmarksByWakeKind.Values.Sum());
+            bookmarksByWakeKind.Values.Sum(),
+            overdueBookmarks);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Core;
+using Serilog.Sinks.OpenTelemetry;
+using Wbskt.Infrastructure.Telemetry;
 
 namespace Wbskt.Infrastructure.Configuration;
 
@@ -39,6 +41,26 @@ public static class SharedConfigurationExtension
     
     public static Logger CreateSerilog(this IHostApplicationBuilder builder)
     {
-        return new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration).CreateLogger();
+        var configuration = new LoggerConfiguration().ReadFrom.Configuration(builder.Configuration);
+
+        // Alongside the console, not instead of it: `docker compose logs` keeps working when the
+        // collector is down, and the collector gets every event with the trace and span ids of the
+        // request that wrote it, so a trace in Grafana links straight to its logs.
+        if (builder.Configuration.ExportsTelemetry())
+        {
+            configuration.WriteTo.OpenTelemetry(options =>
+            {
+                // OTEL_EXPORTER_OTLP_ENDPOINT is a base URL; over HTTP the sink wants the logs path itself.
+                var endpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]!.TrimEnd('/');
+                var http = builder.Configuration["OTEL_EXPORTER_OTLP_PROTOCOL"] == "http/protobuf";
+                options.Endpoint = http ? endpoint + "/v1/logs" : endpoint;
+                options.Protocol = http ? OtlpProtocol.HttpProtobuf : OtlpProtocol.Grpc;
+                options.ResourceAttributes["service.name"] = builder.ServiceName();
+                options.ResourceAttributes["service.instance.id"] = Environment.MachineName;
+                options.ResourceAttributes["deployment.environment.name"] = builder.Environment.EnvironmentName;
+            });
+        }
+
+        return configuration.CreateLogger();
     }
 }

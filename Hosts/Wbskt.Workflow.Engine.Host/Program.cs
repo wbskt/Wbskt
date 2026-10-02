@@ -18,6 +18,8 @@ using Wbskt.Workflow.Engine.Host.Middleware;
 using Wbskt.Workflow.Engine.Host.Providers;
 using Wbskt.Workflow.Extensions;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Infrastructure.Telemetry;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Engine.Host;
 
@@ -39,6 +41,7 @@ public static class Program
         builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "workflow-engine.json");
 
         builder.Host.UseSerilog(builder.CreateSerilog());
+        builder.AddWbsktTelemetry(WorkflowMetrics.MeterName);
 
         builder.Services.AddHttpClient();
         // Outbound WebhookNotification client: don't follow redirects, so a 3xx to an internal

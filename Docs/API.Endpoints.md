@@ -170,7 +170,6 @@ List endpoints take `skip`/`take`, clamped to 200 rather than rejected, and retu
 |---|---|---|
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
-| `GET /metrics` | **authenticated** | Prometheus scrape. Requires authorization because this host is publicly routed and the metrics would otherwise be world-readable. Nothing scrapes it today; an in-network Prometheus would authenticate with a bearer token. |
 | `GET /openapi`, Scalar reference | anonymous, **development only** | API docs. Anonymous by consequence rather than by declaration — this host has no fallback policy, so an unmarked endpoint is already open. |
 
 ---
