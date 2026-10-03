@@ -63,6 +63,7 @@ public static class Program
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
+        builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientService, ClientService>();

@@ -390,4 +390,48 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    /// <summary>
+    /// Deleting a workspace retires what the main database holds for it: its registration PIN stops
+    /// accepting devices and its existing devices can no longer sign in. That happens on the
+    /// management host in response to an event, so the test waits for it rather than asserting at once.
+    /// </summary>
+    [SkippableFact]
+    public async Task WS_CRD_22_DeletedWorkspace_StopsItsPoliciesAndDevices()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var user = await fixture.CreateUserAsync();
+        var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
+        var (_, pin) = await fixture.CreatePolicyAsync(user.Token, workspaceRef);
+        var (clientRef, secret) = await fixture.RegisterClientAsync(pin, $"e2e-device-{Guid.NewGuid():N}");
+
+        await fixture.SendAsync(
+            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token);
+
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        bool registrationRefused = false, loginRefused = false;
+        while (DateTime.UtcNow < deadline && !(registrationRefused && loginRefused))
+        {
+            var registration = await fixture.SendAsync(
+                HttpMethod.Post,
+                ServicesFixture.ManagementUrl("/api/client-registrations/initiate"),
+                body: new { Pin = pin, Name = $"e2e-late-{Guid.NewGuid():N}" });
+            registrationRefused = !registration.IsSuccessStatusCode;
+
+            var login = await fixture.SendAsync(
+                HttpMethod.Post,
+                ServicesFixture.ManagementUrl("/api/client-auth/login"),
+                body: new { ClientRefId = clientRef, Secret = secret });
+            loginRefused = !login.IsSuccessStatusCode;
+
+            if (!(registrationRefused && loginRefused))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500));
+            }
+        }
+
+        registrationRefused.Should().BeTrue("the deleted workspace's policy is disabled");
+        loginRefused.Should().BeTrue("the deleted workspace's devices are revoked");
+    }
 }
