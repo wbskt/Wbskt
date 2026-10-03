@@ -53,6 +53,6 @@ internal static class OpenApiExtension
             options.Theme = ScalarTheme.Kepler;
             options.ShowDeveloperTools = DeveloperToolsVisibility.Never;
             options.AddPreferredSecuritySchemes("Bearer");
-        }).AllowAnonymous(); // Dev-only, like MapOpenApi; exempt from the default-deny fallback policy.
+        }).AllowAnonymous(); // Like MapOpenApi, gated on ApiDocs:Enabled and exempt from the default-deny fallback policy.
     }
 }

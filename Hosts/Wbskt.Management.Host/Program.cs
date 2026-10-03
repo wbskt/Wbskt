@@ -255,9 +255,10 @@ public static class Program
         // UseForwardedHeaders so the partition key is the real client IP behind Traefik.
         app.UseRateLimiter();
 
-        if (app.Environment.IsDevelopment())
+        if (app.Configuration.IsApiDocsEnabled(app.Environment))
         {
-            // Dev-only API docs are exempt from the default-deny fallback policy.
+            // API docs (on in Development, opt-in elsewhere via ApiDocs:Enabled) are exempt from the
+            // default-deny fallback policy.
             app.MapOpenApi().AllowAnonymous();
 
             app.MapCustomScalarApiReference();
