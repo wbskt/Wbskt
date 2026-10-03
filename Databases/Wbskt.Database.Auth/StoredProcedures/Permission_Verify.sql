@@ -13,6 +13,13 @@ BEGIN
 
     DECLARE @PermissionId INT;
 
+    -- 0. A member suspended in this tenant holds nothing here, whatever is assigned to them.
+    IF EXISTS (SELECT 1 FROM dbo.TenantMembers WHERE TenantId = @TenantId AND UserId = @UserId AND IsSuspended = 1)
+    BEGIN
+        SELECT 0 AS AccessGranted;
+        RETURN;
+    END
+
     -- 1. Get Permission ID
     SELECT @PermissionId = Id FROM dbo.Permissions WHERE Slug = @PermissionSlug;
 

@@ -16,8 +16,8 @@
 -- having none. That is the deliberate direction to be wrong in -- walking the group ancestry here
 -- and getting it subtly wrong would let a change orphan the tenant.
 --
--- Deactivated accounts are not administrators: they cannot sign in, so counting them would let the
--- last active administrator remove themselves while an inactive one "remained".
+-- Deactivated accounts and suspended members are not administrators: neither can act in the tenant,
+-- so counting them would let the last active administrator remove themselves while one "remained".
 CREATE FUNCTION dbo.Tenant_Administrators (@TenantId INT)
 RETURNS TABLE
 AS
@@ -27,6 +27,7 @@ RETURN
     INNER JOIN dbo.Users U ON U.Id = TM.UserId
     WHERE TM.TenantId = @TenantId
       AND U.IsActive = 1
+      AND TM.IsSuspended = 0
 
       AND NOT EXISTS (
           SELECT 1

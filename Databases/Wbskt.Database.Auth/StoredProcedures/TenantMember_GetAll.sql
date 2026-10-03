@@ -20,7 +20,8 @@ BEGIN
         U.RefId,
         U.Username,
         U.Email,
-        U.IsActive
+        U.IsActive,
+        TM.IsSuspended
     FROM dbo.TenantMembers TM
     INNER JOIN dbo.Users U ON U.Id = TM.UserId
     WHERE TM.TenantId = @TenantId

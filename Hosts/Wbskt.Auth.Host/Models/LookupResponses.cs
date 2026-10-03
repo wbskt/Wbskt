@@ -79,7 +79,7 @@ public record GrantRolePermissionRequest(
 
     bool IsDeny = false);
 
-public record SetUserActiveRequest(bool IsActive);
+public record SetMemberSuspendedRequest(bool IsSuspended);
 
 public record CreateTenantRequest(
     [Required]
@@ -147,8 +147,11 @@ public record AcceptInvitationResponse(Guid TenantRef, string TenantName);
 /// </summary>
 public record InvitationLookup(Guid RefId, Guid TenantRef, string TenantName, string Email, DateTime ExpiresAt, bool IsLive);
 
-/// <summary>A user as seen by tenant administration.</summary>
-public record TenantMemberResponse(Guid RefId, string Username, string Email, bool IsActive);
+/// <summary>
+/// A user as seen by tenant administration. <paramref name="IsActive"/> is the account, across every
+/// tenant; <paramref name="IsSuspended"/> is this tenant only.
+/// </summary>
+public record TenantMemberResponse(Guid RefId, string Username, string Email, bool IsActive, bool IsSuspended);
 
 /// <summary>A role held by a user or group, with the scope it was granted at.</summary>
 public record RoleAssignmentResponse(Guid RoleRef, string RoleName, Guid? WorkspaceRef);

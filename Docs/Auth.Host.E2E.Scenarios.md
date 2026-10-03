@@ -143,7 +143,7 @@ Highest priority: these encode defects that shipped, so they must fail against t
 | `AUTH_LOG_03` | + | Two consecutive logins issue **different** refresh tokens | Both usable independently (multi-device) |
 | `AUTH_LOG_04` | − | Correct email, wrong password | **401** `AUTH_INVALID_CREDENTIALS` |
 | `AUTH_LOG_05` | − | Unregistered email | **401** `AUTH_INVALID_CREDENTIALS` — **identical code and message to `04`**; asserting they match is the point, it prevents account enumeration |
-| `AUTH_LOG_06` | − | Deactivated account, correct password | **401** `AUTH_USER_INACTIVE` — note this *does* distinguish itself from `04`/`05`, so a caller can tell "exists but disabled" from "no such user". Assert current behaviour and treat the leak as a separate decision |
+| `AUTH_LOG_06` | − | Deactivated account, correct password | Retired: tenant administrators suspend members instead, so only an operator can disable an account. The login still answers **401** `AUTH_USER_INACTIVE` for one, which distinguishes it from `04`/`05` |
 | `AUTH_LOG_07` | − | Password differing only in case | **401** |
 | `AUTH_LOG_08` | − | Email with leading/trailing whitespace | Document actual behaviour (no trimming today) |
 | `AUTH_LOG_09` | − | Missing `password` | model-validation 400 |
@@ -173,7 +173,7 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_10` | − | Access token submitted as a refresh token | model-validation 400 — a JWT is longer than the 255-character bound on `RefreshToken`, so it never reaches the lookup |
 | `AUTH_RT_11` | − | Refresh after `logout` revoked the token | **401** `AUTH_TOKEN_INACTIVE` |
 | `AUTH_RT_12` | − | Refresh after `logout-all` | **401** |
-| `AUTH_RT_13` | − | Refresh for a user deactivated since issuance | **401** `AUTH_TOKEN_INACTIVE` — *not* `AUTH_USER_INACTIVE`. Deactivation revokes every refresh token first, so rotation trips on the revoked token and never reaches the `IsActive` check. That branch is unreachable on this path, since a token issued after deactivation cannot exist |
+| `AUTH_RT_13` | − | Refresh for a user deactivated since issuance | Retired with account deactivation from the API; a suspended member's refresh still works (`MEM_32`) |
 | `AUTH_RT_14` | − | Refresh token past its 7-day expiry | **401** `AUTH_TOKEN_INACTIVE` — needs clock control or a seeded expired row; mark skipped if neither is available |
 | `AUTH_RT_15` | − | Two concurrent refreshes with the same token | Exactly one 200; the other 401. Must not mint two live families |
 | `AUTH_RT_16` | + | Rotation is anonymous (no `Authorization` header) | **200** — the refresh token is the credential |
@@ -233,7 +233,7 @@ Run isolated — the partition key is the client IP and these will otherwise poi
 | `AUTH_TK_07` | − | Client token against `GET /api/tenants` | **401** |
 | `AUTH_TK_08` | − | `Authorization` header without the `Bearer ` prefix | **401** |
 | `AUTH_TK_09` | + | Token from a *rotated* refresh still authorizes | **200** |
-| `AUTH_TK_10` | − | Access token belonging to a deactivated user, on the auth and management hosts | **401** on both — deactivation revokes issued access tokens through Redis, not just refresh tokens |
+| `AUTH_TK_10` | − | Access token of a member suspended in one tenant, on the auth and management hosts | **403** `WORKSPACE_FORBIDDEN` for that tenant's workspaces on both hosts at once; the same token still works in the member's own tenant |
 
 ---
 
@@ -447,13 +447,13 @@ admin unless stated.
 | `MEM_28` | + | Remove a direct permission | **204**; the decision reverts to the user's roles |
 | `MEM_29` | + | Remove is scope-sensitive | Removing the workspace-scoped row leaves the tenant-wide one |
 | `MEM_30` | − | Grant/remove without `roles.manage` | **403** |
-| `MEM_31` | + | Deactivate a user | **204**; login → **401** `AUTH_USER_INACTIVE` |
-| `MEM_32` | + | Deactivation revokes every refresh token | All previously issued refresh tokens → **401** |
-| `MEM_33` | + | Reactivate | **204**; login succeeds again |
-| `MEM_34` | + | Deactivation is visible in the member list | `isActive: false` |
-| `MEM_35` | − | Deactivate without `users.manage` | **403** |
-| `MEM_36` | − | Deactivate an unknown `userRef` | **403** `USER_NOT_FOUND` |
-| `MEM_37` | + | An admin can deactivate themselves | Document the outcome — there is no self-protection guard today, and it can strand the tenant |
+| `MEM_31` | + | Suspend a member | **204**; their existing token is refused (**403**) in that tenant's workspaces, which also leave their workspace and tenant lists |
+| `MEM_32` | + | Suspension leaves the account alone | Login and refresh still work; only the suspending tenant disappears from their list |
+| `MEM_33` | + | Lift the suspension | **204**; access returns exactly as it was |
+| `MEM_34` | + | Suspension is visible in the member list | `isSuspended: true`, `isActive: true` |
+| `MEM_35` | − | Suspend without `users.manage` | **403** |
+| `MEM_36` | − | Suspend an unknown `userRef` | **403** `USER_NOT_FOUND` |
+| `MEM_37` | − | An administrator suspends themselves | **400** `AUTH_CANNOT_SUSPEND_SELF`. The database also refuses any suspension that leaves the tenant with no administrator (50008). `MEM_37b`: the old `/active` route is gone |
 
 ---
 

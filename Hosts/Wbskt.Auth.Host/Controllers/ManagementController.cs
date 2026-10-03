@@ -420,18 +420,23 @@ public class ManagementController : ApiControllerBase
     }
 
     /// <summary>
-    /// Enables or disables an account. Disabling revokes every refresh token the user holds; an
-    /// access token already issued stays valid until it expires. This is account-wide and affects
-    /// every tenant the user belongs to — to remove someone from one tenant, use
-    /// <see cref="RemoveMember"/>. Requires <c>users.manage</c>.
+    /// Suspends a member in this tenant, or lifts the suspension. A suspended member keeps their
+    /// account, their other tenants and everything assigned to them here, but holds no permission in
+    /// this tenant and cannot see or enter its workspaces until it is lifted. Requires
+    /// <c>users.manage</c>; refused for yourself and for the tenant's last administrator.
+    /// <para>
+    /// Disabling an account outright is deliberately not available to tenant administrators: it
+    /// would lock the person out of every tenant they belong to, including ones the caller has no
+    /// say over. To remove someone from this tenant, use <see cref="RemoveMember"/>.
+    /// </para>
     /// </summary>
-    [HttpPut("{tenantRef:guid}/members/{userRef:guid}/active")]
-    public async Task<IActionResult> SetUserActive(Guid tenantRef, Guid userRef, [FromBody] SetUserActiveRequest request, CancellationToken cancellationToken)
+    [HttpPut("{tenantRef:guid}/members/{userRef:guid}/suspended")]
+    public async Task<IActionResult> SetMemberSuspended(Guid tenantRef, Guid userRef, [FromBody] SetMemberSuspendedRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: SetUserActive requested (UserRef: {UserRef}, IsActive: {IsActive})", userRef, request.IsActive);
+        _logger.LogInformation("API: SetMemberSuspended requested (UserRef: {UserRef}, IsSuspended: {IsSuspended})", userRef, request.IsSuspended);
 
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return await WithCallerAsync(callerId => _managementService.SetUserActiveAsync(callerId, tenantRef, userRef, request.IsActive, ipAddress, cancellationToken));
+        return await WithCallerAsync(callerId => _managementService.SetMemberSuspendedAsync(callerId, tenantRef, userRef, request.IsSuspended, ipAddress, cancellationToken));
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------

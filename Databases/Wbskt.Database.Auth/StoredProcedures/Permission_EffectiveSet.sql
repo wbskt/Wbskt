@@ -11,7 +11,9 @@ BEGIN
 
     DECLARE @TenantId INT = (SELECT TenantId FROM dbo.Workspaces WHERE Id = @WorkspaceId);
 
+    -- A member suspended in the workspace's tenant holds nothing there, whatever is assigned to them.
     IF @TenantId IS NULL
+       OR EXISTS (SELECT 1 FROM dbo.TenantMembers WHERE TenantId = @TenantId AND UserId = @UserId AND IsSuspended = 1)
     BEGIN
         SELECT Slug FROM dbo.Permissions WHERE 1 = 0;
         RETURN;

@@ -148,8 +148,16 @@ registered.
 that tenant, and transfers workspaces they owned to the caller — access resolution gates on a
 `WorkspaceMembers` row before evaluating any permission, so a workspace owned by a non-member would
 be unreachable to everyone. It refuses to remove the last administrator (`THROW 50008`) and refuses
-self-removal, since the transfer would have no recipient. It is distinct from `PUT
-/members/{userRef}/active`, which disables the *account* across every tenant it belongs to.
+self-removal, since the transfer would have no recipient.
+
+**Suspending:** `PUT /{tenantRef}/members/{userRef}/suspended` with `{ "isSuspended": true }` keeps the
+member and every assignment but makes access resolution treat them as holding nothing in this
+tenant (`Permission_Verify`, `Permission_EffectiveSet`, `WorkspaceMember_Verify`), and hides the
+tenant and its workspaces from their lists. It takes effect on their next request, since access is
+resolved per request. Their account, sessions and other tenants are untouched; a tenant
+administrator cannot disable the account itself, which only an operator can (`dbo.User_SetActive`).
+It refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and suspending the last administrator
+(`THROW 50008`); a suspended administrator does not count toward the guard.
 
 > The last-administrator guard counts direct `UserRoles` and `UserPermissions` only; an
 > administrator reached through a group is not counted. That undercounts, so the guard occasionally
@@ -173,7 +181,7 @@ their tenant's permission graph.
 | Invitations | `GET/POST /{tenantRef}/invitations`, `DELETE /{tenantRef}/invitations/{invitationRef}`, `POST /api/invitations/accept` |
 | Roles | `GET/POST /roles`, `PUT/DELETE /roles/{roleRef}`, `GET/POST /roles/{roleRef}/permissions`, `DELETE /roles/{roleRef}/permissions/{slug}` |
 | Groups | `GET/POST /groups`, `PUT/DELETE /groups/{groupRef}`, `GET /groups/{groupRef}/roles`, `POST/DELETE /groups/{groupRef}/roles/{roleRef}` |
-| Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{slug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PUT /members/{userRef}/active` |
+| Members | `GET /members`, `GET /members/{userRef}/roles\|permissions\|groups`, `POST/DELETE /members/{userRef}/roles/{roleRef}`, `POST /members/{userRef}/permissions`, `DELETE /members/{userRef}/permissions/{slug}`, `POST/DELETE /members/{userRef}/groups/{groupRef}`, `PUT /members/{userRef}/suspended` |
 | Catalogue | `GET /permissions` |
 
 Assignment scope travels in the body as `workspaceRef` on POST (null = tenant-wide) and as a query
@@ -267,8 +275,8 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
   rather than left sharing a live token with an attacker.
 - `POST /api/auth/logout` revokes one token; `POST /api/auth/logout-all` revokes the caller's whole
   set. Both succeed regardless of whether the token existed, so neither can be used to probe.
-- `PUT /api/tenants/{tenantRef}/members/{userRef}/active` disables an account and revokes its refresh tokens.
-  An access token already issued stays valid until it expires — deactivation is not instant.
+- Suspending a member (`PUT /api/tenants/{tenantRef}/members/{userRef}/suspended`) does not touch
+  their tokens; it closes that one tenant to them on their next request.
 - The credential endpoints are rate limited per client IP (`RateLimiting:Authentication`).
 
 ## Error semantics

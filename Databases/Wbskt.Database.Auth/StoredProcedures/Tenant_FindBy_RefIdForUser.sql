@@ -11,6 +11,7 @@ BEGIN
     FROM dbo.Tenants T
     INNER JOIN dbo.TenantMembers TM ON TM.TenantId = T.Id
     WHERE T.RefId = @RefId
-      AND TM.UserId = @UserId;
+      AND TM.UserId = @UserId
+      AND TM.IsSuspended = 0; -- a suspended member is answered exactly like a non-member
 END
 GO
