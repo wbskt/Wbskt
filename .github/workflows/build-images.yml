@@ -148,6 +148,13 @@ jobs:
           --health-retries 10
     env:
       ConnectionStrings__Redis: localhost:6379
+      # The hosts connect with the same least-privilege logins as production (see "SQL logins" in
+      # deploy/README.md), so a host that starts sending SQL its login may not run fails here.
+      HOST_SQL_PASSWORD: Wb1-e2e-Host-Login
+      ConnectionStrings__AuthDBConnection: Server=localhost;Database=Wbskt.Database.Auth;User ID=wbskt_auth;Password=Wb1-e2e-Host-Login;Encrypt=False;
+      # Management and engine share this one variable here, so both run as wbskt_management.
+      # wbskt_engine carries exactly the same grants.
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_management;Password=Wb1-e2e-Host-Login;Encrypt=False;
     steps:
       - uses: actions/checkout@v4
 
@@ -161,7 +168,7 @@ jobs:
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Deploy databases
-        run: pwsh ./Deploy-Databases.ps1
+        run: pwsh ./Deploy-Databases.ps1 -HostLoginPassword "$HOST_SQL_PASSWORD"
 
       # The hosts serve HTTPS on their dev ports with the development certificate, and it has to be
       # trusted system-wide: the client SDK the tests drive validates it, and so does Management when

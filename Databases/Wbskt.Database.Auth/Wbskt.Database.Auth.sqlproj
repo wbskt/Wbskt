@@ -19,4 +19,12 @@
         <PreDeploy Include="Scripts\Script.PreDeployment.sql"/>
     </ItemGroup>
 
+    <!-- Passwords for the per-host SQL logins the post-deployment script creates. Empty skips them. -->
+    <ItemGroup>
+        <SqlCmdVariable Include="AuthHostPassword">
+            <DefaultValue></DefaultValue>
+            <Value>$(SqlCmdVar__1)</Value>
+        </SqlCmdVariable>
+    </ItemGroup>
+
 </Project>

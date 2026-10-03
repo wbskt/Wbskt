@@ -134,7 +134,7 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER   # log out/in, or keep using sudo
 
 # Checkout + registry login + .env - see One-time setup above. Fill in DOMAIN, ACME_EMAIL, and
-# generate real secrets for SQL_SA_PASSWORD, RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, GRAFANA_ADMIN_PASSWORD,
+# generate real secrets for SQL_SA_PASSWORD, SQL_AUTH_PASSWORD, SQL_MANAGEMENT_PASSWORD, SQL_ENGINE_PASSWORD (see SQL logins below), RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, GRAFANA_ADMIN_PASSWORD,
 # AUTH_JWT_SIGNING_KEY and MANAGEMENT_JWT_SIGNING_KEY (see JWT signing keys below), CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
 # ACME_CASERVER to the Let's Encrypt staging directory first (see .env.example) to avoid burning
 # production rate limits while you're still iterating.
@@ -415,6 +415,33 @@ sqlpackage reported, and if the loss is intended, rerun with:
 ```
 MIGRATE_ALLOW_DATA_LOSS=true docker compose --profile migrate run --rm migrator
 ```
+
+### SQL logins
+
+The hosts do not connect as `sa`. Each has its own login, created by the migrator's
+post-deployment scripts from the passwords in `.env`:
+
+| Login | Database | Used by |
+|---|---|---|
+| `wbskt_auth` | `Wbskt.Database.Auth` | auth (`SQL_AUTH_PASSWORD`) |
+| `wbskt_management` | `Wbskt.Database` | management (`SQL_MANAGEMENT_PASSWORD`) |
+| `wbskt_engine` | `Wbskt.Database` | engine (`SQL_ENGINE_PASSWORD`) |
+
+Each login can connect to its database and execute the procedures in `dbo`, nothing else: no
+direct table access, no other database, no server rights. Every query the hosts make is a stored
+procedure, so that is all they need, and a bug in any host can no longer read or change data
+outside what its procedures allow. `sa` is now used only by the migrator, the SQL healthcheck and
+the backup/restore scripts.
+
+The migrator creates the logins if they are missing and resets their passwords to what `.env`
+says on every run, so rotating one is: change it in `.env`, run the migrator, then recreate the
+host that uses it. It also re-links each database user to its login, which a restore onto a
+different server needs.
+
+**Upgrading an existing deployment:** add the three `SQL_*_PASSWORD` values to `.env` before the
+first deploy that carries this change. Compose refuses to start any service without them, which
+is deliberate. The default deploy runs the migrator before restarting hosts, which is the order
+this needs; do not pass `--skip-migrations` on that deploy.
 
 ### The device-secret migration needs this flag, once
 

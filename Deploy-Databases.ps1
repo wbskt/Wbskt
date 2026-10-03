@@ -23,7 +23,13 @@ param (
     [string] $User = "sa",
 
     [Parameter(Mandatory = $false)]
-    [string] $Password = "Welcome1234"
+    [string] $Password = "Welcome1234",
+
+    # Optional: also create the per-host logins (wbskt_auth, wbskt_management, wbskt_engine), all
+    # with this one password. Production gives each its own through the migrator; this is for
+    # running the hosts locally, or in CI, the way they connect in production.
+    [Parameter(Mandatory = $false)]
+    [string] $HostLoginPassword = ""
 )
 
 begin {
@@ -102,7 +108,8 @@ begin {
             [string]$DbName,
             [string]$DacpacPath,
             [string]$SqlPackageExecutable,
-            [bool]$Recreate
+            [bool]$Recreate,
+            [string[]]$Variables = @()
         )
 
         if (-not $DacpacPath) { throw "DACPAC path is null for $DbName." }
@@ -119,6 +126,9 @@ begin {
             "/p:BlockOnPossibleDataLoss=False",
             "/p:CreateNewDatabase=$Recreate"
         )
+        foreach ($variable in $Variables) {
+            $publishArgs += "/v:$variable"
+        }
 
         & $SqlPackageExecutable @publishArgs
         
@@ -148,11 +158,18 @@ process {
         Drop-Database -DbName $coreDbName -SqlPackageExecutable $exe
     }
 
+    $authVariables = @()
+    $coreVariables = @()
+    if ($HostLoginPassword) {
+        $authVariables = @("AuthHostPassword=$HostLoginPassword")
+        $coreVariables = @("ManagementHostPassword=$HostLoginPassword", "EngineHostPassword=$HostLoginPassword")
+    }
+
     $authDacpac = Get-DacpacPath -ProjectPath $authProject -DacpacName "Wbskt.Database.Auth.dacpac"
-    Publish-Database -DbName $authDbName -DacpacPath $authDacpac -SqlPackageExecutable $exe -Recreate $Fresh
+    Publish-Database -DbName $authDbName -DacpacPath $authDacpac -SqlPackageExecutable $exe -Recreate $Fresh -Variables $authVariables
 
     $coreDacpac = Get-DacpacPath -ProjectPath $coreProject -DacpacName "Wbskt.Database.dacpac"
-    Publish-Database -DbName $coreDbName -DacpacPath $coreDacpac -SqlPackageExecutable $exe -Recreate $Fresh
+    Publish-Database -DbName $coreDbName -DacpacPath $coreDacpac -SqlPackageExecutable $exe -Recreate $Fresh -Variables $coreVariables
 
     Write-Host "`nDeployment completed successfully." -ForegroundColor Green
 }
