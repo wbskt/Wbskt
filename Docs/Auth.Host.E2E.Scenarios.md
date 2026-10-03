@@ -361,6 +361,20 @@ workspace scenarios it depends on.
 
 ---
 
+## 11c. Workflows — delete, versions, webhook idempotency (management host)
+
+Covered by `Scenarios/Workflows/WorkflowLifecycleTests.cs`.
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `WF_VER_01` | + | Publish twice, list versions | **200**; version 2 `Published`, version 1 `Superseded` |
+| `WF_DEL_01` | + | Delete a workflow | **204**; current, versions and a second delete are **404**; it is not listed; republishing its RefId is **409** `WORKFLOW_DELETED` |
+| `WF_DEL_02` | − | Delete another workspace's workflow | **404**; the owner still reads it |
+| `WF_IDEM_01` | + | Send one webhook three times with the same `Idempotency-Key`, then once with another | One run for the repeated key, a second for the new one |
+| `WF_IDEM_02` | − | `Idempotency-Key` longer than 255 characters | **400** |
+
+---
+
 ## 12. Tenant administration — roles, groups, permissions
 
 All under `/api/tenants/{tenantRef}`, all requiring the permission **tenant-wide**. Run as the seeded

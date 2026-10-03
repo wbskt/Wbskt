@@ -49,7 +49,7 @@ public sealed class InboundWebhookControllerTests
         var controller = CreateController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        InboundWebhookResponse response = await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
+        InboundWebhookResponse response = (await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None)).Value!;
 
         Assert.Equal("StartedRun", response.Outcome);
         Assert.Equal(testRef, response.RunId);
@@ -78,7 +78,7 @@ public sealed class InboundWebhookControllerTests
         var controller = CreateController(hub.Object, runProvider.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        InboundWebhookResponse response = await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
+        InboundWebhookResponse response = (await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None)).Value!;
 
         Assert.Equal(firstRef, response.RunId);
         Assert.Equal(
@@ -119,6 +119,56 @@ public sealed class InboundWebhookControllerTests
         await controller.Post(Guid.NewGuid(), "alerts", payload, CancellationToken.None);
 
         hub.Verify(h => h.HandleAsync(It.Is<InboundEvent>(e => e.Secret == null), CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task The_same_idempotency_key_names_the_same_event_and_a_different_secret_does_not()
+    {
+        // The dispatcher dedupes on the event id, so a sender's retry must produce the same id. A
+        // caller without the secret must not be able to claim it ahead of the real sender.
+        var ids = new List<string>();
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<InboundEvent, CancellationToken>((e, _) => ids.Add(e.InboundEventId))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "ok"));
+        var workspaceRef = Guid.NewGuid();
+        JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
+
+        async Task SendAsync(string? key, string? secret, string path = "alerts")
+        {
+            var controller = CreateController(hub.Object, Mock.Of<IRunProvider>());
+            if (key is not null) controller.ControllerContext.HttpContext.Request.Headers[InboundWebhookController.IdempotencyKeyHeader] = key;
+            if (secret is not null) controller.ControllerContext.HttpContext.Request.Headers[InboundWebhookController.SecretHeader] = secret;
+            await controller.Post(workspaceRef, path, payload, CancellationToken.None);
+        }
+
+        await SendAsync("delivery-1", "s3cret");
+        await SendAsync("delivery-1", "s3cret");
+        await SendAsync("delivery-1", "guess");
+        await SendAsync("delivery-1", "s3cret", path: "other");
+        await SendAsync("delivery-2", "s3cret");
+        await SendAsync(null, "s3cret");
+        await SendAsync(null, "s3cret");
+
+        Assert.Equal(ids[0], ids[1]);
+        Assert.Equal(7, ids.Count);
+        Assert.Equal(6, ids.Distinct().Count());
+        Assert.All(ids, id => Assert.True(id.Length + "inbound-event:".Length <= 200));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("has space")]
+    public async Task A_malformed_idempotency_key_is_rejected_before_dispatch(string key)
+    {
+        var hub = new Mock<IInboundHub>();
+        var controller = CreateController(hub.Object, Mock.Of<IRunProvider>());
+        controller.ControllerContext.HttpContext.Request.Headers[InboundWebhookController.IdempotencyKeyHeader] = key;
+
+        var result = await controller.Post(Guid.NewGuid(), "alerts", JsonSerializer.SerializeToElement(new { }), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static InboundWebhookController CreateController(IInboundHub hub, IRunProvider runProvider)

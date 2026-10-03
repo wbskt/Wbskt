@@ -112,6 +112,30 @@ public sealed class WorkflowsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Every published version of a workflow, newest first, with how many runs each has had. Fetch a
+    /// version's definition with <c>GET versions/{version}</c>.
+    /// </summary>
+    [HttpGet("{refId:guid}/versions")]
+    public async Task<ActionResult<Wbskt.Models.ListResponse<WorkflowVersionDto>>> GetVersions(Guid workspaceRef, Guid refId, CancellationToken ct)
+    {
+        _logger.LogInformation("API: GetVersions workflow requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<Wbskt.Models.ListResponse<WorkflowVersionDto>>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _service.GetVersionsAsync(workspaceIdResult.Value, refId, ct);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<Wbskt.Models.ListResponse<WorkflowVersionDto>>.Failure(result.Error));
+        }
+
+        return Ok(new Wbskt.Models.ListResponse<WorkflowVersionDto> { Items = result.Value });
+    }
+
     [HttpGet("{refId:guid}/versions/{version:int}")]
     public async Task<ActionResult<WorkflowDefinitionDto>> GetVersion(Guid workspaceRef, Guid refId, int version, CancellationToken ct)
     {
@@ -139,6 +163,26 @@ public sealed class WorkflowsController : ApiControllerBase
         }
 
         var result = await _service.DeprecateAsync(workspaceIdResult.Value, refId, ct);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Deletes a workflow. Unlike deprecating, it cannot be undone: the workflow leaves the list, its
+    /// triggers stop, runs still going are cancelled, and its RefId cannot be published again. Past
+    /// runs and the versions they ran stay readable by run.
+    /// </summary>
+    [HttpDelete("{refId:guid}")]
+    public async Task<IActionResult> Delete(Guid workspaceRef, Guid refId, CancellationToken ct)
+    {
+        _logger.LogInformation("API: Delete workflow requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsDelete, ct);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _service.DeleteAsync(workspaceIdResult.Value, refId, ct);
         return MapResult(result);
     }
 

@@ -17,12 +17,15 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private const int WorkflowOwnedElsewhereError = 50021; // THROW in dbo.WorkflowDefinition_Publish
+    private const int WorkflowDeletedError = 50022; // THROW in dbo.WorkflowDefinition_Publish
+    private const string DeletedCancellationReason = "Workflow deleted.";
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ITriggerRegistrationService _triggerRegistrationService;
     private readonly IWorkflowDefinitionCache _cache;
     private readonly WorkflowValidator _validator;
     private readonly IIdentityService _identityService;
+    private readonly IRunCancellationService _runCancellation;
     private readonly ILogger<WorkflowDefinitionService> _logger;
 
     public WorkflowDefinitionService(
@@ -31,8 +34,10 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         IWorkflowDefinitionCache cache,
         WorkflowValidator validator,
         IIdentityService identityService,
+        IRunCancellationService runCancellation,
         ILogger<WorkflowDefinitionService> logger)
     {
+        _runCancellation = runCancellation;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _triggerRegistrationService = triggerRegistrationService;
         _cache = cache;
@@ -99,6 +104,13 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                     PublishedBy = _identityService.GetUserIdentity().UserId,
                     CreatedAt = request.Definition.CreatedAt
                 }, ct);
+            }
+            catch (SqlException ex) when (ex.Number == WorkflowDeletedError)
+            {
+                // The current-version read above already treats a deleted workflow as missing, so this
+                // is where a publish (or a rollback) under a deleted RefId ends.
+                _logger.LogWarning("Workflow publish rejected: Workflow '{RefId}' was deleted", request.RefId);
+                return Result<WorkflowPublishResponse>.Failure(Error.Conflict("WORKFLOW_DELETED", $"Workflow '{request.RefId}' was deleted and cannot be published again."));
             }
             catch (SqlException ex) when (ex.Number == WorkflowOwnedElsewhereError)
             {
@@ -446,6 +458,76 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             _logger.LogError("Unexpected error deprecating workflow '{RefId}'. Error: {Message}", refId, ex.Message);
             _logger.LogTrace(ex, "DeprecateAsync exception stack trace for RefId '{RefId}'", refId);
             return Result.Failure(Error.Failure("WORKFLOW_DEPRECATE_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<WorkflowVersionDto>>> GetVersionsAsync(int workspaceId, Guid refId, CancellationToken ct)
+    {
+        _logger.LogDebug("Querying versions of workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
+
+        try
+        {
+            var rows = await _workflowDefinitionProvider.GetVersionsAsync(refId, workspaceId, ct);
+            if (rows.Count == 0)
+            {
+                // Unknown, deleted, or another workspace's: the procedure is workspace-scoped, so all
+                // three read alike, as for a client or run reference that does not resolve here.
+                return Result<IReadOnlyList<WorkflowVersionDto>>.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+            }
+
+            // Only the newest version can be live; an older one was superseded when the next was published.
+            int current = rows.Max(r => r.Version);
+            var versions = rows.Select(r => new WorkflowVersionDto(
+                r.Version,
+                r.Version != current ? "Superseded" : r.IsEnabled ? "Published" : "Deprecated",
+                r.Name,
+                r.Description,
+                r.RunCount,
+                r.CreatedAt)).ToList();
+
+            return Result<IReadOnlyList<WorkflowVersionDto>>.Success(versions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query versions of workflow '{RefId}'. Error: {Message}", refId, ex.Message);
+            _logger.LogTrace(ex, "GetVersionsAsync exception stack trace for RefId '{RefId}'", refId);
+            return Result<IReadOnlyList<WorkflowVersionDto>>.Failure(Error.Failure("WORKFLOW_QUERY_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> DeleteAsync(int workspaceId, Guid refId, CancellationToken ct)
+    {
+        _logger.LogInformation("Deleting workflow '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
+
+        try
+        {
+            var deletion = await _workflowDefinitionProvider.DeleteAsync(refId, workspaceId, _identityService.GetUserIdentity().UserId, ct);
+            if (deletion is null)
+            {
+                // Same answer for unknown, already deleted, and another workspace's workflow.
+                return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+            }
+
+            // The triggers are gone, so nothing new starts; runs already going are stopped rather than
+            // left to finish a workflow the operator has removed.
+            foreach (long runId in deletion.ActiveRunIds)
+            {
+                await _runCancellation.RequestCancellationAsync(runId, DeletedCancellationReason, ct);
+            }
+
+            foreach (int definitionId in deletion.DefinitionIds)
+            {
+                _cache.Invalidate(definitionId);
+            }
+
+            _logger.LogInformation("Workflow '{RefId}' deleted: {Versions} version(s) disabled, {Runs} run(s) cancelling", refId, deletion.DefinitionIds.Count, deletion.ActiveRunIds.Count);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error deleting workflow '{RefId}'. Error: {Message}", refId, ex.Message);
+            _logger.LogTrace(ex, "DeleteAsync exception stack trace for RefId '{RefId}'", refId);
+            return Result.Failure(Error.Failure("WORKFLOW_DELETE_ERROR", ex.Message));
         }
     }
 

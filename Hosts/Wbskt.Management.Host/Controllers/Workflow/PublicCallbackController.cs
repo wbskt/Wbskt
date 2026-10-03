@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
 
@@ -29,6 +30,11 @@ public sealed class PublicCallbackController : ControllerBase
 {
     /// <summary>The header a webhook caller presents its trigger's shared secret in.</summary>
     public const string WebhookSecretHeader = "X-Wbskt-Secret";
+    public const string IdempotencyKeyHeader = "Idempotency-Key";
+    private const int MaxIdempotencyKeyLength = 255;
+
+    private static bool IsValidIdempotencyKey(string key) =>
+        key.Length is > 0 and <= MaxIdempotencyKeyLength && key.All(c => c is >= '\x21' and <= '\x7e');
 
     private readonly IWorkflowEngineClient _engineClient;
     private readonly ILogger<PublicCallbackController> _logger;
@@ -71,7 +77,18 @@ public sealed class PublicCallbackController : ControllerBase
                 ? presented.ToString()
                 : null;
 
-            WebhookResponse response = await _engineClient.WebhookAsync(workspaceRef, path, payload, secret, ct);
+            // A sender's name for this delivery, so its retries start one run. Checked here as well as
+            // in the engine (WebhookEventIds.IsValidKey): the engine's 400 would reach this caller as a
+            // relay failure, and a malformed header is the sender's mistake, not a reason to retry.
+            string? idempotencyKey = Request.Headers.TryGetValue(IdempotencyKeyHeader, out Microsoft.Extensions.Primitives.StringValues key)
+                ? key.ToString()
+                : null;
+            if (idempotencyKey is not null && !IsValidIdempotencyKey(idempotencyKey))
+            {
+                return BadRequest(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{MaxIdempotencyKeyLength} printable characters."));
+            }
+
+            WebhookResponse response = await _engineClient.WebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);
             // Outcome/RunId logged for operators only; the anonymous caller gets an opaque 202 so the
             // response reveals nothing about whether the path matched a registered trigger.
             _logger.LogInformation("Public webhook callback outcome {Outcome} (runId={RunId}).", response.Outcome, response.RunId);

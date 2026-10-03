@@ -108,6 +108,8 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
 
     private sealed class InMemoryProviders : IBranchProvider, IRunProvider, IRunCountersProvider, IBookmarkProvider, IHistoryEventProvider, IWorkflowDefinitionProvider, IIdempotencyKeyProvider
     {
+        public Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct) => throw new NotSupportedException();
         private readonly WorkflowDefinition _definition;
         private int _activeBranches = 1;
 

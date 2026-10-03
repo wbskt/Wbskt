@@ -347,6 +347,28 @@ public sealed class TriggerDispatcherTests
         return JsonSerializer.Serialize(expression, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
+    [Fact]
+    public async Task Dispatch_releases_the_claim_as_failed_when_starting_a_run_throws()
+    {
+        // A claim left Pending would drop the sender's retry of this delivery as a duplicate; Failed
+        // lets BookmarkResumer reclaim it.
+        var idempotency = new MockIdempotencyKeyProvider();
+        var dispatcher = new TriggerDispatcher(
+            new CorrelationKeyResolver(),
+            new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
+            new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            new ThrowingTriggerConcurrencyEnforcer(),
+            new RecordingRunCancellationService(),
+            new RecordingRunStarter([]),
+            new RecordingRunDispatcher([]),
+            idempotency,
+            new ExpressionEvaluator(new DispatcherTestClock()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None));
+
+        Assert.Equal(["inbound-event:evt-1"], idempotency.Failed);
+    }
+
     private static TriggerDispatcher CreateDispatcher(
         RecordingBookmarkResumer? bookmarkResumer = null,
         RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null,
@@ -377,9 +399,20 @@ public sealed class TriggerDispatcherTests
         public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct) => throw new NotImplementedException();
         public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotImplementedException();
         public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
-        public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotImplementedException();
+        public List<string> Failed { get; } = [];
+        public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct)
+        {
+            Failed.Add(keyValue);
+            return Task.FromResult<IdempotencyKeyRow>(null!);
+        }
         public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotImplementedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    private sealed class ThrowingTriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
+    {
+        public Task<TriggerConcurrencyDecision> EvaluateAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct) =>
+            throw new InvalidOperationException("database unavailable");
     }
 
     private static InboundEvent CreateInboundEvent()
