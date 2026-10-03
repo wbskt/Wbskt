@@ -10,6 +10,11 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 [Collection("SqlEdge")]
 public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
 {
+    // Runs.CreatedAt is the server's SYSUTCDATETIME() (Run_Create does not take it), so a run made a
+    // moment ago can share its millisecond with DateTime.UtcNow and fail "CreatedAt < @CutoffUtc".
+    // A cutoff a minute ahead is past every run these tests create.
+    private static DateTime PastEveryRun() => DateTime.UtcNow.AddMinutes(1);
+
     private async Task<(WorkflowDefinitionRow Wd, RunRow Run)> CreateRunAsync(DateTime createdAt)
     {
         var wdProvider = ProviderFactory.WorkflowDefinition(fixture.ConnectionString);
@@ -68,7 +73,7 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
         }, CancellationToken.None);
 
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
-        IReadOnlyCollection<RunRow> stuck = await runProvider.GetStuckRunsAsync(DateTime.UtcNow, 100, CancellationToken.None);
+        IReadOnlyCollection<RunRow> stuck = await runProvider.GetStuckRunsAsync(PastEveryRun(), 100, CancellationToken.None);
 
         stuck.Should().NotContain(r => r.Id == run.Id);
     }
@@ -101,7 +106,7 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
         }, CancellationToken.None);
 
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
-        IReadOnlyCollection<RunRow> stuck = await runProvider.GetStuckRunsAsync(DateTime.UtcNow, 100, CancellationToken.None);
+        IReadOnlyCollection<RunRow> stuck = await runProvider.GetStuckRunsAsync(PastEveryRun(), 100, CancellationToken.None);
 
         stuck.Should().NotContain(r => r.Id == run.Id);
     }
@@ -115,7 +120,7 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
         (_, RunRow run) = await CreateRunAsync(old);
 
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
-        IReadOnlyCollection<RunRow> stuck = await runProvider.GetStuckRunsAsync(DateTime.UtcNow, 100, CancellationToken.None);
+        IReadOnlyCollection<RunRow> stuck = await runProvider.GetStuckRunsAsync(PastEveryRun(), 100, CancellationToken.None);
 
         stuck.Should().Contain(r => r.Id == run.Id);
     }
