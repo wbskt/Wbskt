@@ -32,3 +32,57 @@ UPDATE dbo.Clients
     WHERE IsConnected = 1
         AND ConnectedHostId IS NULL;
 GO
+
+-- Login for the management host: [wbskt_management], which may execute this database's procedures and nothing else.
+-- Created here, not in the model, because a login is a server object and its password is a secret
+-- that varies per environment. The password arrives as the $(ManagementHostPassword) SQLCMD variable; empty (the
+-- default) skips this block, which is what local development and the integration suite rely on.
+-- Rerunning with a new password rotates it. ALTER USER ... WITH LOGIN re-links the user after a
+-- restore onto another server, where the login's SID would otherwise not match.
+IF N'$(ManagementHostPassword)' <> N''
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'wbskt_management')
+        CREATE LOGIN [wbskt_management] WITH PASSWORD = N'$(ManagementHostPassword)', DEFAULT_DATABASE = [$(DatabaseName)];
+    ELSE
+        ALTER LOGIN [wbskt_management] WITH PASSWORD = N'$(ManagementHostPassword)';
+
+    IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'wbskt_management')
+        CREATE USER [wbskt_management] FOR LOGIN [wbskt_management];
+    ELSE
+        ALTER USER [wbskt_management] WITH LOGIN = [wbskt_management];
+
+    -- Every query the hosts make is a stored procedure in dbo (the health check's SELECT 1 needs
+    -- nothing), and ownership chaining lets those procedures read and write the tables. A host that
+    -- starts sending ad-hoc SQL will fail with a permission error rather than quietly widening this.
+    -- CONNECT explicitly: a user created by a DACPAC deployment does not reliably carry it.
+    GRANT CONNECT TO [wbskt_management];
+    GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_management];
+END
+GO
+
+-- Login for the workflow engine host: [wbskt_engine], which may execute this database's procedures and nothing else.
+-- Created here, not in the model, because a login is a server object and its password is a secret
+-- that varies per environment. The password arrives as the $(EngineHostPassword) SQLCMD variable; empty (the
+-- default) skips this block, which is what local development and the integration suite rely on.
+-- Rerunning with a new password rotates it. ALTER USER ... WITH LOGIN re-links the user after a
+-- restore onto another server, where the login's SID would otherwise not match.
+IF N'$(EngineHostPassword)' <> N''
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'wbskt_engine')
+        CREATE LOGIN [wbskt_engine] WITH PASSWORD = N'$(EngineHostPassword)', DEFAULT_DATABASE = [$(DatabaseName)];
+    ELSE
+        ALTER LOGIN [wbskt_engine] WITH PASSWORD = N'$(EngineHostPassword)';
+
+    IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'wbskt_engine')
+        CREATE USER [wbskt_engine] FOR LOGIN [wbskt_engine];
+    ELSE
+        ALTER USER [wbskt_engine] WITH LOGIN = [wbskt_engine];
+
+    -- Every query the hosts make is a stored procedure in dbo (the health check's SELECT 1 needs
+    -- nothing), and ownership chaining lets those procedures read and write the tables. A host that
+    -- starts sending ad-hoc SQL will fail with a permission error rather than quietly widening this.
+    -- CONNECT explicitly: a user created by a DACPAC deployment does not reliably carry it.
+    GRANT CONNECT TO [wbskt_engine];
+    GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_engine];
+END
+GO

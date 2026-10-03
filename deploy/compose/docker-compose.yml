@@ -142,7 +142,8 @@ services:
       OTEL_SERVICE_NAME: wbskt-auth
       # Serves /scalar and /openapi/v1.json anonymously when true. Off unless set in .env.
       ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
-      ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      # Its own login, limited to running the auth database's procedures; the migrator creates it.
+      ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=wbskt_auth;Password=${SQL_AUTH_PASSWORD:?SQL_AUTH_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       # Signs user tokens. Its public half is served at /.well-known/jwks.json for management.
       Jwt__SigningKey: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required - see .env.example}
       Jwt__AdditionalPublicKeys__0: ${AUTH_JWT_PREVIOUS_PUBLIC_KEY:-}
@@ -198,7 +199,8 @@ services:
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-management
       ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
-      ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      # Its own login, limited to running the core database's procedures; the migrator creates it.
+      ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=wbskt_management;Password=${SQL_MANAGEMENT_PASSWORD:?SQL_MANAGEMENT_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       ConnectionStrings__Redis: redis:6379
       # Signs client tokens for the socket host, and validates user tokens against auth's public keys.
       Jwt__SigningKey: ${MANAGEMENT_JWT_SIGNING_KEY:?MANAGEMENT_JWT_SIGNING_KEY is required - see .env.example}
@@ -295,7 +297,8 @@ services:
     environment:
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-engine
-      ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      # Its own login, limited to running the core database's procedures; the migrator creates it.
+      ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=wbskt_engine;Password=${SQL_ENGINE_PASSWORD:?SQL_ENGINE_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       Engine__InboundApiKey: ${ENGINE_INBOUND_API_KEY}
     volumes:
       - ../config:/Config:ro
@@ -510,6 +513,11 @@ services:
       # rows (column drops/narrowing) on an incremental run - see deploy/README.md.
       MIGRATE_FRESH: ${MIGRATE_FRESH:-false}
       MIGRATE_ALLOW_DATA_LOSS: ${MIGRATE_ALLOW_DATA_LOSS:-false}
+      # The migrator still connects as sa: creating databases and logins needs it. It hands these
+      # to the post-deployment scripts, which create or update one login per host.
+      SQL_AUTH_PASSWORD: ${SQL_AUTH_PASSWORD:?SQL_AUTH_PASSWORD is required - see .env.example}
+      SQL_MANAGEMENT_PASSWORD: ${SQL_MANAGEMENT_PASSWORD:?SQL_MANAGEMENT_PASSWORD is required - see .env.example}
+      SQL_ENGINE_PASSWORD: ${SQL_ENGINE_PASSWORD:?SQL_ENGINE_PASSWORD is required - see .env.example}
     depends_on:
       sql:
         condition: service_healthy
