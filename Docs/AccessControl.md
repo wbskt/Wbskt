@@ -244,7 +244,7 @@ the slug is the second gate.
 | Logs | `GET event-logs` | `logs.read` |
 | Workflows | `GET workflows…`, `GET runs…`, `GET runs/{ref}/history`, `GET …/variables/{name}` | `workflows.read` |
 | Workflows | `POST workflows` (publish) | `workflows.create` |
-| Workflows | `POST workflows/{ref}/deprecate` | `workflows.delete` |
+| Workflows | `POST workflows/{ref}/deprecate`, `DELETE workflows/{ref}` | `workflows.delete` |
 | Workflows | `POST workflows/{ref}/runs`, `POST runs/{ref}/cancel`, `POST runs/{ref}/signals/{name}`, `PUT …/variables/{name}` | `workflows.execute` |
 | Realtime | `NotificationHub.JoinWorkspace` | `workspace.join` |
 

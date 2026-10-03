@@ -18,6 +18,15 @@ public interface IWorkflowDefinitionService
     Task<Result<Wbskt.Models.IPagedList<WorkflowSummaryDto>>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task<Result> DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct);
 
+    /// <summary>Every version of a workflow, newest first, without definitions.</summary>
+    Task<Result<IReadOnlyList<WorkflowVersionDto>>> GetVersionsAsync(int workspaceId, Guid refId, CancellationToken ct);
+
+    /// <summary>
+    /// Deletes a workflow: it leaves every list and current-version read, its triggers stop, runs
+    /// in flight are cancelled, and its RefId cannot be published again. Past runs stay readable.
+    /// </summary>
+    Task<Result> DeleteAsync(int workspaceId, Guid refId, CancellationToken ct);
+
     /// <summary>
     /// The inverse of <see cref="DeprecateAsync"/>: re-enables the current version and re-registers
     /// its triggers (re-seeding schedules from their cron). Without this, deprecating is one-way and

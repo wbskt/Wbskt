@@ -26,6 +26,13 @@ BEGIN
         THROW 50021, 'The workflow belongs to another workspace.', 1;
     END
 
+    -- A deleted workflow stays deleted: publishing under its RefId would bring its triggers back.
+    IF EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WHERE RefId = @RefId)
+    BEGIN
+        ROLLBACK TRAN;
+        THROW 50022, 'The workflow was deleted.', 1;
+    END
+
     -- This procedure is the single authority on the version number. The stored JSON is stamped here,
     -- under the same HOLDLOCK that computed it, so the row's Version column and the DefinitionJson's
     -- "version" property can never disagree - which they could when the caller pre-computed a version

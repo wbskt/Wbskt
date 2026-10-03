@@ -20,6 +20,19 @@ public interface IWorkflowDefinitionProvider
     /// </summary>
     Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct);
 
+    /// <summary>
+    /// Every version of a workflow in <paramref name="workspaceId"/>, newest first. Empty when the
+    /// workflow is unknown, in another workspace, or deleted.
+    /// </summary>
+    Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct);
+
+    /// <summary>
+    /// Deletes a workflow (<c>WorkflowDefinition_Delete</c>): tombstones its RefId, disables every
+    /// version and removes its triggers. Null when there was nothing in <paramref name="workspaceId"/>
+    /// to delete; otherwise the runs to cancel and the definitions to evict from caches.
+    /// </summary>
+    Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct);
+
     /// <summary>Enables or disables a definition (<c>WorkflowDefinition_UpdateIsEnabled</c>).</summary>
     Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct);
 }

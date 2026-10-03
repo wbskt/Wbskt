@@ -84,62 +84,75 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
         List<TriggerRegistrationDispatch> perRegistration = new(registrations.Count);
 
-        foreach (TriggerRegistrationRow registration in registrations)
+        // A throw part-way through leaves the claim Pending, and a Pending claim drops every later
+        // delivery with the same event id as a duplicate. With a caller-chosen id (a webhook's
+        // Idempotency-Key) that would turn the sender's retry of a failed delivery into a silent
+        // no-op, so the claim is released as Failed, which BookmarkResumer reclaims on the retry. The
+        // cost is that a registration which did start a run before the throw starts another on retry.
+        try
         {
-            // The per-registration correlation key, which is what the concurrency policy correlates
-            // *existing runs* against. Bookmarks played their part above and are done with: the bookmark
-            // match runs first and returns early, so reaching this line means the event resumed nothing
-            // and is being considered for starting something new.
-            string? correlationValue = EvaluateCorrelationExpression(registration.CorrelationExpression, resolvedEvent)
-                ?? defaultCorrelation;
-            _logger?.LogDebug("Evaluated correlation expression for registration {RegistrationId} to {CorrelationValue}", registration.Id, correlationValue);
-            InboundEvent normalizedEvent = resolvedEvent with { CorrelationKey = correlationValue };
-
-            // Secret and filter are both checked before the concurrency enforcer: neither should be able
-            // to queue, drop or cancel anything. An event that fails either was never for this trigger.
-            if (!SecretMatches(registration, resolvedEvent))
+            foreach (TriggerRegistrationRow registration in registrations)
             {
-                // Recorded per-registration but never surfaced to the caller: the public callback answers
-                // 202 either way, so a wrong secret stays indistinguishable from a right one.
-                _logger?.LogWarning("Registration {RegistrationId} rejected event {EventId}: webhook secret mismatch.", registration.Id, evt.InboundEventId);
-                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.SecretMismatch, null, correlationValue));
-                continue;
-            }
+                // The per-registration correlation key, which is what the concurrency policy correlates
+                // *existing runs* against. Bookmarks played their part above and are done with: the bookmark
+                // match runs first and returns early, so reaching this line means the event resumed nothing
+                // and is being considered for starting something new.
+                string? correlationValue = EvaluateCorrelationExpression(registration.CorrelationExpression, resolvedEvent)
+                    ?? defaultCorrelation;
+                _logger?.LogDebug("Evaluated correlation expression for registration {RegistrationId} to {CorrelationValue}", registration.Id, correlationValue);
+                InboundEvent normalizedEvent = resolvedEvent with { CorrelationKey = correlationValue };
 
-            if (!await FilterPassesAsync(registration, normalizedEvent, ct))
-            {
-                // Reported rather than silently swallowed - "I fired the webhook and nothing happened" is
-                // otherwise unanswerable, and a filter is the most likely reason.
-                _logger?.LogDebug("Registration {RegistrationId} filtered out event {EventId}.", registration.Id, evt.InboundEventId);
-                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Filtered, null, correlationValue));
-                continue;
-            }
-
-            TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
-            _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
-            switch (concurrencyDecision.Outcome)
-            {
-                case TriggerConcurrencyOutcome.Dropped:
-                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue));
+                // Secret and filter are both checked before the concurrency enforcer: neither should be able
+                // to queue, drop or cancel anything. An event that fails either was never for this trigger.
+                if (!SecretMatches(registration, resolvedEvent))
+                {
+                    // Recorded per-registration but never surfaced to the caller: the public callback answers
+                    // 202 either way, so a wrong secret stays indistinguishable from a right one.
+                    _logger?.LogWarning("Registration {RegistrationId} rejected event {EventId}: webhook secret mismatch.", registration.Id, evt.InboundEventId);
+                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.SecretMismatch, null, correlationValue));
                     continue;
+                }
 
-                case TriggerConcurrencyOutcome.Queued:
-                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue));
+                if (!await FilterPassesAsync(registration, normalizedEvent, ct))
+                {
+                    // Reported rather than silently swallowed - "I fired the webhook and nothing happened" is
+                    // otherwise unanswerable, and a filter is the most likely reason.
+                    _logger?.LogDebug("Registration {RegistrationId} filtered out event {EventId}.", registration.Id, evt.InboundEventId);
+                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Filtered, null, correlationValue));
                     continue;
+                }
 
-                case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
-                    foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
-                    {
-                        await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
-                    }
-                    break;
+                TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
+                _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
+                switch (concurrencyDecision.Outcome)
+                {
+                    case TriggerConcurrencyOutcome.Dropped:
+                        perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue));
+                        continue;
+
+                    case TriggerConcurrencyOutcome.Queued:
+                        perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue));
+                        continue;
+
+                    case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
+                        foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
+                        {
+                            await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
+                        }
+                        break;
+                }
+
+                (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
+                _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
+                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
+
+                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, runId, correlationValue));
             }
-
-            (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
-            _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
-            await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
-
-            perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, runId, correlationValue));
+        }
+        catch when (bookmarkMatch.ClaimKey != null)
+        {
+            await _idempotencyKeyProvider.MarkFailedAsync(bookmarkMatch.ClaimKey, "{\"error\":\"dispatch failed\"}", CancellationToken.None);
+            throw;
         }
 
         if (bookmarkMatch.ClaimKey != null)

@@ -129,6 +129,54 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
         return deleted is not null && Convert.ToInt32(deleted) > 0;
     }
 
+    public async Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.WorkflowDefinition_GetVersions_By_RefId",
+            p =>
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@WorkspaceId", workspaceId);
+            },
+            reader => new WorkflowVersionRow
+            {
+                Version = reader.GetInt32(reader.GetOrdinal("Version")),
+                Name = reader.GetString(reader.GetOrdinal("Name")),
+                Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+                IsEnabled = reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
+                PublishedBy = reader.GetInt32(reader.GetOrdinal("PublishedBy")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                RunCount = reader.GetInt64(reader.GetOrdinal("RunCount"))
+            },
+            ct
+        );
+    }
+
+    public async Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct)
+    {
+        var rows = await ExecuteCollectionAsync(
+            "dbo.WorkflowDefinition_Delete",
+            p =>
+            {
+                p.AddWithValue("@RefId", refId);
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@DeletedBy", deletedBy);
+            },
+            reader => (Kind: reader.GetString(reader.GetOrdinal("Kind")), Id: reader.GetInt64(reader.GetOrdinal("Id"))),
+            ct
+        );
+
+        // Every deleted workflow has at least one definition, so no rows means nothing was deleted.
+        if (rows.Count == 0)
+        {
+            return null;
+        }
+
+        return new WorkflowDeletion(
+            rows.Where(r => r.Kind == "run").Select(r => r.Id).ToList(),
+            rows.Where(r => r.Kind == "definition").Select(r => (int)r.Id).ToList());
+    }
+
     internal static WorkflowDefinitionRow Map(DbDataReader reader)
     {
         return new WorkflowDefinitionRow

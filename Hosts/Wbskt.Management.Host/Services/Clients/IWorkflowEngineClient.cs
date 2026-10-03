@@ -13,5 +13,5 @@ public interface IWorkflowEngineClient
     /// presented in <c>X-Wbskt-Secret</c>, passed through verbatim so the engine can compare it against
     /// the trigger's configured secret; null when the caller sent none.
     /// </summary>
-    Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, CancellationToken ct);
+    Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, string? idempotencyKey, CancellationToken ct);
 }

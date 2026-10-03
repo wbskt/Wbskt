@@ -26,7 +26,7 @@ public sealed class PublishToObserveE2ETests
         var cache = new RecordingWorkflowDefinitionCache();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -49,7 +49,7 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -75,6 +75,8 @@ public sealed class PublishToObserveE2ETests
 
     private sealed class InMemoryWorkflowDefinitionProvider : IWorkflowDefinitionProvider
     {
+        public Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct) => throw new NotSupportedException();
         private readonly Dictionary<Guid, List<WorkflowDefinitionRow>> _rows = new();
 
         public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));

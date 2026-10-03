@@ -257,8 +257,10 @@ in-place edit, which is why there is no update verb.
 | `POST validate` | `workflows.create` | Validates a definition **without publishing**. Returns `IsValid` plus every issue (warnings included) with code, message and `nodeId`. An invalid definition is a 200 with `IsValid: false`, not an error. |
 | `GET /` | `workflows.read` | Lists workflow summaries. Paged. |
 | `GET {refId}` | `workflows.read` | The current published version. |
-| `GET {refId}/versions/{version}` | `workflows.read` | A specific historical version. |
+| `GET {refId}/versions` | `workflows.read` | Every version, newest first, without definitions: number, status (`Published` or `Deprecated` for the newest, `Superseded` for the rest), name, run count and publish time. **404** for a deleted workflow. |
+| `GET {refId}/versions/{version}` | `workflows.read` | A specific historical version. Still readable after the workflow is deleted, so a past run's definition can be shown. |
 | `POST {refId}/deprecate` | `workflows.delete` | Marks the definition deprecated and deregisters its triggers, so nothing new fires it. Not a delete — the version history and its runs stay queryable. |
+| `DELETE {refId}` | `workflows.delete` | Deletes the workflow, which cannot be undone: it leaves the list and every current-version read (**404**), its triggers and schedules are removed, runs still going are cancelled, and its RefId cannot be published again (**409** `WORKFLOW_DELETED`). Past runs stay readable by run. **404** for a workflow that is not in this workspace or is already deleted. |
 | `POST {refId}/reinstate` | `workflows.delete` | The inverse of deprecate: re-enables the current version **and re-registers its triggers**, re-seeding schedules from their cron. Rejects a workflow that is already enabled. |
 | `POST {refId}/rollback/{version}` | `workflows.create` | Republishes an earlier version's definition as a **new** version — history stays append-only. Validated like any other publish, so rolling back to a definition that predates a validation rule fails rather than reinstating a broken workflow. |
 | `POST {refId}/runs` | `workflows.execute` | Starts a manual run. Verifies the workflow belongs to the workspace, then relays to the engine. Not every non-start is an error: **200** started (or an idempotent retry, returning the original run), **202** queued behind an active run, **409** dropped by the concurrency policy / no manual trigger / workflow deprecated. A 5xx means the engine itself failed. |
@@ -317,7 +319,7 @@ exactly like a webhook URL.
 | Endpoint | What it does |
 |---|---|
 | `POST api/callbacks/wake/{token}` | Wakes a run parked on a `WaitForHttp` node. |
-| `POST api/callbacks/webhook/{workspaceRef}/{path}` | Fires a webhook trigger, which may start a run. |
+| `POST api/callbacks/webhook/{workspaceRef}/{path}` | Fires a webhook trigger, which may start a run. An optional `Idempotency-Key` header (1–255 printable characters, else **400**) names the delivery: a retry with the same key, path and secret within 24 hours starts nothing new. Without it every request is a new delivery. |
 
 Hardened for an anonymous edge, on three axes:
 

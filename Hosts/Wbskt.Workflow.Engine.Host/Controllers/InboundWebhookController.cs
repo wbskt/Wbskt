@@ -13,16 +13,34 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
     /// <summary>The header a webhook caller presents its trigger's shared secret in.</summary>
     public const string SecretHeader = "X-Wbskt-Secret";
 
+    /// <summary>
+    /// The header a webhook caller names a delivery in, so a retry of the same delivery starts no
+    /// second run. The common name for it; see <see cref="WebhookEventIds"/>.
+    /// </summary>
+    public const string IdempotencyKeyHeader = "Idempotency-Key";
+
     [HttpPost("{workspaceRef:guid}/{channelKind}")]
-    public async Task<InboundWebhookResponse> Post(Guid workspaceRef, string channelKind, [FromBody] JsonElement payload, CancellationToken ct)
+    public async Task<ActionResult<InboundWebhookResponse>> Post(Guid workspaceRef, string channelKind, [FromBody] JsonElement payload, CancellationToken ct)
     {
         logger?.LogInformation("Received webhook request for workspace {WorkspaceRef} channel {ChannelKind}", workspaceRef, channelKind);
+
+        string? secret = Request.Headers.TryGetValue(SecretHeader, out Microsoft.Extensions.Primitives.StringValues presented)
+            ? presented.ToString()
+            : null;
+        string? idempotencyKey = Request.Headers.TryGetValue(IdempotencyKeyHeader, out Microsoft.Extensions.Primitives.StringValues key)
+            ? key.ToString()
+            : null;
+        if (idempotencyKey is not null && !WebhookEventIds.IsValidKey(idempotencyKey))
+        {
+            return BadRequest(new { Code = "IDEMPOTENCY_KEY_INVALID", Message = $"{IdempotencyKeyHeader} must be 1-{WebhookEventIds.MaxKeyLength} printable characters." });
+        }
+
         // The key is workspace-scoped (webhook:{workspaceRef}:{path}) and must match both the
         // registration minted by TriggerRegistrationService and CorrelationKeyResolver's webhook key.
         InboundEvent inboundEvent = new(
             "webhook",
             [$"webhook:{workspaceRef}:{channelKind}"],
-            $"webhook:{workspaceRef}:{channelKind}:{Guid.NewGuid()}",
+            WebhookEventIds.For(workspaceRef, channelKind, idempotencyKey, secret),
             new Dictionary<string, JsonElement>
             {
                 ["workspaceRefId"] = JsonSerializer.SerializeToElement(workspaceRef.ToString()),
@@ -33,9 +51,7 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
         {
             // Carried beside the payload, never inside it: the payload is persisted as the run's trigger
             // data, and a secret written there would be readable from the run's history forever.
-            Secret = Request.Headers.TryGetValue(SecretHeader, out Microsoft.Extensions.Primitives.StringValues presented)
-                ? presented.ToString()
-                : null
+            Secret = secret
         };
 
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, ct);

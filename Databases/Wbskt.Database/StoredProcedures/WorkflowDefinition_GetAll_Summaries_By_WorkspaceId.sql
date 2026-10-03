@@ -9,8 +9,9 @@ BEGIN
 
     -- Get total count for pagination
     SELECT @TotalCount = COUNT(DISTINCT RefId)
-    FROM dbo.WorkflowDefinitions
-    WHERE WorkspaceId = @WorkspaceId;
+    FROM dbo.WorkflowDefinitions WD
+    WHERE WorkspaceId = @WorkspaceId
+      AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = WD.RefId);
 
     -- Return latest versions of workflows in the workspace
     WITH LatestWorkflows AS
@@ -18,8 +19,9 @@ BEGIN
         SELECT 
             RefId,
             MAX(Version) AS LatestVersion
-        FROM dbo.WorkflowDefinitions
+        FROM dbo.WorkflowDefinitions WD
         WHERE WorkspaceId = @WorkspaceId
+          AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions WDel WHERE WDel.RefId = WD.RefId)
         GROUP BY RefId
     )
     SELECT

@@ -7,6 +7,7 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
 {
     /// <summary>Must match <c>InboundWebhookController.SecretHeader</c> on the engine side.</summary>
     internal const string WebhookSecretHeader = "X-Wbskt-Secret";
+    internal const string IdempotencyKeyHeader = "Idempotency-Key";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -71,7 +72,7 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         return new WakeResponse(engineResponse?.Matched ?? false, engineResponse?.Outcome ?? string.Empty);
     }
 
-    public async Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, CancellationToken ct)
+    public async Task<WebhookResponse> WebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, string? idempotencyKey, CancellationToken ct)
     {
         // Same relay shape as WakeAsync: the engine's /api/inbound/webhook is backend-only and
         // api-key gated (WorkflowEngineApiKeyHandler adds the key), so this fronts an external
@@ -89,6 +90,12 @@ internal sealed class WorkflowEngineClient : IWorkflowEngineClient
         if (!string.IsNullOrEmpty(secret))
         {
             request.Headers.TryAddWithoutValidation(WebhookSecretHeader, secret);
+        }
+
+        // The engine validates it and turns it into the event id the delivery is deduplicated on.
+        if (idempotencyKey is not null)
+        {
+            request.Headers.TryAddWithoutValidation(IdempotencyKeyHeader, idempotencyKey);
         }
 
         var response = await _httpClient.SendAsync(request, ct);
