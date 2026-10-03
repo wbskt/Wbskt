@@ -13,6 +13,7 @@ public interface IWorkspaceService
     Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int callerId, int workspaceId, int skip, int take, CancellationToken cancellationToken = default);
     Task<Result> UpdateWorkspaceAsync(int callerId, int workspaceId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default);
     Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default);
+    Task<Result> TransferOwnershipAsync(int callerId, int workspaceId, Guid newOwnerRef, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Membership gate plus effective permission set for <paramref name="userId"/> in the workspace.

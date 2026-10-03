@@ -206,6 +206,25 @@ public class WorkspacesController : ApiControllerBase
     }
 
     /// <summary>
+    /// Makes another member of the workspace's tenant its owner, adding them to the workspace if they
+    /// are not in it. The previous owner stays a member and can then be removed like anyone else.
+    /// Requires users.manage in that workspace.
+    /// </summary>
+    [HttpPut("{workspaceRef:guid}/owner")]
+    public async Task<IActionResult> TransferOwnership(Guid workspaceRef, [FromBody] TransferOwnershipRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: TransferOwnership requested for WorkspaceRef: '{WorkspaceRef}', NewOwner: '{UserRef}'", workspaceRef, request.UserRef);
+
+        var resolved = await ResolveAsync(workspaceRef, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return MapError(resolved.Error);
+        }
+
+        return MapResult(await _workspaceService.TransferOwnershipAsync(resolved.Value.CallerId, resolved.Value.WorkspaceId, request.UserRef, cancellationToken));
+    }
+
+    /// <summary>
     /// Deletes a workspace and every assignment scoped to it. Resources owned by other services
     /// (clients, policies, workflows) are not removed — their workspace reference simply stops
     /// resolving. Requires users.manage in that workspace.

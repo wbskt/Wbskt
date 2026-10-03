@@ -1,5 +1,5 @@
--- Redeems an invitation: joins the accepting user to the tenant and grants the invited role, if one
--- was named. This is the authoritative validity check -- callers may look an invitation up first for
+-- Redeems an invitation: joins the accepting user to the tenant, grants the invited role if one was
+-- named, and adds them to the workspaces the invitation lists. This is the authoritative validity check -- callers may look an invitation up first for
 -- a better error, but only this procedure may act on one.
 --
 -- The accepting account's email must match the address the invitation was sent to. Without that,
@@ -61,6 +61,15 @@ BEGIN
         INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId)
         VALUES (@UserId, @RoleId, @TenantId, NULL);
     END
+
+    -- Only workspaces still in this tenant: one deleted since the invitation was issued has already
+    -- cascaded out of the list, and the tenant check guards anything else.
+    INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId)
+    SELECT IW.WorkspaceId, @UserId
+    FROM dbo.TenantInvitationWorkspaces IW
+    INNER JOIN dbo.Workspaces W ON W.Id = IW.WorkspaceId AND W.TenantId = @TenantId
+    WHERE IW.InvitationId = @InvitationId
+      AND NOT EXISTS (SELECT 1 FROM dbo.WorkspaceMembers WM WHERE WM.WorkspaceId = IW.WorkspaceId AND WM.UserId = @UserId);
 
     COMMIT TRANSACTION;
 END

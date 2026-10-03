@@ -18,3 +18,8 @@ public record AddMemberRequest(
     [EmailAddress]
     [StringLength(100)]
     string Email);
+
+/// <summary>Names the tenant member who becomes the workspace's owner.</summary>
+public record TransferOwnershipRequest(
+    [Required]
+    Guid UserRef);

@@ -93,3 +93,18 @@ BEGIN
         COMMIT TRANSACTION;';
 END
 GO
+
+-- User role defaults: the User roles that exist when TenantInvitationWorkspaces is still missing
+-- (that is, on the first deploy of the version that started seeding User with read permissions)
+-- and hold no permissions are recorded here, and the post-deployment script grants them the same
+-- reads Tenant_Create now seeds, then drops the list. Exactly once: a User role an administrator
+-- empties on purpose later is never refilled. Through EXEC for the same SQL70645 reason as above.
+IF OBJECT_ID('dbo.Roles', 'U') IS NOT NULL
+   AND OBJECT_ID('dbo.TenantInvitationWorkspaces', 'U') IS NULL
+   AND OBJECT_ID('dbo.__UserRoleDefaultsBackfill', 'U') IS NULL
+BEGIN
+    PRINT 'Recording empty User roles to receive the default read permissions.';
+    EXEC('SELECT r.Id INTO dbo.__UserRoleDefaultsBackfill FROM dbo.Roles r
+          WHERE r.Name = ''User'' AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id);');
+END
+GO

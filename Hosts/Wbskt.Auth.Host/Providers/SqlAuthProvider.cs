@@ -302,7 +302,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
 
-    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default)
+    public async Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.TenantInvitation_Create", p =>
         {
@@ -314,6 +314,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.AddWithValue("@InvitedByUserId", invitedByUserId);
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
             p.Add("@TenantName", SqlDbType.NVarChar, 100).Direction = ParameterDirection.Output;
+            p.AddWithValue("@WorkspaceIds", workspaceIds.Count == 0 ? DBNull.Value : string.Join(',', workspaceIds));
         }, cancellationToken);
 
         return new CreatedInvitation((Guid)parameters["@RefId"].Value, (string)parameters["@TenantName"].Value);
@@ -750,7 +751,10 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             reader.IsDBNull(reader.GetOrdinal("RoleRefId")) ? null : reader.GetGuid(reader.GetOrdinal("RoleRefId")),
             reader.IsDBNull(reader.GetOrdinal("RoleName")) ? null : reader.GetString(reader.GetOrdinal("RoleName")),
             reader.GetDateTime(reader.GetOrdinal("ExpiresAt")),
-            reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            reader.IsDBNull(reader.GetOrdinal("WorkspaceRefIds"))
+                ? []
+                : reader.GetString(reader.GetOrdinal("WorkspaceRefIds")).Split(',').Select(Guid.Parse).ToArray()
         );
     }
 

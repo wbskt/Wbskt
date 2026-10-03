@@ -88,7 +88,8 @@ internal interface IAuthProvider : IReferenceProvider
 
     // Invitations. The token is never stored or accepted in raw form here — the service hashes it,
     // so a provider that logged its parameters could not leak a usable one.
-    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, CancellationToken cancellationToken = default);
+    /// <summary>Throws 50017 when one of <paramref name="workspaceIds"/> is not in the tenant.</summary>
+    Task<CreatedInvitation> CreateInvitationAsync(int tenantId, string email, int? roleId, byte[] tokenHash, DateTime expiresAt, int invitedByUserId, IReadOnlyCollection<int> workspaceIds, CancellationToken cancellationToken = default);
     /// <summary>Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when no invitation carries that hash.</summary>
     Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
     Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default);

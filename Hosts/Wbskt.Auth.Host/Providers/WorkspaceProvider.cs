@@ -92,6 +92,15 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
+    public async Task SetOwnerAsync(int workspaceId, int userId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.Workspace_SetOwner", p =>
+        {
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            p.AddWithValue("@UserId", userId);
+        }, cancellationToken);
+    }
+
     public async Task DeleteWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Workspace_Delete", p =>

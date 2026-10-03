@@ -38,9 +38,10 @@ BEGIN
     SET @TenantId = SCOPE_IDENTITY();
 
     -- Seeded per tenant, mirroring the post-deployment seed for the default tenant: Admin holds
-    -- every permission in the catalogue, User holds none and is a starting point the tenant's
-    -- administrator customises. Granting User a default set here would be inventing authorisation
-    -- policy on the tenant's behalf.
+    -- every permission in the catalogue, User holds the read permissions for a workspace's
+    -- resources. An empty User role made inviting someone with it grant nothing at all; reads are
+    -- the least a member needs to see the workspace they were added to, and the tenant's
+    -- administrator can still narrow or widen the role.
     INSERT INTO dbo.Roles (TenantId, Name, Description)
     VALUES (@TenantId, 'Admin', 'Administrator with full access'),
            (@TenantId, 'User', 'Standard user');
@@ -50,6 +51,12 @@ BEGIN
     INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
     SELECT @AdminRoleId, P.Id, 0
     FROM dbo.Permissions P;
+
+    INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
+    SELECT R.Id, P.Id, 0
+    FROM dbo.Roles R
+    INNER JOIN dbo.Permissions P ON P.Slug IN ('clients.read', 'policies.read', 'templates.read', 'workflows.read', 'logs.read')
+    WHERE R.TenantId = @TenantId AND R.Name = 'User';
 
     INSERT INTO dbo.TenantMembers (TenantId, UserId)
     VALUES (@TenantId, @OwnerUserId);

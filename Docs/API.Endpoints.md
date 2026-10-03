@@ -110,14 +110,14 @@ role or user belonging to another tenant reads as nonexistent.
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET {tenantRef}/invitations` | `users.read` | Lists outstanding invitations. |
-| `POST {tenantRef}/invitations` | `users.manage` | Issues one against an email address and mails the invitee a link. Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. |
+| `POST {tenantRef}/invitations` | `users.manage` | Issues one against an email address and mails the invitee a link. Optional `roleRef` (granted tenant-wide) and `workspaceRefs` (up to 50 workspaces of this tenant the invitee joins on acceptance; one outside it is 403 `WORKSPACE_NOT_FOUND`). Still returns the raw token **once**, so an administrator can deliver it by hand when mail is not an option. The listing returns each invitation's `workspaceRefs`. |
 | `DELETE {tenantRef}/invitations/{invitationRef}` | `users.manage` | Revokes an unredeemed invitation. |
 
 **Roles and their permissions**
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET {tenantRef}/roles` | `roles.read` | Lists the tenant's roles. Roles are tenant-owned; a new tenant starts with `Admin` and `User`. |
+| `GET {tenantRef}/roles` | `roles.read` | Lists the tenant's roles. Roles are tenant-owned; a new tenant starts with `Admin` (everything) and `User` (the five `*.read` permissions for a workspace's resources). |
 | `POST {tenantRef}/roles` | `roles.manage` | Creates a role. |
 | `PUT {tenantRef}/roles/{roleRef}` | `roles.manage` | Renames a role or changes its description. |
 | `DELETE {tenantRef}/roles/{roleRef}` | `roles.manage` | Deletes a role and its assignments. |
@@ -168,6 +168,7 @@ List endpoints take `skip`/`take`, clamped to 200 rather than rejected, and retu
 | `GET /` | none | Lists workspaces the caller belongs to. |
 | `POST /` | none | Creates a workspace in the caller's tenant and makes them its owner. The owner automatically receives the tenant's `Admin` role scoped to it. |
 | `PUT {workspaceRef}` | `users.manage` **in that workspace** | Renames a workspace or changes its description. |
+| `PUT {workspaceRef}/owner` | `users.manage` in that workspace | Body `{ "userRef": guid }`. Makes another member of the workspace's tenant its owner, adding them to the workspace if needed. The previous owner stays a member and can then be removed. Someone outside the tenant is 404 `USER_NOT_FOUND`. |
 | `DELETE {workspaceRef}` | `users.manage` in that workspace | Deletes the workspace and every assignment scoped to it. Resources owned by other services — clients, policies, workflows — are **not** removed; their workspace reference simply stops resolving. |
 | `GET {workspaceRef}/members` | `users.read` in that workspace | Lists members. |
 | `POST {workspaceRef}/members` | `users.manage` in that workspace | Adds an existing **tenant member** to the workspace. It will not pull in a non-member: doing so used to let anyone with `users.manage` in one workspace capture any account in the system knowing only its email. An unknown address and a non-member are reported identically. |
