@@ -91,6 +91,49 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientStateVariables WHERE ClientId = @p0", clientId));
     }
 
+    /// <summary>
+    /// <c>dbo.Run_DeleteRetired</c> removes a long-finished run and everything that hangs off it,
+    /// and leaves a run still going and one finished after the cutoff. Runs complete in 2000 and the
+    /// cutoff is 2001, so the shared database's other runs are never swept here.
+    /// </summary>
+    [SkippableFact]
+    public async Task Retiring_runs_removes_old_completed_runs_and_their_rows_only()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var workflowRefId = Guid.NewGuid();
+        await PublishAsync(workflowRefId, Random.Shared.Next(1_000_000, int.MaxValue));
+
+        int oldRun = await InsertRunAsync(workflowRefId, "Completed", "2000-01-01");
+        int recentRun = await InsertRunAsync(workflowRefId, "Completed", "2001-06-01");
+        int liveRun = await InsertRunAsync(workflowRefId, "Running", null);
+        foreach (int runId in new[] { oldRun, recentRun, liveRun })
+        {
+            await ExecAsync("""
+                INSERT INTO dbo.RunCounters (RunId) VALUES (@p0);
+                INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status) VALUES (NEWID(), @p0, NEWID(), N'Completed');
+                INSERT INTO dbo.HistoryEvents (RunId, NodeId, EventKind, Severity, PayloadJson, Timestamp)
+                VALUES (@p0, NEWID(), N'RunStarted', N'Error', N'{}', '2000-01-01');
+                """, runId);
+        }
+
+        await ProcAsync("dbo.Run_DeleteRetired", ("@CutoffUtc", new DateTime(2001, 1, 1)), ("@BatchSize", 100));
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id = @p0", oldRun));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Branches WHERE RunId = @p0", oldRun));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.HistoryEvents WHERE RunId = @p0", oldRun));
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.RunCounters WHERE RunId = @p0", oldRun));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Runs WHERE Id IN (@p0, @p1)", recentRun, liveRun));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Branches WHERE RunId IN (@p0, @p1)", recentRun, liveRun));
+    }
+
+    private Task<int> InsertRunAsync(Guid workflowRefId, string status, string? completedAt) =>
+        ScalarAsync<int>("""
+            INSERT INTO dbo.Runs (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, Status, StartedAt, CompletedAt, CreditBudget)
+            OUTPUT INSERTED.Id
+            SELECT NEWID(), Id, RefId, Version, NEWID(), @p1, '2000-01-01', CONVERT(DATETIME2(3), @p2), 0
+            FROM dbo.WorkflowDefinitions WHERE RefId = @p0;
+            """, workflowRefId, status, (object?)completedAt ?? DBNull.Value);
+
     // ---------------------------------------------------------------- helpers
 
     private async Task<(bool ShouldContinue, int Contributed)> ContributeAsync(Guid joinToken, long branchId)

@@ -28,3 +28,8 @@ CREATE NONCLUSTERED INDEX IX_RefreshTokens_UserId
     ON dbo.RefreshTokens (UserId)
     INCLUDE (Revoked)
 GO
+
+-- Drives the retention sweep (dbo.Credential_DeleteExpired).
+CREATE NONCLUSTERED INDEX IX_RefreshTokens_Expires
+    ON dbo.RefreshTokens (Expires)
+GO

@@ -58,6 +58,8 @@ public static class Program
         builder.Services.AddScoped<IManagementService, ManagementService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+        builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
+        builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();
 
         // Mail. Both option types bind from Auth:Email - the SMTP half describes the relay, the

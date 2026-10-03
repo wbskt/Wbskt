@@ -44,3 +44,9 @@ GO
 
 
 
+
+-- Drives both retention sweeps (HistoryEvent_DeleteForRetiredRuns, Run_DeleteRetired).
+CREATE INDEX IX_Runs_CompletedAt
+    ON dbo.Runs (CompletedAt)
+    WHERE CompletedAt IS NOT NULL;
+GO

@@ -40,6 +40,33 @@ public sealed class HistoryRetentionGcTests
         Assert.Empty(historyProvider.DeleteCalls);
     }
 
+    [Fact]
+    public async Task Tick_then_deletes_runs_past_the_elevated_window_until_caught_up()
+    {
+        var historyProvider = new RecordingHistoryEventProvider([0]);
+        var runProvider = new RecordingRunRetentionProvider([HistoryRetentionGc.RunBatchSize, 3]);
+        var gc = new HistoryRetentionGc(new FixedClock(), new RecordingLeaseHolder(isHeld: true), historyProvider,
+            NullLogger<HistoryRetentionGc>.Instance, elevatedRetentionWindow: TimeSpan.FromDays(365), runRetentionProvider: runProvider);
+
+        await gc.ProcessRetentionAsync(CancellationToken.None);
+
+        var expectedCutoff = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc).AddDays(-365);
+        Assert.Equal([(expectedCutoff, HistoryRetentionGc.RunBatchSize), (expectedCutoff, HistoryRetentionGc.RunBatchSize)], runProvider.DeleteCalls);
+    }
+
+    private sealed class RecordingRunRetentionProvider(IReadOnlyCollection<int> deletes) : IRunRetentionProvider
+    {
+        private readonly Queue<int> _deletes = new(deletes);
+
+        public List<(DateTime CutoffUtc, int BatchSize)> DeleteCalls { get; } = [];
+
+        public Task<int> DeleteRetiredRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+        {
+            DeleteCalls.Add((cutoffUtc, batchSize));
+            return Task.FromResult(_deletes.Dequeue());
+        }
+    }
+
     private sealed class FixedClock : IClock
     {
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
