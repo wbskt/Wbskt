@@ -201,6 +201,81 @@ public class ClientsController : ApiControllerBase
     }
 
     /// <summary>
+    /// Applies one status to many clients: approving or revoking a batch of pending devices at once.
+    /// Each client is handled as the single-client endpoint would handle it, so one that fails (the
+    /// policy is full, or the client is not in this workspace) is reported and the rest still change.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="request">The clients (at most 100) and the status to give them.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Which clients changed and which did not, with why.</returns>
+    [HttpPatch("status")]
+    public async Task<ActionResult<BulkClientStatusResponse>> UpdateStatuses(Guid workspaceRef, BulkClientStatusRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: UpdateStatuses requested for WorkspaceRef: '{WorkspaceRef}' ({Count} clients) to Status: '{Status}'", workspaceRef, request.ClientRefIds?.Count ?? 0, request.Status);
+
+        if (request.ClientRefIds is null || request.ClientRefIds.Count == 0 || request.ClientRefIds.Count > BulkClientStatusRequest.MaxClients)
+        {
+            return BadRequest(Error.Validation("CLIENT_REFS_INVALID", $"Name between 1 and {BulkClientStatusRequest.MaxClients} clients."));
+        }
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<BulkClientStatusResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.UpdateStatusesAsync(workspaceIdResult.Value, request.ClientRefIds, request.Status, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Deletes a client. Its connection is closed, its token refused, and its capabilities and
+    /// state removed; its event-log history stays. The device has to register again to come back.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>No content.</returns>
+    [HttpDelete("{clientRefId:guid}")]
+    public async Task<IActionResult> Delete(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: Delete requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.DeleteAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        return result.IsSuccess ? NoContent() : MapError(result.Error);
+    }
+
+    /// <summary>
+    /// Replaces a client's secret and returns the new one, once. The old secret stops working at
+    /// once and the live connection is closed; the device reconnects when it is given the new one.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The new secret.</returns>
+    [HttpPost("{clientRefId:guid}/rotate-secret")]
+    public async Task<ActionResult<ClientSecretResponse>> RotateSecret(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RotateSecret requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ClientSecretResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.RotateSecretAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
     /// Retrieves the last-known state variables self-reported by a specific client.
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>

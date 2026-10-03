@@ -18,9 +18,8 @@ public static class Permissions
     public static readonly PermissionSlug ClientsUpdate = PermissionSlug.CreateInternal("clients.update");
 
     /// <summary>
-    /// Reserved for client lifecycle operations (creation and removal from the console). No endpoint
-    /// gates on it today — status changes and renames are <see cref="ClientsUpdate"/>. Kept in the
-    /// catalogue rather than removed so existing role configurations that grant it stay valid.
+    /// Client lifecycle beyond a status change: deleting a client and rotating its secret. Approving
+    /// and revoking stay on <see cref="ClientsUpdate"/>.
     /// </summary>
     public static readonly PermissionSlug ClientsManage = PermissionSlug.CreateInternal("clients.manage");
     public static readonly PermissionSlug ClientsCommand = PermissionSlug.CreateInternal("clients.command");

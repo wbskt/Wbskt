@@ -119,6 +119,29 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         }, cancellationToken);
     }
 
+    public async Task<RegistrationPolicy> RotatePinAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
+    {
+        // Same retry as InsertAsync: PINs are unique across the platform.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await ExecuteNonQueryAsync("dbo.RegistrationPolicy_UpdatePin", p =>
+                {
+                    p.AddWithValue("@WorkspaceId", workspaceId);
+                    p.AddWithValue("@Id", id);
+                    p.Add("@Pin", SqlDbType.NVarChar, 20).Value = RegistrationPins.Generate();
+                }, cancellationToken);
+
+                return await GetByIdAsync(id, cancellationToken);
+            }
+            catch (SqlException ex) when (ex.Number is 2601 or 2627 && attempt < MaxPinAttempts)
+            {
+                // Drawn PIN already taken; the next iteration draws another.
+            }
+        }
+    }
+
     public async Task DisableAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.RegistrationPolicy_Disable", p =>

@@ -1,15 +1,20 @@
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models;
+using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Services;
 
 internal sealed class ClientService : IClientService
 {
+    // THROW number from dbo.Client_UpdateStatus (and dbo.Client_Create) when a policy is full.
+    private const int PolicyLimitReached = 50020;
+
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly IEventBus _eventBus;
@@ -124,7 +129,18 @@ internal sealed class ClientService : IClientService
                 }
             }
 
-            await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
+            try
+            {
+                await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
+            }
+            catch (SqlException ex) when (ex.Number == PolicyLimitReached)
+            {
+                // The check above is the friendly early answer; this one, under a lock on the policy,
+                // is the one that holds when approvals race.
+                _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", policy.Id);
+                return Result.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients."));
+            }
+
             _logger.LogInformation("Successfully updated client ID {ClientId} status from '{OldStatus}' to '{NewStatus}'", id, oldStatus, status);
 
             await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, (byte)status), cancellationToken);
@@ -137,6 +153,117 @@ internal sealed class ClientService : IClientService
             _logger.LogTrace(ex, "UpdateStatusAsync exception stack trace for ClientId {ClientId}", id);
             return Result.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
         }
+    }
+
+    public async Task<Result<BulkClientStatusResponse>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds,
+        ClientStatus status, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Updating {Count} clients to status '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefIds.Count, status, workspaceId);
+
+        var updated = new List<Guid>();
+        var failed = new List<BulkClientStatusFailure>();
+
+        // One at a time, in the order given: approvals compete for the policy's remaining places, and
+        // a predictable order decides which ones get them.
+        foreach (var clientRefId in clientRefIds.Distinct())
+        {
+            var idResult = await EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            var result = idResult.IsSuccess
+                ? await UpdateStatusAsync(workspaceId, idResult.Value, status, cancellationToken)
+                : Result.Failure(idResult.Error);
+
+            if (result.IsSuccess)
+            {
+                updated.Add(clientRefId);
+            }
+            else
+            {
+                failed.Add(new BulkClientStatusFailure(clientRefId, result.Error.Code, result.Error.Message));
+            }
+        }
+
+        return Result<BulkClientStatusResponse>.Success(new BulkClientStatusResponse(updated, failed));
+    }
+
+    public async Task<Result> DeleteAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+
+        try
+        {
+            var client = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (client is null)
+            {
+                return Result.Failure(Unauthorized);
+            }
+
+            if (!await _clientProvider.DeleteAsync(client.Id, workspaceId, cancellationToken))
+            {
+                // Deleted by someone else between the lookup and here: the outcome they asked for.
+                return Result.Success();
+            }
+
+            _logger.LogInformation("Deleted client ID {ClientId} ('{Name}') from WorkspaceId: {WorkspaceId}", client.Id, client.Name, workspaceId);
+            await _eventBus.PublishAsync(
+                new ClientDeletedEvent(client.RefId, client.Id, client.PolicyRefId, client.PolicyId, workspaceId, client.Name),
+                cancellationToken);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error deleting client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "DeleteAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
+            return Result.Failure(Error.Failure("CLIENT_DELETE_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<ClientSecretResponse>> RotateSecretAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Rotating secret for client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+
+        try
+        {
+            var client = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (client is null)
+            {
+                return Result<ClientSecretResponse>.Failure(Unauthorized);
+            }
+
+            var secret = ClientSecrets.Generate();
+            if (!await _clientProvider.UpdateSecretAsync(client.Id, workspaceId, ClientSecrets.Hash(secret), cancellationToken))
+            {
+                return Result<ClientSecretResponse>.Failure(Unauthorized);
+            }
+
+            _logger.LogInformation("Rotated secret for client ID {ClientId}", client.Id);
+            await _eventBus.PublishAsync(new ClientSecretRotatedEvent(client.RefId, client.Id, workspaceId, DateTime.UtcNow), cancellationToken);
+
+            return Result<ClientSecretResponse>.Success(new ClientSecretResponse(client.RefId, secret));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error rotating secret for client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "RotateSecretAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
+            return Result<ClientSecretResponse>.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
+        }
+    }
+
+    // The client, or null both when the reference resolves to nothing and when it is another
+    // workspace's; see Unauthorized for why the two are not told apart.
+    private async Task<Client?> FindInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
+    {
+        Client client;
+        try
+        {
+            client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
+        }
+        catch (NotFoundException)
+        {
+            return null;
+        }
+
+        return client.WorkspaceId == workspaceId ? client : null;
     }
 
     public async Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)

@@ -232,12 +232,13 @@ the slug is the second gate.
 | Area | Endpoint | Permission |
 |---|---|---|
 | Clients | `GET clients`, `GET clients/policy/{ref}`, `GET clients/{ref}`, `GET clients/{ref}/state` | `clients.read` |
-| Clients | `PATCH clients/{ref}/status`, `PATCH clients/{ref}/name` | `clients.update` |
+| Clients | `PATCH clients/{ref}/status`, `PATCH clients/status` (bulk), `PATCH clients/{ref}/name` | `clients.update` |
+| Clients | `DELETE clients/{ref}`, `POST clients/{ref}/rotate-secret` | `clients.manage` |
 | Clients | `POST clients/{ref}/command` | `clients.command` |
 | Clients | `POST clients/{ref}/ping` | `clients.ping` |
 | Clients | `GET clients/{ref}/comms` | `logs.read` — it is a projection of the event log, not client state |
 | Policies | `GET registration-policies…` | `policies.read` |
-| Policies | `POST`, `PATCH {ref}`, `POST {ref}/disable` | `policies.manage` |
+| Policies | `POST`, `PATCH {ref}`, `POST {ref}/disable`, `POST {ref}/rotate-pin` | `policies.manage` |
 | Templates | `GET message-templates` | `templates.read` |
 | Templates | `POST`, `PUT {ref}`, `DELETE {ref}` | `templates.manage` |
 | Logs | `GET event-logs` | `logs.read` |
@@ -252,8 +253,11 @@ the slug is the second gate.
 require it now take `workflows.execute`. The split exists so that operating a workflow and rewriting
 one are separate grants; an operator with `workflows.execute` alone cannot change what a run does.
 
-`clients.manage` likewise gates nothing today. Both are kept in the catalogue rather than removed so
-that role configurations already granting them stay valid.
+It is kept in the catalogue rather than removed so that role configurations already granting it
+stay valid.
+
+`clients.manage` gates the device lifecycle operations that go beyond a status change: deleting a
+client and rotating its secret. Approving and revoking, singly or in bulk, stay on `clients.update`.
 
 Two structural notes on scoping, since neither is enforced by the resolve call:
 

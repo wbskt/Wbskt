@@ -174,6 +174,35 @@ public class RegistrationPoliciesController : ApiControllerBase
     }
 
     /// <summary>
+    /// Replaces a policy's PIN, so a leaked one stops registering devices. Devices already registered
+    /// keep working; the PIN is only used to register.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="refId">The unique reference ID of the policy.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The policy with its new PIN.</returns>
+    [HttpPost("{refId:guid}/rotate-pin")]
+    public async Task<ActionResult<RegistrationPolicyResponse>> RotatePin(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: Rotate PIN requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<RegistrationPolicyResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
+        if (policyId <= 0)
+        {
+            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+        }
+
+        var result = await _policyService.RotatePinAsync(workspaceIdResult.Value, policyId, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
     /// Disables a specific registration policy.
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>

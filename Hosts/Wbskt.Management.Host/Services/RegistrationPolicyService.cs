@@ -175,6 +175,44 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         }
     }
 
+    public async Task<Result<RegistrationPolicyResponse>> RotatePinAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Rotating PIN of registration policy ID {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+
+        try
+        {
+            RegistrationPolicy policy;
+            try
+            {
+                policy = await _provider.GetByIdAsync(policyId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to rotate PIN: Policy ID {PolicyId} not found. Error: {Message}", policyId, ex.Message);
+                return Result<RegistrationPolicyResponse>.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+            }
+
+            if (policy.WorkspaceId != workspaceId)
+            {
+                _logger.LogWarning("PIN rotation rejected: Policy ID {PolicyId} does not belong to WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+                return Result<RegistrationPolicyResponse>.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
+            }
+
+            var rotated = await _provider.RotatePinAsync(workspaceId, policyId, cancellationToken);
+            _logger.LogInformation("Registration policy ID {PolicyId} has a new PIN", policyId);
+
+            await _eventBus.PublishAsync(new PolicyPinRotatedEvent(rotated.RefId, rotated.Id, workspaceId), cancellationToken);
+
+            return Result<RegistrationPolicyResponse>.Success(MapToResponse(rotated));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error rotating PIN of registration policy ID {PolicyId}. Error: {Message}", policyId, ex.Message);
+            _logger.LogTrace(ex, "RotatePinAsync exception stack trace for PolicyId {PolicyId}", policyId);
+            return Result<RegistrationPolicyResponse>.Failure(Error.Failure("POLICY_UPDATE_ERROR", ex.Message));
+        }
+    }
+
     public async Task<Result> DisableAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Disabling registration policy ID {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);

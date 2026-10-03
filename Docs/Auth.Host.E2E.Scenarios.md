@@ -344,6 +344,23 @@ The cross-service contract. Every workspace-scoped management-host request passe
 
 ---
 
+## 11b. Devices — delete, rotate, bulk status (management host)
+
+Covered by `Scenarios/Devices/DeviceLifecycleTests.cs`; listed here so device lifecycle sits beside the
+workspace scenarios it depends on.
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `DEV_DEL_01` | + | Delete a registered device | **204**; its secret no longer signs in (**401**) and its detail is **404** |
+| `DEV_DEL_02` | − | Delete another workspace's device | **403** `CLIENT_UNAUTHORIZED`; the device still signs in |
+| `DEV_SEC_01` | + | Rotate a device's secret | **200** with a new secret; the old one is **401**, the new one signs in |
+| `DEV_PIN_01` | + | Rotate a policy's PIN | **200** with a new PIN; the old PIN no longer registers, the new one does, and existing devices still sign in |
+| `DEV_BULK_01` | + | Approve two pending devices and an unknown ref | **200**; both approved, the unknown ref reported as `CLIENT_UNAUTHORIZED` |
+| `DEV_BULK_02` | − | Approve two pending devices under a one-device policy | The first is approved, the second reported as `POLICY_LIMIT_REACHED` |
+| `DEV_BULK_03` | − | Empty batch, or more than 100 | **400** |
+
+---
+
 ## 12. Tenant administration — roles, groups, permissions
 
 All under `/api/tenants/{tenantRef}`, all requiring the permission **tenant-wide**. Run as the seeded

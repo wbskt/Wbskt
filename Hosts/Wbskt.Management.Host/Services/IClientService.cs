@@ -11,6 +11,12 @@ public interface IClientService
     Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId, ClientStatus? status,
         string? name, int skip, int take, CancellationToken cancellationToken = default);
     Task<Result> UpdateStatusAsync(int workspaceId, int id, ClientStatus status, CancellationToken cancellationToken = default);
+    /// <summary>Applies one status to many clients, each as <see cref="UpdateStatusAsync"/> would.</summary>
+    Task<Result<BulkClientStatusResponse>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds, ClientStatus status, CancellationToken cancellationToken = default);
+    /// <summary>Deletes a client, its capabilities and state, and disconnects it. Its event log stays.</summary>
+    Task<Result> DeleteAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
+    /// <summary>Replaces a client's secret, returns the new one once, and disconnects it.</summary>
+    Task<Result<ClientSecretResponse>> RotateSecretAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
     Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
     Task<Result> RenameAsync(int workspaceId, int id, string name, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, int id, CancellationToken cancellationToken = default);

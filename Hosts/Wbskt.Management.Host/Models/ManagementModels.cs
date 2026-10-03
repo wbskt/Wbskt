@@ -43,6 +43,23 @@ public record ClientRegistrationResponse(
     ClientStatus Status
 );
 
+/// <summary>A client's new secret, shown once. The old one stops working at once.</summary>
+public record ClientSecretResponse(Guid ClientRefId, string Secret);
+
+/// <summary>One status change for many clients. At most <see cref="MaxClients"/> per request.</summary>
+public record BulkClientStatusRequest(IReadOnlyList<Guid> ClientRefIds, ClientStatus Status)
+{
+    public const int MaxClients = 100;
+}
+
+/// <summary>
+/// Which clients changed and which did not. A failure carries the same error code the single-client
+/// endpoint would have returned, so one bad client does not undo the rest.
+/// </summary>
+public record BulkClientStatusResponse(IReadOnlyList<Guid> Updated, IReadOnlyList<BulkClientStatusFailure> Failed);
+
+public record BulkClientStatusFailure(Guid ClientRefId, string Code, string Message);
+
 public record ClientResponse(
     Guid ClientRefId,
     Guid PolicyRefId,
