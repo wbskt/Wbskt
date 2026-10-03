@@ -242,6 +242,10 @@ CORS_EXTRA_ORIGINS=http://localhost:4200
 docker compose up -d --no-build auth management
 ```
 
+List several origins separated by commas. An entry ending in `:*` allows every port on that
+scheme and host, so `CORS_EXTRA_ORIGINS=http://localhost:*` covers any local dev server. Only the
+port can be wildcarded, never the host.
+
 It is empty by default and only widens CORS. Email links still point at `CONSOLE_ORIGIN`, so a
 verification or reset link opens the deployed console, not the local one. Clear it again before
 public launch. The console side (pointing `ng serve` at these URLs) is in the Wbskt.Console README.
