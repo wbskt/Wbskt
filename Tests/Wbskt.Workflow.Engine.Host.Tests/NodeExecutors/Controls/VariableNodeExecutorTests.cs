@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -101,18 +102,18 @@ public sealed class VariableNodeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_shared_counter_seeds_the_variable_when_it_does_not_exist()
+    public async Task ExecuteAsync_shared_counter_on_a_variable_that_is_not_a_counter_fails_the_node()
     {
-        var provider = new RecordingSharedVariableProvider { CounterThrowsNotFound = true };
+        // The procedure itself creates a missing counter, so the only refusal left is a variable that
+        // holds something else. It surfaces as a permanent node failure, not a SQL cast error.
+        var provider = new RecordingSharedVariableProvider { CounterIsNotACounter = true };
         var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
         NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Increment, Var = "hits", Value = JsonSerializer.SerializeToElement(3) } });
 
-        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<SharedVariableNotACounterException>(() => executor.ExecuteAsync(context, CancellationToken.None));
 
-        Assert.IsType<NodeExecutionResult.Continue>(result);
-        var initialize = Assert.Single(provider.InitializeCalls);
-        Assert.Equal("Counter", initialize.VarType);
-        Assert.Equal("3", initialize.ValueJson);
+        Assert.Equal("VARIABLE_NOT_A_COUNTER", ex.ErrorCode);
+        Assert.Empty(provider.InitializeCalls);
     }
 
     [Theory]
@@ -205,6 +206,72 @@ public sealed class VariableNodeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_shared_compare_and_set_sends_canonical_json()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "state", Expected = Parse("""{"b": 1.0, "a": [2.50]}"""), Value = Parse("""{"z": 1e2, "y": true}""") } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        var call = Assert.Single(provider.CompareAndSetCalls);
+        Assert.Equal("""{"a":[2.5],"b":1}""", call.Expected);
+        Assert.Equal("""{"y":true,"z":100}""", call.NewValue);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_shared_compare_and_set_retries_a_miss_against_the_value_as_it_was_stored_before()
+    {
+        // A value written before writes were canonical still holds its original spelling.
+        var provider = new RecordingSharedVariableProvider { CompareAndSetRowsAffected = 0, CompareAndSetMatches = """{"b":1.0,"a":2}""" };
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "state", Expected = Parse("""{"b": 1.0, "a": 2}"""), Value = Parse("3") } });
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(context, CancellationToken.None));
+
+        Assert.Equal(["""{"a":2,"b":1}""", """{"b":1.0,"a":2}"""], provider.CompareAndSetCalls.Select(c => c.Expected));
+        Assert.True(continuation.LocalStatePatch["casSucceeded"].GetBoolean());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_shared_compare_and_set_does_not_retry_when_the_canonical_form_is_the_original()
+    {
+        var provider = new RecordingSharedVariableProvider { CompareAndSetRowsAffected = 0 };
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "mode", Expected = JsonSerializer.SerializeToElement("idle"), Value = JsonSerializer.SerializeToElement("busy") } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Single(provider.CompareAndSetCalls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_shared_set_stores_canonical_json()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "state", Value = Parse("""{"b": 1.0, "a": 2}""") } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal("""{"a":2,"b":1}""", Assert.Single(provider.SetCalls).ValueJson);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_local_compare_and_set_matches_numbers_spelled_differently()
+    {
+        var provider = new RecordingSharedVariableProvider();
+        var executor = new VariableNodeExecutor(provider, new MockExpressionEvaluator());
+        NodeContext context = CreateContext(
+            new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.CompareAndSet, Var = "count", Expected = Parse("1"), Value = Parse("2") } },
+            new Dictionary<string, JsonElement> { ["count"] = Parse("1.0") });
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(context, CancellationToken.None));
+
+        Assert.True(continuation.LocalStatePatch["casSucceeded"].GetBoolean());
+    }
+
+    [Fact]
     public async Task ExecuteAsync_local_compare_and_set_writes_only_when_the_current_value_matches()
     {
         var provider = new RecordingSharedVariableProvider();
@@ -248,6 +315,8 @@ public sealed class VariableNodeExecutorTests
         };
     }
 
+    private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
     private static IReadOnlyCollection<PortDefinition> CreatePorts()
     {
         return [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }];
@@ -258,8 +327,8 @@ public sealed class VariableNodeExecutorTests
         /// <summary>Makes SetAsync report the variable as never written (KeyNotFoundException).</summary>
         public bool SetThrowsNotFound { get; init; }
 
-        /// <summary>Makes Increment/Decrement report no matching counter row.</summary>
-        public bool CounterThrowsNotFound { get; init; }
+        /// <summary>Makes Increment/Decrement refuse the variable as not a counter.</summary>
+        public bool CounterIsNotACounter { get; init; }
 
         public int GetCalls { get; private set; }
 
@@ -298,9 +367,9 @@ public sealed class VariableNodeExecutorTests
 
         public Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
         {
-            if (CounterThrowsNotFound)
+            if (CounterIsNotACounter)
             {
-                throw new KeyNotFoundException(varName);
+                throw new SharedVariableNotACounterException(varName, new InvalidOperationException("50023"));
             }
 
             IncrementCalls.Add((varName, delta));
@@ -309,9 +378,9 @@ public sealed class VariableNodeExecutorTests
 
         public Task<string> DecrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
         {
-            if (CounterThrowsNotFound)
+            if (CounterIsNotACounter)
             {
-                throw new KeyNotFoundException(varName);
+                throw new SharedVariableNotACounterException(varName, new InvalidOperationException("50023"));
             }
 
             DecrementCalls.Add((varName, delta));
@@ -321,10 +390,13 @@ public sealed class VariableNodeExecutorTests
         /// <summary>Rows the compare-and-set procedure reports updating; 0 means the race was lost.</summary>
         public int CompareAndSetRowsAffected { get; init; } = 1;
 
+        /// <summary>When set, a compare against exactly this text succeeds whatever <see cref="CompareAndSetRowsAffected"/> says.</summary>
+        public string? CompareAndSetMatches { get; init; }
+
         public Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct)
         {
             CompareAndSetCalls.Add((workflowRefId, varName, expected, newValue));
-            return Task.FromResult(CompareAndSetRowsAffected);
+            return Task.FromResult(expected == CompareAndSetMatches ? 1 : CompareAndSetRowsAffected);
         }
 
         private static SharedVariableRow Row(Guid workflowRefId, string varName, string varType, string valueJson)

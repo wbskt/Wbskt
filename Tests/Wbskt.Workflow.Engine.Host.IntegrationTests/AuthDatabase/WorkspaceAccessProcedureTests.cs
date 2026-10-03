@@ -116,6 +116,37 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
 
     // ---------------------------------------------------------------- helpers
 
+    [SkippableFact]
+    public async Task The_built_in_roles_are_found_by_kind_not_by_name()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId) = await CreateTenantAsync();
+        Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Roles WHERE TenantId = @p0 AND Kind IN (N'Admin', N'User')", tenantId));
+
+        // Renaming Admin, then giving a custom role the old name, must not move the owner's role.
+        await ExecAsync("UPDATE dbo.Roles SET Name = N'Owners' WHERE TenantId = @p0 AND Kind = N'Admin'", tenantId);
+        await ExecAsync("INSERT INTO dbo.Roles (TenantId, Name, Description) VALUES (@p0, N'Admin', N'custom')", tenantId);
+        int workspaceId = await CreateWorkspaceThroughProcedureAsync(tenantId, ownerId);
+
+        Assert.Equal("Owners", await ScalarAsync<string>("""
+            SELECT r.Name FROM dbo.UserRoles ur INNER JOIN dbo.Roles r ON r.Id = ur.RoleId
+            WHERE ur.UserId = @p0 AND ur.WorkspaceId = @p1
+            """, ownerId, workspaceId));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Roles WHERE TenantId = @p0 AND Name = N'Admin' AND Kind IS NULL", tenantId));
+    }
+
+    [SkippableFact]
+    public async Task A_tenant_cannot_have_two_roles_of_one_kind()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, _) = await CreateTenantAsync();
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ExecAsync(
+            "INSERT INTO dbo.Roles (TenantId, Name, Kind) VALUES (@p0, N'Second admin', N'Admin')", tenantId));
+
+        Assert.Equal(2601, ex.Number);
+    }
+
     private static byte[] RandomHash() => System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
 
     private async Task<(int TenantId, int OwnerId)> CreateTenantAsync()
@@ -131,6 +162,20 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
         cmd.Parameters.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
         await cmd.ExecuteNonQueryAsync();
         return ((int)cmd.Parameters["@TenantId"].Value, ownerId);
+    }
+
+    private async Task<int> CreateWorkspaceThroughProcedureAsync(int tenantId, int ownerId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.Workspace_Create", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@Name", "ws");
+        cmd.Parameters.AddWithValue("@Description", "ws");
+        cmd.Parameters.AddWithValue("@OwnerUserId", ownerId);
+        cmd.Parameters.AddWithValue("@TenantId", tenantId);
+        var refId = cmd.Parameters.Add("@RefId", SqlDbType.UniqueIdentifier);
+        refId.Direction = ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return await ScalarAsync<int>("SELECT Id FROM dbo.Workspaces WHERE RefId = @p0", (Guid)refId.Value);
     }
 
     private Task<int> CreateWorkspaceAsync(int tenantId, int ownerId) =>

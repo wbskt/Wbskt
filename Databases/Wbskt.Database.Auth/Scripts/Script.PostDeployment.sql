@@ -52,23 +52,35 @@ GO
 SET IDENTITY_INSERT dbo.Tenants OFF;
 GO
 
--- Roles
-IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'Admin' AND TenantId = 1)
+-- Roles: Kind for the built-in roles that existed before the column did, as the pre-deployment
+-- script recorded them by name. Runs once, then drops its list; from then on only Kind is read.
+IF OBJECT_ID('dbo.__RoleKindBackfill', 'U') IS NOT NULL
 BEGIN
-    INSERT INTO dbo.Roles (TenantId, Name, Description) VALUES (1, 'Admin', 'Administrator with full access');
+    EXEC('UPDATE r SET Kind = b.Kind
+          FROM dbo.Roles r
+          INNER JOIN dbo.__RoleKindBackfill b ON b.Id = r.Id;');
+    EXEC('DROP TABLE dbo.__RoleKindBackfill;');
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'User' AND TenantId = 1)
+-- Roles. The name check as well as the kind one: a role an administrator named Admin or User
+-- would otherwise make the insert fail on UQ_Roles_Tenant_Name and stop the deploy.
+IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE TenantId = 1 AND (Kind = 'Admin' OR Name = 'Admin'))
 BEGIN
-    INSERT INTO dbo.Roles (TenantId, Name, Description) VALUES (1, 'User', 'Standard user');
+    INSERT INTO dbo.Roles (TenantId, Name, Description, Kind) VALUES (1, 'Admin', 'Administrator with full access', 'Admin');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE TenantId = 1 AND (Kind = 'User' OR Name = 'User'))
+BEGIN
+    INSERT INTO dbo.Roles (TenantId, Name, Description, Kind) VALUES (1, 'User', 'Standard user', 'User');
 
     -- Recorded for the default reads below, as Tenant_Create grants them for every other tenant.
     -- The permission rows are seeded further down, so the grant has to wait until after them.
     IF OBJECT_ID('dbo.__UserRoleDefaultsBackfill', 'U') IS NULL
-        EXEC('SELECT Id INTO dbo.__UserRoleDefaultsBackfill FROM dbo.Roles WHERE TenantId = 1 AND Name = ''User'';');
+        EXEC('SELECT Id INTO dbo.__UserRoleDefaultsBackfill FROM dbo.Roles WHERE TenantId = 1 AND Kind = ''User'';');
     ELSE
-        EXEC('INSERT INTO dbo.__UserRoleDefaultsBackfill (Id) SELECT Id FROM dbo.Roles WHERE TenantId = 1 AND Name = ''User'';');
+        EXEC('INSERT INTO dbo.__UserRoleDefaultsBackfill (Id) SELECT Id FROM dbo.Roles WHERE TenantId = 1 AND Kind = ''User'';');
 END
 GO
 
@@ -199,7 +211,7 @@ GO
 -- RolePermissions (every tenant's Admin gets ALL).
 --
 -- Set-based across all Admin roles on purpose. Roles are tenant-scoped, so once a second tenant
--- exists there is more than one row named 'Admin' and assigning them to a scalar variable fails the
+-- exists there is more than one Admin role and assigning them to a scalar variable fails the
 -- whole post-deployment script with "Subquery returned more than 1 value". This is also the only
 -- mechanism by which a permission slug added after a tenant was created reaches that tenant's
 -- administrators -- Tenant_Create grants the catalogue as it stood at creation time and never
@@ -208,7 +220,7 @@ INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
 SELECT r.Id, p.Id, 0
 FROM dbo.Roles r
 CROSS JOIN dbo.Permissions p
-WHERE r.Name = 'Admin'
+WHERE r.Kind = 'Admin'
   AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
 GO
 
@@ -253,7 +265,7 @@ GO
 -- UserRoles (Root is tenant-wide Admin in the default tenant)
 IF EXISTS (SELECT 1 FROM dbo.Users WHERE Id = 1)
 BEGIN
-    DECLARE @AdminRoleId_UR INT = (SELECT Id FROM dbo.Roles WHERE TenantId = 1 AND Name = 'Admin');
+    DECLARE @AdminRoleId_UR INT = (SELECT Id FROM dbo.Roles WHERE TenantId = 1 AND Kind = 'Admin');
     IF @AdminRoleId_UR IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.UserRoles WHERE UserId = 1 AND RoleId = @AdminRoleId_UR AND TenantId = 1 AND WorkspaceId IS NULL)
     BEGIN
         INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId) VALUES (1, @AdminRoleId_UR, 1, NULL);

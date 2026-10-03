@@ -69,3 +69,21 @@ public class NodeKindNotSupportedException : PermanentNodeException
 
     public string Kind { get; }
 }
+
+/// <summary>
+/// An Increment or Decrement named a shared variable that exists but is not an integer counter: it
+/// was created by Set, or Set has since stored something that is not a whole number. Permanent - the
+/// stored value does not change by retrying.
+/// </summary>
+public class SharedVariableNotACounterException : PermanentNodeException
+{
+    public SharedVariableNotACounterException(string varName, Exception innerException)
+        : base($"Shared variable '{varName}' is not a counter, so it cannot be incremented or decremented.", innerException)
+    {
+        VarName = varName;
+    }
+
+    public string VarName { get; }
+
+    public override string ErrorCode => "VARIABLE_NOT_A_COUNTER";
+}

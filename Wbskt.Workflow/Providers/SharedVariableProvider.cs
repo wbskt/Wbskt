@@ -4,12 +4,16 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
 
 internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableProvider
 {
+    // THROW 50023 in SharedVariable_Increment/_Decrement: the variable exists but is not an integer counter.
+    private const int NotACounterError = 50023;
+
     public SharedVariableProvider(IConfiguration configuration) : base(configuration) { }
 
     public async Task<SharedVariableRow> GetByWorkflowRefIdNameAsync(Guid workflowRefId, string varName, CancellationToken ct)
@@ -63,36 +67,48 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
 
     public async Task<string> IncrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
     {
-        return await ExecuteSingleAsync(
-            "dbo.SharedVariable_Increment",
-            p =>
-            {
-                p.AddWithValue("@WorkflowRefId", workflowRefId);
-                p.AddWithValue("@VarName", varName);
-                p.AddWithValue("@Delta", delta);
-            },
-            r => r.GetString(0),
-            // null => KeyNotFoundException, the repo-wide "no such row" signal the executor branches on
-            null,
-            ct
-        );
+        try
+        {
+            return await ExecuteSingleAsync(
+                "dbo.SharedVariable_Increment",
+                p =>
+                {
+                    p.AddWithValue("@WorkflowRefId", workflowRefId);
+                    p.AddWithValue("@VarName", varName);
+                    p.AddWithValue("@Delta", delta);
+                },
+                r => r.GetString(0),
+                new InvalidOperationException("SharedVariable_Increment did not return a value."),
+                ct
+            );
+        }
+        catch (SqlException ex) when (ex.Number == NotACounterError)
+        {
+            throw new SharedVariableNotACounterException(varName, ex);
+        }
     }
 
     public async Task<string> DecrementAsync(Guid workflowRefId, string varName, long delta, CancellationToken ct)
     {
-        return await ExecuteSingleAsync(
-            "dbo.SharedVariable_Decrement",
-            p =>
-            {
-                p.AddWithValue("@WorkflowRefId", workflowRefId);
-                p.AddWithValue("@VarName", varName);
-                p.AddWithValue("@Delta", delta);
-            },
-            r => r.GetString(0),
-            // null => KeyNotFoundException, the repo-wide "no such row" signal the executor branches on
-            null,
-            ct
-        );
+        try
+        {
+            return await ExecuteSingleAsync(
+                "dbo.SharedVariable_Decrement",
+                p =>
+                {
+                    p.AddWithValue("@WorkflowRefId", workflowRefId);
+                    p.AddWithValue("@VarName", varName);
+                    p.AddWithValue("@Delta", delta);
+                },
+                r => r.GetString(0),
+                new InvalidOperationException("SharedVariable_Decrement did not return a value."),
+                ct
+            );
+        }
+        catch (SqlException ex) when (ex.Number == NotACounterError)
+        {
+            throw new SharedVariableNotACounterException(varName, ex);
+        }
     }
 
     public async Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct)
