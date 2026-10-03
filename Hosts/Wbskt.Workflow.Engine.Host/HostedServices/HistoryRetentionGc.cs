@@ -10,6 +10,8 @@ public sealed class HistoryRetentionGc : BackgroundService
 {
     private const string LeaseName = "history-retention-gc";
     private const int BatchSize = 5000;
+    // Each run takes its branches and history with it, so a run batch is much heavier than a row batch.
+    internal const int RunBatchSize = 100;
     private readonly IClock _clock;
     private readonly ILeaseHolder _leaseHolder;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -36,8 +38,9 @@ public sealed class HistoryRetentionGc : BackgroundService
         ILogger<HistoryRetentionGc> logger,
         TimeSpan? pollInterval = null,
         TimeSpan? retentionWindow = null,
-        TimeSpan? elevatedRetentionWindow = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(historyEventProvider), logger, pollInterval, retentionWindow, elevatedRetentionWindow)
+        TimeSpan? elevatedRetentionWindow = null,
+        IRunRetentionProvider? runRetentionProvider = null)
+        : this(clock, leaseHolder, new StaticScopeFactory(historyEventProvider, runRetentionProvider), logger, pollInterval, retentionWindow, elevatedRetentionWindow)
     {
     }
 
@@ -75,6 +78,23 @@ public sealed class HistoryRetentionGc : BackgroundService
             int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, elevatedCutoffUtc, ct);
             if (deleted < BatchSize)
             {
+                break;
+            }
+        }
+
+        // Once even a run's Warn/Error history is past retention, the run row and its branches are
+        // all that is left; without this they were kept forever, full branch state included.
+        var runRetentionProvider = scope.ServiceProvider.GetService<IRunRetentionProvider>();
+        if (runRetentionProvider is null)
+        {
+            return;
+        }
+
+        while (true)
+        {
+            int deleted = await runRetentionProvider.DeleteRetiredRunsAsync(elevatedCutoffUtc, RunBatchSize, ct);
+            if (deleted < RunBatchSize)
+            {
                 return;
             }
         }
@@ -107,17 +127,17 @@ public sealed class HistoryRetentionGc : BackgroundService
         }
     }
 
-    private sealed class StaticScopeFactory(IHistoryEventProvider historyEventProvider) : IServiceScopeFactory
+    private sealed class StaticScopeFactory(IHistoryEventProvider historyEventProvider, IRunRetentionProvider? runRetentionProvider) : IServiceScopeFactory
     {
         public IServiceScope CreateScope()
         {
-            return new StaticServiceScope(historyEventProvider);
+            return new StaticServiceScope(historyEventProvider, runRetentionProvider);
         }
     }
 
-    private sealed class StaticServiceScope(IHistoryEventProvider historyEventProvider) : IServiceScope, IAsyncDisposable
+    private sealed class StaticServiceScope(IHistoryEventProvider historyEventProvider, IRunRetentionProvider? runRetentionProvider) : IServiceScope, IAsyncDisposable
     {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(historyEventProvider);
+        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(historyEventProvider, runRetentionProvider);
 
         public void Dispose()
         {
@@ -129,11 +149,16 @@ public sealed class HistoryRetentionGc : BackgroundService
         }
     }
 
-    private sealed class StaticServiceProvider(IHistoryEventProvider historyEventProvider) : IServiceProvider
+    private sealed class StaticServiceProvider(IHistoryEventProvider historyEventProvider, IRunRetentionProvider? runRetentionProvider) : IServiceProvider
     {
         public object? GetService(Type serviceType)
         {
-            return serviceType == typeof(IHistoryEventProvider) ? historyEventProvider : null;
+            if (serviceType == typeof(IHistoryEventProvider))
+            {
+                return historyEventProvider;
+            }
+
+            return serviceType == typeof(IRunRetentionProvider) ? runRetentionProvider : null;
         }
     }
 }
