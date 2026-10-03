@@ -2,7 +2,7 @@ namespace Wbskt.Workflow.Abstraction.Entities;
 
 public record IdempotencyKeyRow
 {
-    public required int Id { get; init; }
+    public required long Id { get; init; }
     public required string KeyValue { get; init; }
     public required int RunId { get; init; }
     public required Guid BranchRefId { get; init; }

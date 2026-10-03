@@ -7,7 +7,7 @@ BEGIN
 
     DECLARE @Deleted TABLE
     (
-        Id INT NOT NULL
+        Id BIGINT NOT NULL
     );
 
     ;WITH Targets AS

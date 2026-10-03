@@ -15,8 +15,3 @@ CREATE TABLE dbo.RegistrationPolicies (
     CONSTRAINT UQ_RegistrationPolicies_Pin   UNIQUE (Pin)
 );
 GO
-
--- Indexes
-CREATE INDEX IX_RegistrationPolicies_RefId
-    ON dbo.RegistrationPolicies (RefId);
-GO

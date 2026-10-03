@@ -104,7 +104,7 @@ internal sealed class IdempotencyKeyProvider : BaseSqlProvider, IIdempotencyKeyP
     {
         return new IdempotencyKeyRow
         {
-            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            Id = reader.GetInt64(reader.GetOrdinal("Id")),
             KeyValue = reader.GetString(reader.GetOrdinal("KeyValue")),
             RunId = reader.GetInt32(reader.GetOrdinal("RunId")),
             BranchRefId = reader.GetGuid(reader.GetOrdinal("BranchRefId")),

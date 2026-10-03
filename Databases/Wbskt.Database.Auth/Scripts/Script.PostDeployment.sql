@@ -53,15 +53,15 @@ SET IDENTITY_INSERT dbo.Tenants OFF;
 GO
 
 -- Roles
-IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'Admin')
+IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'Admin' AND TenantId = 1)
 BEGIN
-    INSERT INTO dbo.Roles (Name, Description) VALUES ('Admin', 'Administrator with full access');
+    INSERT INTO dbo.Roles (TenantId, Name, Description) VALUES (1, 'Admin', 'Administrator with full access');
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'User')
+IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'User' AND TenantId = 1)
 BEGIN
-    INSERT INTO dbo.Roles (Name, Description) VALUES ('User', 'Standard user');
+    INSERT INTO dbo.Roles (TenantId, Name, Description) VALUES (1, 'User', 'Standard user');
 END
 GO
 

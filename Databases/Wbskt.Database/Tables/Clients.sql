@@ -23,9 +23,6 @@ CREATE TABLE dbo.Clients (
 GO
 
 -- Indexes
-CREATE INDEX IX_Clients_RefId
-    ON dbo.Clients (RefId);
-GO
 CREATE INDEX IX_Clients_PolicyId
     ON dbo.Clients (PolicyId);
 GO

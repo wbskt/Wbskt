@@ -2,6 +2,7 @@ CREATE PROCEDURE dbo.Branch_CancelWaiting
     @RunId INT
 AS
 BEGIN
+    -- No SET NOCOUNT ON: the caller returns the rows-affected count from ExecuteNonQuery.
     UPDATE dbo.Branches
     SET
         Status = 'Cancelled',

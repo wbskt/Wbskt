@@ -7,13 +7,30 @@ CREATE PROCEDURE dbo.ScheduledFire_Insert
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
-    INSERT INTO dbo.ScheduledFires
-        (TriggerNodeId, WorkflowDefinitionId, WorkflowRefId, CronOrInterval, NextFireAt)
-    VALUES
-        (@TriggerNodeId, @WorkflowDefinitionId, @WorkflowRefId, @CronOrInterval, @NextFireAt);
+    DECLARE @NewId INT;
 
-    DECLARE @NewId INT = SCOPE_IDENTITY();
+    BEGIN TRANSACTION;
+
+    -- Registering the same version twice returns the schedule it already has rather than adding a
+    -- second one; the range lock keeps two concurrent registrations from both missing it.
+    SELECT @NewId = Id
+    FROM dbo.ScheduledFires WITH (UPDLOCK, HOLDLOCK)
+    WHERE WorkflowDefinitionId = @WorkflowDefinitionId
+      AND TriggerNodeId = @TriggerNodeId;
+
+    IF @NewId IS NULL
+    BEGIN
+        INSERT INTO dbo.ScheduledFires
+            (TriggerNodeId, WorkflowDefinitionId, WorkflowRefId, CronOrInterval, NextFireAt)
+        VALUES
+            (@TriggerNodeId, @WorkflowDefinitionId, @WorkflowRefId, @CronOrInterval, @NextFireAt);
+
+        SET @NewId = SCOPE_IDENTITY();
+    END;
+
+    COMMIT TRANSACTION;
 
     SELECT
         Id,

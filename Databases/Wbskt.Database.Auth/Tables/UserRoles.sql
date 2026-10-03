@@ -3,7 +3,7 @@ CREATE TABLE dbo.UserRoles
     Id INT IDENTITY(1,1) NOT NULL,
     UserId INT NOT NULL,
     RoleId INT NOT NULL,
-    TenantId INT NOT NULL CONSTRAINT DF_UserRoles_TenantId DEFAULT (1),
+    TenantId INT NOT NULL,
     WorkspaceId INT NULL, -- NULL = tenant-wide assignment
     CONSTRAINT PK_UserRoles PRIMARY KEY (Id),
     CONSTRAINT UQ_UserRoles_Scope UNIQUE (UserId, RoleId, TenantId, WorkspaceId),

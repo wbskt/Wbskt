@@ -1,7 +1,7 @@
 CREATE TABLE dbo.Workspaces (
     Id INT IDENTITY(1, 1) NOT NULL,
     RefId UNIQUEIDENTIFIER NOT NULL,
-    TenantId INT NOT NULL CONSTRAINT DF_Workspaces_TenantId DEFAULT (1),
+    TenantId INT NOT NULL,
     Name NVARCHAR(100) NOT NULL,
     Description NVARCHAR(500) NULL,
     OwnerUserId INT NOT NULL,

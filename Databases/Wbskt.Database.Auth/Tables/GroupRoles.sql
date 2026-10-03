@@ -2,7 +2,7 @@ CREATE TABLE dbo.GroupRoles (
     Id INT IDENTITY(1,1) NOT NULL,
     GroupId INT NOT NULL,
     RoleId  INT NOT NULL,
-    TenantId INT NOT NULL CONSTRAINT DF_GroupRoles_TenantId DEFAULT (1),
+    TenantId INT NOT NULL,
     WorkspaceId INT NULL, -- NULL = tenant-wide assignment
 
     -- Constraints

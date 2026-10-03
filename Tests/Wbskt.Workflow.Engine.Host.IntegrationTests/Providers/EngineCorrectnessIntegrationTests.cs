@@ -71,6 +71,22 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Registering_a_schedule_twice_keeps_one_row()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var refId = Guid.NewGuid();
+        await PublishAsync(refId, Random.Shared.Next(1_000_000, int.MaxValue));
+        int definitionId = await ScalarAsync<int>("SELECT Id FROM dbo.WorkflowDefinitions WHERE RefId = @p0", refId);
+        var triggerNodeId = Guid.NewGuid();
+
+        int first = await InsertScheduleAsync(definitionId, refId, triggerNodeId);
+        int second = await InsertScheduleAsync(definitionId, refId, triggerNodeId);
+
+        Assert.Equal(first, second);
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ScheduledFires WHERE WorkflowDefinitionId = @p0", definitionId));
+    }
+
+    [SkippableFact]
     public async Task A_client_at_its_variable_cap_can_update_but_not_add()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -161,6 +177,20 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         await reader.ReadAsync();
         return (reader.GetBoolean(reader.GetOrdinal("Stored")),
             reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson")));
+    }
+
+    private async Task<int> InsertScheduleAsync(int definitionId, Guid workflowRefId, Guid triggerNodeId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.ScheduledFire_Insert", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@TriggerNodeId", triggerNodeId);
+        cmd.Parameters.AddWithValue("@WorkflowDefinitionId", definitionId);
+        cmd.Parameters.AddWithValue("@WorkflowRefId", workflowRefId);
+        cmd.Parameters.AddWithValue("@CronOrInterval", "*/5 * * * *");
+        cmd.Parameters.AddWithValue("@NextFireAt", DateTime.UtcNow);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return reader.GetInt32(reader.GetOrdinal("Id"));
     }
 
     private Task PublishAsync(Guid refId, int workspaceId) =>
