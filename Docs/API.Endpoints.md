@@ -180,7 +180,7 @@ List endpoints take `skip`/`take`, clamped to 200 rather than rejected, and retu
 |---|---|---|
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
-| `GET /openapi`, Scalar reference | anonymous, **development only** | API docs. Anonymous by consequence rather than by declaration — this host has no fallback policy, so an unmarked endpoint is already open. |
+| `GET /openapi`, Scalar reference | anonymous, **development only** unless `ApiDocs:Enabled` (`API_DOCS_ENABLED`) is true | API docs. Anonymous by consequence rather than by declaration — this host has no fallback policy, so an unmarked endpoint is already open. |
 
 ---
 
@@ -338,7 +338,7 @@ engine is never exposed publicly and the manual/signal channels never get a publ
 |---|---|---|
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
-| `GET /openapi`, `/scalar` | anonymous, **development only** | API docs. Explicitly exempted from the default-deny fallback policy. |
+| `GET /openapi`, `/scalar` | anonymous, **development only** unless `ApiDocs:Enabled` (`API_DOCS_ENABLED`) is true | API docs. Explicitly exempted from the default-deny fallback policy. |
 
 ---
 
