@@ -47,6 +47,9 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
         Assert.Equal(userId, consumedFor);
         Assert.Equal("the-new-hash", await ScalarAsync<string>("SELECT PasswordHash FROM dbo.Users WHERE Id = @p0", userId));
 
+        // The token arrived by mail, so redeeming it proves the inbox as well as verification would.
+        Assert.True(await ScalarAsync<bool>("SELECT IsEmailVerified FROM dbo.Users WHERE Id = @p0", userId));
+
         // The assertion the unit suite structurally cannot make. Both of this user's sessions are
         // gone; recovering an account is usually a response to losing control of it, and a session
         // the attacker already holds must not outlive the reset.

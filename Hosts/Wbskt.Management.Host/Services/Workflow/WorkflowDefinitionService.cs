@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
@@ -15,6 +16,7 @@ namespace Wbskt.Management.Host.Services.Workflow;
 public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+    private const int WorkflowOwnedElsewhereError = 50021; // THROW in dbo.WorkflowDefinition_Publish
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ITriggerRegistrationService _triggerRegistrationService;
@@ -81,19 +83,29 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             // The version is assigned by WorkflowDefinition_Publish under HOLDLOCK, which also stamps
             // it into the stored JSON. Nothing is pre-computed here: a version guessed from the
             // unlocked read above could disagree with the row under concurrent publishes.
-            WorkflowDefinitionRow inserted = await _workflowDefinitionProvider.InsertAsync(new WorkflowDefinitionRow
+            WorkflowDefinitionRow inserted;
+            try
             {
-                Id = 0,
-                RefId = request.RefId,
-                Version = 0,
-                WorkspaceId = workspaceId,
-                Name = request.Name,
-                Description = request.Description,
-                IsEnabled = true,
-                DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
-                PublishedBy = _identityService.GetUserIdentity().UserId,
-                CreatedAt = request.Definition.CreatedAt
-            }, ct);
+                inserted = await _workflowDefinitionProvider.InsertAsync(new WorkflowDefinitionRow
+                {
+                    Id = 0,
+                    RefId = request.RefId,
+                    Version = 0,
+                    WorkspaceId = workspaceId,
+                    Name = request.Name,
+                    Description = request.Description,
+                    IsEnabled = true,
+                    DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
+                    PublishedBy = _identityService.GetUserIdentity().UserId,
+                    CreatedAt = request.Definition.CreatedAt
+                }, ct);
+            }
+            catch (SqlException ex) when (ex.Number == WorkflowOwnedElsewhereError)
+            {
+                // Another workspace's first publish of the same RefId won the race past the check above.
+                _logger.LogWarning("Workflow publish rejected under lock: Workflow '{RefId}' belongs to another workspace", request.RefId);
+                return Result<WorkflowPublishResponse>.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{request.RefId}' does not belong to the workspace."));
+            }
 
             // From here the row exists. Anything that fails must not leave a published version whose
             // triggers were never registered - that workflow would be current, and dead.

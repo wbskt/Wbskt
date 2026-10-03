@@ -490,7 +490,7 @@ internal sealed class BranchLoop : IBranchLoop
 
         try
         {
-            JoinContributionResult contribution = await _joinAggregatorProvider.ContributeAsync(joinToken, "failed", ct);
+            JoinContributionResult contribution = await _joinAggregatorProvider.ContributeAsync(joinToken, branchRow.Id, "failed", ct);
             _logger?.LogInformation(
                 "Branch {BranchId} failed and contributed 'failed' to join {JoinToken} ({Contributed}/{Expected}, {Failed} failed).",
                 branchRow.Id, joinToken, contribution.ContributedCount, contribution.ExpectedCount, contribution.FailedCount);

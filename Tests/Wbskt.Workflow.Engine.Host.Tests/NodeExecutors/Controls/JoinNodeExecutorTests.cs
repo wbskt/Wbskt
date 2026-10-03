@@ -48,7 +48,7 @@ public sealed class JoinNodeExecutorTests
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, It.IsAny<long>(), "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(true, 3, 3, 0, 3));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -78,7 +78,7 @@ public sealed class JoinNodeExecutorTests
         Guid outerToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(innerToken, "succeeded", It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(innerToken, It.IsAny<long>(), "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(true, 2, 2, 0, 2));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -101,7 +101,7 @@ public sealed class JoinNodeExecutorTests
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, It.IsAny<long>(), "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(true, 3, 3, 0, 3));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -125,7 +125,7 @@ public sealed class JoinNodeExecutorTests
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, It.IsAny<long>(), "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(false, 1, 1, 0, 3));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -151,7 +151,7 @@ public sealed class JoinNodeExecutorTests
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
-            .Setup(a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()))
+            .Setup(a => a.ContributeAsync(joinToken, It.IsAny<long>(), "succeeded", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JoinContributionResult(true, 3, 3, 0, 5));
 
         var executor = new JoinNodeExecutor(aggregatorMock.Object);
@@ -165,7 +165,7 @@ public sealed class JoinNodeExecutorTests
         await executor.ExecuteAsync(ctx, CancellationToken.None);
 
         aggregatorMock.Verify(
-            a => a.ContributeAsync(joinToken, "succeeded", It.IsAny<CancellationToken>()),
+            a => a.ContributeAsync(joinToken, It.IsAny<long>(), "succeeded", It.IsAny<CancellationToken>()),
             Times.Once);
         aggregatorMock.VerifyNoOtherCalls();
     }

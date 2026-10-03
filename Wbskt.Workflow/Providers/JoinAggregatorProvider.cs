@@ -33,13 +33,14 @@ internal sealed class JoinAggregatorProvider : BaseSqlProvider, IJoinAggregatorP
         );
     }
 
-    public async Task<JoinContributionResult> ContributeAsync(Guid joinToken, string outcome, CancellationToken ct)
+    public async Task<JoinContributionResult> ContributeAsync(Guid joinToken, long branchId, string outcome, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.JoinAggregator_Contribute",
             p =>
             {
                 p.AddWithValue("@JoinToken", joinToken);
+                p.AddWithValue("@BranchId", branchId);
                 p.AddWithValue("@Outcome", outcome);
             },
             Map,

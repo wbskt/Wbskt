@@ -52,6 +52,28 @@ public sealed class ScheduledFireTickerTests
         Assert.Equal(fire.NextFireAt, evt.Payload["fireAt"].GetDateTime());
     }
 
+    /// <summary>
+    /// A crash between dispatch and advancing NextFireAt re-leases the same occurrence. Its event id
+    /// must be the same both times so the dispatcher's idempotency claim drops the second dispatch,
+    /// while the next occurrence gets a different id.
+    /// </summary>
+    [Fact]
+    public async Task Tick_gives_a_released_occurrence_the_same_event_id()
+    {
+        var at = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
+        var first = new RecordingInboundHub();
+        var second = new RecordingInboundHub();
+        await new ScheduledFireTicker(new FixedClock(), new RecordingLeaseHolder(isHeld: true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), first, NullLogger<ScheduledFireTicker>.Instance)
+            .ProcessScheduledFiresAsync(CancellationToken.None);
+        await new ScheduledFireTicker(new FixedClock(), new RecordingLeaseHolder(isHeld: true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), second, NullLogger<ScheduledFireTicker>.Instance)
+            .ProcessScheduledFiresAsync(CancellationToken.None);
+
+        Assert.Equal(Assert.Single(first.Events).InboundEventId, Assert.Single(second.Events).InboundEventId);
+        Assert.NotEqual(
+            ScheduledFireTicker.OccurrenceEventId(CreateFire(45, "0 */5 * * * *", at)),
+            ScheduledFireTicker.OccurrenceEventId(CreateFire(45, "0 */5 * * * *", at.AddMinutes(5))));
+    }
+
     [Fact]
     public async Task Tick_advances_recurring_fire()
     {

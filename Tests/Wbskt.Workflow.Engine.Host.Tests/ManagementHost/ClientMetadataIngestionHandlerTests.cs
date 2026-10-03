@@ -1,3 +1,4 @@
+using Wbskt.Management.Host.Models;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -93,7 +94,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     {
         var (handler, provider, bus) = CreateHandler();
         provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "ventPosition", "number", "75", It.IsAny<CancellationToken>()))
-            .ReturnsAsync("0");
+            .ReturnsAsync(new StateVariableUpsert(true, "0"));
 
         await handler.Consume(Context("state.report", """{"ventPosition":75}"""));
 
@@ -107,7 +108,7 @@ public sealed class ClientMetadataIngestionHandlerTests
     {
         var (handler, provider, bus) = CreateHandler();
         provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "firmware", "string", "\"2.4.1\"", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync(new StateVariableUpsert(true, null));
 
         await handler.Consume(Context("state.report", """{"firmware":"2.4.1"}"""));
 
@@ -121,11 +122,23 @@ public sealed class ClientMetadataIngestionHandlerTests
     {
         var (handler, provider, bus) = CreateHandler();
         provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "ventPosition", "number", "75", It.IsAny<CancellationToken>()))
-            .ReturnsAsync("75");
+            .ReturnsAsync(new StateVariableUpsert(true, "75"));
 
         await handler.Consume(Context("state.report", """{"ventPosition":75}"""));
 
         provider.Verify(x => x.UpsertStateVariableAsync(ClientId, "ventPosition", "number", "75", It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(x => x.PublishAsync(It.IsAny<ClientPropertyUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task State_report_variable_refused_at_the_cap_publishes_nothing()
+    {
+        var (handler, provider, bus) = CreateHandler();
+        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "extra", "number", "1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateVariableUpsert(false, null));
+
+        await handler.Consume(Context("state.report", """{"extra":1}"""));
+
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientPropertyUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

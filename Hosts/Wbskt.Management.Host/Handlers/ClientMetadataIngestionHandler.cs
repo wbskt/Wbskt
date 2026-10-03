@@ -83,11 +83,17 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
             var valueJson = property.Value.GetRawText();
             var dataType = GetDataType(property.Value.ValueKind);
 
-            var oldValueJson = await _clientProvider.UpsertStateVariableAsync(message.ClientId, property.Name, dataType, valueJson, cancellationToken);
-            if (oldValueJson != valueJson)
+            var upsert = await _clientProvider.UpsertStateVariableAsync(message.ClientId, property.Name, dataType, valueJson, cancellationToken);
+            if (!upsert.Stored)
+            {
+                _logger.LogWarning("Client {ClientRefId} is at its state variable limit; ignoring new variable '{Name}'.", message.ClientRefId, property.Name);
+                continue;
+            }
+
+            if (upsert.OldValueJson != valueJson)
             {
                 await _eventBus.PublishAsync(
-                    new ClientPropertyUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, property.Name, oldValueJson, valueJson),
+                    new ClientPropertyUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, property.Name, upsert.OldValueJson, valueJson),
                     cancellationToken);
             }
         }

@@ -183,17 +183,22 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
-    public async Task<string?> UpsertStateVariableAsync(int clientId, string name, string dataType, string valueJson,
+    public async Task<StateVariableUpsert> UpsertStateVariableAsync(int clientId, string name, string dataType, string valueJson,
         CancellationToken cancellationToken = default)
     {
         // Returns the previous ValueJson (NULL on first report) so callers can detect changes.
-        return await ExecuteScalarAsync<string>("dbo.ClientStateVariable_Upsert", p =>
+        return await ExecuteSingleAsync("dbo.ClientStateVariable_Upsert", p =>
         {
             p.AddWithValue("@ClientId", clientId);
             p.AddWithValue("@Name", name);
             p.AddWithValue("@DataType", dataType);
             p.AddWithValue("@ValueJson", valueJson);
-        }, cancellationToken);
+        },
+        reader => new StateVariableUpsert(
+            reader.GetBoolean(reader.GetOrdinal("Stored")),
+            reader.IsDBNull(reader.GetOrdinal("OldValueJson")) ? null : reader.GetString(reader.GetOrdinal("OldValueJson"))),
+        new InvalidOperationException("ClientStateVariable_Upsert did not return a row."),
+        cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<ClientStateVariable>> GetStateVariablesAsync(int clientId, CancellationToken cancellationToken = default)
