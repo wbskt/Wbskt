@@ -131,7 +131,7 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
                 workflowRefId, triggerNodeId, correlationKey, $"{{\"seq\":{i}}}", CancellationToken.None);
         }
 
-        var dequeued = new System.Collections.Concurrent.ConcurrentBag<int>();
+        var dequeued = new System.Collections.Concurrent.ConcurrentBag<long>();
 
         await Parallel.ForEachAsync(
             Enumerable.Range(0, callerCount),

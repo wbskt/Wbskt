@@ -12,7 +12,7 @@ BEGIN
     VALUES
         (@WorkflowRefId, @TriggerNodeId, @CorrelationKey, @InboundEventJson);
 
-    DECLARE @NewId INT = SCOPE_IDENTITY();
+    DECLARE @NewId BIGINT = SCOPE_IDENTITY();
 
     SELECT
         Id,

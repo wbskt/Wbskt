@@ -1,6 +1,6 @@
 CREATE TABLE dbo.PendingTriggerEvents
 (
-    Id               INT              NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    Id               BIGINT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     WorkflowRefId    UNIQUEIDENTIFIER NOT NULL,
     TriggerNodeId    UNIQUEIDENTIFIER NOT NULL,
     CorrelationKey   NVARCHAR(400)    NOT NULL,

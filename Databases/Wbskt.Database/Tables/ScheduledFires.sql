@@ -9,7 +9,11 @@ CREATE TABLE dbo.ScheduledFires
     LeasedUntil          DATETIME2(3)     NULL,
     CreatedAt            DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_ScheduledFires_WorkflowDefinitions
-        FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)
+        FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id),
+    -- One schedule per trigger node per definition version. Without it, two registrations of the
+    -- same version (a retried or concurrent reinstate) left two rows ticking, so the workflow fired twice.
+    CONSTRAINT UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId
+        UNIQUE (WorkflowDefinitionId, TriggerNodeId)
 );
 GO
 

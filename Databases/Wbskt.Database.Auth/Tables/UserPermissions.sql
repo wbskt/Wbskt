@@ -3,7 +3,7 @@ CREATE TABLE dbo.UserPermissions
     Id INT IDENTITY(1,1) NOT NULL,
     UserId INT NOT NULL,
     PermissionId INT NOT NULL,
-    TenantId INT NOT NULL CONSTRAINT DF_UserPermissions_TenantId DEFAULT (1),
+    TenantId INT NOT NULL,
     WorkspaceId INT NULL, -- NULL = tenant-wide assignment
     IsDeny BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_UserPermissions PRIMARY KEY (Id),

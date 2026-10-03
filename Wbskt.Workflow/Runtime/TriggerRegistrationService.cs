@@ -35,6 +35,11 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(definitionRow.DefinitionJson, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new InvalidOperationException($"Workflow definition {workflowDefinitionId} could not be deserialized.");
 
+        // Registering replaces whatever this version already had, so a retried or repeated
+        // registration (a reinstate run twice) leaves one set of triggers, not two.
+        await _triggerRegistrationProvider.DeleteAllByWorkflowDefinitionIdAsync(workflowDefinitionId, ct);
+        await _scheduledFireProvider.DeleteAllByWorkflowDefinitionIdAsync(workflowDefinitionId, ct);
+
         foreach (BaseNode node in definition.Nodes)
         {
             TriggerRegistrationRow? registration = node switch

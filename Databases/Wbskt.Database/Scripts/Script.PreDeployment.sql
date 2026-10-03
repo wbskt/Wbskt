@@ -90,3 +90,36 @@ it. Dropped here explicitly, which is a no-op on a fresh database.
 */
 DROP PROCEDURE IF EXISTS dbo.Client_Verify;
 GO
+/*
+--------------------------------------------------------------------------------------
+Pre-Deployment Script: one ScheduledFires row per (WorkflowDefinitionId, TriggerNodeId)
+--------------------------------------------------------------------------------------
+The table gains UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId. Registering the same version
+twice used to add a second row, and the constraint cannot be created while one exists. Keep the
+oldest row for each pair, and drop the trigger registrations that pointed at the removed ones
+(their key is "schedule:<ScheduledFires.Id>", so nothing would ever match them again).
+*/
+IF OBJECT_ID('dbo.ScheduledFires', 'U') IS NOT NULL
+   AND OBJECT_ID('dbo.UQ_ScheduledFires_WorkflowDefinitionId_TriggerNodeId', 'UQ') IS NULL
+BEGIN
+    EXEC sp_executesql N'
+        DECLARE @RemovedFires TABLE (Id INT NOT NULL PRIMARY KEY);
+
+        DELETE sf
+        OUTPUT deleted.Id INTO @RemovedFires (Id)
+        FROM dbo.ScheduledFires sf
+        WHERE EXISTS (SELECT 1
+                      FROM dbo.ScheduledFires keep
+                      WHERE keep.WorkflowDefinitionId = sf.WorkflowDefinitionId
+                        AND keep.TriggerNodeId = sf.TriggerNodeId
+                        AND keep.Id < sf.Id);
+
+        IF OBJECT_ID(''dbo.TriggerRegistrations'', ''U'') IS NOT NULL
+            DELETE tr
+            FROM dbo.TriggerRegistrations tr
+            JOIN @RemovedFires r ON tr.TriggerKey = N''schedule:'' + CAST(r.Id AS NVARCHAR(20));
+
+        DECLARE @Removed INT = (SELECT COUNT(*) FROM @RemovedFires);
+        PRINT ''>>> ScheduledFires: removed '' + CAST(@Removed AS NVARCHAR(20)) + '' duplicate schedule(s)'';';
+END
+GO

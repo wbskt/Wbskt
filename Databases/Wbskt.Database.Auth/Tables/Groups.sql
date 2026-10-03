@@ -1,7 +1,7 @@
 CREATE TABLE dbo.Groups (
     Id            INT              IDENTITY(1, 1) NOT NULL,
     RefId         UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_Groups_RefId DEFAULT NEWID(),
-    TenantId      INT              NOT NULL CONSTRAINT DF_Groups_TenantId DEFAULT (1),
+    TenantId      INT              NOT NULL,
     Name          NVARCHAR(100)    NOT NULL,
     ParentGroupId INT              NULL,
 

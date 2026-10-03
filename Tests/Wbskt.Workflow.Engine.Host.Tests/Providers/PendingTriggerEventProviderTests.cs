@@ -13,7 +13,7 @@ public class PendingTriggerEventProviderTests
         {
             new Dictionary<string, object?>
             {
-                ["Id"] = 42,
+                ["Id"] = 42L,
                 ["WorkflowRefId"] = Guid.Parse("f47ac10b-58cc-4372-a567-0e02b2c3d479"),
                 ["TriggerNodeId"] = Guid.Parse("a47ac10b-58cc-4372-a567-0e02b2c3d479"),
                 ["CorrelationKey"] = "user-123",

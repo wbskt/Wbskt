@@ -1,6 +1,6 @@
 CREATE TABLE dbo.IdempotencyKeys
 (
-    Id          INT              NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    Id          BIGINT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
     KeyValue    NVARCHAR(200)    NOT NULL,
     RunId       INT              NOT NULL,
     BranchRefId UNIQUEIDENTIFIER NOT NULL,

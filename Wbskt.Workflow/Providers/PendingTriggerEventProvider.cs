@@ -94,7 +94,7 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
     {
         return new PendingTriggerEventRow
         {
-            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            Id = reader.GetInt64(reader.GetOrdinal("Id")),
             WorkflowRefId = reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
             TriggerNodeId = reader.GetGuid(reader.GetOrdinal("TriggerNodeId")),
             CorrelationKey = reader.GetString(reader.GetOrdinal("CorrelationKey")),
