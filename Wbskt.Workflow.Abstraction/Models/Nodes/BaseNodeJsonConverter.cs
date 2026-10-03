@@ -54,6 +54,7 @@ public sealed class BaseNodeJsonConverter : JsonConverter<BaseNode>
         NodeKind.ControlFailRun => typeof(FailRunNode),
         NodeKind.ControlEnd => typeof(EndNode),
         NodeKind.TriggerClient => typeof(ClientTriggerNode),
+        NodeKind.TriggerClientPresence => typeof(ClientPresenceTriggerNode),
         NodeKind.TriggerSchedule => typeof(ScheduleTriggerNode),
         NodeKind.TriggerWebhook => typeof(WebhookTriggerNode),
         NodeKind.TriggerManual => typeof(ManualTriggerNode),

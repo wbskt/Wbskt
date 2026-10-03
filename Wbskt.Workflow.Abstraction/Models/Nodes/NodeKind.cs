@@ -3,6 +3,7 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes;
 public static class NodeKind
 {
     public const string TriggerClient = "trigger:client";
+    public const string TriggerClientPresence = "trigger:clientPresence";
     public const string TriggerSchedule = "trigger:schedule";
     public const string TriggerWebhook = "trigger:webhook";
     public const string TriggerManual = "trigger:manual";
@@ -27,7 +28,7 @@ public static class NodeKind
     /// <summary>Every kind the definition model can express.</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        TriggerClient, TriggerSchedule, TriggerWebhook, TriggerManual,
+        TriggerClient, TriggerClientPresence, TriggerSchedule, TriggerWebhook, TriggerManual,
         ControlLogic, ControlForEach, ControlParallelForEach, ControlJoin, ControlFork,
         ControlDelay, ControlVariable, ControlSubWorkflow, ControlWaitForHttp, ControlAwaitSignal,
         ControlFailRun, ControlEnd,

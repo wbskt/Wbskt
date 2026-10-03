@@ -429,6 +429,43 @@ public sealed class WorkflowValidatorRuleTests
     }
 
     [Theory]
+    [InlineData("sensor-A", 60, "INVALID_CLIENT_REF")]
+    [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", -1, "INVALID_PRESENCE_DURATION")]
+    [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 86401, "INVALID_PRESENCE_DURATION")]
+    public void Validate_rejects_a_presence_trigger_that_could_never_fire(string clientRef, int forSeconds, string expectedCode)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var presence = new ClientPresenceTriggerNode
+        {
+            NodeId = Guid.NewGuid(),
+            Name = "offline",
+            Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }],
+            Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ClientPresenceTriggerConfig { ClientRef = clientRef, ForSeconds = forSeconds }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, presence] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == expectedCode);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_presence_trigger_and_counts_it_as_a_trigger()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var presence = new ClientPresenceTriggerNode
+        {
+            NodeId = Guid.NewGuid(),
+            Name = "offline",
+            Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }],
+            Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ClientPresenceTriggerConfig { ClientRef = Guid.NewGuid().ToString(), ForSeconds = 0 }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [presence] , Edges = [] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "INVALID_CLIENT_REF" or "INVALID_PRESENCE_DURATION" or "NO_TRIGGERS");
+    }
+
+    [Theory]
     [InlineData("0 6 * * *")]      // 5-field
     [InlineData("0 0 6 * * *")]    // 6-field with seconds
     public void Validate_accepts_both_supported_cron_formats(string cron)

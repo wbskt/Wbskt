@@ -3,6 +3,7 @@ using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
+using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Abstraction.Validation;
@@ -191,6 +192,29 @@ public sealed class WorkflowValidator
                     WarnOnCorrelation(node.NodeId, client.Config?.CorrelationKey, client.Config?.ConcurrencyPolicy, issues);
                     break;
 
+                case ClientPresenceTriggerNode presence:
+                    // The key is built from the parsed GUID, and the socket host reports presence by
+                    // GUID, so anything else would publish a trigger that can never fire.
+                    if (!Guid.TryParse(presence.Config?.ClientRef, out _))
+                    {
+                        issues.Add(new ValidationIssue(
+                            ValidationSeverity.Error,
+                            "INVALID_CLIENT_REF",
+                            $"Presence trigger '{node.NodeId}' needs a client id, but has '{presence.Config?.ClientRef}'.",
+                            node.NodeId));
+                    }
+                    if (presence.Config is { } config
+                        && (config.ForSeconds < 0 || config.ForSeconds > ClientPresenceTriggerConfig.MaxForSeconds))
+                    {
+                        issues.Add(new ValidationIssue(
+                            ValidationSeverity.Error,
+                            "INVALID_PRESENCE_DURATION",
+                            $"Presence trigger '{node.NodeId}' has forSeconds {config.ForSeconds}; it must be between 0 and {ClientPresenceTriggerConfig.MaxForSeconds}.",
+                            node.NodeId));
+                    }
+                    WarnOnCorrelation(node.NodeId, presence.Config?.CorrelationKey, presence.Config?.ConcurrencyPolicy, issues);
+                    break;
+
                 case WebhookTriggerNode webhook:
                     WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, webhook.Config?.ConcurrencyPolicy, issues);
                     break;
@@ -310,7 +334,7 @@ public sealed class WorkflowValidator
 
     private static void WarnIfNoTriggers(WorkflowDefinition def, List<ValidationIssue> issues)
     {
-        var hasTrigger = def.Nodes.Any(n => n is ClientTriggerNode or ScheduleTriggerNode or WebhookTriggerNode or ManualTriggerNode);
+        var hasTrigger = def.Nodes.Any(n => n is ClientTriggerNode or ClientPresenceTriggerNode or ScheduleTriggerNode or WebhookTriggerNode or ManualTriggerNode);
 
         if (!hasTrigger)
         {

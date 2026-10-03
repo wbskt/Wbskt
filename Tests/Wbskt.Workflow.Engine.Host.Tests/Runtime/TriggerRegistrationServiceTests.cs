@@ -159,6 +159,33 @@ public sealed class TriggerRegistrationServiceTests
             7);
     }
 
+    [Fact]
+    public async Task OnPublished_with_presence_trigger_registers_a_key_naming_the_trigger_and_its_grace_period()
+    {
+        var clientRef = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var nodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var definition = CreateDefinition() with
+        {
+            Nodes =
+            [
+                // Upper case on purpose: the key must use the canonical form the socket host reports.
+                new ClientPresenceTriggerNode { NodeId = nodeId, Name = "offline", Ports = [], Config = new ClientPresenceTriggerConfig { ClientRef = clientRef.ToString().ToUpperInvariant(), State = ClientPresenceState.Offline, ForSeconds = 300 } }
+            ]
+        };
+        var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
+
+        TriggerRegistrationRow row = Assert.Single(triggerRegistrationProvider.Rows);
+        Assert.Equal("presence", row.TriggerKind);
+        Assert.StartsWith(ClientPresenceTriggerKey.Prefix(clientRef, ClientPresenceState.Offline), row.TriggerKey);
+        Assert.EndsWith($":300:{row.WorkflowRefId}:{nodeId}", row.TriggerKey);
+        Assert.True(ClientPresenceTriggerKey.TryGetForSeconds(row.TriggerKey, out int forSeconds));
+        Assert.Equal(300, forSeconds);
+        Assert.Equal(nameof(WorkflowConcurrencyPolicy.Queue), row.ConcurrencyPolicy);
+    }
+
     private sealed class RecordingWorkflowDefinitionProvider(WorkflowDefinition definition) : IWorkflowDefinitionProvider
     {
         public Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct) => throw new NotSupportedException();

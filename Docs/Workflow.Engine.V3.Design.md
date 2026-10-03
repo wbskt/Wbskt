@@ -115,7 +115,7 @@ Structural metadata for designer UX, validation, and policy defaults. **Not** a 
 
 | Family | Purpose | Example kinds | Constraint |
 |---|---|---|---|
-| **Trigger** | Starts a Run. Output ports only. | `trigger:client`, `trigger:schedule`, `trigger:webhook`, `trigger:manual` | Soft warning if a definition has none |
+| **Trigger** | Starts a Run. Output ports only. | `trigger:client`, `trigger:clientPresence`, `trigger:schedule`, `trigger:webhook`, `trigger:manual` | Soft warning if a definition has none |
 | **Control** | Influences flow without external side effects (mostly). | `control:logic`, `control:foreach`, `control:parallelForEach`, `control:join`, `control:delay`, `control:variable`, `control:subWorkflow` | Pure w.r.t. outside world (except `variable`/`subWorkflow`) |
 | **Action** | Performs external side effects. | `action:clientMessage`, `action:email`, `action:webhook`, `action:telegram`, `action:toast` | Carries `RetryPolicy` and `OnFailure` (Section 5) |
 
@@ -1088,6 +1088,7 @@ Computed at publish time from the trigger node's `kind` + config.
 |---|---|
 | `trigger:client { deviceRefId: D, propertyName: P }` | `client\|D\|P` |
 | `trigger:client { deviceRefId: D }` (any property) | `client\|D\|*` |
+| `trigger:clientPresence { clientRef: D, state: offline, forSeconds: 60 }` | `presence:D:offline:60:<workflowRef>:<triggerNodeId>` (dispatched only after the client has stayed offline for 60s) |
 | `trigger:webhook { path: "/water-start", method: "POST" }` | `webhook\|POST\|/water-start` |
 | `trigger:schedule { cron: "0 6 * * *" }` | `schedule\|<workflowRef>\|<triggerNodeId>` |
 | `trigger:signal { name: "ops-emergency" }` | `signal\|ops-emergency` |

@@ -59,6 +59,8 @@ public static class Program
         builder.Services.AddSingleton<ILeaseHolder, SqlLeaseHolder>();
         builder.Services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
+        builder.Services.AddScoped<IClientPresenceCheckProvider, ClientPresenceCheckProvider>();
+        builder.Services.AddScoped<ClientPresenceParker>();
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         builder.Services.AddScoped<IToastPublisher, ToastPublisher>();
         builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
@@ -74,6 +76,7 @@ public static class Program
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
         builder.Services.AddHostedService<ScheduledFireTicker>();
+        builder.Services.AddHostedService<ClientPresenceTicker>();
         builder.Services.AddHostedService<RunReaper>();
         builder.Services.AddHostedService<HistoryRetentionGc>();
         builder.Services.AddHostedService<IdempotencyKeyGc>();
