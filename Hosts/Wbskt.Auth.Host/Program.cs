@@ -12,6 +12,7 @@ using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
+using Wbskt.Auth.Host.Services.Events;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
@@ -54,7 +55,10 @@ public static class Program
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddAccessTokenRevocation(builder.Configuration);
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
-        builder.Services.AddScoped<IAuthService, AuthService>();
+        // AuthService publishes through the queued bus, so sign-in never waits on RabbitMQ; see
+        // QueuedEventBus. Every other service here keeps the real bus.
+        builder.Services.AddSingleton<QueuedEventBus>();
+        builder.Services.AddScoped<IAuthService>(sp => ActivatorUtilities.CreateInstance<AuthService>(sp, sp.GetRequiredService<QueuedEventBus>()));
         builder.Services.AddScoped<IManagementService, ManagementService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
@@ -80,6 +84,9 @@ public static class Program
 
         // Event Bus
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
+
+        // Registered after the bus so it stops first, and can still send what is queued while stopping.
+        builder.Services.AddHostedService<QueuedEventDispatcher>();
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

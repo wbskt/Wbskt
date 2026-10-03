@@ -69,17 +69,6 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         token.Id = (int)parameters["@Id"].Value;
     }
 
-    public async Task<RefreshToken> GetRefreshTokenAsync(string token, CancellationToken cancellationToken = default)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.RefreshToken_GetBy_Token",
-            p => p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token),
-            MapRefreshToken,
-            new SecurityException("Invalid refresh token."),
-            cancellationToken
-        );
-    }
-
     public async Task<int> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.RefreshToken_Revoke", p =>
@@ -89,6 +78,42 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.Add("@ReplacedByTokenHash", SqlDbType.VarBinary, 32).Value =
                 replacedByToken is null ? DBNull.Value : SecurityTokens.Hash(replacedByToken);
         }, cancellationToken);
+    }
+
+    public async Task<RefreshRotation> RotateRefreshTokenAsync(string token, RefreshToken replacement, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.RefreshToken_Rotate",
+            p =>
+            {
+                p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
+                p.Add("@NewTokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(replacement.Token);
+                p.AddWithValue("@NewExpires", replacement.Expires);
+                p.AddWithValue("@Ip", ipAddress ?? (object)DBNull.Value);
+            },
+            reader =>
+            {
+                var outcome = Enum.Parse<RefreshRotationOutcome>(reader.GetString(reader.GetOrdinal("Outcome")));
+                var userIdOrdinal = reader.GetOrdinal("UserId");
+                int? userId = reader.IsDBNull(userIdOrdinal) ? null : reader.GetInt32(userIdOrdinal);
+
+                User? user = null;
+                if (outcome == RefreshRotationOutcome.Rotated && userId is not null)
+                {
+                    user = new User
+                    {
+                        Id = userId.Value,
+                        RefId = reader.GetGuid(reader.GetOrdinal("RefId")),
+                        Username = reader.GetString(reader.GetOrdinal("Username")),
+                        Email = reader.GetString(reader.GetOrdinal("Email")),
+                        IsActive = true
+                    };
+                }
+
+                return new RefreshRotation(outcome, userId, user);
+            },
+            cancellationToken: cancellationToken
+        );
     }
 
     public async Task<int> RevokeAllRefreshTokensForUserAsync(int userId, string ipAddress, CancellationToken cancellationToken = default)
@@ -781,17 +806,6 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
             IsEmailVerified = reader.GetBoolean(reader.GetOrdinal("IsEmailVerified")),
             LockedUntil = reader.IsDBNull(reader.GetOrdinal("LockedUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("LockedUntil"))
-        };
-    }
-
-    private static RefreshToken MapRefreshToken(SqlDataReader reader)
-    {
-        return new RefreshToken
-        {
-            Id = reader.GetInt32(reader.GetOrdinal("Id")),
-            UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
-            Expires = reader.GetDateTime(reader.GetOrdinal("Expires")),
-            Revoked = reader.IsDBNull(reader.GetOrdinal("Revoked")) ? null : reader.GetDateTime(reader.GetOrdinal("Revoked"))
         };
     }
 }

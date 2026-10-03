@@ -172,9 +172,9 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var session = await fixture.LoginAsync(user.Email, user.Password);
 
-        // One token must never become two live families. RefreshToken_Revoke is an atomic
-        // compare-and-swap that reports how many rows it retired, but the rotation mints the
-        // replacement before calling it and ignores the count — so both racers can win.
+        // One token must never become two live families. RefreshToken_Rotate retires the presented
+        // token with a compare-and-swap and only stores a replacement when it won, so exactly one
+        // racer can come away with a new pair.
         var responses = await Task.WhenAll(
             fixture.RefreshAsync(session.RefreshToken),
             fixture.RefreshAsync(session.RefreshToken));

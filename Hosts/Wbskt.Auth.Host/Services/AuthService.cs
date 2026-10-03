@@ -75,6 +75,15 @@ internal sealed class AuthService : IAuthService
     private readonly bool _requireVerifiedEmail;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
+    /// <summary>
+    /// A hash of a password nobody knows, verified against when there is no real one to check, so a
+    /// login for an address with no account (or a locked one) costs the same hashing work as one with
+    /// a wrong password. Without it, the time a login takes says whether the address is registered -
+    /// the one thing register, forgot-password and resend-verification are built not to reveal.
+    /// </summary>
+    private static readonly Lazy<string> DummyPasswordHash =
+        new(() => new PasswordHasher<User>().HashPassword(new User(), Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))));
+
     public AuthService(
         IAuthProvider provider, 
         IJwtService jwtService, 
@@ -111,6 +120,7 @@ internal sealed class AuthService : IAuthService
             }
             catch (SecurityException ex)
             {
+                SpendPasswordCheck(password);
                 _logger.LogWarning("Login failed: User with email {Email} not found. IP: {IpAddress}. Error: {Message}", email, ipAddress, ex.Message);
                 _logger.LogTrace(ex, "Login user lookup failed stack trace for {Email}", email);
                 _metrics.RecordLogin("invalid_credentials");
@@ -123,6 +133,8 @@ internal sealed class AuthService : IAuthService
             // an account to anyone willing to make ten bad guesses. The owner gets in by resetting.
             if (user.LockedUntil > DateTime.UtcNow)
             {
+                // Against the dummy hash, not the account's: the work is spent, the password is not tested.
+                SpendPasswordCheck(password);
                 _logger.LogWarning("Login refused: account {UserId} is locked until {LockedUntil}. IP: {IpAddress}", user.Id, user.LockedUntil, ipAddress);
                 _metrics.RecordLogin("locked_out");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Account locked"), cancellationToken);
@@ -205,91 +217,68 @@ internal sealed class AuthService : IAuthService
 
         try
         {
-            RefreshToken existingToken;
-            try
-            {
-                existingToken = await _provider.GetRefreshTokenAsync(token, cancellationToken);
-            }
-            catch (SecurityException ex)
-            {
-                _logger.LogWarning("Token refresh failed: Provided token is invalid. IP: {IpAddress}. Error: {Message}", ipAddress, ex.Message);
-                _logger.LogTrace(ex, "Token refresh lookup failed stack trace");
-                _metrics.RecordRefresh("invalid_token");
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_TOKEN", "Invalid refresh token."));
-            }
+            // One call, one transaction: the presented token is retired and its replacement stored
+            // together or not at all. When these were separate calls, a failure after the revoke left
+            // the client holding a dead token, and its next attempt read as a replay that ended every
+            // session the user had. The procedure also tells a replay (already retired when read)
+            // from a lost race (retired by a concurrent exchange in between); see RefreshToken_Rotate.
+            // The user id is not needed here: the procedure stores the replacement under whoever owns
+            // the presented token.
+            var newRefreshToken = GenerateRefreshToken(0);
+            var rotation = await _provider.RotateRefreshTokenAsync(token, newRefreshToken, ipAddress, cancellationToken);
 
-            // A token we already retired is being presented again. The legitimate client moved on to
-            // its replacement, so whoever sent this either kept a copy or intercepted one. Treat the
-            // whole session family as compromised rather than just refusing this one request.
-            if (existingToken.Revoked is not null)
+            switch (rotation.Outcome)
             {
-                _logger.LogWarning("Token refresh failed: Replay of a revoked token for user ID {UserId}. Revoking all sessions. IP: {IpAddress}", existingToken.UserId, ipAddress);
-                await _provider.RevokeAllRefreshTokensForUserAsync(existingToken.UserId, ipAddress, cancellationToken);
-                await _accessTokens.RevokeUserAsync(existingToken.UserId, cancellationToken);
-                _metrics.RecordRefresh("token_replayed");
+                case RefreshRotationOutcome.Unknown:
+                    _logger.LogWarning("Token refresh failed: Provided token is invalid. IP: {IpAddress}", ipAddress);
+                    _metrics.RecordRefresh("invalid_token");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_TOKEN", "Invalid refresh token."));
 
-                await _eventBus.PublishAsync(new SecurityAlertEvent(
-                    "RefreshTokenReplay",
-                    $"A revoked refresh token was replayed for user ID {existingToken.UserId}; all sessions revoked.",
-                    ipAddress,
-                    $"UserId: {existingToken.UserId}"), cancellationToken);
+                case RefreshRotationOutcome.Replayed:
+                {
+                    // A token we already retired is being presented again. The legitimate client moved
+                    // on to its replacement, so whoever sent this either kept a copy or intercepted one.
+                    // The procedure has already revoked every refresh token the user holds; this ends
+                    // their access tokens too.
+                    var userId = rotation.UserId!.Value;
+                    _logger.LogWarning("Token refresh failed: Replay of a revoked token for user ID {UserId}. All sessions revoked. IP: {IpAddress}", userId, ipAddress);
+                    await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+                    _metrics.RecordRefresh("token_replayed");
 
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
-            }
+                    await _eventBus.PublishAsync(new SecurityAlertEvent(
+                        "RefreshTokenReplay",
+                        $"A revoked refresh token was replayed for user ID {userId}; all sessions revoked.",
+                        ipAddress,
+                        $"UserId: {userId}"), cancellationToken);
 
-            if (!existingToken.IsActive)
-            {
-                _logger.LogWarning("Token refresh failed: Provided token for user ID {UserId} has expired. IP: {IpAddress}", existingToken.UserId, ipAddress);
-                _metrics.RecordRefresh("token_inactive");
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
-            }
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
+                }
 
-            User user;
-            try
-            {
-                user = await _provider.GetByIdAsync(existingToken.UserId, cancellationToken);
-                _logger.LogDebug("User record resolved for ID: {UserId}", existingToken.UserId);
-            }
-            catch (SecurityException ex)
-            {
-                _logger.LogWarning("Token refresh failed: User with ID {UserId} not found. IP: {IpAddress}. Error: {Message}", existingToken.UserId, ipAddress, ex.Message);
-                _logger.LogTrace(ex, "Token refresh user lookup failed stack trace for User ID {UserId}", existingToken.UserId);
-                _metrics.RecordRefresh("user_not_found");
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
-            }
+                case RefreshRotationOutcome.Expired:
+                    _logger.LogWarning("Token refresh failed: Provided token for user ID {UserId} has expired. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _metrics.RecordRefresh("token_inactive");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
 
-            if (!user.IsActive)
-            {
-                _logger.LogWarning("Token refresh failed: Account is inactive for user {Username}. IP: {IpAddress}", user.Username, ipAddress);
-                _metrics.RecordRefresh("user_inactive");
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
+                case RefreshRotationOutcome.UserInactive:
+                    _logger.LogWarning("Token refresh failed: Account is inactive for user ID {UserId}. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _metrics.RecordRefresh("user_inactive");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
+
+                case RefreshRotationOutcome.Raced:
+                    // Another exchange retired this token in the moment between the procedure's read
+                    // and its write. Losing that race is not evidence of theft - the token was used
+                    // exactly once, just not by us - so the family is left alone and only this request
+                    // is refused.
+                    _logger.LogWarning("Token refresh lost a concurrent exchange for user ID {UserId}. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _metrics.RecordRefresh("token_raced");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
             }
 
-            _logger.LogDebug("Rotating refresh token for user: {Username}", user.Username);
-            var newRefreshToken = GenerateRefreshToken(user.Id);
-
-            // Retire the presented token *before* minting its replacement, and let the revoke decide
-            // who won. It is a compare-and-swap - it only touches a row whose Revoked is still null -
-            // and reports how many rows it retired, so exactly one of two concurrent exchanges can
-            // come away with a count of 1. Minting first and revoking afterwards let both callers
-            // through the earlier IsActive check and both walk away with a live token, which turns
-            // one refresh token into two independent session families. That is precisely what the
-            // replay detection above exists to prevent: a thief racing the legitimate client would
-            // otherwise hold a family that survives the victim's next rotation.
-            var revoked = await _provider.RevokeRefreshTokenAsync(token, ipAddress, newRefreshToken.Token, cancellationToken);
-            if (revoked == 0)
-            {
-                // Another exchange retired this token in the moment between our read and our write.
-                // Losing that race is not evidence of theft - the token was used exactly once, just
-                // not by us - so the family is left alone and only this request is refused.
-                _logger.LogWarning("Token refresh lost a concurrent exchange for user ID {UserId}. IP: {IpAddress}", user.Id, ipAddress);
-                _metrics.RecordRefresh("token_raced");
-                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
-            }
-
+            var user = rotation.User!;
             var newAccessToken = GenerateAccessToken(user);
-            await _provider.InsertRefreshTokenAsync(newRefreshToken, ipAddress, cancellationToken);
 
+            // Queued, not awaited on the broker (QueuedEventBus): the rotation is committed, and an
+            // event that fails to go out must not turn it into an error the client acts on.
             await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
             _logger.LogInformation("Token refreshed successfully for user: {Username}. IP: {IpAddress}", user.Username, ipAddress);
@@ -644,6 +633,15 @@ internal sealed class AuthService : IAuthService
         }
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Verifies <paramref name="password"/> against <see cref="DummyPasswordHash"/> and discards the
+    /// answer, so the paths that have no real hash to check take as long as the ones that do.
+    /// </summary>
+    private void SpendPasswordCheck(string password)
+    {
+        _passwordHasher.VerifyHashedPassword(new User(), DummyPasswordHash.Value, password);
     }
 
     /// <summary>
