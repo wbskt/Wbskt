@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
@@ -8,6 +9,9 @@ namespace Wbskt.Management.Host.Services;
 
 internal sealed class ClientRegistrationService : IClientRegistrationService
 {
+    /// <summary>Raised by <c>dbo.Client_Create</c> when the policy is already at <c>MaxClients</c>.</summary>
+    private const int PolicyLimitReachedError = 50020;
+
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly IEventBus _eventBus;
@@ -44,8 +48,9 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Client registration failed: Policy with PIN '{Pin}' not found. Error: {Message}", request.Pin, ex.Message);
-                _logger.LogTrace(ex, "GetByPin lookup failure stack trace for PIN '{Pin}'", request.Pin);
+                // The presented PIN is never logged: a wrong guess is noise, and a right one is a credential.
+                _logger.LogWarning("Client registration failed: no policy matches the presented PIN. Error: {Message}", ex.Message);
+                _logger.LogTrace(ex, "GetByPin lookup failure stack trace");
                 return Result<ClientRegistrationResponse>.Failure(Error.NotFound("POLICY_NOT_FOUND", "Invalid registration PIN."));
             }
 
@@ -70,7 +75,20 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
             var secret = ClientSecrets.Generate();
             var initialStatus = policy.AutoApproval ? ClientStatus.Registered : ClientStatus.Pending;
 
-            var client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, cancellationToken);
+            Client client;
+            try
+            {
+                client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, cancellationToken);
+            }
+            catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)
+            {
+                // A concurrent registration took the last slot after the count above. Client_Create
+                // re-checks under a lock on the policy row; this is that check refusing.
+                _logger.LogWarning("Client registration failed: Limit reached for policy '{PolicyName}' (concurrent registration)", policy.Name);
+                await _eventBus.PublishAsync(new PolicyRegistrationLimitReachedEvent(policy.RefId, policy.Id, policy.WorkspaceId, policy.MaxClients.Value), cancellationToken);
+                return Result<ClientRegistrationResponse>.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached."));
+            }
+
             _logger.LogInformation("Client '{ClientName}' record created with status: '{ClientStatus}'", request.Name, initialStatus);
 
             await _eventBus.PublishAsync(new ClientRegistrationInitiatedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, client.Name), cancellationToken);

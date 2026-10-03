@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
@@ -24,6 +25,7 @@ public class ClientRegistrationsController : ApiControllerBase
     }
 
     [HttpPost("initiate")]
+    [EnableRateLimiting(RateLimitPolicies.DeviceRegistration)]
     public async Task<ActionResult<ClientRegistrationResponse>> Initiate(ClientRegistrationRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: Client Registration initiated for Client Name: '{ClientName}'", request.Name);

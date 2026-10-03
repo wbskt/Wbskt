@@ -1,24 +1,23 @@
 /*
 --------------------------------------------------------------------------------------
-Post-Deployment Script: Seed Default Policies
+Post-Deployment Script
 --------------------------------------------------------------------------------------
 */
 
--- 1. Seed Registration Policies
--- Default Testing Policy
-IF NOT EXISTS (SELECT 1 FROM dbo.RegistrationPolicies WHERE Pin = '123456')
-    BEGIN
-        INSERT INTO dbo.RegistrationPolicies (WorkspaceId, Pin, Name, MaxClients, AutoApproval)
-        VALUES (1, '123456', 'Default Testing Policy', 100, 1);
-    END
-GO
-
--- Manual Approval Policy
-IF NOT EXISTS (SELECT 1 FROM dbo.RegistrationPolicies WHERE Pin = '654321')
-    BEGIN
-        INSERT INTO dbo.RegistrationPolicies (WorkspaceId, Pin, Name, MaxClients, AutoApproval)
-        VALUES (1, '654321', 'Manual Approval Policy', 10, 0);
-    END
+-- 1. Retire the registration policies this script used to seed.
+-- Every deploy created PIN 123456 (auto-approve, 100 devices) and PIN 654321 in workspace 1. The
+-- registration endpoint is anonymous, so a PIN anyone would guess first was an open door into the
+-- default workspace. The seed is gone; this disables the rows already created. Disabling, not
+-- deleting: clients registered through them reference the policy and keep working. It runs on every
+-- deploy, so re-enabling one from the console does not stick; create a new policy (which gets a
+-- generated PIN) instead. Matched on name as well as PIN so that a policy an administrator created
+-- with the same PIN is left alone.
+UPDATE dbo.RegistrationPolicies
+    SET IsEnabled = 0
+    WHERE WorkspaceId = 1
+        AND IsEnabled = 1
+        AND ((Pin = '123456' AND Name = 'Default Testing Policy')
+          OR (Pin = '654321' AND Name = 'Manual Approval Policy'));
 GO
 
 -- 2. One-time fix-up for the horizontal-scale migration (added ConnectedHostId).

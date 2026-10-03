@@ -10,7 +10,9 @@ var config = new ClientConfig(
     BaseApiUrl: "https://localhost:7010", // Management API
     BaseSocketUrl: "wss://localhost:7020", // Socket Server
     DeviceName: $"Sim-Sensor-{Environment.TickCount % 10000}",
-    PolicyPin: "123456"
+    // The enrollment PIN of a registration policy in your workspace (console: Policies).
+    PolicyPin: Environment.GetEnvironmentVariable("WBSKT_POLICY_PIN")
+        ?? throw new InvalidOperationException("Set WBSKT_POLICY_PIN to a registration policy's PIN.")
 );
 
 var storage = new FileClientStorage();
