@@ -187,7 +187,7 @@ public static class Program
                 var allowedOrigins = builder.Configuration.GetCorsAllowedOrigins();
                 if (allowedOrigins is { Length: > 0 })
                 {
-                    policyBuilder.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
+                    policyBuilder.SetIsOriginAllowed(allowedOrigins.IsCorsOriginAllowed).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
                 }
                 else if (builder.Environment.IsDevelopment())
                 {
