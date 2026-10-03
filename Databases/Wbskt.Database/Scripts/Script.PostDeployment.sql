@@ -39,24 +39,27 @@ GO
 -- default) skips this block, which is what local development and the integration suite rely on.
 -- Rerunning with a new password rotates it. ALTER USER ... WITH LOGIN re-links the user after a
 -- restore onto another server, where the login's SID would otherwise not match.
+-- Each statement runs through EXEC so the DACPAC build cannot see it: the SDK lifts a literal
+-- CREATE LOGIN, CREATE USER or GRANT out of this script into the model, and sqlpackage would then
+-- create the login itself on every publish, failing when the password variable is empty.
 IF N'$(ManagementHostPassword)' <> N''
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'wbskt_management')
-        CREATE LOGIN [wbskt_management] WITH PASSWORD = N'$(ManagementHostPassword)', DEFAULT_DATABASE = [$(DatabaseName)];
+        EXEC (N'CREATE LOGIN [wbskt_management] WITH PASSWORD = N''$(ManagementHostPassword)'', DEFAULT_DATABASE = [$(DatabaseName)]');
     ELSE
-        ALTER LOGIN [wbskt_management] WITH PASSWORD = N'$(ManagementHostPassword)';
+        EXEC (N'ALTER LOGIN [wbskt_management] WITH PASSWORD = N''$(ManagementHostPassword)''');
 
     IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'wbskt_management')
-        CREATE USER [wbskt_management] FOR LOGIN [wbskt_management];
+        EXEC (N'CREATE USER [wbskt_management] FOR LOGIN [wbskt_management]');
     ELSE
-        ALTER USER [wbskt_management] WITH LOGIN = [wbskt_management];
+        EXEC (N'ALTER USER [wbskt_management] WITH LOGIN = [wbskt_management]');
 
     -- Every query the hosts make is a stored procedure in dbo (the health check's SELECT 1 needs
     -- nothing), and ownership chaining lets those procedures read and write the tables. A host that
     -- starts sending ad-hoc SQL will fail with a permission error rather than quietly widening this.
-    -- CONNECT explicitly: a user created by a DACPAC deployment does not reliably carry it.
-    GRANT CONNECT TO [wbskt_management];
-    GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_management];
+    -- CONNECT is granted explicitly rather than relying on CREATE USER to imply it.
+    EXEC (N'GRANT CONNECT TO [wbskt_management]');
+    EXEC (N'GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_management]');
 END
 GO
 
@@ -66,23 +69,26 @@ GO
 -- default) skips this block, which is what local development and the integration suite rely on.
 -- Rerunning with a new password rotates it. ALTER USER ... WITH LOGIN re-links the user after a
 -- restore onto another server, where the login's SID would otherwise not match.
+-- Each statement runs through EXEC so the DACPAC build cannot see it: the SDK lifts a literal
+-- CREATE LOGIN, CREATE USER or GRANT out of this script into the model, and sqlpackage would then
+-- create the login itself on every publish, failing when the password variable is empty.
 IF N'$(EngineHostPassword)' <> N''
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'wbskt_engine')
-        CREATE LOGIN [wbskt_engine] WITH PASSWORD = N'$(EngineHostPassword)', DEFAULT_DATABASE = [$(DatabaseName)];
+        EXEC (N'CREATE LOGIN [wbskt_engine] WITH PASSWORD = N''$(EngineHostPassword)'', DEFAULT_DATABASE = [$(DatabaseName)]');
     ELSE
-        ALTER LOGIN [wbskt_engine] WITH PASSWORD = N'$(EngineHostPassword)';
+        EXEC (N'ALTER LOGIN [wbskt_engine] WITH PASSWORD = N''$(EngineHostPassword)''');
 
     IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'wbskt_engine')
-        CREATE USER [wbskt_engine] FOR LOGIN [wbskt_engine];
+        EXEC (N'CREATE USER [wbskt_engine] FOR LOGIN [wbskt_engine]');
     ELSE
-        ALTER USER [wbskt_engine] WITH LOGIN = [wbskt_engine];
+        EXEC (N'ALTER USER [wbskt_engine] WITH LOGIN = [wbskt_engine]');
 
     -- Every query the hosts make is a stored procedure in dbo (the health check's SELECT 1 needs
     -- nothing), and ownership chaining lets those procedures read and write the tables. A host that
     -- starts sending ad-hoc SQL will fail with a permission error rather than quietly widening this.
-    -- CONNECT explicitly: a user created by a DACPAC deployment does not reliably carry it.
-    GRANT CONNECT TO [wbskt_engine];
-    GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_engine];
+    -- CONNECT is granted explicitly rather than relying on CREATE USER to imply it.
+    EXEC (N'GRANT CONNECT TO [wbskt_engine]');
+    EXEC (N'GRANT EXECUTE ON SCHEMA::dbo TO [wbskt_engine]');
 END
 GO
