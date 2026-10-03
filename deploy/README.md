@@ -228,6 +228,24 @@ docker compose up -d --no-deps auth
 
 The same steps apply to management with the `MANAGEMENT_` variables.
 
+### Running a local console against this backend
+
+`CONSOLE_ORIGIN` is the only browser origin auth and management accept, so a console served
+from anywhere else (`ng serve` on your machine, say) has every API call blocked by CORS. To let one
+in, list its origin in `CORS_EXTRA_ORIGINS` in `compose/.env`, comma-separated, then recreate the
+two hosts:
+
+```bash
+# compose/.env
+CORS_EXTRA_ORIGINS=http://localhost:4200
+
+docker compose up -d --no-build auth management
+```
+
+It is empty by default and only widens CORS. Email links still point at `CONSOLE_ORIGIN`, so a
+verification or reset link opens the deployed console, not the local one. Clear it again before
+public launch. The console side (pointing `ng serve` at these URLs) is in the Wbskt.Console README.
+
 ## Incremental deployment (already running, you've changed something)
 
 Normally: push to `master`, wait for **Build images**, then dispatch **Deploy** with that run's

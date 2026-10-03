@@ -147,6 +147,7 @@ services:
       # Publishes access-token revocations (logout-all, deactivation, password reset) to management.
       ConnectionStrings__Redis: redis:6379
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+      Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
       # Mail. Leave SMTP_HOST empty and the host logs an error at startup and sends nothing - which,
       # because sign-in requires a confirmed address, means no new account can be used. The links in
       # that mail point at the console's public origin, never at an inbound Host header.
@@ -204,6 +205,7 @@ services:
       Services__WorkflowEngine: http://traefik:8081
       Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY}
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+      Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
     volumes:
       - ../config:/Config:ro
     healthcheck:

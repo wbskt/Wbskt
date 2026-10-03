@@ -170,7 +170,7 @@ public static class Program
         {
             options.AddPolicy("AllowAll", policyBuilder =>
             {
-                var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                var allowedOrigins = builder.Configuration.GetCorsAllowedOrigins();
                 if (allowedOrigins is { Length: > 0 })
                 {
                     policyBuilder.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
