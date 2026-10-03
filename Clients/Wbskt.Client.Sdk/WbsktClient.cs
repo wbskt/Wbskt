@@ -9,6 +9,8 @@ public sealed class WbsktClient : IWbsktClient
     private readonly IClientStorage _storage;
     private readonly AuthClient _auth;
     private readonly SocketClient _socket;
+    private readonly OutboundBuffer _outbound;
+    private readonly SemaphoreSlim _flushLock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
     
     private bool _shouldReconnect = true;
@@ -20,12 +22,15 @@ public sealed class WbsktClient : IWbsktClient
     public event Action? OnConnected;
     public event Action? OnDisconnected;
 
+    public int PendingMessageCount => _outbound.Count;
+
     public WbsktClient(ClientConfig config, IClientStorage storage)
     {
         _config = config;
         _storage = storage;
         _auth = new AuthClient(config);
         _socket = new SocketClient(config.BaseSocketUrl);
+        _outbound = new OutboundBuffer(config.OfflineBufferSize);
 
         // Forward internal events to public surface
         _socket.OnMessageReceived += (type, payload, commandId) => OnMessageReceived?.Invoke(type, payload, commandId);
@@ -77,12 +82,16 @@ public sealed class WbsktClient : IWbsktClient
     {
         try
         {
-            await SendAsync("capabilities", BuildEffectiveCapabilities());
+            // Capabilities describe the connection, so they go out first and are never buffered.
+            await _socket.SendAsync(new SocketMessage("capabilities", BuildEffectiveCapabilities()));
         }
         catch (Exception)
         {
             // Connection may have dropped mid-handshake; the reconnect monitor will retry and re-announce.
+            return;
         }
+
+        await FlushOutboundAsync();
     }
 
     private ClientCapabilities BuildEffectiveCapabilities()
@@ -134,13 +143,49 @@ public sealed class WbsktClient : IWbsktClient
 
         if (_socket.IsConnected)
         {
-            await SendAsync("capabilities", BuildEffectiveCapabilities());
+            await _socket.SendAsync(new SocketMessage("capabilities", BuildEffectiveCapabilities()));
         }
     }
 
     public async Task SendAsync(string type, object payload)
     {
-        await _socket.SendAsync(new SocketMessage(type, payload));
+        var message = new SocketMessage(type, payload) { SentAt = DateTimeOffset.UtcNow };
+
+        if (_outbound.Capacity <= 0)
+        {
+            await _socket.SendAsync(message);
+            return;
+        }
+
+        // Every message goes through the buffer so a backlog from an outage is never overtaken.
+        _outbound.Enqueue(message);
+        await FlushOutboundAsync();
+    }
+
+    private async Task FlushOutboundAsync()
+    {
+        await _flushLock.WaitAsync();
+        try
+        {
+            while (_socket.IsConnected && _outbound.TryPeek(out var next))
+            {
+                try
+                {
+                    await _socket.SendAsync(next);
+                }
+                catch (Exception)
+                {
+                    // Keep it queued; the next connection resends it.
+                    return;
+                }
+
+                _outbound.RemoveIfHead(next);
+            }
+        }
+        finally
+        {
+            _flushLock.Release();
+        }
     }
 
     public async Task ReportStateAsync(IReadOnlyDictionary<string, object?> patch)
@@ -176,5 +221,6 @@ public sealed class WbsktClient : IWbsktClient
         _auth.Dispose();
         await _socket.DisposeAsync();
         _cts.Dispose();
+        _flushLock.Dispose();
     }
 }

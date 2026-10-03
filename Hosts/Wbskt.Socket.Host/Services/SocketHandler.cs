@@ -188,13 +188,40 @@ internal sealed class SocketHandler : ISocketHandler
                 }
 
                 var payload = JsonSerializer.Serialize(message.Payload);
-                await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, message.Type, payload), cancellationToken);
+                await _eventBus.PublishAsync(new ClientMessageReceivedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, message.Type, payload)
+                {
+                    SentAtUtc = PlausibleSentAt(message.SentAt, DateTime.UtcNow)
+                }, cancellationToken);
             }
             catch (JsonException ex)
             {
                 _logger.LogWarning("Invalid JSON received from client {ClientRefId}: {Error}", clientRefId, ex.Message);
             }
         }
+    }
+
+    internal static readonly TimeSpan MaxSentAtAge = TimeSpan.FromDays(7);
+    internal static readonly TimeSpan MaxSentAtClockAhead = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// The device's send time, if it is believable: not in the future beyond small clock drift and
+    /// no older than a week. Anything else is dropped so a wrong device clock cannot rewrite history.
+    /// </summary>
+    internal static DateTime? PlausibleSentAt(DateTimeOffset? sentAt, DateTime nowUtc)
+    {
+        if (sentAt is not { } value)
+        {
+            return null;
+        }
+
+        var utc = value.UtcDateTime;
+        if (utc > nowUtc + MaxSentAtClockAhead || utc < nowUtc - MaxSentAtAge)
+        {
+            return null;
+        }
+
+        // A device clock slightly ahead still means "now".
+        return utc > nowUtc ? nowUtc : utc;
     }
 
     private async Task HandleSystemMessageAsync(Guid clientRefId, ClientConnection connection, SocketMessage message, CancellationToken cancellationToken)

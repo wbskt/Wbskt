@@ -314,6 +314,9 @@ Reserved message types after this design: `sys.ping`, `sys.pong`, `sys.ack`, `ca
 3. **Ack support** (§8): auto-`sys.ack`, `commandId` on the receive callback.
 4. Remove the `[RJ]` ping-pong TODO in `SocketClient.ReceiveLoopAsync` once §5 lands (the client side of the contract was already correct).
 5. Fix the receive-loop framing bug (§12.1) — it bites here first, because capabilities payloads are the first messages likely to exceed 4 KB.
+6. **Offline buffering and send time.** `SendAsync` stamps every application message with `sentAt` (ISO 8601, device clock) and queues it in memory while the socket is down, up to `ClientConfig.OfflineBufferSize` (default 1000, oldest dropped first; 0 restores the old throw-when-offline behaviour). On connect the SDK announces capabilities first, then sends the backlog in order. `PendingMessageCount` exposes the queue length. The buffer is not persisted, and a message the socket accepted just before a drop can still be lost.
+   - **Socket host** keeps `sentAt` only when it is plausible (at most 1 min ahead of server time, clamped to now, and at most 7 days old); otherwise it is dropped. An unreadable `sentAt` never rejects the message. The value travels as `ClientMessageReceivedEvent.SentAtUtc`.
+   - **Engine** adds `sentAt`, `receivedAt` and `late` (arrived more than 30 s after it was sent) to the client trigger payload, next to `payload`. A workflow filter such as `late == false` skips stale readings. Hold-time triggers order readings by `sentAt`, so a backlog replays the hold at the times the readings were taken.
 
 ---
 

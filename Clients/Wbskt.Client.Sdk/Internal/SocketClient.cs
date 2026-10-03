@@ -9,6 +9,7 @@ internal sealed class SocketClient : IAsyncDisposable
 {
     private ClientWebSocket _webSocket = new();
     private CancellationTokenSource _cts = new();
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly string _baseUrl;
 
     public event Action<string, object?, string?>? OnMessageReceived;
@@ -57,6 +58,8 @@ internal sealed class SocketClient : IAsyncDisposable
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
         
+        // ClientWebSocket allows one send at a time; pongs, acks and app messages share the socket.
+        await _sendLock.WaitAsync();
         try
         {
             await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, _cts.Token);
@@ -65,6 +68,10 @@ internal sealed class SocketClient : IAsyncDisposable
         {
             await AbortAsync();
             throw;
+        }
+        finally
+        {
+            _sendLock.Release();
         }
     }
 
@@ -166,5 +173,6 @@ internal sealed class SocketClient : IAsyncDisposable
         await AbortAsync();
         _webSocket.Dispose();
         _cts.Dispose();
+        _sendLock.Dispose();
     }
 }
