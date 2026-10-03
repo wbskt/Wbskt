@@ -448,6 +448,47 @@ public sealed class WorkflowValidatorRuleTests
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == expectedCode);
     }
 
+    [Theory]
+    [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 600, false, "HOLD_REQUIRES_FILTER")]
+    [InlineData("sensor-A", 600, true, "INVALID_CLIENT_REF")]
+    [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", -1, true, "INVALID_HOLD_DURATION")]
+    [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 86401, true, "INVALID_HOLD_DURATION")]
+    public void Validate_rejects_a_bad_client_hold(string clientRef, int holdSeconds, bool withFilter, string expectedCode)
+    {
+        var result = Validator.Validate(WithClientTrigger(clientRef, holdSeconds, withFilter));
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == expectedCode);
+    }
+
+    [Theory]
+    [InlineData("sensor-A", 0, false)]
+    [InlineData("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 600, true)]
+    public void Validate_accepts_a_client_trigger_without_a_hold_or_with_a_filtered_one(string clientRef, int holdSeconds, bool withFilter)
+    {
+        var result = Validator.Validate(WithClientTrigger(clientRef, holdSeconds, withFilter));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "HOLD_REQUIRES_FILTER" or "INVALID_CLIENT_REF" or "INVALID_HOLD_DURATION");
+    }
+
+    private static WorkflowDefinition WithClientTrigger(string clientRef, int holdSeconds, bool withFilter)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var client = new ClientTriggerNode
+        {
+            NodeId = Guid.NewGuid(),
+            Name = "too warm",
+            Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }],
+            Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ClientTriggerConfig
+            {
+                ClientRef = clientRef,
+                Type = "temperature",
+                HoldSeconds = holdSeconds,
+                Filter = withFilter ? new LiteralExpression(true) : null
+            }
+        };
+        return def with { Nodes = [client], Edges = [] };
+    }
+
     [Fact]
     public void Validate_accepts_a_presence_trigger_and_counts_it_as_a_trigger()
     {

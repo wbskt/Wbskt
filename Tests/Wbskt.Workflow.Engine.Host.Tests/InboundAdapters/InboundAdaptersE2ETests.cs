@@ -17,7 +17,7 @@ public sealed class InboundAdaptersE2ETests
     public async Task ClientPayloadConsumer_routes_to_hub()
     {
         var hub = CreateHub();
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         ClientMessageReceivedEvent evt = new(Guid.NewGuid(), 1, 1, "sensor", "{}");
         context.SetupGet(c => c.Message).Returns(evt);

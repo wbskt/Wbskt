@@ -189,6 +189,10 @@ public sealed class WorkflowValidator
                     break;
 
                 case ClientTriggerNode client:
+                    if (client.Config is { } clientConfig)
+                    {
+                        ValidateClientHold(node.NodeId, clientConfig, issues);
+                    }
                     WarnOnCorrelation(node.NodeId, client.Config?.CorrelationKey, client.Config?.ConcurrencyPolicy, issues);
                     break;
 
@@ -219,6 +223,44 @@ public sealed class WorkflowValidator
                     WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, webhook.Config?.ConcurrencyPolicy, issues);
                     break;
             }
+        }
+    }
+
+    private static void ValidateClientHold(Guid nodeId, ClientTriggerConfig config, List<ValidationIssue> issues)
+    {
+        if (config.HoldSeconds < 0 || config.HoldSeconds > ClientTriggerConfig.MaxHoldSeconds)
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "INVALID_HOLD_DURATION",
+                $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds}; it must be between 0 and {ClientTriggerConfig.MaxHoldSeconds}.",
+                nodeId));
+            return;
+        }
+
+        if (config.HoldSeconds == 0)
+        {
+            return;
+        }
+
+        // Holding means "the filter kept matching"; with no filter there is nothing to hold.
+        if (config.Filter is null)
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "HOLD_REQUIRES_FILTER",
+                $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds} but no filter; a hold time needs a filter to hold.",
+                nodeId));
+        }
+
+        // The hold key is built from the parsed GUID, as presence keys are.
+        if (!Guid.TryParse(config.ClientRef, out _))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "INVALID_CLIENT_REF",
+                $"Client trigger '{nodeId}' has a hold time and needs a client id, but has '{config.ClientRef}'.",
+                nodeId));
         }
     }
 

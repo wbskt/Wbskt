@@ -5,9 +5,9 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
-public sealed class ClientPayloadReceivedConsumer(IInboundHub hub) : IConsumer<ClientMessageReceivedEvent>
+public sealed class ClientPayloadReceivedConsumer(IInboundHub hub, ClientHoldRecorder holdRecorder) : IConsumer<ClientMessageReceivedEvent>
 {
-    public Task Consume(ConsumeContext<ClientMessageReceivedEvent> context)
+    public async Task Consume(ConsumeContext<ClientMessageReceivedEvent> context)
     {
         ClientMessageReceivedEvent evt = context.Message;
         InboundEvent inboundEvent = new(
@@ -24,7 +24,8 @@ public sealed class ClientPayloadReceivedConsumer(IInboundHub hub) : IConsumer<C
             },
             default);
 
-        return hub.HandleAsync(inboundEvent, context.CancellationToken);
+        await hub.HandleAsync(inboundEvent, context.CancellationToken);
+        await holdRecorder.RecordAsync(inboundEvent, evt.ClientRefId, evt.Type, evt.WorkspaceId, evt.CreatedAtUtc, context.CancellationToken);
     }
 
     private static JsonElement GetPayloadElement(string payload)

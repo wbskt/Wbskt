@@ -77,7 +77,7 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId, string? name = null, WorkflowExpression? filter = null)
+    public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, string? correlationExpression, out Guid nodeId, string? name = null, WorkflowExpression? filter = null, int holdSeconds = 0)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -85,7 +85,7 @@ public sealed class WorkflowBuilder
             NodeId = id,
             Name = name ?? "Device Trigger",
             Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new ClientTriggerConfig { ClientRef = clientRef, Type = type, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy, Filter = filter } });
+            Config = new ClientTriggerConfig { ClientRef = clientRef, Type = type, CorrelationKey = correlationExpression, ConcurrencyPolicy = concurrencyPolicy, Filter = filter, HoldSeconds = holdSeconds } });
         _head = (id, PortNames.Default);
         return this;
     }

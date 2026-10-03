@@ -1088,6 +1088,7 @@ Computed at publish time from the trigger node's `kind` + config.
 |---|---|
 | `trigger:client { deviceRefId: D, propertyName: P }` | `client\|D\|P` |
 | `trigger:client { deviceRefId: D }` (any property) | `client\|D\|*` |
+| `trigger:client { clientRef: D, type: T, filter: F, holdSeconds: 600 }` | `hold:D:T:600:<workflowRef>:<triggerNodeId>`, kind `client-hold` (dispatched only after F has matched every message from D for 600s; then quiet until a message stops matching) |
 | `trigger:clientPresence { clientRef: D, state: offline, forSeconds: 60 }` | `presence:D:offline:60:<workflowRef>:<triggerNodeId>` (dispatched only after the client has stayed offline for 60s) |
 | `trigger:webhook { path: "/water-start", method: "POST" }` | `webhook\|POST\|/water-start` |
 | `trigger:schedule { cron: "0 6 * * *" }` | `schedule\|<workflowRef>\|<triggerNodeId>` |

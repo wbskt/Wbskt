@@ -45,6 +45,7 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         {
             TriggerRegistrationRow? registration = node switch
             {
+                ClientTriggerNode { Config.HoldSeconds: > 0 } heldClientTrigger => CreateClientHoldRegistration(definitionRow, heldClientTrigger),
                 ClientTriggerNode clientTrigger => CreateRegistration(definitionRow, clientTrigger.NodeId, "client", $"client:{clientTrigger.Config.ClientRef}:{clientTrigger.Config.Type}", clientTrigger.Config.ConcurrencyPolicy.ToString(), clientTrigger.Config.CorrelationKey, clientTrigger.Config.Filter),
                 ClientPresenceTriggerNode presenceTrigger => CreatePresenceRegistration(definitionRow, presenceTrigger),
                 // Webhook keys are workspace-scoped so an author-chosen path is unique per workspace
@@ -84,6 +85,17 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         ClientPresenceTriggerConfig config = presenceTrigger.Config;
         string triggerKey = ClientPresenceTriggerKey.Build(Guid.Parse(config.ClientRef), config.State, config.ForSeconds, definitionRow.RefId, presenceTrigger.NodeId);
         return CreateRegistration(definitionRow, presenceTrigger.NodeId, ClientPresenceTriggerKey.TriggerKind, triggerKey, config.ConcurrencyPolicy.ToString(), config.CorrelationKey);
+    }
+
+    private static TriggerRegistrationRow CreateClientHoldRegistration(WorkflowDefinitionRow definitionRow, ClientTriggerNode clientTrigger)
+    {
+        // Registered under its own kind, so a matching message never starts a run directly: the
+        // engine records it against this trigger, and its hold ticker dispatches once the filter has
+        // kept matching for the whole hold time. The filter is still copied onto the row, both for
+        // that recording and for the dispatcher, which checks it again on the held payload.
+        ClientTriggerConfig config = clientTrigger.Config;
+        string triggerKey = ClientHoldTriggerKey.Build(Guid.Parse(config.ClientRef), config.Type, config.HoldSeconds, definitionRow.RefId, clientTrigger.NodeId);
+        return CreateRegistration(definitionRow, clientTrigger.NodeId, ClientHoldTriggerKey.TriggerKind, triggerKey, config.ConcurrencyPolicy.ToString(), config.CorrelationKey, config.Filter);
     }
 
     private static TriggerRegistrationRow CreateRegistration(
