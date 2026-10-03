@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Telemetry;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
@@ -15,17 +17,20 @@ internal sealed class WorkspaceService : IWorkspaceService
 {
     private readonly IWorkspaceProvider _workspaceProvider;
     private readonly IAuthProvider _authProvider;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly AuthMetrics _metrics;
 
     public WorkspaceService(
         IWorkspaceProvider workspaceProvider,
         IAuthProvider authProvider,
+        IEventBus eventBus,
         ILogger<WorkspaceService> logger,
         AuthMetrics metrics)
     {
         _workspaceProvider = workspaceProvider;
         _authProvider = authProvider;
+        _eventBus = eventBus;
         _logger = logger;
         _metrics = metrics;
     }
@@ -221,6 +226,22 @@ internal sealed class WorkspaceService : IWorkspaceService
         {
             await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, cancellationToken);
             _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
+
+            // The workspace's policies, devices and workflows live in the main database, which the
+            // management host retires on this event. Without it they would keep running for a
+            // workspace nobody can see or administer any more.
+            //
+            // Caught separately: the workspace is already gone, so reporting the request as failed
+            // would only invite a retry that 404s. The error log is the signal to retire it by hand
+            // (EXEC dbo.Workspace_Retire on the main database).
+            try
+            {
+                await _eventBus.PublishAsync(new WorkspaceDeletedEvent(workspaceId, callerId), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Deleted workspace ID {WorkspaceId} but could not publish WorkspaceDeletedEvent; its devices, policies and workflows are still live until it is retired.", workspaceId);
+            }
             return Result.Success();
         }
         catch (Exception ex)
