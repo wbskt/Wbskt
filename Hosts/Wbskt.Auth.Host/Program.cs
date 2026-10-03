@@ -104,7 +104,7 @@ public static class Program
         {
             options.AddDefaultPolicy(policy =>
             {
-                var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                var allowedOrigins = builder.Configuration.GetCorsAllowedOrigins();
                 if (allowedOrigins is { Length: > 0 })
                 {
                     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
