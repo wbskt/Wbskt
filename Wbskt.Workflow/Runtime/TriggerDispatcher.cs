@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
-using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Microsoft.Extensions.Logging;
@@ -196,62 +195,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             System.Text.Encoding.UTF8.GetBytes(evt.Secret ?? string.Empty));
     }
 
-    /// <summary>
-    /// Evaluates the registration's filter against the inbound payload, before any run exists. Returns
-    /// true when there is no filter.
-    /// </summary>
-    private async Task<bool> FilterPassesAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(registration.FilterExpression) || _expressionEvaluator is null)
-        {
-            return true;
-        }
-
-        try
-        {
-            WorkflowExpression? filter = JsonSerializer.Deserialize<WorkflowExpression>(registration.FilterExpression, SerializerOptions);
-            if (filter is null)
-            {
-                return true;
-            }
-
-            // There is no branch yet, so the context is a shim over the payload: $trigger resolves,
-            // branch-local state is empty, and the ids that only mean something inside a run are zero.
-            var context = new BranchContext(
-                RunId: 0,
-                BranchId: 0,
-                WorkflowDefinitionId: registration.WorkflowDefinitionId,
-                WorkflowDefinitionRefId: registration.WorkflowRefId,
-                Version: registration.WorkflowVersion,
-                CurrentNodeId: registration.TriggerNodeId.ToString(),
-                Attempt: 0,
-                LocalState: EmptyState,
-                TriggerPayload: evt.Payload,
-                CorrelationKey: evt.CorrelationKey ?? string.Empty,
-                StartedAt: evt.ReceivedAt,
-                WorkspaceId: 0);
-
-            JsonElement result = await _expressionEvaluator.EvaluateAsync(filter, context, ct);
-            if (result.ValueKind is JsonValueKind.True or JsonValueKind.False)
-            {
-                return result.ValueKind == JsonValueKind.True;
-            }
-
-            _logger?.LogWarning("Filter on registration {RegistrationId} produced {Kind}, not a boolean; treating the event as non-matching.", registration.Id, result.ValueKind);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            // Fail closed. A filter is a gate, and a gate that cannot be evaluated has not been passed -
-            // starting the run anyway would defeat the point of having one. Logged at warning because a
-            // filter that never evaluates is a definition bug the author needs to see.
-            _logger?.LogWarning(ex, "Filter on registration {RegistrationId} could not be evaluated; treating the event as non-matching.", registration.Id);
-            return false;
-        }
-    }
-
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-    private static readonly IReadOnlyDictionary<string, JsonElement> EmptyState = new Dictionary<string, JsonElement>();
+    private Task<bool> FilterPassesAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct) =>
+        TriggerFilterEvaluator.PassesAsync(_expressionEvaluator, _logger, registration, evt, ct);
 
     /// <summary>
     /// Resolves a registration's correlation expression against the arriving payload.

@@ -53,6 +53,36 @@ public class TriggerNodeTests
         var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
         var trigger = Assert.IsType<ClientTriggerNode>(node);
         Assert.Equal(WorkflowConcurrencyPolicy.Queue, trigger.Config.ConcurrencyPolicy);
+        Assert.Equal(0, trigger.Config.HoldSeconds);
+    }
+
+    [Fact]
+    public void DeviceTriggerNode_reads_holdSeconds()
+    {
+        var json = """
+            {
+                "nodeId": "11111111-1111-1111-1111-111111111111",
+                "kind": "trigger:client",
+                "name": "Too warm",
+                "ports": [],
+                "config": { "clientRef": "dev-1", "type": "telemetry", "holdSeconds": 600 }
+            }
+            """;
+
+        var trigger = Assert.IsType<ClientTriggerNode>(JsonSerializer.Deserialize<BaseNode>(json, Options));
+        Assert.Equal(600, trigger.Config.HoldSeconds);
+    }
+
+    [Theory]
+    [InlineData("temperature")]
+    [InlineData("a:b")]
+    [InlineData("*")]
+    public void ClientHoldTriggerKey_reads_the_hold_time_back_whatever_the_message_type(string type)
+    {
+        string key = Wbskt.Workflow.Abstraction.Models.Triggers.ClientHoldTriggerKey.Build(Guid.NewGuid(), type, 900, Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.True(Wbskt.Workflow.Abstraction.Models.Triggers.ClientHoldTriggerKey.TryGetHoldSeconds(key, out int holdSeconds));
+        Assert.Equal(900, holdSeconds);
     }
 
     [Fact]

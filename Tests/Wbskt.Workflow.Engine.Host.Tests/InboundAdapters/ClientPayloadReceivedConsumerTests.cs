@@ -19,7 +19,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         // Act
         await consumer.Consume(context.Object);
@@ -50,7 +50,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         // Act
         await consumer.Consume(context.Object);
@@ -74,7 +74,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         // Act
         await consumer.Consume(context.Object);
@@ -103,7 +103,7 @@ public sealed class ClientPayloadReceivedConsumerTests
             .Callback<InboundEvent, CancellationToken>((e, _) => capturedIds.Add(e.InboundEventId))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
 
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
         await consumer.Consume(ContextWithMessageId(evt, messageId).Object);

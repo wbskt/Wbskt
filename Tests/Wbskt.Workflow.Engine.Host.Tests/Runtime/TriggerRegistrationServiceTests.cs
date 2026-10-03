@@ -186,6 +186,31 @@ public sealed class TriggerRegistrationServiceTests
         Assert.Equal(nameof(WorkflowConcurrencyPolicy.Queue), row.ConcurrencyPolicy);
     }
 
+    [Fact]
+    public async Task OnPublished_with_a_held_client_trigger_registers_a_hold_key_instead_of_a_client_key()
+    {
+        var clientRef = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var nodeId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var definition = CreateDefinition() with
+        {
+            Nodes =
+            [
+                new ClientTriggerNode { NodeId = nodeId, Name = "too warm", Ports = [], Config = new ClientTriggerConfig { ClientRef = clientRef.ToString().ToUpperInvariant(), Type = "temp_c", HoldSeconds = 600, Filter = new LiteralExpression(true) } }
+            ]
+        };
+        var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+
+        await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
+
+        TriggerRegistrationRow row = Assert.Single(triggerRegistrationProvider.Rows);
+        Assert.Equal(ClientHoldTriggerKey.TriggerKind, row.TriggerKind);
+        Assert.Equal(ClientHoldTriggerKey.Build(clientRef, "temp_c", 600, row.WorkflowRefId, nodeId), row.TriggerKey);
+        Assert.True(ClientHoldTriggerKey.TryGetHoldSeconds(row.TriggerKey, out int holdSeconds));
+        Assert.Equal(600, holdSeconds);
+        Assert.NotNull(row.FilterExpression);
+    }
+
     private sealed class RecordingWorkflowDefinitionProvider(WorkflowDefinition definition) : IWorkflowDefinitionProvider
     {
         public Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct) => throw new NotSupportedException();
