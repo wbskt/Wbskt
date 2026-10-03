@@ -12,5 +12,7 @@ public interface IRegistrationPolicyService
     Task<Result<RegistrationPolicy>> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<Result<RegistrationPolicyResponse>> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     Task<Result> UpdateAsync(int workspaceId, int policyId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Replaces the policy's PIN. Devices already registered are unaffected.</summary>
+    Task<Result<RegistrationPolicyResponse>> RotatePinAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default);
     Task<Result> DisableAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default);
 }

@@ -70,8 +70,12 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        // A revoked client's JWT stays valid for up to an hour; the deny-list closes that window.
-        if (_revocationCache.IsRevoked(clientRefId))
+        // A revoked client's JWT stays valid for up to an hour; the deny-list closes that window. A
+        // token without a readable issue time is treated as older than any cutoff.
+        var issuedAt = long.TryParse(context.User.FindFirst("iat")?.Value, out var iat)
+            ? DateTimeOffset.FromUnixTimeSeconds(iat).UtcDateTime
+            : DateTime.MinValue;
+        if (_revocationCache.IsRevoked(clientRefId, issuedAt))
         {
             _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;

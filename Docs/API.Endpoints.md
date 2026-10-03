@@ -203,6 +203,9 @@ membership gate; the permission slug is the second gate.
 | `GET {clientRefId}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities. |
 | `GET {clientRefId}/state` | `clients.read` | The client's last-known self-reported state variables. |
 | `PATCH {clientRefId}/status` | `clients.update` | Approves or revokes a client. Approving enforces the policy's `MaxClients` ceiling. |
+| `PATCH status` | `clients.update` | Gives up to 100 clients one status (`{ clientRefIds, status }`), each handled as the single-client endpoint would. Answers 200 with `updated` and `failed` (ref, code, message), so one client that cannot change (the policy is full, or it is not in this workspace) does not stop the rest. Approvals are taken in the order given. |
+| `DELETE {clientRefId}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
+| `POST {clientRefId}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
 | `PATCH {clientRefId}/name` | `clients.update` | Renames a client (1–100 characters). |
 | `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Answers 202 whether or not the client is currently connected — delivery is asynchronous. |
 | `POST {clientRefId}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
@@ -224,6 +227,7 @@ approval is automatic or manual.
 | `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. |
 | `PATCH {refId}` | `policies.manage` | Updates name, auto-approval or enabled state. |
 | `POST {refId}/disable` | `policies.manage` | Stops the policy accepting new registrations. Already-registered clients are unaffected. |
+| `POST {refId}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering devices; already-registered clients are unaffected. |
 
 ### 2.3 Message templates — `…/message-templates`
 

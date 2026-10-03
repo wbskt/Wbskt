@@ -121,6 +121,29 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
+    public async Task<bool> DeleteAsync(int id, int workspaceId, CancellationToken cancellationToken = default)
+    {
+        var deleted = await ExecuteScalarAsync<int>("dbo.Client_Delete", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@WorkspaceId", workspaceId);
+        }, cancellationToken);
+
+        return deleted > 0;
+    }
+
+    public async Task<bool> UpdateSecretAsync(int id, int workspaceId, byte[] secretHash, CancellationToken cancellationToken = default)
+    {
+        var updated = await ExecuteScalarAsync<int>("dbo.Client_UpdateSecret", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            p.Add("@SecretHash", SqlDbType.VarBinary, ClientCredential.SecretHashBytes).Value = secretHash;
+        }, cancellationToken);
+
+        return updated > 0;
+    }
+
     public async Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Client_UpdatePresence", p =>
