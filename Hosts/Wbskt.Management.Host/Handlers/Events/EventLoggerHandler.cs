@@ -80,6 +80,8 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
             Guid? clientRefId = (@event as IClientContext)?.ClientRefId ?? GetGuidProperty(targetNode, "clientRefId");
             int? workflowId = (@event as IWorkflowContext)?.WorkflowId ?? GetIntProperty(targetNode, "workflowId");
             Guid? workflowRefId = (@event as IWorkflowContext)?.WorkflowRefId ?? GetGuidProperty(targetNode, "workflowRefId");
+            int? userId = (@event as IUserContext)?.UserId ?? GetIntProperty(targetNode, "userId");
+            Guid? userRefId = (@event as IUserContext)?.UserRefId ?? GetGuidProperty(targetNode, "userRefId");
 
             var entry = new EventLogEntry(
                 eventId, 
@@ -91,7 +93,9 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
                 ClientId: clientId,
                 ClientRefId: clientRefId,
                 WorkflowId: workflowId,
-                WorkflowRefId: workflowRefId
+                WorkflowRefId: workflowRefId,
+                UserId: userId,
+                UserRefId: userRefId
             );
 
             await _buffer.WriteAsync(entry, context.CancellationToken);

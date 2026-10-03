@@ -154,7 +154,7 @@ public class DatabaseBatchFlusherService : BackgroundService
         }
     }
 
-    private static DataTable BuildDataTable(List<EventLogEntry> batch)
+    internal static DataTable BuildDataTable(List<EventLogEntry> batch)
     {
         var dt = new DataTable();
         dt.Columns.Add("EventId",       typeof(int));
@@ -167,6 +167,8 @@ public class DatabaseBatchFlusherService : BackgroundService
         dt.Columns.Add("PolicyRefId",   typeof(Guid));     // moved down
         dt.Columns.Add("ClientRefId",   typeof(Guid));     // moved down
         dt.Columns.Add("WorkflowRefId", typeof(Guid));
+        dt.Columns.Add("UserId",        typeof(int));
+        dt.Columns.Add("UserRefId",     typeof(Guid));
 
         foreach (var item in batch)
         {
@@ -180,7 +182,9 @@ public class DatabaseBatchFlusherService : BackgroundService
                 (object?)item.WorkflowId   ?? DBNull.Value,         // matches new order
                 (object?)item.PolicyRefId  ?? DBNull.Value,
                 (object?)item.ClientRefId  ?? DBNull.Value,
-                (object?)item.WorkflowRefId ?? DBNull.Value);
+                (object?)item.WorkflowRefId ?? DBNull.Value,
+                (object?)item.UserId       ?? DBNull.Value,
+                (object?)item.UserRefId    ?? DBNull.Value);
         }
 
         return dt;

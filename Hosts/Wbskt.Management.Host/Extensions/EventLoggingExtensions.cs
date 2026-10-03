@@ -19,6 +19,7 @@ public static class EventLoggingExtensions
 
         services.AddSingleton<EventLogBuffer>();
         services.AddHostedService<DatabaseBatchFlusherService>();
+        services.AddHostedService<EventLogRetentionService>();
 
         // Return the action so it can be passed into AddRabbitMQEventBus
         return x =>

@@ -8,6 +8,9 @@ public interface IEventProvider
 {
     Task<int> GetOrInsertEventIdAsync(string eventName, short criticality, CancellationToken cancellationToken = default);
     Task InsertBatchAsync(System.Data.DataTable logs, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes up to <paramref name="batchSize"/> entries older than the cutoff; returns how many went.</summary>
+    Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default);
     Task<IPagedList<EventLogResponse>> GetLogsAsync(
         int workspaceId,
         string? eventName,
