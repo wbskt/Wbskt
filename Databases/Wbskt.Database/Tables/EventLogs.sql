@@ -1,5 +1,7 @@
 CREATE TABLE dbo.EventLogs (
-    Id          INT           IDENTITY(1, 1) NOT NULL,
+    -- BIGINT: the table takes a row per device message, which would exhaust INT within a year at
+    -- modest fleet sizes. Retention (dbo.EventLogs_DeleteBefore) does not reset the identity.
+    Id          BIGINT        IDENTITY(1, 1) NOT NULL,
     EventId     INT           NOT NULL,
     WorkspaceId INT           NULL,
     PolicyId    INT           NULL,
@@ -8,6 +10,10 @@ CREATE TABLE dbo.EventLogs (
     ClientRefId UNIQUEIDENTIFIER NULL,
     WorkflowId  INT           NULL,
     WorkflowRefId UNIQUEIDENTIFIER NULL,
+    -- Who the event is about, for events that carry IUserContext (logins, token rotation, permission
+    -- changes). Auth events have no workspace, so without these they were unattributable.
+    UserId      INT           NULL,
+    UserRefId   UNIQUEIDENTIFIER NULL,
     EventData   NVARCHAR(MAX) NULL, -- JSON payload
     CreatedAt   DATETIME2(3)  NOT NULL           DEFAULT SYSUTCDATETIME(),
 
@@ -23,18 +29,24 @@ GO
 CREATE INDEX IX_EventLogs_EventId
     ON dbo.EventLogs (EventId);
 GO
+-- Drives the retention sweep (dbo.EventLogs_DeleteBefore).
 CREATE INDEX IX_EventLogs_CreatedAt
     ON dbo.EventLogs (CreatedAt);
 GO
-CREATE INDEX IX_EventLogs_WorkspaceId
-    ON dbo.EventLogs (WorkspaceId); -- Recommended for multi-tenant filtering
+-- Both reads are "this workspace (or client), newest first": the key order serves the ORDER BY so a
+-- page does not sort the whole history, and EventId covers the join to dbo.Events for the filters.
+CREATE INDEX IX_EventLogs_WorkspaceId_CreatedAt
+    ON dbo.EventLogs (WorkspaceId, CreatedAt DESC) INCLUDE (EventId);
+GO
+CREATE INDEX IX_EventLogs_ClientId_CreatedAt
+    ON dbo.EventLogs (ClientId, CreatedAt DESC) INCLUDE (EventId, WorkspaceId) WHERE ClientId IS NOT NULL;
+GO
+CREATE INDEX IX_EventLogs_UserId_CreatedAt
+    ON dbo.EventLogs (UserId, CreatedAt DESC) INCLUDE (EventId) WHERE UserId IS NOT NULL;
 GO
 CREATE INDEX IX_EventLogs_PolicyId
     ON dbo.EventLogs (PolicyId) WHERE PolicyId IS NOT NULL;
 GO
-CREATE INDEX IX_EventLogs_ClientId
-    ON dbo.EventLogs (ClientId) WHERE ClientId IS NOT NULL;
-GO
-CREATE INDEX IX_EventLogs_WorkflowRefId
+CREATE INDEX IX_EventLogs_WorkflowId
     ON dbo.EventLogs (WorkflowId) WHERE WorkflowId IS NOT NULL;
 GO

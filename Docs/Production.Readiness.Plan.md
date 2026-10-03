@@ -363,6 +363,10 @@ So the data is being captured and is unreachable. This is a plumbing job, not a 
   `EventLog_GetBy_Workspace.sql`
 - `Hosts/Wbskt.Management.Host/Controllers/EventLogsController.cs`
 
+**Status (2026-10-03).** `UserId` and `UserRefId` are now stored and filled from `IUserContext`, the
+key is `BIGINT`, and a 90-day retention sweep runs (D4). Still open: `TenantId` (no event carries a
+tenant yet; see Traps) and the tenant-scoped read.
+
 **Steps.**
 1. Add `UserId INT NULL`, `UserRefId UNIQUEIDENTIFIER NULL`, `TenantId INT NULL` to `EventLogs`,
    with an index supporting a tenant-scoped read.
@@ -690,7 +694,7 @@ Ask before guessing — each changes the shape of the work.
 | **D1** | Where does the integration master key live — configuration, cloud KMS, or a secrets manager? | P1-3 | Config is simplest and rotates worst. A KMS makes P2-5's managed-infra move easier. |
 | **D2** | Managed SQL/RabbitMQ, or stay self-hosted? | P2-5, and retroactively F4 | **Answered 2026-10-02: stay self-hosted.** P2-5 stays documented future work; the nightly verified, off-box backups (Phase 0) and P2-1's backup and dead-letter alerts carry the risk until it is revisited. |
 | **D3** | What may an unverified account do — nothing, or read-only until verified? | P1-2 | Affects registration UX and the console. |
-| **D4** | Audit log retention, and who can read it? | P1-5 | `HistoryRetentionGc` is the existing model for the job. |
+| **D4** | Audit log retention, and who can read it? | P1-5 | **Retention answered (pika, 2026-10-03): 90 days**, enforced by `EventLogRetentionService` in the management host (`EventLogging:RetentionDays`). Who can read it is still open. |
 | **D5** | Does the positioning hold — connected-device automation, integrators and OEMs first? | All of Phase 3 | If it does, P3-1 outranks everything else in that phase. |
 
 ---

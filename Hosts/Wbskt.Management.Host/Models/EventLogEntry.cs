@@ -10,5 +10,7 @@ public sealed record EventLogEntry(
     int? ClientId = null,
     Guid? ClientRefId = null,
     int? WorkflowId = null,
-    Guid? WorkflowRefId = null
+    Guid? WorkflowRefId = null,
+    int? UserId = null,
+    Guid? UserRefId = null
 );

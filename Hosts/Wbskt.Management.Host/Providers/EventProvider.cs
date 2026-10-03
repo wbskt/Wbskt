@@ -33,6 +33,15 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
+    public async Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.EventLogs_DeleteBefore", p =>
+        {
+            p.Add("@CutoffUtc", SqlDbType.DateTime2).Value = cutoffUtc;
+            p.AddWithValue("@BatchSize", batchSize);
+        }, cancellationToken);
+    }
+
     public async Task<IPagedList<EventLogResponse>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int? policyId, int? clientId, int? workflowId, int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
