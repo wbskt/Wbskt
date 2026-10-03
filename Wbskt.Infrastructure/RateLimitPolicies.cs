@@ -14,4 +14,11 @@ public static class RateLimitPolicies
     /// access tokens make refreshing routine traffic rather than a credential attempt.
     /// </summary>
     public const string TokenRefresh = "token-refresh";
+
+    /// <summary>
+    /// Device enrollment by registration PIN. Anonymous by necessity - the device has no credential
+    /// yet - and the PIN is the only thing standing between the internet and a device in someone's
+    /// workspace, so guessing at it has to be slow. Partitioned per IP.
+    /// </summary>
+    public const string DeviceRegistration = "device-registration";
 }

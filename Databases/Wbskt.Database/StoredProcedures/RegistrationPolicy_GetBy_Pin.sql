@@ -1,5 +1,5 @@
 CREATE PROCEDURE dbo.RegistrationPolicy_GetBy_Pin
-    @Pin NVARCHAR(10)
+    @Pin NVARCHAR(20)
 AS
 BEGIN
     SET NOCOUNT ON;

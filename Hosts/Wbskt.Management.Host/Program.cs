@@ -151,7 +151,8 @@ public static class Program
             options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
         });
 
-        // Per-IP throttle for the anonymous public callback edge (see PublicCallbackController).
+        // Per-IP throttles for the anonymous edges: the public callback (see PublicCallbackController)
+        // and device enrollment (see ClientRegistrationsController).
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -162,6 +163,18 @@ public static class Program
                     {
                         PermitLimit = PublicCallbackPolicy.PermitsPerWindow,
                         Window = TimeSpan.FromSeconds(PublicCallbackPolicy.RateLimitWindowSeconds),
+                        QueueLimit = 0
+                    }));
+
+            // Device enrollment. A fleet being provisioned from one site shares an address, so the
+            // budget is per IP and configurable; the default still makes walking the PIN space hopeless.
+            options.AddPolicy(RateLimitPolicies.DeviceRegistration, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = builder.Configuration.GetValue("RateLimiting:DeviceRegistration:PermitLimit", 20),
+                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:DeviceRegistration:WindowMinutes", 1)),
                         QueueLimit = 0
                     }));
         });
