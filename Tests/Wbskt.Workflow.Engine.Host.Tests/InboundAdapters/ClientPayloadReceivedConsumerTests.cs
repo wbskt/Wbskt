@@ -113,6 +113,36 @@ public sealed class ClientPayloadReceivedConsumerTests
         Assert.EndsWith(messageId.ToString(), capturedIds[0]);
     }
 
+    [Theory]
+    [InlineData(null, false)]   // no device time: treated as sent on arrival
+    [InlineData(5, false)]      // ordinary network delay
+    [InlineData(30, false)]     // right at the threshold
+    [InlineData(31, true)]
+    [InlineData(3600, true)]    // buffered for an hour while offline
+    public async Task Consume_adds_send_time_arrival_time_and_late_flag(int? secondsInTransit, bool expectedLate)
+    {
+        InboundEvent? captured = null;
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<InboundEvent, CancellationToken>((e, _) => captured = e)
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        DateTime receivedAt = new(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
+        DateTime? sentAt = secondsInTransit is { } s ? receivedAt.AddSeconds(-s) : null;
+        ClientMessageReceivedEvent evt = new(Guid.NewGuid(), 1, 2, "temperature", "{}") { CreatedAtUtc = receivedAt, SentAtUtc = sentAt };
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
+
+        await consumer.Consume(context.Object);
+
+        Assert.NotNull(captured);
+        Assert.Equal(sentAt ?? receivedAt, captured.Payload["sentAt"].GetDateTime());
+        Assert.Equal(DateTimeKind.Utc, captured.Payload["sentAt"].GetDateTime().Kind);
+        Assert.Equal(receivedAt, captured.Payload["receivedAt"].GetDateTime());
+        Assert.Equal(expectedLate, captured.Payload["late"].GetBoolean());
+    }
+
     private static Mock<ConsumeContext<ClientMessageReceivedEvent>> ContextWithMessageId(ClientMessageReceivedEvent evt, Guid messageId)
     {
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();

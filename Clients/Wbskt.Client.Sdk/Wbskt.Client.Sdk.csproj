@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wbskt.Workflow.Engine.Host.Tests" />
+  </ItemGroup>
+
 </Project>

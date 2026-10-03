@@ -38,6 +38,26 @@ public sealed class ClientHoldRecorderTests
     }
 
     [Fact]
+    public async Task A_buffered_message_is_recorded_at_the_time_the_device_sent_it()
+    {
+        // A reading sent offline must not look newer than readings that arrived before it,
+        // or the hold would start from the time the device reconnected.
+        TriggerRegistrationRow typed = Registration(ClientHoldTriggerKey.Build(ClientRef, "temperature", 600, Guid.NewGuid(), Guid.NewGuid()));
+        var provider = new RecordingHoldStateProvider(typed);
+        var consumer = new ClientPayloadReceivedConsumer(Hub().Object, new ClientHoldRecorder(provider, new FixedFilterEvaluator(true)));
+        DateTime sentAt = new(2026, 10, 3, 11, 0, 0, DateTimeKind.Utc);
+        ClientMessageReceivedEvent evt = new(ClientRef, 12, 34, "temperature", "{}")
+        {
+            CreatedAtUtc = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc),
+            SentAtUtc = sentAt
+        };
+
+        await consumer.Consume(Context(evt).Object);
+
+        Assert.Equal(sentAt, Assert.Single(provider.Records).EventAt);
+    }
+
+    [Fact]
     public async Task A_message_with_no_hold_triggers_records_nothing()
     {
         var provider = new RecordingHoldStateProvider();

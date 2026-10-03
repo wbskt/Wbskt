@@ -9,12 +9,17 @@ public interface IWbsktClient : IAsyncDisposable
     event Action? OnConnected;
     event Action? OnDisconnected;
 
+    /// <summary>Messages waiting in the offline buffer.</summary>
+    int PendingMessageCount { get; }
+
     Task StartAsync();
 
     /// <summary>
     /// Sends an application message. The types "capabilities", "state.report" and anything
     /// prefixed "sys." are reserved for the platform protocol — use
     /// <see cref="UpdateCapabilitiesAsync"/> / <see cref="ReportStateAsync"/> instead.
+    /// Each message carries the time it was sent. While offline, messages wait in memory
+    /// (up to <see cref="ClientConfig.OfflineBufferSize"/>) and go out in order on reconnect.
     /// </summary>
     Task SendAsync(string type, object payload);
     Task UpdateCapabilitiesAsync(ClientCapabilities capabilities);
