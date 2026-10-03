@@ -20,8 +20,9 @@ public interface IJoinAggregatorProvider
     /// Records one arrival. <paramref name="outcome"/> is "succeeded" or "failed".
     /// Exactly one caller ever receives <see cref="JoinContributionResult.ShouldContinue"/> = true
     /// for a given cohort (claimed under the same transaction that counts the arrival).
+    /// A repeat from the same <paramref name="branchId"/> is not counted again and never continues.
     /// </summary>
-    Task<JoinContributionResult> ContributeAsync(Guid joinToken, string outcome, CancellationToken ct);
+    Task<JoinContributionResult> ContributeAsync(Guid joinToken, long branchId, string outcome, CancellationToken ct);
 
     Task DeleteAllByRunIdAsync(int runId, CancellationToken ct);
 }

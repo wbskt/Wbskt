@@ -106,7 +106,10 @@ public sealed class ScheduledFireTicker : BackgroundService
                 var inboundEvent = new InboundEvent(
                     "schedule",
                     [$"schedule:{fire.Id}"],
-                    Guid.NewGuid().ToString(),
+                    // Derived from the occurrence, not random: if the process dies between this dispatch
+                    // and AdvanceNextAsync below, the lease expires and the same occurrence is leased
+                    // again, and only a stable id lets the dispatcher's idempotency claim drop it.
+                    OccurrenceEventId(fire),
                     payload,
                     now);
 
@@ -136,6 +139,9 @@ public sealed class ScheduledFireTicker : BackgroundService
             }
         }
     }
+
+    internal static string OccurrenceEventId(ScheduledFireRow fire) =>
+        $"schedule:{fire.Id}:{fire.NextFireAt:yyyyMMddTHHmmssfff}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

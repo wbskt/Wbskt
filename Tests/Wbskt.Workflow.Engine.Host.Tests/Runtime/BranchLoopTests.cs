@@ -1754,7 +1754,7 @@ public sealed class BranchLoopTests
         public Task InitializeAsync(Guid joinToken, int runId, int expectedCount, string mode, int quorumCount, Guid? joinNodeId, CancellationToken ct)
             => Task.CompletedTask;
 
-        public Task<JoinContributionResult> ContributeAsync(Guid joinToken, string outcome, CancellationToken ct)
+        public Task<JoinContributionResult> ContributeAsync(Guid joinToken, long branchId, string outcome, CancellationToken ct)
         {
             Contributions.Add((joinToken, outcome));
             return Task.FromResult(result);

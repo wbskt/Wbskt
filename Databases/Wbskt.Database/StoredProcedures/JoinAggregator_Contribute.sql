@@ -1,9 +1,11 @@
 CREATE PROCEDURE dbo.JoinAggregator_Contribute
     @JoinToken UNIQUEIDENTIFIER,
+    @BranchId  BIGINT = NULL, -- NULL only from an engine older than this procedure, mid-deploy
     @Outcome   NVARCHAR(20)
 AS
 BEGIN
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
     -- Mode/QuorumCount come from the row, not from the caller: a branch that FAILS contributes from
     -- BranchLoop, which never sees the Join node's config. Before this, only the Join executor could
@@ -13,11 +15,24 @@ BEGIN
 
     BEGIN TRAN;
 
-    UPDATE dbo.JoinAggregators WITH (ROWLOCK)
-    SET ContributedCount = ContributedCount + 1,
-        SucceededCount   = SucceededCount + CASE WHEN @Outcome = 'succeeded' THEN 1 ELSE 0 END,
-        FailedCount      = FailedCount + CASE WHEN @Outcome = 'failed' THEN 1 ELSE 0 END
-    WHERE JoinToken = @JoinToken;
+    -- A replayed contribution from the same branch counts once. The aggregator row lock serialises
+    -- contributors to a cohort, so the existence check cannot race.
+    DECLARE @CohortLock BIGINT, @IsRepeat BIT = 0;
+    SELECT @CohortLock = Id FROM dbo.JoinAggregators WITH (UPDLOCK, HOLDLOCK, ROWLOCK) WHERE JoinToken = @JoinToken;
+    IF EXISTS (SELECT 1 FROM dbo.JoinContributions WHERE JoinToken = @JoinToken AND BranchId = @BranchId)
+        SET @IsRepeat = 1;
+
+    IF @IsRepeat = 0
+    BEGIN
+        IF @BranchId IS NOT NULL
+            INSERT INTO dbo.JoinContributions (JoinToken, BranchId) VALUES (@JoinToken, @BranchId);
+
+        UPDATE dbo.JoinAggregators WITH (ROWLOCK)
+        SET ContributedCount = ContributedCount + 1,
+            SucceededCount   = SucceededCount + CASE WHEN @Outcome = 'succeeded' THEN 1 ELSE 0 END,
+            FailedCount      = FailedCount + CASE WHEN @Outcome = 'failed' THEN 1 ELSE 0 END
+        WHERE JoinToken = @JoinToken;
+    END;
 
     DECLARE @ContributedCount INT,
             @SucceededCount   INT,
@@ -54,7 +69,7 @@ BEGIN
     ELSE IF @Mode = 'Quorum' AND (@ExpectedCount - @FailedCount) < @QuorumCount
         SET @QuorumMet = 1;
 
-    IF @QuorumMet = 1 AND @ContinueClaimed = 0
+    IF @QuorumMet = 1 AND @ContinueClaimed = 0 AND @IsRepeat = 0
     BEGIN
         UPDATE dbo.JoinAggregators
         SET ContinueClaimed = 1

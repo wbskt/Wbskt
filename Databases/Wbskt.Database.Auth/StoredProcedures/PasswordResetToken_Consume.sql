@@ -42,8 +42,10 @@ BEGIN
     SET ConsumedAt = SYSUTCDATETIME()
     WHERE Id = @TokenId;
 
+    -- Redeeming a mailed token proves control of the inbox, which is all verification proves.
     UPDATE dbo.Users
-    SET PasswordHash = @PasswordHash
+    SET PasswordHash = @PasswordHash,
+        IsEmailVerified = 1
     WHERE Id = @UserId;
 
     UPDATE dbo.RefreshTokens

@@ -37,7 +37,7 @@ internal sealed class JoinNodeExecutor : INodeExecutor
         // which contributes "failed" on its behalf. Mode/quorum now live on the aggregator row
         // (stamped by ParallelForEach at fan-out), so both contributors agree without the failing
         // side needing to see this node's config.
-        JoinContributionResult result = await _aggregators.ContributeAsync(joinToken, "succeeded", ct);
+        JoinContributionResult result = await _aggregators.ContributeAsync(joinToken, ctx.Branch.BranchId, "succeeded", ct);
 
         if (result.ShouldContinue)
         {

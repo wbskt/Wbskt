@@ -18,6 +18,14 @@ BEGIN
                   FROM dbo.WorkflowDefinitions WITH (HOLDLOCK, UPDLOCK)
                  WHERE RefId = @RefId), 0) + 1;
 
+    -- The service checks ownership too, but from an unlocked read: two first publishes of one RefId
+    -- from different workspaces could both pass it. Under the lock above only one can.
+    IF EXISTS (SELECT 1 FROM dbo.WorkflowDefinitions WHERE RefId = @RefId AND WorkspaceId <> @WorkspaceId)
+    BEGIN
+        ROLLBACK TRAN;
+        THROW 50021, 'The workflow belongs to another workspace.', 1;
+    END
+
     -- This procedure is the single authority on the version number. The stored JSON is stamped here,
     -- under the same HOLDLOCK that computed it, so the row's Version column and the DefinitionJson's
     -- "version" property can never disagree - which they could when the caller pre-computed a version
