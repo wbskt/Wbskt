@@ -331,6 +331,19 @@ The cross-service contract. Every workspace-scoped management-host request passe
 
 ---
 
+## 11a. Workspace access — invitations with workspaces, ownership, User role
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `INV_WS_01` | + | Invite naming one of two workspaces, register with it | The invitee resolves the named workspace (**200**) and not the other (**403**) |
+| `INV_WS_02` | − | Invite naming another tenant's workspace | **403** `WORKSPACE_NOT_FOUND`, the same as an unknown ref |
+| `INV_WS_03` | + | Invite with the `User` role and a workspace | The invitee's effective permissions there include the five `*.read` slugs and no `manage`/`create` |
+| `WS_OWN_01` | + | Transfer to a tenant member outside the workspace | **204**; they can resolve it; removing them is now refused and removing the previous owner succeeds |
+| `WS_OWN_02` | − | Transfer to someone outside the tenant | **404** `USER_NOT_FOUND`; they gain nothing |
+| `WS_OWN_03` | − | Transfer by a member without `users.manage` | **403** |
+
+---
+
 ## 12. Tenant administration — roles, groups, permissions
 
 All under `/api/tenants/{tenantRef}`, all requiring the permission **tenant-wide**. Run as the seeded

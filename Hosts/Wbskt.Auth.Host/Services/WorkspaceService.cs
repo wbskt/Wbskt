@@ -214,6 +214,35 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
     }
 
+    public async Task<Result> TransferOwnershipAsync(int callerId, int workspaceId, Guid newOwnerRef, CancellationToken cancellationToken = default)
+    {
+        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
+        if (gate.IsFailure)
+        {
+            return gate;
+        }
+
+        try
+        {
+            var newOwnerId = await ResolveUserIdAsync(newOwnerRef, cancellationToken);
+            await _workspaceProvider.SetOwnerAsync(workspaceId, newOwnerId, cancellationToken);
+            _logger.LogInformation("Workspace ID {WorkspaceId} transferred to user ID {UserId} by user ID {CallerId}", workspaceId, newOwnerId, callerId);
+            return Result.Success();
+        }
+        catch (Exception ex) when (ex is SecurityException or SqlException { Number: 50009 })
+        {
+            // Unknown, and known but outside this tenant, answer the same: as far as this tenant is
+            // concerned that user does not exist.
+            _logger.LogWarning("Ownership transfer of workspace ID {WorkspaceId} refused: user {UserRef} is not in its tenant", workspaceId, newOwnerRef);
+            return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to transfer workspace ID {WorkspaceId} to user {UserRef}", workspaceId, newOwnerRef);
+            return Result.Failure(Error.Failure("WORKSPACE_UPDATE_ERROR", ex.Message));
+        }
+    }
+
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
     {
         var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);

@@ -77,13 +77,21 @@ did not end up with tenant-wide `users.manage` cannot be repaired: every managem
 requires that permission *in that tenant* to act, so nobody is left who could grant it.
 
 Seeded per tenant, mirroring the post-deployment seed: `Admin` holds every permission in the
-catalogue, `User` holds none and is a starting point the administrator customises.
+catalogue, `User` holds the reads for a workspace's resources (`clients.read`, `policies.read`,
+`templates.read`, `workflows.read`, `logs.read`) and is a starting point the administrator customises.
+Existing `User` roles that held nothing got the same reads once, on the deploy that introduced them;
+a `User` role an administrator has shaped, or empties later, is never touched again.
 
 **Joining an existing tenant happens exactly one way — a redeemed invitation.** An administrator
 issues one against an email address (`POST /{tenantRef}/invitations`), and the invitee redeems it,
 either with an account (`POST /api/invitations/accept`) or while creating one (`invitationToken` on
 `POST /api/auth/register`). The accepting account's email must match the address invited, so a
 leaked link is not by itself enough to join.
+
+An invitation can also name workspaces of the tenant (`workspaceRefs`). Accepting it adds the invitee
+to each one, so a new member is not left seeing nothing until someone adds them by hand. A workspace
+outside the tenant is refused as `WORKSPACE_NOT_FOUND`, the same as one that does not exist, and a
+workspace deleted before the invitation is accepted is simply skipped.
 
 - Only the SHA-256 hash of the token is stored. The raw value is returned once, by the call that
   issued it, and is not recoverable. The invitee is mailed a link automatically; the raw token is

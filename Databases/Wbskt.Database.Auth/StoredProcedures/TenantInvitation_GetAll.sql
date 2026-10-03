@@ -24,7 +24,11 @@ BEGIN
            R.RefId AS RoleRefId,
            R.Name AS RoleName,
            I.ExpiresAt,
-           I.CreatedAt
+           I.CreatedAt,
+           (SELECT STRING_AGG(CONVERT(NVARCHAR(36), W.RefId), N',')
+            FROM dbo.TenantInvitationWorkspaces IW
+            INNER JOIN dbo.Workspaces W ON W.Id = IW.WorkspaceId
+            WHERE IW.InvitationId = I.Id) AS WorkspaceRefIds
     FROM dbo.TenantInvitations I
     LEFT JOIN dbo.Roles R ON R.Id = I.RoleId
     WHERE I.TenantId = @TenantId

@@ -62,6 +62,13 @@ GO
 IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE Name = 'User' AND TenantId = 1)
 BEGIN
     INSERT INTO dbo.Roles (TenantId, Name, Description) VALUES (1, 'User', 'Standard user');
+
+    -- Recorded for the default reads below, as Tenant_Create grants them for every other tenant.
+    -- The permission rows are seeded further down, so the grant has to wait until after them.
+    IF OBJECT_ID('dbo.__UserRoleDefaultsBackfill', 'U') IS NULL
+        EXEC('SELECT Id INTO dbo.__UserRoleDefaultsBackfill FROM dbo.Roles WHERE TenantId = 1 AND Name = ''User'';');
+    ELSE
+        EXEC('INSERT INTO dbo.__UserRoleDefaultsBackfill (Id) SELECT Id FROM dbo.Roles WHERE TenantId = 1 AND Name = ''User'';');
 END
 GO
 
@@ -203,6 +210,19 @@ FROM dbo.Roles r
 CROSS JOIN dbo.Permissions p
 WHERE r.Name = 'Admin'
   AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
+GO
+
+-- RolePermissions: the User roles the pre-deployment script recorded as empty get the default
+-- reads Tenant_Create now seeds (keep the two lists the same). Runs once, then drops its list.
+IF OBJECT_ID('dbo.__UserRoleDefaultsBackfill', 'U') IS NOT NULL
+BEGIN
+    EXEC('INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
+          SELECT b.Id, p.Id, 0
+          FROM dbo.__UserRoleDefaultsBackfill b
+          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'')
+          WHERE NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = b.Id AND rp.PermissionId = p.Id);');
+    EXEC('DROP TABLE dbo.__UserRoleDefaultsBackfill;');
+END
 GO
 
 -- Users (Root WITH enforced ID)

@@ -107,13 +107,17 @@ public record CreateInvitationRequest(
     [StringLength(100)]
     string Email,
 
-    Guid? RoleRef = null);
+    Guid? RoleRef = null,
+
+    // Workspaces of this tenant the invitee joins when they accept. Optional.
+    [MaxLength(50)]
+    IReadOnlyList<Guid>? WorkspaceRefs = null);
 
 /// <summary>
 /// A pending invitation as listed by an administrator. Deliberately carries no token: the raw value
 /// is returned once, by the call that issued it, and is not recoverable afterwards.
 /// </summary>
-public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTime ExpiresAt, DateTime CreatedAt);
+public record InvitationResponse(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTime ExpiresAt, DateTime CreatedAt, IReadOnlyList<Guid> WorkspaceRefs);
 
 /// <summary>
 /// The result of issuing an invitation. <c>Token</c> is the only time the raw token exists outside

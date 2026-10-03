@@ -11,7 +11,10 @@ CREATE PROCEDURE dbo.TenantInvitation_Create
     @RefId UNIQUEIDENTIFIER OUTPUT,
     -- The invitation mail names the tenant the invitee is being asked to join. Returned from here
     -- rather than fetched separately: the caller already has the tenant id and this costs nothing.
-    @TenantName NVARCHAR(100) OUTPUT
+    @TenantName NVARCHAR(100) OUTPUT,
+    -- Comma-separated Workspaces.Id values the invitee joins on acceptance. NULL or empty for none.
+    -- Every one must belong to @TenantId.
+    @WorkspaceIds NVARCHAR(MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -31,6 +34,21 @@ BEGIN
         THROW 50012, 'That user is already a member of this tenant.', 1;
     END
 
+    DECLARE @Workspaces TABLE (WorkspaceId INT NOT NULL PRIMARY KEY);
+    INSERT INTO @Workspaces (WorkspaceId)
+    SELECT DISTINCT CAST(value AS INT)
+    FROM STRING_SPLIT(ISNULL(@WorkspaceIds, N''), N',')
+    WHERE LTRIM(RTRIM(value)) <> N'';
+
+    IF EXISTS (
+        SELECT 1
+        FROM @Workspaces WS
+        LEFT JOIN dbo.Workspaces W ON W.Id = WS.WorkspaceId AND W.TenantId = @TenantId
+        WHERE W.Id IS NULL)
+    BEGIN
+        THROW 50017, 'Workspace does not belong to the specified tenant.', 1;
+    END
+
     SELECT @TenantName = Name FROM dbo.Tenants WHERE Id = @TenantId;
 
     SET @RefId = NEWID();
@@ -46,6 +64,10 @@ BEGIN
 
     INSERT INTO dbo.TenantInvitations (RefId, TenantId, Email, RoleId, TokenHash, ExpiresAt, InvitedByUserId)
     VALUES (@RefId, @TenantId, @Email, @RoleId, @TokenHash, @ExpiresAt, @InvitedByUserId);
+
+    INSERT INTO dbo.TenantInvitationWorkspaces (InvitationId, WorkspaceId)
+    SELECT SCOPE_IDENTITY(), WorkspaceId
+    FROM @Workspaces;
 
     COMMIT TRANSACTION;
 END

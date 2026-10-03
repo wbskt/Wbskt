@@ -14,4 +14,10 @@ internal interface IWorkspaceProvider : IReferenceProvider
     Task<bool> VerifyWorkspaceMembershipAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);
     Task UpdateWorkspaceAsync(int workspaceId, string name, string? description, CancellationToken cancellationToken = default);
     Task DeleteWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Makes <paramref name="userId"/> the owner, adding them as a member if needed. Throws 50009 when
+    /// they are not in the workspace's tenant.
+    /// </summary>
+    Task SetOwnerAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
 }

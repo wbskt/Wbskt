@@ -131,12 +131,25 @@ internal sealed class ManagementService : IManagementService
             roleId = resolvedRoleId;
         }
 
+        var workspaceIds = new List<int>();
+        foreach (var workspaceRef in (request.WorkspaceRefs ?? []).Distinct())
+        {
+            var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(workspaceRef, cancellationToken);
+            if (workspaceId <= 0)
+            {
+                return Result<CreatedInvitationResponse>.Failure(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
+            }
+
+            // The procedure rejects a workspace outside this tenant (50017).
+            workspaceIds.Add(workspaceId);
+        }
+
         var token = SecurityTokens.Generate();
         var expiresAt = DateTime.UtcNow.Add(InvitationLifetime);
 
         return await GuardAsync("CreateInvitation", async () =>
         {
-            var created = await _provider.CreateInvitationAsync(scope.Value, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, cancellationToken);
+            var created = await _provider.CreateInvitationAsync(scope.Value, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, cancellationToken);
             _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, scope.Value, callerId);
 
             // Queued, not awaited: an unreachable relay must not fail an invitation that has already
@@ -845,6 +858,14 @@ internal sealed class ManagementService : IManagementService
         {
             _logger.LogWarning("{Operation} rejected: invitation no longer valid", operation);
             return InvalidInvitation;
+        }
+
+        // A workspace in another tenant reads exactly like one that does not exist, so an invitation
+        // cannot be used to learn which workspace references are real elsewhere.
+        if (ex is SqlException { Number: 50017 })
+        {
+            _logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
+            return Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found.");
         }
 
         if (ex is SqlException { Number: 50012 })

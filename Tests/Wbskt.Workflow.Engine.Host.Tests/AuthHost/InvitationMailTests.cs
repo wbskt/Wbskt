@@ -63,7 +63,7 @@ public sealed class InvitationMailTests
             p => p.CreateInvitationAsync(
                 It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(),
                 It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash(result.Value.Token))),
-                It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+                It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -83,7 +83,7 @@ public sealed class InvitationMailTests
         Assert.True(result.IsFailure);
         Assert.Empty(harness.Mailer.Sent);
         harness.Provider.Verify(
-            p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -94,7 +94,7 @@ public sealed class InvitationMailTests
             Provider.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, 1, It.IsAny<CancellationToken>())).ReturnsAsync(5);
             Provider.Setup(p => p.VerifyPermissionAsync(1, 5, null, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(permitted);
             Provider.Setup(p => p.CreateInvitationAsync(
-                    It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), tenantName));
 
             Service = new ManagementService(
