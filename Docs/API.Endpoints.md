@@ -53,16 +53,25 @@ password hasher cannot be used as a work amplifier.
 | `POST refresh-token` | anonymous | Rotating refresh: issues a new pair and revokes the token presented. Presenting an already-revoked token is treated as a leak — every refresh token for that user is revoked and a `SecurityAlertEvent` is published. |
 | `POST logout` | anonymous | Revokes the one refresh token presented. Succeeds whether or not it existed. |
 | `POST logout-all` | authenticated | Revokes the caller's entire refresh-token set. |
+| `POST change-password` | authenticated | Takes `currentPassword` and `newPassword`. Writes the new password and revokes **every** session the account has in one transaction, then returns a fresh token pair for the caller. A wrong current password is 400 `AUTH_CURRENT_PASSWORD_INVALID` (not 401, so a client does not sign out) and counts towards the lockout below; a locked account is 403 `AUTH_ACCOUNT_LOCKED`. Rate limited like the anonymous endpoints. |
+| `GET sessions` | authenticated | The caller's live sessions, newest first: `id`, `createdAt`, `expiresAt`, `createdByIp`. One per signed-in device or browser. |
+| `DELETE sessions/{id}` | authenticated | Ends one of the caller's sessions: its refresh token stops working. 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. Access tokens are not tied to a session, so one already issued to that device lives out its 15 minutes. |
 | `POST forgot-password` | anonymous | Mails a reset link if the address has a usable account. **Always 204** — same status, same empty body, for a registered address, an unknown one, a deactivated one, and a malformed one. |
 | `POST reset-password` | anonymous | Redeems a reset token, writes the new password, and revokes **every** refresh token the account holds — in one transaction, so a session an attacker already has cannot outlive the recovery. Unknown, spent and expired tokens are all `RESET_TOKEN_INVALID`. |
 | `POST verify-email` | anonymous | Redeems a confirmation token and marks the address verified. Single-use. |
 | `POST resend-verification` | anonymous | Mails a fresh confirmation link. Anonymous by necessity, not oversight: sign-in requires a confirmed address, so an account that needs this cannot hold a token with which to ask. Always 204, like `forgot-password`. |
 
 Access tokens last 15 minutes (`Jwt:AccessTokenLifetime`); refresh tokens last 7 days. Logout-all,
-deactivation, a password reset and a replayed refresh token each revoke the user's refresh tokens
+deactivation, a password reset or change, and a replayed refresh token each revoke the user's refresh tokens
 and, through a per-user watermark shared in Redis, the access tokens already issued, on the auth and
 management hosts alike. Revoking access tokens is best effort: with Redis unreachable they live out
 their 15 minutes.
+
+Each account is locked for 15 minutes after 10 wrong passwords, counted across sign-in and
+`change-password` and wherever they come from — the per-IP limiter cannot see a guesser spread over
+many addresses. While locked, sign-in answers exactly as for a wrong password, so a lock does not
+confirm the address has an account. A successful sign-in resets the count; a password reset or
+change lifts a lock. Sessions issued before the lock keep working.
 
 Reset and confirmation tokens are stored only as a SHA-256 hash, are single-use, and supersede any
 predecessor for the same account. A reset link lasts 1 hour; a confirmation link lasts 24 hours —

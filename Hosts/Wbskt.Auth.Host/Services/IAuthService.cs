@@ -21,6 +21,18 @@ public interface IAuthService
     Task<Result> LogoutAllAsync(int userId, string ipAddress, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Changes a signed-in user's password after checking the current one, ends every session the
+    /// account has, and returns a fresh session for the caller.
+    /// </summary>
+    Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default);
+
+    /// <summary>The user's live sessions, newest first.</summary>
+    Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Ends one of the user's own sessions. NotFound when it is not a live session of theirs.</summary>
+    Task<Result> RevokeSessionAsync(int userId, int sessionId, string ipAddress, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Issues a password-reset link if the address has a usable account. Succeeds either way — whether
     /// an address is registered is precisely what this endpoint must not disclose.
     /// </summary>

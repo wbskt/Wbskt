@@ -100,6 +100,54 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }, cancellationToken);
     }
 
+    public async Task<DateTime?> RecordLoginFailureAsync(int userId, int maxFailures, TimeSpan lockout, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<DateTime?>("dbo.User_RecordLoginFailure", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@MaxFailures", maxFailures);
+            p.AddWithValue("@LockoutSeconds", (int)lockout.TotalSeconds);
+        }, cancellationToken);
+    }
+
+    public async Task RecordLoginSuccessAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.User_RecordLoginSuccess", p => p.AddWithValue("@UserId", userId), cancellationToken);
+    }
+
+    public async Task ChangePasswordAsync(int userId, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.User_ChangePassword", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@PasswordHash", passwordHash);
+            p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
+        }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<SessionResponse>> GetActiveSessionsAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.RefreshToken_GetActiveForUser",
+            p => p.AddWithValue("@UserId", userId),
+            r => new SessionResponse(
+                r.GetInt32(r.GetOrdinal("Id")),
+                r.GetDateTime(r.GetOrdinal("Created")),
+                r.GetDateTime(r.GetOrdinal("Expires")),
+                r.IsDBNull(r.GetOrdinal("CreatedByIp")) ? null : r.GetString(r.GetOrdinal("CreatedByIp"))),
+            cancellationToken);
+    }
+
+    public async Task<int> RevokeSessionAsync(int sessionId, int userId, string? revokedByIp, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.RefreshToken_RevokeForUser", p =>
+        {
+            p.AddWithValue("@Id", sessionId);
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
+        }, cancellationToken);
+    }
+
     public async Task CreatePasswordResetTokenAsync(int userId, byte[] tokenHash, DateTime expiresAt, string? requestedByIp, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.PasswordResetToken_Create", p =>
@@ -727,7 +775,8 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             Email = reader.GetString(reader.GetOrdinal("Email")),
             PasswordHash = reader.GetString(reader.GetOrdinal("PasswordHash")),
             IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
-            IsEmailVerified = reader.GetBoolean(reader.GetOrdinal("IsEmailVerified"))
+            IsEmailVerified = reader.GetBoolean(reader.GetOrdinal("IsEmailVerified")),
+            LockedUntil = reader.IsDBNull(reader.GetOrdinal("LockedUntil")) ? null : reader.GetDateTime(reader.GetOrdinal("LockedUntil"))
         };
     }
 

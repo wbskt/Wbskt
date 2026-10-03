@@ -20,9 +20,9 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 dotnet test --filter FullyQualifiedName~RateLimitingTests.AUTH_RL_01
 /// </code>
 /// <para>
-/// The limit is a brake on bulk attempts rather than per-account lockout — an unauthenticated
-/// endpoint has no better partition key available, and the point is that the password hasher cannot
-/// be used as a work amplifier.
+/// The limit is a brake on bulk attempts from one address — the point is that the password hasher
+/// cannot be used as a work amplifier. Guessing one account's password from many addresses is what
+/// the per-account lockout (AccountSecurityTests) is for.
 /// </para>
 /// </summary>
 [Collection(E2ECollection.Name)]
@@ -67,7 +67,10 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
         SkipUnlessEnabled();
 
         var user = await fixture.CreateUserAsync();
-        await ExhaustAsync(() => fixture.LoginRawAsync(user.Email, "wrong-password"));
+
+        // Exhausted with an address that has no account: wrong passwords against the user's own
+        // address would also trip the per-account lockout, which outlasts this window.
+        await ExhaustAsync(() => fixture.LoginRawAsync($"nobody-{Guid.NewGuid():N}@test.local", "wrong-password"));
 
         // A fixed window, so waiting it out is the whole recovery path. Slow by nature — this is
         // the test that makes the suite worth isolating.

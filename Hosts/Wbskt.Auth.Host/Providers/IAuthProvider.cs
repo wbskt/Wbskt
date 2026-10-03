@@ -27,6 +27,23 @@ internal interface IAuthProvider : IReferenceProvider
 
     Task<int> RevokeAllRefreshTokensForUserAsync(int userId, string ipAddress, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Counts a wrong password (<c>User_RecordLoginFailure</c>) and returns the account's lock expiry,
+    /// which is set when this failure reached <paramref name="maxFailures"/>.
+    /// </summary>
+    Task<DateTime?> RecordLoginFailureAsync(int userId, int maxFailures, TimeSpan lockout, CancellationToken cancellationToken = default);
+
+    /// <summary>Clears the failure count and stamps the last sign-in.</summary>
+    Task RecordLoginSuccessAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Writes the new password and revokes every refresh token the user holds, in one transaction.</summary>
+    Task ChangePasswordAsync(int userId, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyCollection<SessionResponse>> GetActiveSessionsAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes one of the user's own live sessions. Returns 0 when there is no such live session of theirs.</summary>
+    Task<int> RevokeSessionAsync(int sessionId, int userId, string? revokedByIp, CancellationToken cancellationToken = default);
+
     // Account recovery and address verification. As with invitations, the raw token never reaches
     // this layer -- the service hashes it, so a provider that logged its parameters could not leak a
     // usable one.

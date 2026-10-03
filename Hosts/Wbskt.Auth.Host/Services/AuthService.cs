@@ -51,6 +51,19 @@ internal sealed class AuthService : IAuthService
     /// </summary>
     private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// Wrong passwords an account takes before it is locked. High enough that a person mistyping is
+    /// never caught by it, low enough that a guesser spread across many addresses - which the per-IP
+    /// rate limiter cannot see - gets nowhere.
+    /// </summary>
+    internal const int MaxFailedLogins = 10;
+
+    /// <summary>
+    /// Long enough to make guessing pointless, short enough that a lock someone else caused on purpose
+    /// is a nuisance rather than an outage. A password reset lifts it at once.
+    /// </summary>
+    internal static readonly TimeSpan LoginLockout = TimeSpan.FromMinutes(15);
+
     private readonly IAuthProvider _provider;
     private readonly IJwtService _jwtService;
     private readonly IEventBus _eventBus;
@@ -105,6 +118,17 @@ internal sealed class AuthService : IAuthService
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
+            // Before the password check, so a locked account cannot be used to test passwords. The
+            // answer is the ordinary one: a distinct "locked" reply would confirm that the address has
+            // an account to anyone willing to make ten bad guesses. The owner gets in by resetting.
+            if (user.LockedUntil > DateTime.UtcNow)
+            {
+                _logger.LogWarning("Login refused: account {UserId} is locked until {LockedUntil}. IP: {IpAddress}", user.Id, user.LockedUntil, ipAddress);
+                _metrics.RecordLogin("locked_out");
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Account locked"), cancellationToken);
+                return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
+            }
+
             var stopwatch = Stopwatch.StartNew();
             var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
             stopwatch.Stop();
@@ -114,6 +138,7 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Login failed: Invalid password for email {Email}. IP: {IpAddress}", email, ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
+                await RecordFailedPasswordAsync(user, ipAddress, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password"), cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
@@ -143,6 +168,8 @@ internal sealed class AuthService : IAuthService
                     "AUTH_EMAIL_UNVERIFIED",
                     "Confirm your email address before signing in. Check your inbox, or ask for a new confirmation link."));
             }
+
+            await _provider.RecordLoginSuccessAsync(user.Id, cancellationToken);
 
             _logger.LogDebug("Credentials verified successfully for user: {Username} ({Email}). Generating tokens...", user.Username, email);
             var accessToken = GenerateAccessToken(user);
@@ -314,6 +341,86 @@ internal sealed class AuthService : IAuthService
             _logger.LogError("Unexpected error revoking sessions for user ID: {UserId}. Error: {Message}", userId, ex.Message);
             _logger.LogTrace(ex, "LogoutAll exception stack trace for user {UserId}", userId);
             return Result.Failure(Error.Failure("AUTH_LOGOUT_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var user = await _provider.GetByIdAsync(userId, cancellationToken);
+
+            // The caller is signed in as this account, so saying it is locked discloses nothing - and
+            // checking the current password while locked would reopen the guessing the lock closed.
+            if (user.LockedUntil > DateTime.UtcNow)
+            {
+                _logger.LogWarning("Password change refused: account {UserId} is locked. IP: {IpAddress}", userId, ipAddress);
+                return Result<LoginResponse>.Failure(Error.Forbidden("AUTH_ACCOUNT_LOCKED", "Too many wrong passwords. Try again later, or reset your password."));
+            }
+
+            if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword) == PasswordVerificationResult.Failed)
+            {
+                // Counted like a failed sign-in: a stolen access token must not become an unthrottled
+                // way to guess the password behind it.
+                _logger.LogWarning("Password change refused: current password did not match for user {UserId}. IP: {IpAddress}", userId, ipAddress);
+                await RecordFailedPasswordAsync(user, ipAddress, cancellationToken);
+                // 400, not 401: the session is fine, and a 401 would make a client sign the user out.
+                return Result<LoginResponse>.Failure(Error.Validation("AUTH_CURRENT_PASSWORD_INVALID", "The current password is not correct."));
+            }
+
+            await _provider.ChangePasswordAsync(userId, _passwordHasher.HashPassword(user, newPassword), ipAddress, cancellationToken);
+            await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+
+            // Every session ended with the old password, including this one. The caller gets a new
+            // pair so changing a password does not also sign them out.
+            var refreshToken = GenerateRefreshToken(userId);
+            await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
+
+            _logger.LogInformation("Password changed for user {UserId}; all other sessions revoked. IP: {IpAddress}", userId, ipAddress);
+            return Result<LoginResponse>.Success(new LoginResponse(GenerateAccessToken(user), refreshToken.Token));
+        }
+        catch (SecurityException)
+        {
+            return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error changing the password for user {UserId}", userId);
+            return Result<LoginResponse>.Failure(Error.Failure("AUTH_CHANGE_PASSWORD_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Result<IReadOnlyCollection<SessionResponse>>.Success(await _provider.GetActiveSessionsAsync(userId, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error listing sessions for user {UserId}", userId);
+            return Result<IReadOnlyCollection<SessionResponse>>.Failure(Error.Failure("AUTH_SESSIONS_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result> RevokeSessionAsync(int userId, int sessionId, string ipAddress, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var revoked = await _provider.RevokeSessionAsync(sessionId, userId, ipAddress, cancellationToken);
+            if (revoked == 0)
+            {
+                // Someone else's session reads exactly like one that does not exist.
+                return Result.Failure(Error.NotFound("AUTH_SESSION_NOT_FOUND", "Session not found."));
+            }
+
+            _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error ending session {SessionId} for user {UserId}", sessionId, userId);
+            return Result.Failure(Error.Failure("AUTH_SESSIONS_ERROR", ex.Message));
         }
     }
 
@@ -537,6 +644,23 @@ internal sealed class AuthService : IAuthService
         }
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Counts a wrong password against the account, and raises an alert when that failure locks it.
+    /// </summary>
+    private async Task RecordFailedPasswordAsync(User user, string ipAddress, CancellationToken cancellationToken)
+    {
+        var lockedUntil = await _provider.RecordLoginFailureAsync(user.Id, MaxFailedLogins, LoginLockout, cancellationToken);
+        if (lockedUntil > DateTime.UtcNow)
+        {
+            _logger.LogWarning("Account {UserId} locked until {LockedUntil} after {MaxFailures} wrong passwords. IP: {IpAddress}", user.Id, lockedUntil, MaxFailedLogins, ipAddress);
+            await _eventBus.PublishAsync(new SecurityAlertEvent(
+                "AccountLocked",
+                $"User ID {user.Id} was locked after {MaxFailedLogins} wrong passwords.",
+                ipAddress,
+                $"UserId: {user.Id}"), cancellationToken);
+        }
     }
 
     /// <summary>

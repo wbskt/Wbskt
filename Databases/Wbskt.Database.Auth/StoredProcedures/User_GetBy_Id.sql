@@ -11,7 +11,8 @@ BEGIN
         Email, 
         PasswordHash, 
         IsActive,
-        IsEmailVerified
+        IsEmailVerified,
+        LockedUntil
     FROM dbo.Users
     WHERE Id = @Id;
 END

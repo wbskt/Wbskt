@@ -51,6 +51,23 @@ public record ResetPasswordRequest(
     [StringLength(128, MinimumLength = 12, ErrorMessage = "Password must be at least 12 characters.")]
     string NewPassword);
 
+/// <summary>
+/// Changes the signed-in user's password. The current password is required even though the caller
+/// holds a token: a session left open on a shared machine must not be enough to take the account.
+/// The new password follows the same rules as <see cref="RegisterRequest"/>.
+/// </summary>
+public record ChangePasswordRequest(
+    [Required]
+    [StringLength(128)]
+    string CurrentPassword,
+
+    [Required]
+    [StringLength(128, MinimumLength = 12, ErrorMessage = "Password must be at least 12 characters.")]
+    string NewPassword);
+
+/// <summary>One live sign-in session. <c>Id</c> is what <c>DELETE /api/auth/sessions/{id}</c> takes.</summary>
+public record SessionResponse(int Id, DateTime CreatedAt, DateTime ExpiresAt, string? CreatedByIp);
+
 public record VerifyEmailRequest(
     [Required]
     [StringLength(255)]

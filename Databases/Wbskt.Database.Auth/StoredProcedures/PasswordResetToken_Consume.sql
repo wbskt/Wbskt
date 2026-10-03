@@ -45,7 +45,11 @@ BEGIN
     -- Redeeming a mailed token proves control of the inbox, which is all verification proves.
     UPDATE dbo.Users
     SET PasswordHash = @PasswordHash,
-        IsEmailVerified = 1
+        IsEmailVerified = 1,
+        PasswordChangedAt = SYSUTCDATETIME(),
+        -- Recovery is how a locked-out owner gets back in, so it lifts the lock too.
+        FailedLoginCount = 0,
+        LockedUntil = NULL
     WHERE Id = @UserId;
 
     UPDATE dbo.RefreshTokens
