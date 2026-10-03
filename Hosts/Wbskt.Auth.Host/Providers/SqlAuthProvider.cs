@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Host.Services;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;
@@ -59,7 +60,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         var parameters = await ExecuteNonQueryAsync("dbo.RefreshToken_Insert", p =>
         {
             p.AddWithValue("@UserId", token.UserId);
-            p.AddWithValue("@Token", token.Token);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token.Token);
             p.AddWithValue("@Expires", token.Expires);
             p.AddWithValue("@CreatedByIp", ipAddress ?? (object)DBNull.Value);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
@@ -72,7 +73,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
     {
         return await ExecuteSingleAsync(
             "dbo.RefreshToken_GetBy_Token",
-            p => p.AddWithValue("@Token", token),
+            p => p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token),
             MapRefreshToken,
             new SecurityException("Invalid refresh token."),
             cancellationToken
@@ -83,9 +84,10 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
     {
         return await ExecuteScalarAsync<int>("dbo.RefreshToken_Revoke", p =>
         {
-            p.AddWithValue("@Token", token);
+            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
             p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
-            p.AddWithValue("@ReplacedByToken", replacedByToken ?? (object)DBNull.Value);
+            p.Add("@ReplacedByTokenHash", SqlDbType.VarBinary, 32).Value =
+                replacedByToken is null ? DBNull.Value : SecurityTokens.Hash(replacedByToken);
         }, cancellationToken);
     }
 
@@ -157,12 +159,13 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }
     }
 
-    public async Task SetUserActiveAsync(int userId, bool isActive, CancellationToken cancellationToken = default)
+    public async Task SetUserActiveAsync(int userId, bool isActive, int tenantId, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.User_SetActive", p =>
         {
             p.AddWithValue("@Id", userId);
             p.AddWithValue("@IsActive", isActive);
+            p.AddWithValue("@TenantId", tenantId);
         }, cancellationToken);
     }
 
@@ -733,10 +736,8 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         {
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
-            Token = reader.GetString(reader.GetOrdinal("Token")),
             Expires = reader.GetDateTime(reader.GetOrdinal("Expires")),
-            Revoked = reader.IsDBNull(reader.GetOrdinal("Revoked")) ? null : reader.GetDateTime(reader.GetOrdinal("Revoked")),
-            ReplacedByToken = reader.IsDBNull(reader.GetOrdinal("ReplacedByToken")) ? null : reader.GetString(reader.GetOrdinal("ReplacedByToken"))
+            Revoked = reader.IsDBNull(reader.GetOrdinal("Revoked")) ? null : reader.GetDateTime(reader.GetOrdinal("Revoked"))
         };
     }
 }

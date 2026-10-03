@@ -16,6 +16,28 @@ BEGIN
 END
 GO
 
+-- RefreshTokens: the rows the pre-deployment script carried across the switch to hashed tokens go
+-- back, with their original Ids, and the scratch table goes. Through EXEC because the table is not
+-- part of the model. A row is skipped if its Id or hash is already present, so a re-run after a
+-- partial one cannot duplicate or collide.
+IF OBJECT_ID('dbo.__RefreshTokenHashBackfill', 'U') IS NOT NULL
+BEGIN
+    PRINT 'Restoring dbo.RefreshTokens rows with hashed tokens.';
+    EXEC('
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+        SET IDENTITY_INSERT dbo.RefreshTokens ON;
+        INSERT INTO dbo.RefreshTokens
+            (Id, UserId, TokenHash, Expires, Revoked, CreatedByIp, RevokedByIp, ReplacedByTokenHash)
+        SELECT B.Id, B.UserId, B.TokenHash, B.Expires, B.Revoked, B.CreatedByIp, B.RevokedByIp, B.ReplacedByTokenHash
+        FROM dbo.__RefreshTokenHashBackfill B
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.RefreshTokens R WHERE R.Id = B.Id OR R.TokenHash = B.TokenHash);
+        SET IDENTITY_INSERT dbo.RefreshTokens OFF;
+        DROP TABLE dbo.__RefreshTokenHashBackfill;
+        COMMIT TRANSACTION;');
+END
+GO
+
 -- DEFAULT Tenant (WITH enforced ID) - must exist before Roles/Groups/Workspaces (TenantId default = 1)
 SET IDENTITY_INSERT dbo.Tenants ON;
 GO

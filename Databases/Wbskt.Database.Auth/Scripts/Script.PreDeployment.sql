@@ -36,3 +36,60 @@ BEGIN
     EXEC('SELECT Id INTO dbo.__EmailVerifiedBackfill FROM dbo.Users;');
 END
 GO
+
+-- RefreshTokens.Token -> RefreshTokens.TokenHash: refresh tokens used to be stored in plaintext.
+--
+-- Existing sessions are carried across rather than dropped. Each row is copied, with its token and
+-- its ReplacedByToken hashed, into a scratch table, and the table is then emptied. The schema diff
+-- that follows this script therefore sees an empty table: it can drop the plaintext columns and add
+-- the NOT NULL hash without tripping BlockOnPossibleDataLoss, and without colliding with anything
+-- added here (sqlpackage plans the diff before this script runs; see the IsEmailVerified note above
+-- for what happens otherwise). The post-deployment script puts the rows back, Ids included, and
+-- drops the scratch table.
+--
+-- CONVERT(VARCHAR(255), ...) is load-bearing: HASHBYTES over an NVARCHAR hashes UTF-16LE, while
+-- SecurityTokens.Hash hashes UTF-8. Refresh tokens are base64 and therefore pure ASCII, so the
+-- VARCHAR conversion makes the two byte-identical; without it every carried-over session would fail
+-- to refresh. RefreshTokenHashMigrationTests pins the two together.
+--
+-- Guarded on Token still existing, and idempotent: a run that dies after the copy re-copies only the
+-- rows the scratch table does not have yet, and the copy and the delete are one transaction. Through
+-- sp_executesql because a fresh database has neither table nor column when this batch is parsed.
+IF COL_LENGTH('dbo.RefreshTokens', 'Token') IS NOT NULL
+BEGIN
+    PRINT 'Carrying dbo.RefreshTokens across the switch to hashed tokens.';
+
+    IF OBJECT_ID('dbo.__RefreshTokenHashBackfill', 'U') IS NULL
+        EXEC sp_executesql N'CREATE TABLE dbo.__RefreshTokenHashBackfill (
+            Id INT NOT NULL PRIMARY KEY,
+            UserId INT NOT NULL,
+            TokenHash VARBINARY(32) NOT NULL,
+            Expires DATETIME2(3) NOT NULL,
+            Revoked DATETIME2(3) NULL,
+            CreatedByIp NVARCHAR(50) NULL,
+            RevokedByIp NVARCHAR(50) NULL,
+            ReplacedByTokenHash VARBINARY(32) NULL);';
+
+    EXEC sp_executesql N'
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+
+        INSERT INTO dbo.__RefreshTokenHashBackfill
+            (Id, UserId, TokenHash, Expires, Revoked, CreatedByIp, RevokedByIp, ReplacedByTokenHash)
+        SELECT R.Id,
+               R.UserId,
+               HASHBYTES(''SHA2_256'', CONVERT(VARCHAR(255), R.Token)),
+               R.Expires,
+               R.Revoked,
+               R.CreatedByIp,
+               R.RevokedByIp,
+               CASE WHEN R.ReplacedByToken IS NULL THEN NULL
+                    ELSE HASHBYTES(''SHA2_256'', CONVERT(VARCHAR(255), R.ReplacedByToken)) END
+        FROM dbo.RefreshTokens R
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.__RefreshTokenHashBackfill B WHERE B.Id = R.Id);
+
+        DELETE FROM dbo.RefreshTokens;
+
+        COMMIT TRANSACTION;';
+END
+GO

@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <SqlFiles Include="Functions\*.sql" />
         <SqlFiles Include="StoredProcedures\*.sql" />
         <SqlFiles Include="Tables\*.sql" />
         <SqlFiles Include="Types\*.sql" />

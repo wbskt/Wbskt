@@ -394,7 +394,7 @@ internal sealed class ManagementService : IManagementService
         return await GuardAsync("SetUserActive", async () =>
         {
             var user = await _provider.GetByIdAsync(userId, cancellationToken);
-            await _provider.SetUserActiveAsync(userId, isActive, cancellationToken);
+            await _provider.SetUserActiveAsync(userId, isActive, resolved.Value.TenantId, cancellationToken);
 
             // Both halves: the refresh tokens so no new access token can be minted, and the access
             // tokens already out there so the account stops working now rather than when they lapse.
