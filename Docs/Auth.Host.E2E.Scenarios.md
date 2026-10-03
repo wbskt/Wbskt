@@ -205,7 +205,7 @@ The most security-sensitive area, and entirely uncovered today.
 
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
-| `AUTH_PW_01` | + | Change password with the right current password | **200** with a new pair; every earlier refresh token fails, the earlier access token is **401**, the new pair works, and only the new password signs in |
+| `AUTH_PW_01` | + | Change password with the right current password | **200** with a new pair; the new session is the only one listed, the earlier access tokens are **401**, the new pair works, and only the new password signs in |
 | `AUTH_PW_02` | − | Wrong current password | **400** `AUTH_CURRENT_PASSWORD_INVALID`; the session and the old password still work |
 | `AUTH_PW_03` | − | No token | **401** |
 | `AUTH_SES_01` | + | Two sign-ins, list, end the older | Both listed; after `DELETE` the ended one is gone and its refresh token fails, the other still refreshes |
