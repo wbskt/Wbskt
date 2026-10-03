@@ -1,5 +1,5 @@
--- Revokes a single refresh token. Returns the number of rows actually revoked: 0 means the token
--- was already revoked, which the service treats as a replay of a token it has previously retired.
+-- Revokes a single refresh token (logout). Returns the number of rows actually revoked: 0 means the
+-- token was unknown or already revoked. Rotation does not use this; see dbo.RefreshToken_Rotate.
 CREATE PROCEDURE dbo.RefreshToken_Revoke
     @TokenHash VARBINARY(32),
     @RevokedByIp NVARCHAR(50) = NULL,

@@ -20,10 +20,16 @@ internal interface IAuthProvider : IReferenceProvider
     Task<int> FindUserIdByRefIdInTenantAsync(Guid userRef, int tenantId, CancellationToken cancellationToken = default);
 
     Task InsertRefreshTokenAsync(RefreshToken token, string ipAddress, CancellationToken cancellationToken = default);
-    Task<RefreshToken> GetRefreshTokenAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>Returns the number of rows revoked — 0 means the token was already revoked.</summary>
     Task<int> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retires <paramref name="token"/> and stores <paramref name="replacement"/> in one transaction
+    /// (<c>dbo.RefreshToken_Rotate</c>). A replayed token revokes every session the user has in the
+    /// same call; see <see cref="RefreshRotationOutcome"/> for the other answers.
+    /// </summary>
+    Task<RefreshRotation> RotateRefreshTokenAsync(string token, RefreshToken replacement, string ipAddress, CancellationToken cancellationToken = default);
 
     Task<int> RevokeAllRefreshTokensForUserAsync(int userId, string ipAddress, CancellationToken cancellationToken = default);
 
