@@ -201,6 +201,20 @@ The most security-sensitive area, and entirely uncovered today.
 
 ---
 
+## 6a. Account security — `change-password`, `sessions`, lockout
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `AUTH_PW_01` | + | Change password with the right current password | **200** with a new pair; every earlier refresh token fails, the earlier access token is **401**, the new pair works, and only the new password signs in |
+| `AUTH_PW_02` | − | Wrong current password | **400** `AUTH_CURRENT_PASSWORD_INVALID`; the session and the old password still work |
+| `AUTH_PW_03` | − | No token | **401** |
+| `AUTH_SES_01` | + | Two sign-ins, list, end the older | Both listed; after `DELETE` the ended one is gone and its refresh token fails, the other still refreshes |
+| `AUTH_SES_02` | − | End another user's session by id | **404**; the owner's session is untouched |
+| `AUTH_LOCK_01` | − | Ten wrong passwords, then the right one | **401** `AUTH_INVALID_CREDENTIALS`, identical to a wrong password; sessions issued earlier still work |
+| `AUTH_LOCK_02` | + | Nine wrong passwords, a success, one more wrong one | The next correct sign-in still succeeds: a success resets the count |
+
+---
+
 ## 7. Rate limiting & transport
 
 Run isolated — the partition key is the client IP and these will otherwise poison neighbouring tests.
@@ -208,7 +222,7 @@ Run isolated — the partition key is the client IP and these will otherwise poi
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
 | `AUTH_RL_01` | − | Exceed `RateLimiting:Authentication:PermitLimit` failed logins in the window | **429** once the limit is passed |
-| `AUTH_RL_02` | + | After the window elapses, login works again | **200** |
+| `AUTH_RL_02` | + | After the window elapses, login works again | **200**. The window is exhausted with an unknown address, so the per-account lockout does not also apply |
 | `AUTH_RL_03` | − | The limit applies to `register` | **429** |
 | `AUTH_RL_04` | − | The limit applies to `refresh-token` | **429** |
 | `AUTH_RL_05` | − | The limit applies to `logout` | **429** |

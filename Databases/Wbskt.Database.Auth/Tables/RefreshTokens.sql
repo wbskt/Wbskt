@@ -8,6 +8,8 @@ CREATE TABLE dbo.RefreshTokens
     -- not be enough to sign in as anyone.
     TokenHash VARBINARY(32) NOT NULL,
 
+    -- When the session (or this rotation of it) was issued. Shown in the session list.
+    Created DATETIME2(3) NOT NULL CONSTRAINT DF_RefreshTokens_Created DEFAULT SYSUTCDATETIME(),
     Expires DATETIME2(3) NOT NULL,
     Revoked DATETIME2(3) NULL,
     CreatedByIp NVARCHAR(50) NULL,

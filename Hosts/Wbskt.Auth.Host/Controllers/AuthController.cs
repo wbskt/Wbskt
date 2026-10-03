@@ -118,6 +118,69 @@ public class AuthController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Changes the signed-in user's password. Requires the current password, ends every session the
+    /// account has, and returns a fresh token pair for this caller.
+    /// </summary>
+    /// <remarks>
+    /// A wrong current password answers 400 <c>AUTH_CURRENT_PASSWORD_INVALID</c> rather than 401, so a
+    /// client does not read it as an expired session, and counts towards the account lockout like a
+    /// failed sign-in. A locked account answers 403 <c>AUTH_ACCOUNT_LOCKED</c>.
+    /// </remarks>
+    [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HttpPost("change-password")]
+    public async Task<ActionResult<LoginResponse>> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: ChangePassword requested");
+
+        var userIdResult = CurrentUserId();
+        if (userIdResult.IsFailure)
+        {
+            return MapError(userIdResult.Error);
+        }
+
+        var result = await _authService.ChangePasswordAsync(userIdResult.Value, request.CurrentPassword, request.NewPassword, CallerIpAddress(), cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Lists the signed-in user's live sessions (one per signed-in device or browser), newest first.
+    /// </summary>
+    [Authorize]
+    [HttpGet("sessions")]
+    public async Task<ActionResult<IReadOnlyCollection<SessionResponse>>> GetSessions(CancellationToken cancellationToken)
+    {
+        var userIdResult = CurrentUserId();
+        if (userIdResult.IsFailure)
+        {
+            return MapError(userIdResult.Error);
+        }
+
+        var result = await _authService.GetSessionsAsync(userIdResult.Value, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
+    /// Ends one of the signed-in user's sessions: its refresh token stops working. An access token
+    /// already issued to that device stays valid until it expires, since it is not tied to a session.
+    /// </summary>
+    [Authorize]
+    [HttpDelete("sessions/{id:int}")]
+    public async Task<IActionResult> RevokeSession(int id, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("API: RevokeSession requested for session {SessionId}", id);
+
+        var userIdResult = CurrentUserId();
+        if (userIdResult.IsFailure)
+        {
+            return MapError(userIdResult.Error);
+        }
+
+        var result = await _authService.RevokeSessionAsync(userIdResult.Value, id, CallerIpAddress(), cancellationToken);
+        return MapResult(result);
+    }
+
     private string CallerIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
     /// <summary>

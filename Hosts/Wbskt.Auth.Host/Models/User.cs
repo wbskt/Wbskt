@@ -13,4 +13,7 @@ public class User
     /// Whether the owner of <see cref="Email"/> has proved they control it. Sign-in requires it.
     /// </summary>
     public bool IsEmailVerified { get; set; }
+
+    /// <summary>Set while too many wrong passwords have locked the account. Sign-in is refused until then.</summary>
+    public DateTime? LockedUntil { get; set; }
 }
