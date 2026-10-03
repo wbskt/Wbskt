@@ -140,6 +140,8 @@ services:
     environment:
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-auth
+      # Serves /scalar and /openapi/v1.json anonymously when true. Off unless set in .env.
+      ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
       ConnectionStrings__AuthDBConnection: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       # Signs user tokens. Its public half is served at /.well-known/jwks.json for management.
       Jwt__SigningKey: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required - see .env.example}
@@ -195,6 +197,7 @@ services:
     environment:
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-management
+      ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
       ConnectionStrings__Redis: redis:6379
       # Signs client tokens for the socket host, and validates user tokens against auth's public keys.
@@ -250,6 +253,7 @@ services:
     environment:
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-socket
+      ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
       # Signs nothing; validates client tokens against management's public keys, fetched on first use.
       Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
     volumes:

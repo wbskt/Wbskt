@@ -246,6 +246,22 @@ It is empty by default and only widens CORS. Email links still point at `CONSOLE
 verification or reset link opens the deployed console, not the local one. Clear it again before
 public launch. The console side (pointing `ng serve` at these URLs) is in the Wbskt.Console README.
 
+### API reference (Scalar)
+
+The Scalar API reference and the OpenAPI document it reads are off outside Development. To serve
+them from the deployed hosts, set `API_DOCS_ENABLED=true` in `compose/.env` and recreate the hosts:
+
+```bash
+# compose/.env
+API_DOCS_ENABLED=true
+
+docker compose up -d --no-build auth management socket
+```
+
+Each host then serves `/scalar` and `/openapi/v1.json`: `https://auth.<DOMAIN>/scalar`,
+`https://api.<DOMAIN>/scalar` and `https://ws.<DOMAIN>/scalar`. Both paths are anonymous, so anyone
+can read the full API surface while this is on. Calls made from the page still need a valid token.
+
 ## Incremental deployment (already running, you've changed something)
 
 Normally: push to `master`, wait for **Build images**, then dispatch **Deploy** with that run's
