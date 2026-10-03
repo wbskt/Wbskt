@@ -46,7 +46,7 @@ internal interface IAuthProvider : IReferenceProvider
     /// <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when the token is not valid.
     /// </summary>
     Task<int> ConsumeEmailVerificationTokenAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
-    Task SetUserActiveAsync(int userId, bool isActive, CancellationToken cancellationToken = default);
+    Task SetUserActiveAsync(int userId, bool isActive, int tenantId, CancellationToken cancellationToken = default);
 
     Task<bool> VerifyPermissionAsync(int userId, int tenantId, int? workspaceId, string permissionSlug, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<string>> GetEffectivePermissionsAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);

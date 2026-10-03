@@ -260,8 +260,8 @@ public sealed class AccountRecoveryProcedureTests(AuthSqlFixture fixture)
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand(
             """
-            INSERT INTO dbo.RefreshTokens (UserId, Token, Expires)
-            VALUES (@UserId, @Token, DATEADD(day, 7, SYSUTCDATETIME()));
+            INSERT INTO dbo.RefreshTokens (UserId, TokenHash, Expires)
+            VALUES (@UserId, HASHBYTES('SHA2_256', @Token), DATEADD(day, 7, SYSUTCDATETIME()));
             """, conn);
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@Token", $"{token}-{Guid.NewGuid():N}");

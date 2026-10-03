@@ -849,7 +849,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task MEM_37b_AnAdministratorCanDeactivateThemselves_AndStrandTheTenant()
+    public async Task MEM_37b_TheOnlyAdministratorCannotDeactivateThemselves()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -857,19 +857,18 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var adminRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, admin.Email);
         adminRef.Should().NotBeNull();
 
-        // Documenting behaviour, not endorsing it. There is no self-protection guard, and this is
-        // the tenant's only administrator, so the tenant becomes unadministrable — nobody left
-        // holding users.manage to turn the account back on.
+        // This is the tenant's only administrator. Deactivating them would leave nobody holding
+        // users.manage to turn the account back on, so the last-administrator guard refuses it.
         var response = await fixture.SetUserActiveAsync(admin.Token, tenantRef, adminRef!.Value, isActive: false);
 
-        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
 
         var login = await fixture.SendAsync(
             HttpMethod.Post,
             ServicesFixture.AuthUrl("/api/auth/login"),
             body: new { Email = admin.Email, Password = admin.Password });
 
-        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await ServicesFixture.ReadErrorCodeAsync(login)).Should().Be("AUTH_USER_INACTIVE");
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

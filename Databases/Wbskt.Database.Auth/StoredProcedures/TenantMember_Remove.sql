@@ -20,75 +20,6 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    -- A tenant with no remaining administrator cannot be repaired through the API: every management
-    -- endpoint requires tenant-wide users.manage *in that tenant* to act, so there would be nobody
-    -- left who could grant it. That makes this guard the difference between a mistake and an
-    -- unrecoverable one.
-    --
-    -- Scope: direct assignments only (UserRoles and UserPermissions). Administrators reached through
-    -- a group are not counted, so a tenant administered solely through group membership will refuse
-    -- a removal it could safely allow. That is the deliberate direction to be wrong in -- the
-    -- alternative, walking the group ancestry here and getting it subtly wrong, orphans the tenant.
-    --
-    -- Along the ordinary path this guard never fires: the caller must hold tenant-wide users.manage
-    -- and cannot target themselves, so a remaining administrator is implied. It exists for the two
-    -- cases that do not hold -- an administrator whose users.manage arrives through a group, where
-    -- the undercount above bites, and any future caller that is not this endpoint.
-    IF NOT EXISTS (
-        SELECT 1
-        FROM dbo.TenantMembers TM
-        WHERE TM.TenantId = @TenantId
-          AND TM.UserId <> @UserId
-
-          -- A user-level DENY beats everything, per the precedence in Docs/AccessControl.md.
-          AND NOT EXISTS (
-              SELECT 1
-              FROM dbo.UserPermissions UP
-              INNER JOIN dbo.Permissions P ON P.Id = UP.PermissionId
-              WHERE UP.UserId = TM.UserId
-                AND UP.TenantId = @TenantId
-                AND UP.WorkspaceId IS NULL
-                AND P.Slug = 'users.manage'
-                AND UP.IsDeny = 1)
-
-          AND (
-              -- ... then a user-level ALLOW, which beats any role denial.
-              EXISTS (
-                  SELECT 1
-                  FROM dbo.UserPermissions UP
-                  INNER JOIN dbo.Permissions P ON P.Id = UP.PermissionId
-                  WHERE UP.UserId = TM.UserId
-                    AND UP.TenantId = @TenantId
-                    AND UP.WorkspaceId IS NULL
-                    AND P.Slug = 'users.manage'
-                    AND UP.IsDeny = 0)
-
-              -- ... otherwise a role that allows it, provided no held role denies it.
-              OR (
-                  EXISTS (
-                      SELECT 1
-                      FROM dbo.UserRoles UR
-                      INNER JOIN dbo.RolePermissions RP ON RP.RoleId = UR.RoleId
-                      INNER JOIN dbo.Permissions P ON P.Id = RP.PermissionId
-                      WHERE UR.UserId = TM.UserId
-                        AND UR.TenantId = @TenantId
-                        AND UR.WorkspaceId IS NULL
-                        AND P.Slug = 'users.manage'
-                        AND RP.IsDeny = 0)
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM dbo.UserRoles UR
-                      INNER JOIN dbo.RolePermissions RP ON RP.RoleId = UR.RoleId
-                      INNER JOIN dbo.Permissions P ON P.Id = RP.PermissionId
-                      WHERE UR.UserId = TM.UserId
-                        AND UR.TenantId = @TenantId
-                        AND UR.WorkspaceId IS NULL
-                        AND P.Slug = 'users.manage'
-                        AND RP.IsDeny = 1))))
-    BEGIN
-        THROW 50008, 'Cannot remove the last administrator of a tenant.', 1;
-    END
-
     IF @UserId = @NewOwnerUserId
     BEGIN
         THROW 50013, 'A member cannot be removed in favour of themselves.', 1;
@@ -100,6 +31,22 @@ BEGIN
     END
 
     BEGIN TRANSACTION;
+
+    -- A tenant with no remaining administrator cannot be repaired through the API; see
+    -- dbo.Tenant_Administrators, which also explains the lock. Checked inside the transaction and
+    -- under the lock, so two concurrent removals cannot each count the other as the one remaining.
+    --
+    -- Along the ordinary path this guard never fires: the caller must hold tenant-wide users.manage
+    -- and cannot target themselves, so a remaining administrator is implied. It exists for the cases
+    -- that do not hold -- an administrator whose users.manage arrives through a group, which the
+    -- function does not count, and any future caller that is not this endpoint.
+    DECLARE @TenantLock INT;
+    SELECT @TenantLock = Id FROM dbo.Tenants WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TenantId;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(@TenantId) WHERE UserId <> @UserId)
+    BEGIN
+        THROW 50008, 'Cannot remove the last administrator of a tenant.', 1;
+    END
 
     -- Ownership transfers before the membership rows are cleared, so the receiving administrator is
     -- a member of every workspace they inherit.

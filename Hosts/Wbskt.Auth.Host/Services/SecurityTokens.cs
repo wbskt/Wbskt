@@ -8,6 +8,10 @@ namespace Wbskt.Auth.Host.Services;
 /// password resets and email verifications. One generator for all three, deliberately — a second
 /// copy of <see cref="Hash"/> that drifted from this one would make every token issued before the
 /// drift silently unredeemable, and the properties each of these needs are identical.
+/// <para>
+/// <see cref="Hash"/> is also what refresh tokens are stored as. Those are minted by
+/// <c>AuthService</c> (64 random bytes, base64) but hashed here for the same reason.
+/// </para>
 /// </summary>
 internal static class SecurityTokens
 {
@@ -30,7 +34,7 @@ internal static class SecurityTokens
     /// Plain SHA-256, deliberately: this is a high-entropy random value rather than a password, so
     /// there is no dictionary for a work factor to slow down, and adding one would only cost latency
     /// on every redemption. The digest is 32 bytes, matching the <c>TokenHash VARBINARY(32)</c>
-    /// column on each of the three tables that store one.
+    /// column on each of the tables that store one.
     /// </para>
     /// </summary>
     public static byte[] Hash(string token)
