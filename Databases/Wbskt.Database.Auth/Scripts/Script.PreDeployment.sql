@@ -108,3 +108,17 @@ BEGIN
           WHERE r.Name = ''User'' AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id);');
 END
 GO
+
+-- Role kinds: the Admin and User roles that exist before Roles.Kind does are recorded here by name,
+-- the only way they could be told apart until now, and the post-deployment script sets their Kind,
+-- then drops the list. Exactly once: after this, a role later renamed to Admin stays a custom role.
+-- Through EXEC for the same SQL70645 reason as above.
+IF OBJECT_ID('dbo.Roles', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.Roles', 'Kind') IS NULL
+   AND OBJECT_ID('dbo.__RoleKindBackfill', 'U') IS NULL
+BEGIN
+    PRINT 'Recording the built-in Admin and User roles to receive their Kind.';
+    EXEC('SELECT r.Id, CAST(r.Name AS NVARCHAR(16)) AS Kind INTO dbo.__RoleKindBackfill FROM dbo.Roles r
+          WHERE r.Name IN (''Admin'', ''User'');');
+END
+GO

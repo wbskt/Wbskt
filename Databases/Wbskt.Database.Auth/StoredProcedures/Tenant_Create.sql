@@ -42,11 +42,11 @@ BEGIN
     -- resources. An empty User role made inviting someone with it grant nothing at all; reads are
     -- the least a member needs to see the workspace they were added to, and the tenant's
     -- administrator can still narrow or widen the role.
-    INSERT INTO dbo.Roles (TenantId, Name, Description)
-    VALUES (@TenantId, 'Admin', 'Administrator with full access'),
-           (@TenantId, 'User', 'Standard user');
+    INSERT INTO dbo.Roles (TenantId, Name, Description, Kind)
+    VALUES (@TenantId, 'Admin', 'Administrator with full access', 'Admin'),
+           (@TenantId, 'User', 'Standard user', 'User');
 
-    DECLARE @AdminRoleId INT = (SELECT Id FROM dbo.Roles WHERE TenantId = @TenantId AND Name = 'Admin');
+    DECLARE @AdminRoleId INT = (SELECT Id FROM dbo.Roles WHERE TenantId = @TenantId AND Kind = 'Admin');
 
     INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
     SELECT @AdminRoleId, P.Id, 0
@@ -56,7 +56,7 @@ BEGIN
     SELECT R.Id, P.Id, 0
     FROM dbo.Roles R
     INNER JOIN dbo.Permissions P ON P.Slug IN ('clients.read', 'policies.read', 'templates.read', 'workflows.read', 'logs.read')
-    WHERE R.TenantId = @TenantId AND R.Name = 'User';
+    WHERE R.TenantId = @TenantId AND R.Kind = 'User';
 
     INSERT INTO dbo.TenantMembers (TenantId, UserId)
     VALUES (@TenantId, @OwnerUserId);

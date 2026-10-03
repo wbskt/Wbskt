@@ -1,4 +1,5 @@
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
@@ -116,5 +117,56 @@ public sealed class SharedVariableCasIntegrationTests(SqlEdgeFixture fixture)
 
         results.Count(r => r == 1).Should().Be(1, "exactly one concurrent CAS should win");
         results.Count(r => r == 0).Should().Be(9, "all other concurrent CAS calls should lose");
+    }
+
+    [SkippableFact]
+    public async Task Concurrent_first_increments_all_count()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        Guid workflowRefId = Guid.NewGuid();
+
+        // No row yet: each call either creates the counter or applies its step to the one another
+        // call just created. None may be lost to the race on the insert.
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, 20),
+            new ParallelOptions { MaxDegreeOfParallelism = 20 },
+            async (_, ct) => await ProviderFactory.SharedVariable(fixture.ConnectionString).IncrementAsync(workflowRefId, "hits", 2, ct));
+
+        var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
+        SharedVariableRow result = await provider.GetByWorkflowRefIdNameAsync(workflowRefId, "hits", CancellationToken.None);
+        result.VarType.Should().Be("Counter");
+        result.ValueJson.Should().Be("40");
+    }
+
+    [SkippableFact]
+    public async Task Decrement_creates_a_missing_counter_below_zero()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
+        Guid workflowRefId = Guid.NewGuid();
+
+        (await provider.DecrementAsync(workflowRefId, "stock", 3, CancellationToken.None)).Should().Be("-3");
+        (await provider.IncrementAsync(workflowRefId, "stock", 5, CancellationToken.None)).Should().Be("2");
+    }
+
+    [SkippableTheory]
+    [InlineData("Json", "5")]
+    [InlineData("Counter", "\"lots\"")]
+    [InlineData("Counter", "1.5")]
+    public async Task Increment_refuses_a_variable_that_is_not_an_integer_counter(string varType, string valueJson)
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
+
+        var provider = ProviderFactory.SharedVariable(fixture.ConnectionString);
+        Guid workflowRefId = Guid.NewGuid();
+        await provider.InitializeAsync(workflowRefId, "v", varType, valueJson, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<SharedVariableNotACounterException>(
+            () => provider.IncrementAsync(workflowRefId, "v", 1, CancellationToken.None));
+
+        ex.ErrorCode.Should().Be("VARIABLE_NOT_A_COUNTER");
+        (await provider.GetByWorkflowRefIdNameAsync(workflowRefId, "v", CancellationToken.None)).ValueJson.Should().Be(valueJson);
     }
 }

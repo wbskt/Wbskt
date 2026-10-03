@@ -22,7 +22,7 @@ BEGIN
     VALUES (@WorkspaceId, @OwnerUserId);
 
     -- Owner gets the tenant's Admin role scoped to this workspace
-    DECLARE @AdminRoleId INT = (SELECT Id FROM dbo.Roles WHERE TenantId = @TenantId AND Name = 'Admin');
+    DECLARE @AdminRoleId INT = (SELECT Id FROM dbo.Roles WHERE TenantId = @TenantId AND Kind = 'Admin');
     IF @AdminRoleId IS NOT NULL
     BEGIN
         INSERT INTO dbo.UserRoles (UserId, RoleId, TenantId, WorkspaceId)

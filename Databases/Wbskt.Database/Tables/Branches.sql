@@ -13,6 +13,10 @@ CREATE TABLE dbo.Branches
     CompensationStackJson NVARCHAR(MAX)    NULL,
     CreatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
     UpdatedAt             DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    -- Not an optimistic-concurrency guard: branch writes are last-writer-wins by design, since one
+    -- engine owns a run's branches. It is the branch's visit token (BranchContext.VisitToken), which
+    -- changes on every write and so tells two visits of the same node apart in the idempotency keys
+    -- RetryExecutor gives side-effecting actions. Keep it even though no procedure compares it.
     RowVersion            ROWVERSION       NOT NULL,
     CONSTRAINT UQ_Branches_RefId UNIQUE (RefId),
     CONSTRAINT FK_Branches_Runs FOREIGN KEY (RunId) REFERENCES dbo.Runs (Id)

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -19,7 +18,6 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// </summary>
 internal sealed class VariableNodeExecutor : INodeExecutor
 {
-    private const string CounterVarType = "Counter";
     private const string JsonVarType = "Json";
 
     /// <summary>Branch-state key carrying whether the last CompareAndSet on this branch won its race.</summary>
@@ -72,7 +70,7 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             return Continue(new Dictionary<string, JsonElement> { [config.Var] = value });
         }
 
-        string valueJson = JsonSerializer.Serialize(value);
+        string valueJson = CanonicalJson.Serialize(value);
         try
         {
             await _sharedVariableProvider.SetAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, valueJson, ct);
@@ -110,18 +108,18 @@ internal sealed class VariableNodeExecutor : INodeExecutor
         JsonElement newValue = await ResolveValueAsync(ctx, config, config.Value, ct);
         JsonElement expected = await ResolveValueAsync(ctx, config, config.Expected, ct);
 
-        // Comparison is on serialized JSON text, because that is exactly what SharedVariable_CompareAndSet
-        // does in SQL (ValueJson = @Expected). Matching it keeps the two scopes honest about each other
-        // rather than having local quietly accept a structural match the shared path would reject.
-        string expectedJson = JsonSerializer.Serialize(expected);
-        string newValueJson = JsonSerializer.Serialize(newValue);
+        // Comparison is on canonical JSON text, because SharedVariable_CompareAndSet compares text in SQL
+        // (ValueJson = @Expected) and every shared write stores the canonical form. Local compares the
+        // same way, so the two scopes agree on what "equal" means.
+        string expectedJson = CanonicalJson.Serialize(expected);
+        string newValueJson = CanonicalJson.Serialize(newValue);
 
         bool succeeded;
         if (config.Scope == VariableScope.Local)
         {
             string currentJson = ctx.Branch.LocalState.TryGetValue(config.Var, out JsonElement current)
-                ? JsonSerializer.Serialize(current)
-                : JsonSerializer.Serialize(JsonSerializer.SerializeToElement((string?)null));
+                ? CanonicalJson.Serialize(current)
+                : CanonicalJson.Serialize(JsonSerializer.SerializeToElement((string?)null));
 
             succeeded = string.Equals(currentJson, expectedJson, StringComparison.Ordinal);
             var patch = new Dictionary<string, JsonElement>
@@ -138,6 +136,15 @@ internal sealed class VariableNodeExecutor : INodeExecutor
         }
 
         succeeded = await _sharedVariableProvider.CompareAndSetAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, expectedJson, newValueJson, ct) > 0;
+
+        // A value stored before writes were canonical keeps its original spelling until it is next
+        // written, so a miss is retried once against that spelling. Each attempt is atomic and a miss
+        // writes nothing, so the retry cannot apply the new value twice.
+        string legacyExpectedJson = JsonSerializer.Serialize(expected);
+        if (!succeeded && !string.Equals(legacyExpectedJson, expectedJson, StringComparison.Ordinal))
+        {
+            succeeded = await _sharedVariableProvider.CompareAndSetAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, legacyExpectedJson, newValueJson, ct) > 0;
+        }
 
         return Continue(new Dictionary<string, JsonElement>
         {
@@ -178,28 +185,16 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             });
         }
 
-        try
+        // Atomic in the procedure, which also creates a missing counter at the step - no read-modify-write
+        // race and no retry loop. A variable that is not a counter throws SharedVariableNotACounterException,
+        // which fails the node as VARIABLE_NOT_A_COUNTER.
+        if (delta >= 0)
         {
-            // Atomic in the UPDATE - no read-modify-write race, so no retry loop.
-            if (delta >= 0)
-            {
-                await _sharedVariableProvider.IncrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, delta, ct);
-            }
-            else
-            {
-                await _sharedVariableProvider.DecrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, -delta, ct);
-            }
+            await _sharedVariableProvider.IncrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, delta, ct);
         }
-        catch (KeyNotFoundException)
+        else
         {
-            // No counter yet (or it exists with a non-Counter type, which the procedures also skip).
-            // Seed it at the delta, matching "started from zero then applied this step".
-            await _sharedVariableProvider.InitializeAsync(
-                ctx.Branch.WorkflowDefinitionRefId,
-                config.Var,
-                CounterVarType,
-                delta.ToString(CultureInfo.InvariantCulture),
-                ct);
+            await _sharedVariableProvider.DecrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, -delta, ct);
         }
 
         return Continue();
