@@ -501,13 +501,13 @@ public sealed class ServicesFixture : IDisposable
         return workspaces.Select(w => w.RefId).ToList();
     }
 
-    /// <summary>Enables or disables an account. Requires a caller with tenant-wide users.manage.</summary>
-    public Task<HttpResponseMessage> SetUserActiveAsync(string adminToken, Guid tenantRef, Guid userRef, bool isActive) =>
+    /// <summary>Suspends a member in one tenant, or lifts it. Requires a caller with tenant-wide users.manage.</summary>
+    public Task<HttpResponseMessage> SetMemberSuspendedAsync(string adminToken, Guid tenantRef, Guid userRef, bool isSuspended) =>
         SendAsync(
             HttpMethod.Put,
-            AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/active"),
+            AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/suspended"),
             adminToken,
-            new { IsActive = isActive });
+            new { IsSuspended = isSuspended });
 
     /// <summary>The caller's first tenant reference — every /api/tenants route needs one.</summary>
     public async Task<Guid> GetTenantRefAsync(string token)

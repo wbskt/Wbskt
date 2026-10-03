@@ -123,6 +123,66 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         Assert.False(await ScalarAsync<bool>("SELECT IsActive FROM dbo.Users WHERE Id = @p0", elsewhereOwnerId));
     }
 
+    [SkippableFact]
+    public async Task The_only_administrator_cannot_be_suspended()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, ownerId, adminRoleId) = await CreateTenantAsync();
+
+        await AssertRejectedAsync(() => ExecAsync("dbo.TenantMember_SetSuspended",
+            ("@TenantId", tenantId), ("@UserId", ownerId), ("@IsSuspended", true)));
+        Assert.True(await IsAdministratorAsync(tenantId, ownerId));
+
+        // With a second administrator the suspension goes through, and the suspended one stops counting.
+        int second = await AddMemberAsync(tenantId, adminRoleId);
+        await ExecAsync("dbo.TenantMember_SetSuspended", ("@TenantId", tenantId), ("@UserId", ownerId), ("@IsSuspended", true));
+        Assert.False(await IsAdministratorAsync(tenantId, ownerId));
+
+        await AssertRejectedAsync(() => ExecAsync("dbo.TenantMember_SetSuspended",
+            ("@TenantId", tenantId), ("@UserId", second), ("@IsSuspended", true)));
+    }
+
+    [SkippableFact]
+    public async Task Suspending_someone_outside_the_tenant_is_refused()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, _, _) = await CreateTenantAsync();
+        var (_, outsiderId, _) = await CreateTenantAsync();
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => ExecAsync("dbo.TenantMember_SetSuspended",
+            ("@TenantId", tenantId), ("@UserId", outsiderId), ("@IsSuspended", true)));
+        Assert.Equal(50016, ex.Number);
+    }
+
+    /// <summary>
+    /// Suspension removes everything the member holds in that tenant and nothing elsewhere, and
+    /// lifting it restores exactly what they had, since no assignment was touched.
+    /// </summary>
+    [SkippableFact]
+    public async Task Suspension_closes_one_tenant_and_lifting_it_restores_access()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var (tenantId, _, adminRoleId) = await CreateTenantAsync();
+        int member = await AddMemberAsync(tenantId, adminRoleId);
+        int workspaceId = await ScalarAsync<int>("SELECT TOP 1 Id FROM dbo.Workspaces WHERE TenantId = @p0", tenantId);
+        await ExecSqlAsync("INSERT INTO dbo.WorkspaceMembers (WorkspaceId, UserId) VALUES (@p0, @p1);", workspaceId, member);
+
+        // The member also owns a tenant of their own.
+        int ownTenantId = await CreateTenantForAsync(member);
+        int ownWorkspaceId = await ScalarAsync<int>("SELECT TOP 1 Id FROM dbo.Workspaces WHERE TenantId = @p0", ownTenantId);
+
+        Assert.True(await HasAccessAsync(member, tenantId, workspaceId));
+
+        await ExecAsync("dbo.TenantMember_SetSuspended", ("@TenantId", tenantId), ("@UserId", member), ("@IsSuspended", true));
+
+        Assert.False(await HasAccessAsync(member, tenantId, workspaceId));
+        Assert.True(await HasAccessAsync(member, ownTenantId, ownWorkspaceId));
+
+        await ExecAsync("dbo.TenantMember_SetSuspended", ("@TenantId", tenantId), ("@UserId", member), ("@IsSuspended", false));
+
+        Assert.True(await HasAccessAsync(member, tenantId, workspaceId));
+    }
+
     /// <summary>
     /// An inactive account cannot sign in, so it cannot be the administrator that "remains".
     /// The guard used to count it, which let the last active administrator be removed.
@@ -208,7 +268,27 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
     private async Task<(int TenantId, int OwnerId, int AdminRoleId)> CreateTenantAsync()
     {
         int ownerId = await CreateUserAsync();
+        int tenantId = await CreateTenantForAsync(ownerId);
+        int adminRoleId = await ScalarAsync<int>("SELECT Id FROM dbo.Roles WHERE TenantId = @p0 AND Name = 'Admin'", tenantId);
+        return (tenantId, ownerId, adminRoleId);
+    }
 
+    /// <summary>True only when every access check agrees the user can work in the workspace.</summary>
+    private async Task<bool> HasAccessAsync(int userId, int tenantId, int workspaceId)
+    {
+        bool verified = await ProcScalarAsync<int>("dbo.Permission_Verify",
+            ("@UserId", userId), ("@TenantId", tenantId), ("@WorkspaceId", workspaceId), ("@PermissionSlug", "users.manage")) == 1;
+        bool member = await ProcScalarAsync<bool>("dbo.WorkspaceMember_Verify", ("@UserId", userId), ("@WorkspaceId", workspaceId));
+        bool effective = await ProcScalarAsync<string>("dbo.Permission_EffectiveSet", ("@UserId", userId), ("@WorkspaceId", workspaceId)) is not null;
+        bool listed = await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.TenantMembers WHERE UserId = @p0 AND TenantId = @p1 AND IsSuspended = 0", userId, tenantId) == 1;
+
+        Assert.True(verified == member && member == effective && effective == listed,
+            $"access checks disagree: verify={verified}, member={member}, effective={effective}, listed={listed}");
+        return verified;
+    }
+
+    private async Task<int> CreateTenantForAsync(int ownerId)
+    {
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("dbo.Tenant_Create", conn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@Name", "guard-test");
@@ -218,10 +298,20 @@ public sealed class TenantAdministratorGuardTests(AuthSqlFixture fixture)
         cmd.Parameters.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         cmd.Parameters.Add("@TenantId", SqlDbType.Int).Direction = ParameterDirection.Output;
         await cmd.ExecuteNonQueryAsync();
+        return (int)cmd.Parameters["@TenantId"].Value;
+    }
 
-        int tenantId = (int)cmd.Parameters["@TenantId"].Value;
-        int adminRoleId = await ScalarAsync<int>("SELECT Id FROM dbo.Roles WHERE TenantId = @p0 AND Name = 'Admin'", tenantId);
-        return (tenantId, ownerId, adminRoleId);
+    private async Task<T?> ProcScalarAsync<T>(string procedure, params (string Name, object Value)[] parameters)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand(procedure, conn) { CommandType = CommandType.StoredProcedure };
+        foreach (var (name, value) in parameters)
+        {
+            cmd.Parameters.AddWithValue(name, value);
+        }
+
+        var result = await cmd.ExecuteScalarAsync();
+        return result is null or DBNull ? default : (T)result;
     }
 
     private async Task<int> AddMemberAsync(int tenantId, int? roleId)

@@ -14,7 +14,8 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// rejecting a malformed identifier with a 400 would say "that was the wrong shape" where every
 /// other failure says 401, and it would break the moment sign-in accepts a username too.
 ///
-/// AUTH_LOG_06 is the one place that property does not hold, and it is asserted as-is.
+/// The one exception is a disabled account (AUTH_USER_INACTIVE). Only an operator can disable an
+/// account now that tenant administrators suspend members instead, so it has no E2E path.
 ///
 /// Requires the auth host running. Skips gracefully when it is down.
 /// </summary>
@@ -134,30 +135,6 @@ public sealed class LoginTests(ServicesFixture fixture)
 
         // Never 200, and never a 500 that would prove the value reached the query unparameterised.
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [SkippableFact]
-    public async Task AUTH_LOG_06_InactiveAccount_IsDistinguishable()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var admin = await fixture.CreateUserAsync();
-        var tenantRef = await fixture.GetTenantRefAsync(admin.Token);
-
-        var member = await fixture.CreateUserInTenantAsync(admin.Token, tenantRef);
-        var memberRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, member.Email);
-        memberRef.Should().NotBeNull();
-
-        await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef!.Value, isActive: false);
-
-        var response = await fixture.LoginRawAsync(member.Email, member.Password);
-
-        // The one place the uniform-failure property does not hold: AUTH_USER_INACTIVE tells a
-        // caller the address exists and is merely disabled, where every other failure says only
-        // "invalid credentials". Asserted as-is so the leak is a recorded decision rather than an
-        // accident; closing it means collapsing this into AUTH_INVALID_CREDENTIALS.
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_USER_INACTIVE");
     }
 
     // ── Input bounds ──────────────────────────────────────────────────────────────────────

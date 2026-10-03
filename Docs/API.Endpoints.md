@@ -141,7 +141,7 @@ role or user belonging to another tenant reads as nonexistent.
 | `POST {tenantRef}/members/{userRef}/permissions` | `roles.manage` | Grants or denies a slug directly on the user. A user-level entry outranks anything role-derived. |
 | `DELETE {tenantRef}/members/{userRef}/permissions/{slug}` | `roles.manage` | **Deletes the override, does not deny it.** Denying would leave the override in place; deleting returns the decision to the user's roles. Without this an accidental grant could never be undone through the API. |
 | `DELETE {tenantRef}/members/{userRef}` | `users.manage` | Offboards a member: removes every assignment scoped to the tenant and transfers workspaces they owned to the caller. Refuses to remove the last administrator, and refuses self-removal (the transfer would have no recipient). |
-| `PUT {tenantRef}/members/{userRef}/active` | `users.manage` | Enables or disables the **account across every tenant it belongs to**, and revokes its refresh tokens. Not the same as removing them from this tenant. |
+| `PUT {tenantRef}/members/{userRef}/suspended` | `users.manage` | Body `{ "isSuspended": bool }`. Suspends the member **in this tenant only**: they keep their account, sessions and other tenants, and their assignments here, but hold nothing here until it is lifted. Refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and leaving the tenant without an administrator. |
 
 **Catalogue**
 

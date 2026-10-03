@@ -382,7 +382,7 @@ internal sealed class ManagementService : IManagementService
         });
     }
 
-    public async Task<Result> SetUserActiveAsync(int callerId, Guid tenantRef, Guid userRef, bool isActive, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> SetMemberSuspendedAsync(int callerId, Guid tenantRef, Guid userRef, bool isSuspended, string ipAddress, CancellationToken cancellationToken = default)
     {
         var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.UsersManage, cancellationToken);
         if (resolved.IsFailure)
@@ -391,24 +391,30 @@ internal sealed class ManagementService : IManagementService
         }
 
         var userId = resolved.Value.EntityId;
-        return await GuardAsync("SetUserActive", async () =>
+        var tenantId = resolved.Value.TenantId;
+
+        // Nobody could lift it: a suspended member holds no users.manage in the tenant.
+        if (isSuspended && userId == callerId)
         {
-            var user = await _provider.GetByIdAsync(userId, cancellationToken);
-            await _provider.SetUserActiveAsync(userId, isActive, resolved.Value.TenantId, cancellationToken);
+            return Result.Failure(Error.Validation("AUTH_CANNOT_SUSPEND_SELF", "You cannot suspend yourself."));
+        }
 
-            // Both halves: the refresh tokens so no new access token can be minted, and the access
-            // tokens already out there so the account stops working now rather than when they lapse.
-            if (!isActive)
+        return await GuardAsync("SetMemberSuspended", async () =>
+        {
+            await _provider.SetMemberSuspendedAsync(tenantId, userId, isSuspended, cancellationToken);
+
+            // Access is resolved per request, so the suspension takes effect on the member's next
+            // call without touching their tokens - which also still work in their other tenants.
+            await PublishUserPermissionsChangedAsync(userId, cancellationToken);
+
+            if (isSuspended)
             {
-                var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
-                await _accessTokens.RevokeUserAsync(userId, cancellationToken);
-                _logger.LogInformation("Deactivated user ID {UserId} and revoked {RevokedCount} refresh token(s)", userId, revoked);
-
+                _logger.LogInformation("Suspended user ID {UserId} in tenant ID {TenantId}", userId, tenantId);
                 await _eventBus.PublishAsync(new SecurityAlertEvent(
-                    "UserDeactivated",
-                    $"User ID {userId} ({user.Username}) was deactivated and all sessions revoked.",
+                    "MemberSuspended",
+                    $"User ID {userId} was suspended in tenant ID {tenantId} by user ID {callerId}.",
                     ipAddress,
-                    $"UserId: {userId}"), cancellationToken);
+                    $"UserId: {userId}, TenantId: {tenantId}"), cancellationToken);
             }
         });
     }

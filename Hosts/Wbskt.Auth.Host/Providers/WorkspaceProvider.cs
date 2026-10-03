@@ -75,7 +75,8 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
                 r.GetGuid(r.GetOrdinal("RefId")),
                 r.GetString(r.GetOrdinal("Username")),
                 r.GetString(r.GetOrdinal("Email")),
-                r.GetBoolean(r.GetOrdinal("IsActive"))
+                r.GetBoolean(r.GetOrdinal("IsActive")),
+                r.GetBoolean(r.GetOrdinal("IsSuspended"))
             ),
             cancellationToken
         );

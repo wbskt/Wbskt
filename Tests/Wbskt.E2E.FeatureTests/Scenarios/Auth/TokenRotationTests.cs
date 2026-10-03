@@ -311,35 +311,6 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_RT_13_Refresh_AfterDeactivation_Returns401()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (adminToken, _) = await fixture.LoginAsAdminAsync();
-        var tenantRef = await fixture.GetTenantRefAsync(adminToken);
-
-        // Invited into the admin's tenant: registration alone would put them in a tenant of their
-        // own, where the admin holds nothing and cannot deactivate them.
-        var user = await fixture.CreateUserInTenantAsync(adminToken, tenantRef);
-        var session = await fixture.LoginAsync(user.Email, user.Password);
-
-        var userRef = await fixture.FindTenantMemberRefAsync(adminToken, tenantRef, user.Email);
-        userRef.Should().NotBeNull();
-
-        var deactivate = await fixture.SetUserActiveAsync(adminToken, tenantRef, userRef!.Value, isActive: false);
-        deactivate.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        var response = await fixture.RefreshAsync(session.RefreshToken);
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-
-        // AUTH_TOKEN_INACTIVE, not AUTH_USER_INACTIVE: deactivation revokes every refresh token
-        // first, so the rotation path trips on the revoked token and never reaches the IsActive
-        // check. The user-inactive branch is effectively unreachable on this path — a token issued
-        // after deactivation cannot exist, because login is already refused.
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_TOKEN_INACTIVE");
-    }
-
-    [SkippableFact]
     public async Task AUTH_RT_14_Refresh_ExpiredToken_Returns401()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");

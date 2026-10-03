@@ -719,112 +719,32 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    // ── Activation ────────────────────────────────────────────────────────────────────────
+    // ── Suspension ────────────────────────────────────────────────────────────────────────
 
     [SkippableFact]
-    public async Task MEM_31_Deactivation_BlocksLogin()
+    public async Task MEM_31_Suspension_ClosesThatTenantsWorkspaces()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var (admin, tenantRef) = await ArrangeAsync();
-        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+        var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
 
-        (await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: false)).StatusCode
+        (await fixture.ResolveWorkspaceAsync(member.Token, workspaceRef)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "the member can reach the workspace before the suspension");
+
+        (await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, memberRef, isSuspended: true)).StatusCode
             .Should().Be(HttpStatusCode.NoContent);
 
-        var login = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/auth/login"),
-            body: new { Email = member.Email, Password = member.Password });
-
-        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await ServicesFixture.ReadErrorCodeAsync(login)).Should().Be("AUTH_USER_INACTIVE");
+        // Access is resolved per request, so the token the member already holds is refused here
+        // straight away without being revoked.
+        (await fixture.ResolveWorkspaceAsync(member.Token, workspaceRef)).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
+        (await fixture.GetWorkspaceRefsAsync(member.Token)).Should().NotContain(workspaceRef);
+        (await fixture.GetTenantsAsync(member.Token)).Select(t => t.RefId).Should().NotContain(tenantRef);
     }
 
     [SkippableFact]
-    public async Task MEM_32_Deactivation_RevokesEveryRefreshToken()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (admin, tenantRef) = await ArrangeAsync();
-        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
-
-        // Two live sessions, both issued before the account is disabled.
-        var first = await fixture.LoginAsync(member.Email, member.Password);
-        var second = await fixture.LoginAsync(member.Email, member.Password);
-
-        await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: false);
-
-        // Blocking the next login is not enough on its own: a refresh token outlives the access
-        // token that came with it, so an un-revoked one would keep minting credentials for a
-        // disabled account.
-        (await fixture.RefreshAsync(first.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await fixture.RefreshAsync(second.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [SkippableFact]
-    public async Task MEM_33_Reactivation_RestoresLogin()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (admin, tenantRef) = await ArrangeAsync();
-        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
-
-        await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: false);
-        (await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: true)).StatusCode
-            .Should().Be(HttpStatusCode.NoContent);
-
-        var session = await fixture.LoginAsync(member.Email, member.Password);
-
-        session.AccessToken.Should().NotBeNullOrWhiteSpace();
-    }
-
-    [SkippableFact]
-    public async Task MEM_34_DeactivationIsVisibleInTheMemberList()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (admin, tenantRef) = await ArrangeAsync();
-        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
-
-        await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: false);
-
-        var body = await (await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?search={Uri.EscapeDataString(member.Email)}"),
-            admin.Token)).Content.ReadAsStringAsync();
-
-        body.Should().Contain("\"isActive\":false");
-    }
-
-    [SkippableFact]
-    public async Task MEM_35_DeactivateWithoutUsersManage_Returns403()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (admin, tenantRef) = await ArrangeAsync();
-        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
-
-        var response = await fixture.SetUserActiveAsync(member.Token, tenantRef, memberRef, isActive: false);
-
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-    }
-
-    [SkippableFact]
-    public async Task MEM_36_DeactivatingAnUnknownUserRef_Returns403()
-    {
-        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-
-        var (admin, tenantRef) = await ArrangeAsync();
-
-        var response = await fixture.SetUserActiveAsync(admin.Token, tenantRef, Guid.NewGuid(), isActive: false);
-
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
-    }
-
-    [SkippableFact]
-    public async Task MEM_37_DeactivationSpansEveryTenantTheAccountBelongsTo()
+    public async Task MEM_32_Suspension_LeavesTheAccountAndItsOtherTenantsAlone()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -834,22 +754,79 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         // The invited member also administers the tenant registration gave them, so they are in two.
         var tenants = await fixture.GetTenantsAsync(member.Token);
         tenants.Should().HaveCountGreaterThan(1, "an invited member keeps the tenant registration gave them");
+        var session = await fixture.LoginAsync(member.Email, member.Password);
 
-        await fixture.SetUserActiveAsync(admin.Token, tenantRef, memberRef, isActive: false);
+        await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, memberRef, isSuspended: true);
 
-        // Deactivation disables the *account*, not the membership — so an administrator of one
-        // tenant locks the person out of their own tenant too. A wider blast radius than
-        // "remove them from my tenant", and worth being deliberate about rather than discovering.
-        var login = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/auth/login"),
-            body: new { Email = member.Email, Password = member.Password });
-
-        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // An administrator of one tenant controls access to that tenant only: the person can still
+        // sign in, refresh, and use everything they hold elsewhere.
+        (await fixture.LoginRawAsync(member.Email, member.Password)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.RefreshAsync(session.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.GetTenantsAsync(member.Token)).Should().HaveCount(tenants.Count - 1);
     }
 
     [SkippableFact]
-    public async Task MEM_37b_TheOnlyAdministratorCannotDeactivateThemselves()
+    public async Task MEM_33_LiftingTheSuspension_RestoresAccess()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
+
+        await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, memberRef, isSuspended: true);
+        (await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, memberRef, isSuspended: false)).StatusCode
+            .Should().Be(HttpStatusCode.NoContent);
+
+        (await fixture.ResolveWorkspaceAsync(member.Token, workspaceRef)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.GetTenantsAsync(member.Token)).Select(t => t.RefId).Should().Contain(tenantRef);
+    }
+
+    [SkippableFact]
+    public async Task MEM_34_SuspensionIsVisibleInTheMemberList()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+
+        await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, memberRef, isSuspended: true);
+
+        var body = await (await fixture.SendAsync(
+            HttpMethod.Get,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?search={Uri.EscapeDataString(member.Email)}"),
+            admin.Token)).Content.ReadAsStringAsync();
+
+        body.Should().Contain("\"isSuspended\":true").And.Contain("\"isActive\":true");
+    }
+
+    [SkippableFact]
+    public async Task MEM_35_SuspendWithoutUsersManage_Returns403()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+
+        var response = await fixture.SetMemberSuspendedAsync(member.Token, tenantRef, memberRef, isSuspended: true);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [SkippableFact]
+    public async Task MEM_36_SuspendingAnUnknownUserRef_Returns403()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (admin, tenantRef) = await ArrangeAsync();
+
+        var response = await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, Guid.NewGuid(), isSuspended: true);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
+    }
+
+    [SkippableFact]
+    public async Task MEM_37_AnAdministratorCannotSuspendThemselves()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -857,18 +834,30 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var adminRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, admin.Email);
         adminRef.Should().NotBeNull();
 
-        // This is the tenant's only administrator. Deactivating them would leave nobody holding
-        // users.manage to turn the account back on, so the last-administrator guard refuses it.
-        var response = await fixture.SetUserActiveAsync(admin.Token, tenantRef, adminRef!.Value, isActive: false);
+        // A suspended member holds nothing in the tenant, so nobody could lift a self-suspension.
+        var response = await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, adminRef!.Value, isSuspended: true);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_CANNOT_SUSPEND_SELF");
+        (await fixture.GetTenantsAsync(admin.Token)).Select(t => t.RefId).Should().Contain(tenantRef);
+    }
 
-        var login = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/auth/login"),
-            body: new { Email = admin.Email, Password = admin.Password });
+    [SkippableFact]
+    public async Task MEM_37b_TheAccountDeactivationRouteIsGone()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        var (admin, tenantRef) = await ArrangeAsync();
+        var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
+
+        // A tenant administrator used to be able to disable the whole account, locking the person
+        // out of tenants that administrator had no say over. Suspension replaced it.
+        var response = await fixture.SendAsync(
+            HttpMethod.Put,
+            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/active"),
+            admin.Token,
+            new { IsActive = false });
+
+        response.IsSuccessStatusCode.Should().BeFalse();
     }
 }

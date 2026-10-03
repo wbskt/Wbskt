@@ -116,36 +116,45 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AUTH_TK_10_AccessTokenOfDeactivatedUser_IsRefusedOnEveryHost()
+    public async Task AUTH_TK_10_SuspendedMember_IsRefusedInThatTenantOnEveryHost()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
 
-        // Invited into the admin's tenant: registration alone would put them in a tenant of their
-        // own, where the admin holds nothing and cannot deactivate them.
+        // Invited into the admin's tenant and one of its workspaces; registration also gave them a
+        // tenant and workspace of their own, which the suspension must not touch.
         var user = await fixture.CreateUserInTenantAsync(adminToken, tenantRef);
         var userRef = await fixture.FindTenantMemberRefAsync(adminToken, tenantRef, user.Email);
         userRef.Should().NotBeNull();
-
-        // The management host validates the same token independently, so it is the one that proves
-        // the revocation travelled rather than being remembered by the host that recorded it.
         var ownWorkspace = (await fixture.GetWorkspaceRefsAsync(user.Token)).First();
-        var managementEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{ownWorkspace}/registration-policies");
-        (await fixture.SendAsync(HttpMethod.Get, managementEndpoint, user.Token)).StatusCode
-            .Should().Be(HttpStatusCode.OK, "the token works before the account is deactivated");
+        var sharedWorkspace = await fixture.CreateWorkspaceAsync(adminToken);
+        (await fixture.SendAsync(
+            HttpMethod.Post,
+            ServicesFixture.AuthUrl($"/api/workspaces/{sharedWorkspace}/members"),
+            adminToken,
+            new { Email = user.Email })).IsSuccessStatusCode.Should().BeTrue();
 
-        // iat has second resolution and a token from the revocation's own second is let through
-        // (see AccessTokenRevocation), so the token must be at least a second old to be revoked.
-        await Task.Delay(TimeSpan.FromSeconds(1.1));
-        await fixture.SetUserActiveAsync(adminToken, tenantRef, userRef!.Value, isActive: false);
+        var sharedEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{sharedWorkspace}/registration-policies");
+        var ownEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{ownWorkspace}/registration-policies");
+        // The member holds no permissions there, so this may be a permission refusal, but never a
+        // workspace one: the management host resolves the membership first.
+        (await ServicesFixture.ReadErrorCodeAsync(await fixture.SendAsync(HttpMethod.Get, sharedEndpoint, user.Token)))
+            .Should().NotBe("WORKSPACE_FORBIDDEN", "the member reaches the shared workspace before the suspension");
 
-        (await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, user.Token)).StatusCode
-            .Should().Be(HttpStatusCode.Unauthorized,
-                "deactivation revokes the access tokens already issued, not just the refresh tokens");
-        (await EventuallyAsync(() => fixture.SendAsync(HttpMethod.Get, managementEndpoint, user.Token), HttpStatusCode.Unauthorized))
-            .Should().Be(HttpStatusCode.Unauthorized, "the revocation reaches the management host through Redis");
+        (await fixture.SetMemberSuspendedAsync(adminToken, tenantRef, userRef!.Value, isSuspended: true)).StatusCode
+            .Should().Be(HttpStatusCode.NoContent);
+
+        // The management host asks the auth host on every request, so the same token is refused in
+        // the suspended tenant at once and keeps working in the member's own.
+        (await fixture.ResolveWorkspaceAsync(user.Token, sharedWorkspace)).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
+        var shared = await fixture.SendAsync(HttpMethod.Get, sharedEndpoint, user.Token);
+        shared.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ServicesFixture.ReadErrorCodeAsync(shared)).Should().Be("WORKSPACE_FORBIDDEN");
+        (await fixture.SendAsync(HttpMethod.Get, ownEndpoint, user.Token)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "suspension in one tenant leaves the token valid everywhere else");
     }
 
     /// <summary>

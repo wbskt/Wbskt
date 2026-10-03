@@ -159,13 +159,13 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         }
     }
 
-    public async Task SetUserActiveAsync(int userId, bool isActive, int tenantId, CancellationToken cancellationToken = default)
+    public async Task SetMemberSuspendedAsync(int tenantId, int userId, bool isSuspended, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.User_SetActive", p =>
+        await ExecuteNonQueryAsync("dbo.TenantMember_SetSuspended", p =>
         {
-            p.AddWithValue("@Id", userId);
-            p.AddWithValue("@IsActive", isActive);
             p.AddWithValue("@TenantId", tenantId);
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@IsSuspended", isSuspended);
         }, cancellationToken);
     }
 
@@ -712,7 +712,8 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             reader.GetGuid(reader.GetOrdinal("RefId")),
             reader.GetString(reader.GetOrdinal("Username")),
             reader.GetString(reader.GetOrdinal("Email")),
-            reader.GetBoolean(reader.GetOrdinal("IsActive"))
+            reader.GetBoolean(reader.GetOrdinal("IsActive")),
+            reader.GetBoolean(reader.GetOrdinal("IsSuspended"))
         );
     }
 

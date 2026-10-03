@@ -13,6 +13,9 @@ BEGIN
         W.CreatedAt
     FROM dbo.Workspaces W
     INNER JOIN dbo.WorkspaceMembers WM ON W.Id = WM.WorkspaceId
-    WHERE WM.UserId = @UserId;
+    WHERE WM.UserId = @UserId
+      AND NOT EXISTS (
+          SELECT 1 FROM dbo.TenantMembers TM
+          WHERE TM.TenantId = W.TenantId AND TM.UserId = @UserId AND TM.IsSuspended = 1);
 END
 GO
