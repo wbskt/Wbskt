@@ -18,7 +18,7 @@ public sealed class ClientConnectedConsumerTests
         var context = new Mock<ConsumeContext<ClientConnectedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientConnectedConsumer(hub.Object);
+        var consumer = new ClientConnectedConsumer(hub.Object, new ClientPresenceParker(new RecordingPresenceCheckProvider()));
 
         await consumer.Consume(context.Object);
 
@@ -43,7 +43,7 @@ public sealed class ClientConnectedConsumerTests
         var context = new Mock<ConsumeContext<ClientConnectedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientConnectedConsumer(hub.Object);
+        var consumer = new ClientConnectedConsumer(hub.Object, new ClientPresenceParker(new RecordingPresenceCheckProvider()));
 
         await consumer.Consume(context.Object);
 

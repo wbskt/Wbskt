@@ -106,4 +106,45 @@ public class TriggerNodeTests
         var manual = Assert.IsType<ManualTriggerNode>(node);
         Assert.Equal("Start manually", manual.Config.Description);
     }
+
+    [Fact]
+    public void ClientPresenceTriggerNode_deserialises_from_json_with_an_offline_default()
+    {
+        var json = """
+            {
+                "nodeId": "11111111-1111-1111-1111-111111111111",
+                "kind": "trigger:clientPresence",
+                "name": "Freezer offline",
+                "ports": [{ "portId": "default", "direction": "Output", "label": "Out" }],
+                "config": { "clientRef": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "forSeconds": 300 }
+            }
+            """;
+
+        var node = JsonSerializer.Deserialize<BaseNode>(json, Options);
+
+        var trigger = Assert.IsType<ClientPresenceTriggerNode>(node);
+        Assert.Equal(NodeKind.TriggerClientPresence, trigger.Kind);
+        Assert.Equal(ClientPresenceState.Offline, trigger.Config.State);
+        Assert.Equal(300, trigger.Config.ForSeconds);
+        Assert.Equal(WorkflowConcurrencyPolicy.Queue, trigger.Config.ConcurrencyPolicy);
+    }
+
+    [Fact]
+    public void ClientPresenceTriggerNode_reads_the_online_state()
+    {
+        var json = """
+            {
+                "nodeId": "11111111-1111-1111-1111-111111111111",
+                "kind": "trigger:clientPresence",
+                "name": "Back online",
+                "ports": [],
+                "config": { "clientRef": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "state": "Online" }
+            }
+            """;
+
+        var trigger = Assert.IsType<ClientPresenceTriggerNode>(JsonSerializer.Deserialize<BaseNode>(json, Options));
+
+        Assert.Equal(ClientPresenceState.Online, trigger.Config.State);
+        Assert.Equal(60, trigger.Config.ForSeconds);
+    }
 }

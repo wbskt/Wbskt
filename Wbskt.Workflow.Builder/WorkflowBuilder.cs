@@ -90,6 +90,19 @@ public sealed class WorkflowBuilder
         return this;
     }
 
+    public WorkflowBuilder AddClientPresenceTrigger(string clientRef, ClientPresenceState state, int forSeconds, out Guid nodeId, string? name = null)
+    {
+        var id = Guid.NewGuid();
+        nodeId = id;
+        _nodes.Add(new ClientPresenceTriggerNode {
+            NodeId = id,
+            Name = name ?? "Device Presence Trigger",
+            Ports = [new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
+            Config = new ClientPresenceTriggerConfig { ClientRef = clientRef, State = state, ForSeconds = forSeconds } });
+        _head = (id, PortNames.Default);
+        return this;
+    }
+
     public WorkflowBuilder AddClientTrigger(string clientRef, string type, WorkflowConcurrencyPolicy concurrencyPolicy, out Guid nodeId)
     {
         return AddClientTrigger(clientRef, type, concurrencyPolicy, null, out nodeId);

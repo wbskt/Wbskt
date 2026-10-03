@@ -1,13 +1,14 @@
 using System.Text.Json;
 using MassTransit;
 using Wbskt.Events.Client;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
-public sealed class ClientConnectedConsumer(IInboundHub hub) : IConsumer<ClientConnectedEvent>
+public sealed class ClientConnectedConsumer(IInboundHub hub, ClientPresenceParker parker) : IConsumer<ClientConnectedEvent>
 {
-    public Task Consume(ConsumeContext<ClientConnectedEvent> context)
+    public async Task Consume(ConsumeContext<ClientConnectedEvent> context)
     {
         ClientConnectedEvent evt = context.Message;
         InboundEvent inboundEvent = new(
@@ -22,6 +23,7 @@ public sealed class ClientConnectedConsumer(IInboundHub hub) : IConsumer<ClientC
             },
             default);
 
-        return hub.HandleAsync(inboundEvent, context.CancellationToken);
+        await hub.HandleAsync(inboundEvent, context.CancellationToken);
+        await parker.ParkAsync(evt.ClientRefId, evt.WorkspaceId, ClientPresenceState.Online, evt.CreatedAtUtc, context.CancellationToken);
     }
 }

@@ -86,9 +86,15 @@ public static class Program
             app.MapCustomScalarApiReference();
         }
 
+        // The server pings every interval and drops a connection that has not answered within the
+        // timeout. Without the timeout, a device that loses power or Wi-Fi leaves a half-open socket
+        // that keeps it "online" (and its offline triggers silent) until TCP itself gives up, which
+        // can take many minutes. Client libraries answer pings on their own; a client that cannot
+        // can be accommodated by raising the timeout, or setting it to 0 to turn the check off.
         app.UseWebSockets(new WebSocketOptions
         {
-            KeepAliveInterval = TimeSpan.FromMinutes(2)
+            KeepAliveInterval = TimeSpan.FromSeconds(app.Configuration.GetValue("WebSockets:KeepAliveIntervalSeconds", 30)),
+            KeepAliveTimeout = TimeSpan.FromSeconds(app.Configuration.GetValue("WebSockets:KeepAliveTimeoutSeconds", 30))
         });
 
         // Custom WebSocket Authentication Middleware

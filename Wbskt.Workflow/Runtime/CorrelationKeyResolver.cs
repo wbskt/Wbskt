@@ -10,6 +10,7 @@ internal sealed class CorrelationKeyResolver : ICorrelationKeyResolver
         return evt.ChannelKind switch
         {
             "client" => $"client:{GetRequiredString(evt, "clientRefId")}:{GetRequiredString(evt, "messageType")}",
+            "presence" => $"presence:{GetRequiredString(evt, "clientRefId")}:{GetRequiredString(evt, "state")}",
             "schedule" => $"schedule:{GetRequiredString(evt, "scheduledFireId")}",
             "webhook" => $"webhook:{GetRequiredString(evt, "workspaceRefId")}:{GetRequiredString(evt, "webhookPath")}",
             "manual" => $"manual:{GetRequiredString(evt, "workflowDefinitionRefId")}",

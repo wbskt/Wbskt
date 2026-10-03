@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
+using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -45,6 +46,7 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
             TriggerRegistrationRow? registration = node switch
             {
                 ClientTriggerNode clientTrigger => CreateRegistration(definitionRow, clientTrigger.NodeId, "client", $"client:{clientTrigger.Config.ClientRef}:{clientTrigger.Config.Type}", clientTrigger.Config.ConcurrencyPolicy.ToString(), clientTrigger.Config.CorrelationKey, clientTrigger.Config.Filter),
+                ClientPresenceTriggerNode presenceTrigger => CreatePresenceRegistration(definitionRow, presenceTrigger),
                 // Webhook keys are workspace-scoped so an author-chosen path is unique per workspace
                 // and the anonymous public callback for one workspace can never fire another's trigger.
                 WebhookTriggerNode webhookTrigger => CreateRegistration(definitionRow, webhookTrigger.NodeId, "webhook", $"webhook:{workspaceRef}:{webhookTrigger.Config.Path}", webhookTrigger.Config.ConcurrencyPolicy.ToString(), webhookTrigger.Config.CorrelationKey, webhookTrigger.Config.Filter, webhookTrigger.Config.Secret),
@@ -75,6 +77,13 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
         ScheduledFireRow scheduledFire = await _scheduledFireProvider.InsertAsync(scheduleTrigger.NodeId, definitionRow.Id, definitionRow.RefId, scheduleTrigger.Config.Cron, nextFireAt, ct);
 
         return CreateRegistration(definitionRow, scheduleTrigger.NodeId, "schedule", $"schedule:{scheduledFire.Id}", WorkflowConcurrencyPolicy.AllowParallel.ToString(), null);
+    }
+
+    private static TriggerRegistrationRow CreatePresenceRegistration(WorkflowDefinitionRow definitionRow, ClientPresenceTriggerNode presenceTrigger)
+    {
+        ClientPresenceTriggerConfig config = presenceTrigger.Config;
+        string triggerKey = ClientPresenceTriggerKey.Build(Guid.Parse(config.ClientRef), config.State, config.ForSeconds, definitionRow.RefId, presenceTrigger.NodeId);
+        return CreateRegistration(definitionRow, presenceTrigger.NodeId, ClientPresenceTriggerKey.TriggerKind, triggerKey, config.ConcurrencyPolicy.ToString(), config.CorrelationKey);
     }
 
     private static TriggerRegistrationRow CreateRegistration(
