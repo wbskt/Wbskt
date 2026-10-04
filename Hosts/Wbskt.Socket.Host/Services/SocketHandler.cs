@@ -253,7 +253,16 @@ internal sealed class SocketHandler : ISocketHandler
             case "sys.ack":
                 if (TryGetCommandId(message.Payload, out var commandId))
                 {
-                    await _eventBus.PublishAsync(new ClientCommandAckedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, commandId), cancellationToken);
+                    // An SDK that refuses a command (it arrived past its expiresAt) still answers, so
+                    // the sender sees a failure instead of a command that was delivered and never acted on.
+                    if (CommandRefusal.TryRead(message.Payload, out var refusedType, out var reason))
+                    {
+                        await _eventBus.PublishAsync(new ClientCommandFailedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, refusedType, reason, commandId), cancellationToken);
+                    }
+                    else
+                    {
+                        await _eventBus.PublishAsync(new ClientCommandAckedEvent(clientRefId, connection.ClientId, connection.WorkspaceId, commandId), cancellationToken);
+                    }
                 }
                 else
                 {

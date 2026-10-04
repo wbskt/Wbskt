@@ -7,6 +7,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Controllers;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives;
@@ -28,6 +29,7 @@ public sealed class ClientsControllerScopingTests
     private static readonly Guid WorkspaceRef = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
+    private const string HostId = "socket-a";
     private static readonly Error Foreign = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client not found in this workspace.");
 
     private static (ClientsController Controller, Mock<IClientService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController(PermissionSlug permission)
@@ -58,6 +60,13 @@ public sealed class ClientsControllerScopingTests
         return (controller, clientService, bus, eventLogService);
     }
 
+    private static void SetupTarget(Mock<IClientService> clientService, Result<ClientCommandTarget> outcome)
+    {
+        clientService
+            .Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outcome);
+    }
+
     private static void SetupOwnership(Mock<IClientService> clientService, Result<int> outcome)
     {
         clientService
@@ -69,7 +78,7 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_does_not_publish_for_a_client_in_another_workspace()
     {
         var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
-        SetupOwnership(clientService, Result<int>.Failure(Foreign));
+        SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Foreign));
 
         var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
@@ -82,14 +91,59 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_publishes_with_the_resolved_client_id_when_owned()
     {
         var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
-        SetupOwnership(clientService, Result<int>.Success(ClientId));
+        SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
 
         var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
         Assert.IsType<AcceptedResult>(result);
         bus.Verify(x => x.PublishAsync(
-            It.Is<ClientCommandEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == ClientId && e.WorkspaceId == WorkspaceId),
+            It.Is<ClientCommandEvent>(e => e.ClientRefId == ClientRefId && e.ClientId == ClientId && e.WorkspaceId == WorkspaceId
+                && e.TargetHostId == HostId && e.ExpiresAtUtc == null),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendCommand_to_an_offline_device_is_a_409_and_publishes_nothing()
+    {
+        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Error.Conflict("DEVICE_OFFLINE", "offline")));
+
+        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+
+        var objectResult = Assert.IsType<ConflictObjectResult>(result);
+        objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("DEVICE_OFFLINE");
+        bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendCommand_carries_expiresAt_to_the_socket_host()
+    {
+        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(2);
+
+        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}", expiresAt), CancellationToken.None);
+
+        Assert.IsType<AcceptedResult>(result);
+        bus.Verify(x => x.PublishAsync(
+            It.Is<ClientCommandEvent>(e => e.ExpiresAtUtc == expiresAt.UtcDateTime),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(25 * 60)]
+    public async Task SendCommand_rejects_an_expiresAt_in_the_past_or_over_a_day_away(int minutesAhead)
+    {
+        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
+
+        var request = new ClientCommandRequest("reboot", "{}", DateTimeOffset.UtcNow.AddMinutes(minutesAhead));
+        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, request, CancellationToken.None);
+
+        var objectResult = Assert.IsType<BadRequestObjectResult>(result);
+        objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("COMMAND_EXPIRY_INVALID");
+        bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -303,6 +303,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             LastActivityAt = reader.IsDBNull(reader.GetOrdinal("LastActivityAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastActivityAt")),
             LastRttMs = reader.IsDBNull(reader.GetOrdinal("LastRttMs")) ? null : reader.GetInt32(reader.GetOrdinal("LastRttMs")),
             RttMeasuredAt = reader.IsDBNull(reader.GetOrdinal("RttMeasuredAt")) ? null : reader.GetDateTime(reader.GetOrdinal("RttMeasuredAt")),
+            ConnectedHostId = reader.IsDBNull(reader.GetOrdinal("ConnectedHostId")) ? null : reader.GetString(reader.GetOrdinal("ConnectedHostId")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             AgentName = reader.IsDBNull(reader.GetOrdinal("AgentName")) ? null : reader.GetString(reader.GetOrdinal("AgentName")),
             AgentVersion = reader.IsDBNull(reader.GetOrdinal("AgentVersion")) ? null : reader.GetString(reader.GetOrdinal("AgentVersion")),
