@@ -65,8 +65,14 @@ public record ChangePasswordRequest(
     [StringLength(128, MinimumLength = 12, ErrorMessage = "Password must be at least 12 characters.")]
     string NewPassword);
 
-/// <summary>One live sign-in session. <c>Id</c> is what <c>DELETE /api/auth/sessions/{id}</c> takes.</summary>
-public record SessionResponse(int Id, DateTime CreatedAt, DateTime ExpiresAt, string? CreatedByIp);
+/// <summary>
+/// One live sign-in session. <c>Id</c> is what <c>DELETE /api/auth/sessions/{id}</c> takes, and stays
+/// the same for the life of the session. <c>CreatedAt</c> is the sign-in, <c>LastUsedAt</c> the most
+/// recent refresh and <c>IpAddress</c> where that came from. <c>ExpiresAt</c> is when it ends if not
+/// used again, never later than the session's absolute lifetime. <c>IsCurrent</c> marks the session
+/// the request was made from.
+/// </summary>
+public record SessionResponse(Guid Id, DateTime CreatedAt, DateTime LastUsedAt, DateTime ExpiresAt, string? IpAddress, bool IsCurrent = false);
 
 public record VerifyEmailRequest(
     [Required]

@@ -2943,9 +2943,9 @@ const accountView = {
         const box = $('acc-sessions');
         try {
             const items = await http.get('auth', '/api/auth/sessions') || [];
-            box.innerHTML = items.length ? `<div style="overflow-x:auto;"><table><thead><tr><th>Id</th><th>Created</th><th>Expires</th><th>IP</th><th></th></tr></thead><tbody>${items.map(s => `
-                <tr><td class="mono small">${s.id}</td><td class="small">${esc(fmtTime(s.createdAt))}</td><td class="small dim">${esc(fmtTime(s.expiresAt))}</td><td class="mono small">${esc(s.createdByIp || '-')}</td>
-                <td class="actions"><button class="btn sm danger" onclick="accountView.revoke(${s.id})">Revoke</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No active sessions.</div>';
+            box.innerHTML = items.length ? `<div style="overflow-x:auto;"><table><thead><tr><th>Id</th><th>Signed in</th><th>Last used</th><th>Expires</th><th>IP</th><th></th></tr></thead><tbody>${items.map(s => `
+                <tr><td class="mono small">${esc(s.id.slice(0, 8))}${s.isCurrent ? ' <span class="badge">this session</span>' : ''}</td><td class="small">${esc(fmtTime(s.createdAt))}</td><td class="small">${esc(fmtTime(s.lastUsedAt))}</td><td class="small dim">${esc(fmtTime(s.expiresAt))}</td><td class="mono small">${esc(s.ipAddress || '-')}</td>
+                <td class="actions"><button class="btn sm danger" onclick="accountView.revoke('${esc(s.id)}')">Revoke</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No active sessions.</div>';
         } catch (e) {
             box.innerHTML = `<div class="small" style="color:var(--danger)">${esc(e.message)}</div>`;
         }

@@ -26,11 +26,14 @@ public interface IAuthService
     /// </summary>
     Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default);
 
-    /// <summary>The user's live sessions, newest first.</summary>
-    Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, CancellationToken cancellationToken = default);
+    /// <summary>The user's live sessions, newest first, with <paramref name="currentSessionId"/> marked as current.</summary>
+    Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, Guid? currentSessionId, CancellationToken cancellationToken = default);
 
-    /// <summary>Ends one of the user's own sessions. NotFound when it is not a live session of theirs.</summary>
-    Task<Result> RevokeSessionAsync(int userId, int sessionId, string ipAddress, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Ends one of the user's own sessions, its access token included. NotFound when it is not a live
+    /// session of theirs.
+    /// </summary>
+    Task<Result> RevokeSessionAsync(int userId, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Issues a password-reset link if the address has a usable account. Succeeds either way — whether

@@ -1,9 +1,11 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Auth.Host.Controllers;
 
@@ -80,8 +82,9 @@ public class AuthController : ApiControllerBase
     }
 
     /// <summary>
-    /// Revokes the supplied refresh token, ending that session. Succeeds regardless of whether the
-    /// token was live, so it cannot be used to probe which tokens exist.
+    /// Revokes the supplied refresh token, ending that session and the access token issued with it.
+    /// Succeeds regardless of whether the token was live, so it cannot be used to probe which tokens
+    /// exist.
     /// </summary>
     /// <param name="request">The refresh token to revoke.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -157,17 +160,18 @@ public class AuthController : ApiControllerBase
             return MapError(userIdResult.Error);
         }
 
-        var result = await _authService.GetSessionsAsync(userIdResult.Value, cancellationToken);
+        var result = await _authService.GetSessionsAsync(userIdResult.Value, CurrentSessionId(), cancellationToken);
         return MapResult(result);
     }
 
     /// <summary>
-    /// Ends one of the signed-in user's sessions: its refresh token stops working. An access token
-    /// already issued to that device stays valid until it expires, since it is not tied to a session.
+    /// Ends one of the signed-in user's sessions: its refresh token stops working, and so does the
+    /// access token that device holds, on every host. The id is a session's, from the list above,
+    /// and stays the same for the life of the session.
     /// </summary>
     [Authorize]
-    [HttpDelete("sessions/{id:int}")]
-    public async Task<IActionResult> RevokeSession(int id, CancellationToken cancellationToken)
+    [HttpDelete("sessions/{id:guid}")]
+    public async Task<IActionResult> RevokeSession(Guid id, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: RevokeSession requested for session {SessionId}", id);
 
@@ -182,6 +186,13 @@ public class AuthController : ApiControllerBase
     }
 
     private string CallerIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    // The default inbound claim map renames sid, so look under both names. Absent on tokens issued
+    // before sessions had ids.
+    private Guid? CurrentSessionId() =>
+        Guid.TryParse(User.FindFirst(JwtServiceCollectionExtensions.JwtSessionClaim)?.Value ?? User.FindFirst(ClaimTypes.Sid)?.Value, out var id)
+            ? id
+            : null;
 
     /// <summary>
     /// Requests a password-reset link.

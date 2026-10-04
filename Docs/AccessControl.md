@@ -279,7 +279,9 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
 
 ## Sessions and tokens
 
-- Access tokens last 60 minutes and are not revocable; refresh tokens last 7 days and are.
+- Access tokens last 15 minutes. A session (one sign-in, with an id that survives refreshes) lasts 7
+  days without use and 30 days from sign-in at most. Ending a session, logging out, logout-all and
+  password changes end the access tokens already issued too (see `API.Endpoints.md` §1.1).
 - Refresh is **rotating**: `POST /api/auth/refresh-token` issues a new pair and revokes the token
   presented, recording the replacement in `ReplacedByToken`.
 - Presenting an **already-revoked** token is treated as a leak: every refresh token for that user is

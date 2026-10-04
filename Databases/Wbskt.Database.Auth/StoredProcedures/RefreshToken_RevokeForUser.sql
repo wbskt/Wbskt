@@ -1,7 +1,7 @@
--- Ends one of a user's own sessions by id. Scoped to @UserId, so an id belonging to someone else
--- revokes nothing and reads exactly like one that does not exist.
+-- Ends one of a user's own sessions by session id. Scoped to @UserId, so a session belonging to
+-- someone else revokes nothing and reads exactly like one that does not exist.
 CREATE PROCEDURE dbo.RefreshToken_RevokeForUser
-    @Id          INT,
+    @SessionId   UNIQUEIDENTIFIER,
     @UserId      INT,
     @RevokedByIp NVARCHAR(50) = NULL
 AS
@@ -11,7 +11,7 @@ BEGIN
     UPDATE dbo.RefreshTokens
     SET Revoked = SYSUTCDATETIME(),
         RevokedByIp = @RevokedByIp
-    WHERE Id = @Id
+    WHERE SessionId = @SessionId
       AND UserId = @UserId
       AND Revoked IS NULL
       AND Expires > SYSUTCDATETIME();
