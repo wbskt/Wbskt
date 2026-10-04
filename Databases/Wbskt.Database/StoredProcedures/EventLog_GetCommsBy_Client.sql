@@ -1,12 +1,12 @@
 -- Live Comms backfill for the client detail page: the fixed set of in/out protocol events
 -- from the generic event log, so the UI has one stable contract regardless of event additions.
+-- Newest first, a page at a time from @CursorId, as dbo.EventLog_GetBy_Workspace.
 CREATE PROCEDURE dbo.EventLog_GetCommsBy_Client
     @WorkspaceId INT,
     @ClientId INT,
     @Direction NVARCHAR(10) = NULL, -- 'in' | 'out' | NULL for all (lifecycle rows only when all)
-    @Skip INT = 0,
-    @Take INT = 50,
-    @TotalCount INT OUTPUT
+    @CursorId BIGINT = NULL,
+    @Take INT = 50
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -31,14 +31,8 @@ BEGIN
         VALUES (N'ClientConnectedEvent'), (N'ClientDisconnectedEvent');
     END
 
-    SELECT @TotalCount = COUNT(*)
-    FROM dbo.EventLogs el
-    JOIN dbo.Events e ON el.EventId = e.Id
-    WHERE el.WorkspaceId = @WorkspaceId
-      AND el.ClientId = @ClientId
-      AND e.EventName IN (SELECT EventName FROM @Names);
-
-    SELECT
+    SELECT TOP (@Take)
+        el.Id,
         e.EventName,
         el.EventData,
         e.EventCriticality,
@@ -50,8 +44,8 @@ BEGIN
     JOIN dbo.Events e ON el.EventId = e.Id
     WHERE el.WorkspaceId = @WorkspaceId
       AND el.ClientId = @ClientId
+      AND (@CursorId IS NULL OR el.Id < @CursorId)
       AND e.EventName IN (SELECT EventName FROM @Names)
-    ORDER BY el.CreatedAt DESC
-    OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY;
+    ORDER BY el.Id DESC;
 END
 GO

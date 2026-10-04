@@ -1,27 +1,32 @@
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
-using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services;
 
 public interface IEventLogService
 {
-    Task<Result<IPagedList<EventLogResponse>>> GetLogsAsync(
+    /// <summary>
+    /// A page of the workspace's event log, newest first: the page after <paramref name="cursor"/>,
+    /// or the first when it is null. <paramref name="take"/> is clamped to 1..<see cref="Paging.MaxPageSize"/>.
+    /// </summary>
+    Task<Result<EventLogListResponse>> GetLogsAsync(
         int workspaceId,
         string? eventName,
         EventCriticality? criticality,
         int? policyId,
         int? clientId,
         int? workflowId,
-        int skip,
+        long? cursor,
         int take,
         CancellationToken cancellationToken = default);
-    Task<Result<IPagedList<EventLogResponse>>> GetClientCommsAsync(
+
+    /// <summary>A page of one client's comms entries, paged as <see cref="GetLogsAsync"/>.</summary>
+    Task<Result<EventLogListResponse>> GetClientCommsAsync(
         int workspaceId,
         int clientId,
         string? direction,
-        int skip,
+        long? cursor,
         int take,
         CancellationToken cancellationToken = default);
 }

@@ -59,7 +59,7 @@ public class RegistrationPoliciesController : ApiControllerBase
             return MapResult(Result<ListResponse<RegistrationPolicyResponse>>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _policyService.GetAllAsync(workspaceIdResult.Value, autoApproval, name, skip, take, cancellationToken);
+        var result = await _policyService.GetAllAsync(workspaceIdResult.Value, autoApproval, name, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<RegistrationPolicyResponse>>.Failure(result.Error));

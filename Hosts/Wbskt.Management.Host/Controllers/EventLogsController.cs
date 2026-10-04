@@ -44,18 +44,18 @@ public sealed class EventLogsController : ApiControllerBase
     /// <param name="criticality">Optional filter by criticality (Information, Warning, Critical).</param>
     /// <param name="policyRefId"></param>
     /// <param name="clientRefId"></param>
-    /// <param name="skip">Number of records to skip for pagination.</param>
-    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="cursor">The <c>nextCursor</c> of the previous page; omit for the newest entries.</param>
+    /// <param name="take">Page size, 1 to 200.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A paginated list of event logs.</returns>
+    /// <returns>A page of event logs, newest first, with the cursor for the next page.</returns>
     [HttpGet]
-    public async Task<ActionResult<ListResponse<EventLogResponse>>> GetLogs(
+    public async Task<ActionResult<EventLogListResponse>> GetLogs(
         Guid workspaceRef,
         [FromQuery] string? eventName,
         [FromQuery] EventCriticality? criticality,
         [FromQuery] Guid? policyRefId,
         [FromQuery] Guid? clientRefId,
-        [FromQuery] int skip = 0,
+        [FromQuery] long? cursor = null,
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
@@ -64,7 +64,7 @@ public sealed class EventLogsController : ApiControllerBase
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
-            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(workspaceIdResult.Error));
+            return MapResult(Result<EventLogListResponse>.Failure(workspaceIdResult.Error));
         }
 
         int? clientId = null;
@@ -88,20 +88,6 @@ public sealed class EventLogsController : ApiControllerBase
             }
         }
         
-        var result = await _eventLogService.GetLogsAsync(workspaceIdResult.Value, eventName, criticality, policyId, clientId, null, skip, take, cancellationToken);
-        if (result.IsFailure)
-        {
-            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(result.Error));
-        }
-
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-
-        return Ok(new ListResponse<EventLogResponse>
-        {
-            Items = result.Value
-        });
+        return MapResult(await _eventLogService.GetLogsAsync(workspaceIdResult.Value, eventName, criticality, policyId, clientId, null, cursor, take, cancellationToken));
     }
-
-
-
 }

@@ -49,6 +49,7 @@ public sealed class WorkflowHistoryController : ApiControllerBase
             return MapResult(Result<HistoryListResponse>.Failure(ensureRunResult.Error));
         }
 
+        top = Paging.Take(top);
         try
         {
             IReadOnlyCollection<HistoryEventRow> rows = await _historyProvider.GetByRunIdAsync(ensureRunResult.Value, fromEventId, top + 1, ct);

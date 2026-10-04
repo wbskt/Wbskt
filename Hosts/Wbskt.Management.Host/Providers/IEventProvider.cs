@@ -11,21 +11,25 @@ public interface IEventProvider
 
     /// <summary>Deletes up to <paramref name="batchSize"/> entries older than the cutoff; returns how many went.</summary>
     Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default);
-    Task<IPagedList<EventLogResponse>> GetLogsAsync(
+
+    /// <summary>Up to <paramref name="take"/> entries, newest first, older than <paramref name="cursorId"/> when given.</summary>
+    Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(
         int workspaceId,
         string? eventName,
         EventCriticality? criticality,
         int? policyId,
         int? clientId,
         int? workflowId,
-        int skip,
+        long? cursorId,
         int take,
         CancellationToken cancellationToken = default);
-    Task<IPagedList<EventLogResponse>> GetClientCommsAsync(
+
+    /// <summary>Up to <paramref name="take"/> comms entries, newest first, older than <paramref name="cursorId"/> when given.</summary>
+    Task<IReadOnlyCollection<EventLogRow>> GetClientCommsAsync(
         int workspaceId,
         int clientId,
         string? direction,
-        int skip,
+        long? cursorId,
         int take,
         CancellationToken cancellationToken = default);
 }

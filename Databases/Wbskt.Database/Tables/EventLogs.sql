@@ -35,13 +35,14 @@ GO
 CREATE INDEX IX_EventLogs_CreatedAt
     ON dbo.EventLogs (CreatedAt);
 GO
--- Both reads are "this workspace (or client), newest first": the key order serves the ORDER BY so a
--- page does not sort the whole history, and EventId covers the join to dbo.Events for the filters.
-CREATE INDEX IX_EventLogs_WorkspaceId_CreatedAt
-    ON dbo.EventLogs (WorkspaceId, CreatedAt DESC) INCLUDE (EventId);
+-- Both reads are "this workspace (or client), newest first", a page at a time from a cursor (the Id
+-- of the last row the caller has). Keyed on Id so a page is a seek past the cursor rather than an
+-- OFFSET over everything before it; EventId covers the join to dbo.Events for the filters.
+CREATE INDEX IX_EventLogs_WorkspaceId_Id
+    ON dbo.EventLogs (WorkspaceId, Id DESC) INCLUDE (EventId);
 GO
-CREATE INDEX IX_EventLogs_ClientId_CreatedAt
-    ON dbo.EventLogs (ClientId, CreatedAt DESC) INCLUDE (EventId, WorkspaceId) WHERE ClientId IS NOT NULL;
+CREATE INDEX IX_EventLogs_ClientId_Id
+    ON dbo.EventLogs (ClientId, Id DESC) INCLUDE (EventId, WorkspaceId) WHERE ClientId IS NOT NULL;
 GO
 CREATE INDEX IX_EventLogs_UserId_CreatedAt
     ON dbo.EventLogs (UserId, CreatedAt DESC) INCLUDE (EventId) WHERE UserId IS NOT NULL;
