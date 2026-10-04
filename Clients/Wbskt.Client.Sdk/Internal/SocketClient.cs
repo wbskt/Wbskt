@@ -130,6 +130,13 @@ internal sealed class SocketClient : IAsyncDisposable
 
                         if (commandId != null)
                         {
+                            if (CommandExpiry.IsExpired(doc.RootElement, DateTimeOffset.UtcNow))
+                            {
+                                // Answered, so the platform reports it as refused rather than lost.
+                                await SendAsync(new SocketMessage("sys.ack", new { commandId, type, refused = "expired" }));
+                                break;
+                            }
+
                             // Transport-level delivery ack; app-level acks are ordinary messages.
                             await SendAsync(new SocketMessage("sys.ack", new { commandId }));
                         }

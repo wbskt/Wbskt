@@ -33,4 +33,12 @@ public interface IClientService
     /// </para>
     /// </summary>
     Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// <see cref="EnsureClientInWorkspaceAsync"/> for a command, which also needs the device to be
+    /// online: commands are delivered live or not at all, so an offline device is a
+    /// <c>DEVICE_OFFLINE</c> conflict here rather than a command that silently goes nowhere. On
+    /// success the target names the socket-host instance holding the connection.
+    /// </summary>
+    Task<Result<ClientCommandTarget>> ResolveCommandTargetAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);
 }

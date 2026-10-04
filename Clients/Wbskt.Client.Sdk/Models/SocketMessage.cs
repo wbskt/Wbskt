@@ -21,4 +21,14 @@ public record SocketMessage(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonConverter(typeof(LenientDateTimeOffsetConverter))]
     public DateTimeOffset? SentAt { get; init; }
+
+    /// <summary>
+    /// On a command from the platform: the instant after which it must not be acted on. The SDK
+    /// refuses an expired command (answering <c>sys.ack</c> with <c>refused: "expired"</c>) instead
+    /// of raising it. Absent means the command does not expire.
+    /// </summary>
+    [JsonPropertyName("expiresAt")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonConverter(typeof(LenientDateTimeOffsetConverter))]
+    public DateTimeOffset? ExpiresAt { get; init; }
 }

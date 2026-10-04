@@ -20,6 +20,7 @@ BEGIN
         c.LastActivityAt,
         c.LastRttMs,
         c.RttMeasuredAt,
+        c.ConnectedHostId,
         c.CreatedAt,
         cap.AgentName,
         cap.AgentVersion,

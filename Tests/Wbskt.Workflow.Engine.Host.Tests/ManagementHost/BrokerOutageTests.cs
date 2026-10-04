@@ -81,8 +81,8 @@ public sealed class BrokerOutageTests
         authClient.Setup(x => x.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<int>.Success(WorkspaceId));
         var clientService = new Mock<IClientService>();
-        clientService.Setup(x => x.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<int>.Success(42));
+        clientService.Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Wbskt.Management.Host.Models.ClientCommandTarget>.Success(new Wbskt.Management.Host.Models.ClientCommandTarget(42, "socket-a")));
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));

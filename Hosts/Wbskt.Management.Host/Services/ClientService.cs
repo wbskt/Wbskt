@@ -401,9 +401,35 @@ internal sealed class ClientService : IClientService
 
     public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
+        var clientResult = await FindDetailInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        return clientResult.IsSuccess
+            ? Result<int>.Success(clientResult.Value.Id)
+            : Result<int>.Failure(clientResult.Error);
+    }
+
+    public async Task<Result<ClientCommandTarget>> ResolveCommandTargetAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        var clientResult = await FindDetailInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
+        {
+            return Result<ClientCommandTarget>.Failure(clientResult.Error);
+        }
+
+        var client = clientResult.Value;
+        if (!client.IsConnected || string.IsNullOrEmpty(client.ConnectedHostId))
+        {
+            _logger.LogInformation("Command refused: client RefId {ClientRefId} is offline", clientRefId);
+            return Result<ClientCommandTarget>.Failure(DeviceOffline);
+        }
+
+        return Result<ClientCommandTarget>.Success(new ClientCommandTarget(client.Id, client.ConnectedHostId));
+    }
+
+    private async Task<Result<ClientDetail>> FindDetailInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
+    {
         _logger.LogDebug("Verifying client RefId: {ClientRefId} belongs to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
-        Client client;
+        ClientDetail client;
         try
         {
             client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
@@ -412,17 +438,19 @@ internal sealed class ClientService : IClientService
         {
             _logger.LogWarning("Client membership check failed: RefId {ClientRefId} not found. Error: {Message}", clientRefId, ex.Message);
             _logger.LogTrace(ex, "EnsureClientInWorkspaceAsync lookup failure stack trace for {ClientRefId}", clientRefId);
-            return Result<int>.Failure(Unauthorized);
+            return Result<ClientDetail>.Failure(Unauthorized);
         }
 
         if (client.WorkspaceId != workspaceId)
         {
             _logger.LogWarning("Client membership rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-            return Result<int>.Failure(Unauthorized);
+            return Result<ClientDetail>.Failure(Unauthorized);
         }
 
-        return Result<int>.Success(client.Id);
+        return Result<ClientDetail>.Success(client);
     }
+
+    private static readonly Error DeviceOffline = Error.Conflict("DEVICE_OFFLINE", "The device is offline. Commands are only delivered to connected devices.");
 
     /// <summary>
     /// One answer for both "no such client" and "not this workspace's client". This gates the

@@ -238,7 +238,7 @@ List endpoints clamp their page size (`take`, or `top` for runs and history) to 
 | `DELETE {clientRefId}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
 | `POST {clientRefId}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
 | `PATCH {clientRefId}/name` | `clients.update` | Renames a client (1–100 characters). |
-| `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Answers 202 whether or not the client is currently connected — delivery is asynchronous. |
+| `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Commands are delivered live or not at all: an offline client is answered 409 `DEVICE_OFFLINE`, and a client that drops before delivery raises `ClientCommandFailedEvent` ("not connected"). Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`): past it the socket host does not send the command and the SDK refuses it, both reported as `ClientCommandFailedEvent`. |
 | `POST {clientRefId}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
 | `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged by `cursor`/`take` like the event log. |
 
@@ -393,7 +393,11 @@ The device data plane. One long-lived WebSocket per client; everything else is a
 
 Once open, the connection carries the platform protocol — `sys.ping`/`sys.pong`, command frames and
 their `sys.ack`, state and capability reports. Commands arrive from the management host over the bus
-and are routed by `ClientRefId` to whichever socket host holds the connection.
+and are routed by `ClientRefId` to whichever socket host holds the connection. Every socket host
+receives every command; only the one the management host saw holding the connection reports it
+missing. A command frame may carry `expiresAt`; an SDK that receives it late answers
+`sys.ack { commandId, type, refused: "expired" }` instead of raising it, and the socket host reports
+that as a failed command.
 
 ---
 

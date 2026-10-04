@@ -370,6 +370,12 @@ public class ClientsController : ApiControllerBase
             return BadRequest(Error.Validation("COMMAND_PAYLOAD_TOO_LARGE", "Command payload is limited to 32768 characters."));
         }
 
+        if (request.ExpiresAt is { } expiresAt
+            && (expiresAt <= DateTimeOffset.UtcNow || expiresAt > DateTimeOffset.UtcNow.Add(MaxCommandLifetime)))
+        {
+            return BadRequest(Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away."));
+        }
+
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
@@ -378,15 +384,19 @@ public class ClientsController : ApiControllerBase
 
         // Ownership has to be settled here: the command goes out over the bus and the socket host
         // routes it by ClientRefId alone, so nothing downstream would notice a client from another
-        // workspace.
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
-        if (clientResult.IsFailure)
+        // workspace. Presence too: commands are delivered live or not at all, so an offline device
+        // is a 409 DEVICE_OFFLINE now rather than a 202 for a command that goes nowhere.
+        var targetResult = await _clientService.ResolveCommandTargetAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        if (targetResult.IsFailure)
         {
-            return MapError(clientResult.Error);
+            return MapError(targetResult.Error);
         }
 
+        var target = targetResult.Value;
         var commandId = Guid.NewGuid();
-        if (!await TryPublishActionAsync(new ClientCommandEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, request.Type, request.Payload, commandId), cancellationToken))
+        var command = new ClientCommandEvent(clientRefId, target.ClientId, workspaceIdResult.Value, request.Type, request.Payload, commandId,
+            TargetHostId: target.HostId, ExpiresAtUtc: request.ExpiresAt?.UtcDateTime);
+        if (!await TryPublishActionAsync(command, cancellationToken))
         {
             return BrokerUnavailable();
         }
@@ -475,6 +485,9 @@ public class ClientsController : ApiControllerBase
         return NoContent();
     }
 
+    /// <summary>The furthest ahead a command's expiresAt may be.</summary>
+    private static readonly TimeSpan MaxCommandLifetime = TimeSpan.FromHours(24);
+
     /// <summary>How long a command or ping waits for the broker before the caller is told to retry.</summary>
     internal static readonly TimeSpan ActionPublishTimeout = TimeSpan.FromSeconds(5);
 
@@ -512,6 +525,8 @@ public record UpdateClientStatusRequest(ClientStatus Status);
 
 public record UpdateClientNameRequest(string Name);
 
-public record ClientCommandRequest(string Type, string Payload);
+// ExpiresAt is optional: past it the command is refused instead of delivered, by the socket host
+// and by the SDK. At most 24 hours ahead.
+public record ClientCommandRequest(string Type, string Payload, DateTimeOffset? ExpiresAt = null);
 
 public record ClientCommandResponse(Guid CommandId);
