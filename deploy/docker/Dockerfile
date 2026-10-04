@@ -9,7 +9,10 @@
 ARG DOTNET_SDK_VERSION=10.0
 ARG DOTNET_RUNTIME_VERSION=10.0
 
-FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_VERSION} AS build
+# The SDK stage runs on the build machine's own architecture even when the image targets another
+# (CI publishes linux/amd64 from an arm64 runner). A framework-dependent publish is portable IL, so
+# its output is the same either way, and only the small final stage needs emulation.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_VERSION} AS build
 ARG HOST_PROJECT
 WORKDIR /src
 COPY . .
