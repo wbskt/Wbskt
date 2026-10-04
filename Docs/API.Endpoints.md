@@ -218,6 +218,9 @@ Every workspace-scoped route is `api/workspaces/{workspaceRef:guid}/…` and res
 `POST /api/workspaces/resolve` on the auth host before doing anything else. That call is the
 membership gate; the permission slug is the second gate.
 
+List endpoints clamp their page size (`take`, or `top` for runs and history) to 1–200 and a negative
+`skip` to 0, rather than rejecting them.
+
 > **A reference is not a scope.** Resolving `workspaceRef` establishes which workspace the caller is
 > acting in. It says nothing about whether the `clientRefId` or `runRefId` in the same route belongs
 > to it — each endpoint checks that separately.
@@ -237,7 +240,7 @@ membership gate; the permission slug is the second gate.
 | `PATCH {clientRefId}/name` | `clients.update` | Renames a client (1–100 characters). |
 | `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Answers 202 whether or not the client is currently connected — delivery is asynchronous. |
 | `POST {clientRefId}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
-| `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. |
+| `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged by `cursor`/`take` like the event log. |
 
 Command and ping publish onto the event bus, and the socket host dispatches on `ClientRefId` alone —
 it has no workspace of its own to check against. The controller's ownership check is therefore the
@@ -272,7 +275,7 @@ Saved send-panel payloads, optionally pinned to a policy.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `logs.read` | The workspace's event log, filterable by `eventName`, `criticality`, `policyRefId` and `clientRefId`. Paged, newest first. |
+| `GET /` | `logs.read` | The workspace's event log, filterable by `eventName`, `criticality`, `policyRefId` and `clientRefId`. Newest first, `take` per page (1–200, default 50). The body carries `nextCursor`: pass it back as `cursor` for the next page; it is null on the last one. No total count. |
 
 ### 2.5 Workflows — `…/workflows`
 
@@ -317,7 +320,10 @@ Workflow-scoped state that outlives any single run, used to coordinate between t
 ### 2.8 Realtime — `/hubs/notifications` (SignalR)
 
 The hub accepts its JWT in the `access_token` query parameter as well as the header, since browser
-WebSocket clients cannot set headers.
+WebSocket clients cannot set headers. The server closes a connection when its token expires
+(`CloseOnAuthenticationExpiration`), so access that ends (sign-out, a revoked session, removal from the
+workspace) ends on the live feed within one token lifetime. Clients reconnect with a fresh token and
+join their workspaces again; a group joined on the old connection does not carry over.
 
 | Method | Permission | What it does |
 |---|---|---|

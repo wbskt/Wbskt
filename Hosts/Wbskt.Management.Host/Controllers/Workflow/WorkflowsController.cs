@@ -83,7 +83,7 @@ public sealed class WorkflowsController : ApiControllerBase
             return MapResult(Result<Wbskt.Models.ListResponse<WorkflowSummaryDto>>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _service.GetAllSummariesAsync(workspaceIdResult.Value, skip, take, ct);
+        var result = await _service.GetAllSummariesAsync(workspaceIdResult.Value, Paging.Skip(skip), Paging.Take(take), ct);
         if (result.IsFailure)
         {
             return MapResult(Result<Wbskt.Models.ListResponse<WorkflowSummaryDto>>.Failure(result.Error));

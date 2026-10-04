@@ -41,7 +41,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
             return MapResult(Result<RunListResponse>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _runQueryService.ListByWorkflowAsync(workspaceIdResult.Value, workflowRefId, status, top, cursor, ct);
+        var result = await _runQueryService.ListByWorkflowAsync(workspaceIdResult.Value, workflowRefId, status, Paging.Take(top), cursor, ct);
         return MapResult(result);
     }
 
@@ -60,7 +60,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
             return MapResult(Result<RunListResponse>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _runQueryService.ListByWorkspaceAsync(workspaceIdResult.Value, status, top, cursor, ct);
+        var result = await _runQueryService.ListByWorkspaceAsync(workspaceIdResult.Value, status, Paging.Take(top), cursor, ct);
         return MapResult(result);
     }
 

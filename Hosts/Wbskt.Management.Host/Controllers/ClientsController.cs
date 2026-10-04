@@ -73,7 +73,7 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _clientService.GetAllAsync(workspaceIdResult.Value, status, name, skip, take, cancellationToken);
+        var result = await _clientService.GetAllAsync(workspaceIdResult.Value, status, name, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
@@ -138,7 +138,7 @@ public class ClientsController : ApiControllerBase
         }
 
         // 4. All checks pass, get the data
-        var result = await _clientService.GetByPolicyIdAsync(workspaceIdResult.Value, policyId, status, name, skip, take, cancellationToken);
+        var result = await _clientService.GetByPolicyIdAsync(workspaceIdResult.Value, policyId, status, name, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
@@ -402,16 +402,16 @@ public class ClientsController : ApiControllerBase
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="direction">Optional direction filter: "in" or "out". Omit for both (plus connect/disconnect rows).</param>
-    /// <param name="skip">Number of records to skip for pagination.</param>
-    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="cursor">The <c>nextCursor</c> of the previous page; omit for the newest entries.</param>
+    /// <param name="take">Page size, 1 to 200.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A paginated list of comms event-log entries, newest first.</returns>
+    /// <returns>A page of comms event-log entries, newest first, with the cursor for the next page.</returns>
     [HttpGet("{clientRefId:guid}/comms")]
-    public async Task<ActionResult<ListResponse<EventLogResponse>>> GetComms(
+    public async Task<ActionResult<EventLogListResponse>> GetComms(
         Guid workspaceRef,
         Guid clientRefId,
         [FromQuery] string? direction,
-        [FromQuery] int skip = 0,
+        [FromQuery] long? cursor = null,
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
@@ -425,7 +425,7 @@ public class ClientsController : ApiControllerBase
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
         {
-            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(workspaceIdResult.Error));
+            return MapResult(Result<EventLogListResponse>.Failure(workspaceIdResult.Error));
         }
 
         // The query is workspace-filtered in SQL, so a foreign client would come back as an empty
@@ -434,17 +434,10 @@ public class ClientsController : ApiControllerBase
         var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
         if (clientResult.IsFailure)
         {
-            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(clientResult.Error));
+            return MapResult(Result<EventLogListResponse>.Failure(clientResult.Error));
         }
 
-        var result = await _eventLogService.GetClientCommsAsync(workspaceIdResult.Value, clientResult.Value, direction, skip, take, cancellationToken);
-        if (result.IsFailure)
-        {
-            return MapResult(Result<ListResponse<EventLogResponse>>.Failure(result.Error));
-        }
-
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-        return Ok(new ListResponse<EventLogResponse> { Items = result.Value });
+        return MapResult(await _eventLogService.GetClientCommsAsync(workspaceIdResult.Value, clientResult.Value, direction, cursor, take, cancellationToken));
     }
 
     /// <summary>

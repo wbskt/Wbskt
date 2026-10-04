@@ -42,42 +42,43 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
-    public async Task<IPagedList<EventLogResponse>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int? policyId, int? clientId, int? workflowId, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int? policyId, int? clientId, int? workflowId, long? cursorId, int take, CancellationToken cancellationToken = default)
     {
-        return await ExecutePagedCollectionAsync(
+        return await ExecuteCollectionAsync(
             "dbo.EventLog_GetBy_Workspace",
             p =>
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
-                p.AddWithValue("@PolicyId", policyId);
-                p.AddWithValue("@ClientId", clientId);
-                p.AddWithValue("@WorkflowId", workflowId);
+                p.AddWithValue("@PolicyId", (object?)policyId ?? DBNull.Value);
+                p.AddWithValue("@ClientId", (object?)clientId ?? DBNull.Value);
+                p.AddWithValue("@WorkflowId", (object?)workflowId ?? DBNull.Value);
                 p.AddWithValue("@EventName", (object?)eventName ?? DBNull.Value);
                 p.AddWithValue("@Criticality", (object?)criticality ?? DBNull.Value);
-                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
                 p.AddWithValue("@Take", take);
-                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
-            MapEventLog,
+            MapEventLogRow,
             cancellationToken);
     }
 
-    public async Task<IPagedList<EventLogResponse>> GetClientCommsAsync(int workspaceId, int clientId, string? direction, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<EventLogRow>> GetClientCommsAsync(int workspaceId, int clientId, string? direction, long? cursorId, int take, CancellationToken cancellationToken = default)
     {
-        return await ExecutePagedCollectionAsync(
+        return await ExecuteCollectionAsync(
             "dbo.EventLog_GetCommsBy_Client",
             p =>
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@ClientId", clientId);
                 p.AddWithValue("@Direction", (object?)direction ?? DBNull.Value);
-                p.AddWithValue("@Skip", skip);
+                p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
                 p.AddWithValue("@Take", take);
-                p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
-            MapEventLog,
+            MapEventLogRow,
             cancellationToken);
     }
+
+    private static EventLogRow MapEventLogRow(SqlDataReader reader) =>
+        new(reader.GetInt64(reader.GetOrdinal("Id")), MapEventLog(reader));
 
     private static EventLogResponse MapEventLog(SqlDataReader reader)
     {

@@ -294,7 +294,11 @@ public static class Program
         app.MapWbsktJwks();
 
         app.MapControllers();
-        app.MapHub<NotificationHub>("/hubs/notifications");
+        // A connection is authorised once, when it opens, and JoinWorkspace checks permission once,
+        // so without this a signed-out user or a removed member kept the feed for as long as the
+        // socket stayed up. Closing it when the token expires makes the client reconnect with a
+        // fresh token, and its rejoin runs the permission check again.
+        app.MapHub<NotificationHub>("/hubs/notifications", options => options.CloseOnAuthenticationExpiration = true);
 
         await app.RunAsync();
     }

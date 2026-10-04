@@ -53,7 +53,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
             return MapResult(Result<ListResponse<MessageTemplateResponse>>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _templateService.GetAllAsync(workspaceIdResult.Value, policyRefId, skip, take, cancellationToken);
+        var result = await _templateService.GetAllAsync(workspaceIdResult.Value, policyRefId, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<MessageTemplateResponse>>.Failure(result.Error));
