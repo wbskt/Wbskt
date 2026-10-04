@@ -1,8 +1,9 @@
 name: Build images
 
 # Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
-# deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests build without
-# pushing, so a broken Dockerfile is caught before it reaches master.
+# deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests run only the
+# tests and the package scan: the image jobs are skipped there, since every one runs on the single
+# self-hosted runner, so a broken Dockerfile first shows up on the master push that would publish it.
 
 on:
   push:
@@ -274,6 +275,7 @@ jobs:
           echo "no vulnerable packages"
 
   meta:
+    if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux]
     outputs:
       tag: ${{ steps.v.outputs.tag }}
@@ -290,6 +292,7 @@ jobs:
 
   hosts:
     needs: [meta, test, integration, scan]
+    if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux]
     permissions:
       contents: read
@@ -342,6 +345,7 @@ jobs:
 
   migrator:
     needs: [meta, test, integration, scan]
+    if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux]
     permissions:
       contents: read
