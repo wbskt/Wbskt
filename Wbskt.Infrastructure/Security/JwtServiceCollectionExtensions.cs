@@ -61,6 +61,12 @@ public static class JwtServiceCollectionExtensions
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AccessTokenRevocation>>()));
         services.AddSingleton<IAccessTokenRevocation>(sp => sp.GetRequiredService<AccessTokenRevocation>());
         services.AddHostedService(sp => sp.GetRequiredService<AccessTokenRevocation>());
+
+        // Rides on the same connection: the auth host announces access changes, the management host
+        // drops its cached workspace access when it hears one.
+        services.TryAddSingleton(sp => new WorkspaceAccessChanges(
+            sp.GetService<IConnectionMultiplexer>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<WorkspaceAccessChanges>>()));
         return services;
     }
 

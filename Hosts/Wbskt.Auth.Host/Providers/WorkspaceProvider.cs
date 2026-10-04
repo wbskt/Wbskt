@@ -118,6 +118,31 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
+    public async Task<WorkspaceAccessResolution?> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default)
+    {
+        var rows = await ExecuteCollectionAsync(
+            "dbo.Workspace_ResolveAccess",
+            p =>
+            {
+                p.AddWithValue("@UserId", userId);
+                p.AddWithValue("@WorkspaceRef", workspaceRef);
+            },
+            r => (
+                WorkspaceId: r.GetInt32(r.GetOrdinal("WorkspaceId")),
+                IsMember: r.GetBoolean(r.GetOrdinal("IsMember")),
+                Slug: r.IsDBNull(r.GetOrdinal("Slug")) ? null : r.GetString(r.GetOrdinal("Slug"))),
+            cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            return null;
+        }
+
+        var first = rows.First();
+        var permissions = rows.Where(r => r.Slug is not null).Select(r => r.Slug!).ToArray();
+        return new WorkspaceAccessResolution(first.WorkspaceId, first.IsMember, permissions);
+    }
+
     private static Workspace MapWorkspace(SqlDataReader reader)
     {
         return new Workspace

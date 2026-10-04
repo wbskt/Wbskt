@@ -146,13 +146,23 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         (await fixture.SetMemberSuspendedAsync(adminToken, tenantRef, userRef!.Value, isSuspended: true)).StatusCode
             .Should().Be(HttpStatusCode.NoContent);
 
-        // The management host asks the auth host on every request, so the same token is refused in
-        // the suspended tenant at once and keeps working in the member's own.
+        // The auth host refuses at once. The management host caches resolved access, and drops it
+        // when the auth host announces the suspension over Redis, so allow that message a moment; the
+        // same token keeps working in the member's own tenant.
         (await fixture.ResolveWorkspaceAsync(user.Token, sharedWorkspace)).StatusCode
             .Should().Be(HttpStatusCode.Forbidden);
-        var shared = await fixture.SendAsync(HttpMethod.Get, sharedEndpoint, user.Token);
-        shared.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(shared)).Should().Be("WORKSPACE_FORBIDDEN");
+        string? sharedError = null;
+        for (var attempt = 0; attempt < 20 && sharedError != "WORKSPACE_FORBIDDEN"; attempt++)
+        {
+            if (attempt > 0)
+            {
+                await Task.Delay(100);
+            }
+
+            sharedError = await ServicesFixture.ReadErrorCodeAsync(await fixture.SendAsync(HttpMethod.Get, sharedEndpoint, user.Token));
+        }
+
+        sharedError.Should().Be("WORKSPACE_FORBIDDEN");
         (await fixture.SendAsync(HttpMethod.Get, ownEndpoint, user.Token)).StatusCode
             .Should().Be(HttpStatusCode.OK, "suspension in one tenant leaves the token valid everywhere else");
     }

@@ -342,4 +342,36 @@ internal sealed class WorkspaceService : IWorkspaceService
             return Result<IReadOnlyCollection<string>>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
         }
     }
+
+    public async Task<Result<WorkspaceAccessResolution>> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Resolving access for workspace reference: {WorkspaceRef}", workspaceRef);
+
+        try
+        {
+            var resolution = await _workspaceProvider.ResolveAccessAsync(userId, workspaceRef, cancellationToken);
+            if (resolution is null)
+            {
+                return Result<WorkspaceAccessResolution>.Failure(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
+            }
+
+            if (!resolution.IsMember)
+            {
+                _logger.LogWarning("Workspace access resolution failed: User ID {UserId} is not a member of workspace ID: {WorkspaceId}", userId, resolution.WorkspaceId);
+                _metrics.RecordPermissionCheck("effective-set", "unauthorized");
+                return Result<WorkspaceAccessResolution>.Failure(Error.Forbidden("WORKSPACE_UNAUTHORIZED", "user does not have permission to this workspace"));
+            }
+
+            _logger.LogDebug("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, resolution.Permissions.Count, resolution.WorkspaceId);
+            _metrics.RecordPermissionCheck("effective-set", "resolved");
+            return Result<WorkspaceAccessResolution>.Success(resolution);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to resolve access for user ID {UserId} in workspace {WorkspaceRef}. Error: {Message}", userId, workspaceRef, ex.Message);
+            _logger.LogTrace(ex, "ResolveAccess failure stack trace for user ID {UserId} in workspace {WorkspaceRef}", userId, workspaceRef);
+            _metrics.RecordPermissionCheck("effective-set", "error");
+            return Result<WorkspaceAccessResolution>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
+        }
+    }
 }
