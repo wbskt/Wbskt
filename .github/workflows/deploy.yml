@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
     environment: production
     steps:
@@ -41,11 +41,12 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        # Written to the job's temp directory rather than ~/.ssh: on a self-hosted runner the home
+        # directory outlives the job, and its known_hosts may belong to the machine's owner.
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/id_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+          chmod 600 "$RUNNER_TEMP/id_deploy" "$RUNNER_TEMP/known_hosts"
 
       - name: Validate inputs
         env:
@@ -76,6 +77,7 @@ jobs:
             args+=(--skip-migrations)
           fi
           echo "deploy.sh ${args[*]}"
-          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes \
+          ssh -i "$RUNNER_TEMP/id_deploy" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
             "$DEPLOY_PATH/deploy/scripts/deploy.sh" "${args[@]}"
