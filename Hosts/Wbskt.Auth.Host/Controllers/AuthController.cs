@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Services;
@@ -14,13 +15,16 @@ namespace Wbskt.Auth.Host.Controllers;
 public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly RefreshTokenCookie _refreshCookie;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService,
+        RefreshTokenCookie refreshCookie,
         ILogger<AuthController> logger)
     {
         _authService = authService;
+        _refreshCookie = refreshCookie;
         _logger = logger;
     }
 
@@ -50,7 +54,9 @@ public class AuthController : ApiControllerBase
     }
 
     /// <summary>
-    /// Authenticates a user and returns access and refresh tokens.
+    /// Authenticates a user and returns access and refresh tokens. With the
+    /// <c>X-Refresh-Token-Transport: cookie</c> header the refresh token is set as an HttpOnly cookie
+    /// instead of returned.
     /// </summary>
     /// <param name="request">The login credentials (email, password).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -63,24 +69,46 @@ public class AuthController : ApiControllerBase
     {
         _logger.LogDebug("API: Login requested");
         var result = await _authService.LoginAsync(request.Email, request.Password, CallerIpAddress(), cancellationToken);
-        return MapResult(result);
+        return MapSession(result);
     }
 
     /// <summary>
     /// Exchanges a valid refresh token for a new access token and a new refresh token.
     /// The presented token is revoked as part of the exchange, so it cannot be used again.
     /// </summary>
-    /// <param name="request">The valid refresh token.</param>
+    /// <remarks>
+    /// The token comes from the body, or, when the body has none and the request carries
+    /// <c>X-Refresh-Token-Transport: cookie</c>, from the refresh cookie; the replacement then goes
+    /// back the same way. A refused cookie is cleared.
+    /// </remarks>
+    /// <param name="request">The valid refresh token, or nothing to use the cookie.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A new set of access and refresh tokens.</returns>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.TokenRefresh)]
     [HttpPost("refresh-token")]
-    public async Task<ActionResult<LoginResponse>> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<LoginResponse>> RefreshToken([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("API: RefreshToken requested");
-        var result = await _authService.RefreshTokenAsync(request.RefreshToken, CallerIpAddress(), cancellationToken);
-        return MapResult(result);
+        var token = PresentedRefreshToken(request);
+        if (token is null)
+        {
+            if (!RefreshTokenCookie.IsRequested(Request))
+            {
+                return MissingRefreshToken();
+            }
+
+            _refreshCookie.Clear(Response);
+            return MapError(Error.Unauthorized("AUTH_INVALID_TOKEN", "Invalid refresh token."));
+        }
+
+        var result = await _authService.RefreshTokenAsync(token, CallerIpAddress(), cancellationToken);
+        if (result.IsFailure)
+        {
+            ClearRefreshCookieIfRequested();
+        }
+
+        return MapSession(result);
     }
 
     /// <summary>
@@ -88,16 +116,28 @@ public class AuthController : ApiControllerBase
     /// Succeeds regardless of whether the token was live, so it cannot be used to probe which tokens
     /// exist.
     /// </summary>
-    /// <param name="request">The refresh token to revoke.</param>
+    /// <param name="request">The refresh token to revoke, or nothing to revoke the refresh cookie's.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.TokenRefresh)]
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Logout([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("API: Logout requested");
-        var result = await _authService.LogoutAsync(request.RefreshToken, CallerIpAddress(), cancellationToken);
+        var token = PresentedRefreshToken(request);
+        if (token is null && !RefreshTokenCookie.IsRequested(Request))
+        {
+            return MissingRefreshToken();
+        }
+
+        ClearRefreshCookieIfRequested();
+        if (token is null)
+        {
+            return NoContent();
+        }
+
+        var result = await _authService.LogoutAsync(token, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
 
@@ -120,6 +160,7 @@ public class AuthController : ApiControllerBase
         }
 
         var result = await _authService.LogoutAllAsync(userIdResult.Value, CallerIpAddress(), cancellationToken);
+        ClearRefreshCookieIfRequested();
         return MapResult(result);
     }
 
@@ -147,7 +188,7 @@ public class AuthController : ApiControllerBase
         }
 
         var result = await _authService.ChangePasswordAsync(userIdResult.Value, request.CurrentPassword, request.NewPassword, CallerIpAddress(), cancellationToken);
-        return MapResult(result);
+        return MapSession(result);
     }
 
     /// <summary>
@@ -265,5 +306,41 @@ public class AuthController : ApiControllerBase
         _logger.LogDebug("API: ResendVerification requested");
         var result = await _authService.ResendVerificationAsync(request.Email, cancellationToken);
         return MapResult(result);
+    }
+
+    /// <summary>
+    /// A new token pair, with the refresh token moved into the HttpOnly cookie when the caller asked
+    /// for that, so it never reaches script on the page.
+    /// </summary>
+    private ActionResult<LoginResponse> MapSession(Result<LoginResponse> result)
+    {
+        if (result.IsSuccess && RefreshTokenCookie.IsRequested(Request) && result.Value.RefreshToken is { } refreshToken)
+        {
+            _refreshCookie.Write(Response, refreshToken);
+            return Ok(result.Value with { RefreshToken = null });
+        }
+
+        return MapResult(result);
+    }
+
+    private string? PresentedRefreshToken(RefreshTokenRequest? request) =>
+        string.IsNullOrEmpty(request?.RefreshToken) ? _refreshCookie.Read(Request) : request.RefreshToken;
+
+    /// <summary>
+    /// The 400 a body-only caller got from <c>[Required]</c> before the token became optional for
+    /// cookie callers.
+    /// </summary>
+    private ActionResult MissingRefreshToken()
+    {
+        ModelState.AddModelError(nameof(RefreshTokenRequest.RefreshToken), "The RefreshToken field is required.");
+        return ValidationProblem(ModelState);
+    }
+
+    private void ClearRefreshCookieIfRequested()
+    {
+        if (RefreshTokenCookie.IsRequested(Request))
+        {
+            _refreshCookie.Clear(Response);
+        }
     }
 }

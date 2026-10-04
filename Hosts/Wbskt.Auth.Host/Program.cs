@@ -84,6 +84,8 @@ public static class Program
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<MailCooldown>>()));
         builder.Services.AddHostedService<OutboundMailDispatcher>();
+        builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:RefreshCookie").Get<RefreshCookieOptions>() ?? new RefreshCookieOptions()));
+        builder.Services.AddSingleton<RefreshTokenCookie>();
 
         builder.AddWbsktTelemetry(AuthMetrics.MeterName);
 
@@ -122,13 +124,15 @@ public static class Program
             options.AddDefaultPolicy(policy =>
             {
                 var allowedOrigins = builder.Configuration.GetCorsAllowedOrigins();
+                // Credentials, so a console on another origin can send and receive the refresh cookie
+                // (see RefreshTokenCookie). That rules out a literal "*", hence the predicate below.
                 if (allowedOrigins is { Length: > 0 })
                 {
-                    policy.SetIsOriginAllowed(allowedOrigins.IsCorsOriginAllowed).AllowAnyHeader().AllowAnyMethod();
+                    policy.SetIsOriginAllowed(allowedOrigins.IsCorsOriginAllowed).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
                 }
                 else if (builder.Environment.IsDevelopment())
                 {
-                    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+                    policy.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
                 }
             });
         });

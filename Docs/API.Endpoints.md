@@ -55,6 +55,17 @@ count, with up to `QueueLimit` 20 waiting), so a burst from many addresses queue
 every other request of CPU. A request that finds the queue full gets 429. A password stored with
 older hashing settings is re-hashed with the current ones on the next successful sign-in.
 
+**Refresh cookie.** A browser client sends `X-Refresh-Token-Transport: cookie` on login,
+refresh-token, logout, logout-all and change-password. The refresh token then travels only in an
+`HttpOnly; Secure` cookie named `wbskt_refresh`, scoped to `/api/auth`, and is left out of the JSON
+body, so script on the page can never read it. refresh-token and logout take an empty body and read
+the cookie; refresh-token sets the replacement cookie, and a refused refresh, logout and logout-all
+clear it. The cookie is only read from a request with that header (which forces a CORS preflight)
+and an allowed `Origin`, so another site cannot spend it. `Auth:RefreshCookie:SameSite` defaults to
+`Strict`. Without the header everything stays in the body as before, for the SDK, devices and tests;
+a body-only refresh-token or logout with no token is still a 400. CORS on this host allows
+credentials.
+
 register, forgot-password and resend-verification also respect a per-address mail cooldown
 (`Auth:MailCooldown`: one mail of each kind per address per 2 minutes, at most 5 per address an hour),
 kept in Redis when it is configured. A suppressed mail is answered with the same 204, and no new token
@@ -63,7 +74,7 @@ is issued, so the link already in the inbox keeps working.
 | Endpoint | Auth | What it does |
 |---|---|---|
 | `POST register` | anonymous | Creates an account **and its own tenant** — the tenant row, its `Admin`/`User` roles, the creator's membership, a tenant-wide Admin assignment and a default workspace. Accepts an optional `invitationToken` to join an existing tenant at the same time. Mails a confirmation link; the account cannot sign in until it is followed. Answers **204 whether or not the address is already registered** — a taken address creates nothing and mails its real owner instead. A taken *username* is still a 409 `AUTH_USERNAME_CONFLICT`: it discloses nothing about any address. |
-| `POST login` | anonymous | Exchanges credentials for an access/refresh token pair. Every failure mode answers identically, so the endpoint cannot be used to probe which addresses are registered — except `AUTH_EMAIL_UNVERIFIED`, which is returned only *after* the password verifies and therefore tells a caller nothing they did not already prove. |
+| `POST login` | anonymous | Exchanges credentials for an access/refresh token pair (see the refresh cookie below). Every failure mode answers identically, so the endpoint cannot be used to probe which addresses are registered — except `AUTH_EMAIL_UNVERIFIED`, which is returned only *after* the password verifies and therefore tells a caller nothing they did not already prove. |
 | `POST refresh-token` | anonymous | Rotating refresh: issues a new pair and revokes the token presented. Presenting an already-revoked token is treated as a leak — every refresh token for that user is revoked and a `SecurityAlertEvent` is published. |
 | `POST logout` | anonymous | Revokes the one refresh token presented, and the access token issued with it. Succeeds whether or not it existed. |
 | `POST logout-all` | authenticated | Revokes the caller's entire refresh-token set. |

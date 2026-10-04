@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Wbskt.Auth.Host.Models;
 
@@ -16,17 +17,23 @@ public record LoginRequest(
     [StringLength(128)]
     string Password);
 
-public record LoginResponse(string AccessToken, string RefreshToken);
+/// <summary>
+/// A token pair. <see cref="RefreshToken"/> is left out when it went into the HttpOnly refresh cookie
+/// instead (the caller sent <c>X-Refresh-Token-Transport: cookie</c>).
+/// </summary>
+public record LoginResponse(
+    string AccessToken,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken);
 
 /// <summary>
 /// Carries a refresh token for rotation or revocation. A record rather than a bare
 /// <c>[FromBody] string</c> so the body is normal JSON and the endpoint documents itself.
 /// Note this changed the wire format: the endpoint previously accepted a bare JSON string.
+/// The token may be left out, or the body omitted, by a caller using the refresh cookie.
 /// </summary>
 public record RefreshTokenRequest(
-    [Required]
     [StringLength(255)]
-    string RefreshToken);
+    string? RefreshToken);
 
 /// <summary>
 /// Asks for a password-reset link. Deliberately no <c>[EmailAddress]</c>: the endpoint answers
