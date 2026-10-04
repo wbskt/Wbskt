@@ -151,6 +151,8 @@ services:
       ConnectionStrings__Redis: redis:6379
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
       Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
+      # The console's refresh cookie. Strict while the console is a sibling subdomain of this host.
+      Auth__RefreshCookie__SameSite: ${REFRESH_COOKIE_SAMESITE:-Strict}
       # Mail. Leave SMTP_HOST empty and the host logs an error at startup and sends nothing - which,
       # because sign-in requires a confirmed address, means no new account can be used. The links in
       # that mail point at the console's public origin, never at an inbound Host header.

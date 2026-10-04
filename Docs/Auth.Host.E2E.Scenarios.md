@@ -180,6 +180,18 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_RT_17` | + | Access token issued before rotation stays valid until expiry | Documents that rotation does not retro-invalidate access tokens |
 | `AUTH_RT_18` | − | Log out on device A, then device A retries its refresh; check device B | B is **also** revoked. Logout marks the token revoked, and rotation cannot tell a deliberate logout from a stolen-token replay — both are "a retired token came back". A benign post-logout retry therefore signs out every device and raises a `RefreshTokenReplay` alert. Assert current behaviour; the false positive is a separate decision |
 
+
+### 5a. Refresh cookie — `X-Refresh-Token-Transport: cookie`
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `AUTH_RC_01` | + | Login with the header | **200**, `accessToken` only; `wbskt_refresh` set `HttpOnly; Secure; SameSite=Strict; Path=/api/auth` |
+| `AUTH_RC_02` | + | Body-less refresh with the header and cookie | **200**, a new cookie, no `refreshToken` in the body |
+| `AUTH_RC_03` | − | Replay the retired cookie | **401**, and the cookie is cleared |
+| `AUTH_RC_04` | − | Cookie sent without the header | **400** — read as a body-only request with no token |
+| `AUTH_RC_05` | + | Logout with the header and cookie | **204**, cookie cleared, the token then fails refresh |
+| `AUTH_RC_06` | − | Header but no cookie | **401** |
+
 ---
 
 ## 6. Logout — `POST /api/auth/logout` and `/logout-all`
