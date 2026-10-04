@@ -23,9 +23,11 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
 using Wbskt.Management.Host.Hubs;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Management.Host.Services.Readings;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
@@ -78,6 +80,11 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScopedWithQueuedEvents<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
+        // Numeric state history: written by the state.report ingestion, read for charts and CSV.
+        builder.Services.Configure<ReadingsOptions>(builder.Configuration.GetSection(ReadingsOptions.SectionName));
+        builder.Services.AddScoped<IClientReadingProvider, ClientReadingProvider>();
+        builder.Services.AddScoped<IClientReadingService, ClientReadingService>();
+        builder.Services.AddHostedService<ClientReadingRetentionService>();
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
         builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();

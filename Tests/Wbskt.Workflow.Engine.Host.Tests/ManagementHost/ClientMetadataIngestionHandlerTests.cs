@@ -15,18 +15,26 @@ public sealed class ClientMetadataIngestionHandlerTests
     private const int ClientId = 42;
     private const int WorkspaceId = 7;
 
-    private static (ClientMetadataIngestionHandler Handler, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateHandler()
+    private static readonly DateTime ReceivedAt = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
+
+    private readonly Mock<IClientReadingProvider> _readings = new();
+
+    private (ClientMetadataIngestionHandler Handler, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateHandler()
     {
         var provider = new Mock<IClientProvider>();
         var bus = new Mock<IEventBus>();
-        var handler = new ClientMetadataIngestionHandler(provider.Object, bus.Object, NullLogger<ClientMetadataIngestionHandler>.Instance);
+        var handler = new ClientMetadataIngestionHandler(provider.Object, _readings.Object, bus.Object, NullLogger<ClientMetadataIngestionHandler>.Instance);
         return (handler, provider, bus);
     }
 
-    private static ConsumeContext<ClientMessageReceivedEvent> Context(string type, string payload)
+    private static ConsumeContext<ClientMessageReceivedEvent> Context(string type, string payload, DateTime? sentAt = null)
     {
         var ctx = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
-        ctx.SetupGet(x => x.Message).Returns(new ClientMessageReceivedEvent(ClientRefId, ClientId, WorkspaceId, type, payload));
+        ctx.SetupGet(x => x.Message).Returns(new ClientMessageReceivedEvent(ClientRefId, ClientId, WorkspaceId, type, payload)
+        {
+            CreatedAtUtc = ReceivedAt,
+            SentAtUtc = sentAt
+        });
         ctx.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
         return ctx.Object;
     }
@@ -161,5 +169,69 @@ public sealed class ClientMetadataIngestionHandlerTests
 
         provider.VerifyNoOtherCalls();
         bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task State_report_numbers_go_to_the_readings_history_at_the_devices_time()
+    {
+        var (handler, provider, _) = CreateHandler();
+        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateVariableUpsert(true, null));
+        var sentAt = ReceivedAt.AddSeconds(-2);
+
+        await handler.Consume(Context("state.report", """{"temp":4.5,"battery":87,"door":"open","on":true,"pos":[1,2]}""", sentAt));
+
+        _readings.Verify(x => x.InsertAsync(ClientId, sentAt, ReceivedAt, false,
+            It.Is<IReadOnlyCollection<ClientReadingValue>>(r => r.SequenceEqual(new[] { new ClientReadingValue("temp", 4.5), new ClientReadingValue("battery", 87) })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_report_sent_from_the_offline_buffer_is_marked_late()
+    {
+        var (handler, provider, _) = CreateHandler();
+        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "temp", "number", "3", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateVariableUpsert(true, null));
+        var sentAt = ReceivedAt.AddMinutes(-20);
+
+        await handler.Consume(Context("state.report", """{"temp":3}""", sentAt));
+
+        _readings.Verify(x => x.InsertAsync(ClientId, sentAt, ReceivedAt, true, It.IsAny<IReadOnlyCollection<ClientReadingValue>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_report_without_a_sent_time_counts_when_it_arrived()
+    {
+        var (handler, provider, _) = CreateHandler();
+        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "temp", "number", "3", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateVariableUpsert(true, null));
+
+        await handler.Consume(Context("state.report", """{"temp":3}"""));
+
+        _readings.Verify(x => x.InsertAsync(ClientId, ReceivedAt, ReceivedAt, false, It.IsAny<IReadOnlyCollection<ClientReadingValue>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Numbers_refused_at_the_variable_cap_are_not_recorded()
+    {
+        var (handler, provider, _) = CreateHandler();
+        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "extra", "number", "1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateVariableUpsert(false, null));
+
+        await handler.Consume(Context("state.report", """{"extra":1}"""));
+
+        _readings.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_report_with_no_numbers_records_no_readings()
+    {
+        var (handler, provider, _) = CreateHandler();
+        provider.Setup(x => x.UpsertStateVariableAsync(ClientId, "door", "string", "\"open\"", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateVariableUpsert(true, null));
+
+        await handler.Consume(Context("state.report", """{"door":"open"}"""));
+
+        _readings.VerifyNoOtherCalls();
     }
 }

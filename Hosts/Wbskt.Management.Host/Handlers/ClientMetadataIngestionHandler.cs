@@ -2,6 +2,7 @@ using System.Text.Json;
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models;
 
@@ -19,18 +20,24 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
     private const int MaxStateVariablesPerReport = 50;
     private const int MaxStateVariableNameLength = 100;
 
+    // As the workflow engine judges a payload late: it arrived this long after the device sent it.
+    internal static readonly TimeSpan LateThreshold = TimeSpan.FromSeconds(30);
+
     private static readonly JsonSerializerOptions DeserializeOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IClientProvider _clientProvider;
+    private readonly IClientReadingProvider _readingProvider;
     private readonly IEventBus _eventBus;
     private readonly ILogger<ClientMetadataIngestionHandler> _logger;
 
     public ClientMetadataIngestionHandler(
         IClientProvider clientProvider,
+        IClientReadingProvider readingProvider,
         IEventBus eventBus,
         ILogger<ClientMetadataIngestionHandler> logger)
     {
         _clientProvider = clientProvider;
+        _readingProvider = readingProvider;
         _eventBus = eventBus;
         _logger = logger;
     }
@@ -66,6 +73,7 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
         }
 
         var processed = 0;
+        var readings = new List<ClientReadingValue>();
         foreach (var property in doc.RootElement.EnumerateObject())
         {
             if (++processed > MaxStateVariablesPerReport)
@@ -90,12 +98,28 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
                 continue;
             }
 
+            // Numbers also go to the readings history, so they can be charted over time. Only for a
+            // variable that was stored: the cap on variables also caps how many series a device makes.
+            if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetDouble(out var number) && double.IsFinite(number))
+            {
+                readings.Add(new ClientReadingValue(property.Name, number));
+            }
+
             if (upsert.OldValueJson != valueJson)
             {
                 await _eventBus.PublishAsync(
                     new ClientPropertyUpdatedEvent(message.ClientRefId, message.ClientId, message.WorkspaceId, property.Name, upsert.OldValueJson, valueJson),
                     cancellationToken);
             }
+        }
+
+        if (readings.Count > 0)
+        {
+            // A buffered report counts at the time the device took it, not when it was finally sent.
+            var receivedAt = message.CreatedAtUtc;
+            var deviceTime = message.SentAtUtc ?? receivedAt;
+            var isLate = receivedAt - deviceTime > LateThreshold;
+            await _readingProvider.InsertAsync(message.ClientId, deviceTime, receivedAt, isLate, readings, cancellationToken);
         }
     }
 
