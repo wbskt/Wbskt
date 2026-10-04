@@ -150,7 +150,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         {
             p.AddWithValue("@Id", id);
             p.AddWithValue("@IsConnected", isConnected);
-            p.AddWithValue("@LastActivityAt", lastActivityAt);
+            // DateTime2 keeps the full millisecond, so a connect and a disconnect a few ms apart stay in order.
+            p.Add("@LastActivityAt", SqlDbType.DateTime2).Value = lastActivityAt;
             p.AddWithValue("@HostId", (object?)hostId ?? DBNull.Value);
         }, cancellationToken);
     }

@@ -103,7 +103,9 @@ internal sealed class SocketHandler : ISocketHandler
 
         try
         {
-            await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), cts.Token);
+            // Not tied to the connection: a client that drops straight away must still be recorded as
+            // having connected, or its disconnect has nothing to pair with.
+            await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), CancellationToken.None);
 
             // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
             await ReceiveLoopAsync(clientRefId, connection, cts.Token);

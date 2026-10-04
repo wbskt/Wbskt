@@ -66,6 +66,52 @@ public sealed class ClientPresenceCheckIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_disconnect_applied_before_its_connect_leaves_the_client_offline()
+    {
+        // A client that drops straight after connecting: the two events can be consumed out of order.
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        (int clientId, _) = await CreateClientAsync(Random.Shared.Next(1_000_000, int.MaxValue));
+        DateTime connectedAt = DateTime.UtcNow.AddMinutes(-1);
+        DateTime disconnectedAt = connectedAt.AddSeconds(1);
+
+        await PresenceAsync(clientId, false, disconnectedAt, "host-a");
+        await PresenceAsync(clientId, true, connectedAt, "host-a");
+
+        Assert.False(await ScalarAsync<bool>("SELECT IsConnected FROM dbo.Clients WHERE Id = @p0", clientId));
+        Assert.Equal(disconnectedAt, await ScalarAsync<DateTime>("SELECT LastActivityAt FROM dbo.Clients WHERE Id = @p0", clientId));
+    }
+
+    [SkippableFact]
+    public async Task Presence_changes_in_order_still_apply()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        (int clientId, _) = await CreateClientAsync(Random.Shared.Next(1_000_000, int.MaxValue));
+        DateTime connectedAt = DateTime.UtcNow.AddMinutes(-1);
+
+        await PresenceAsync(clientId, true, connectedAt, "host-a");
+        Assert.True(await ScalarAsync<bool>("SELECT IsConnected FROM dbo.Clients WHERE Id = @p0", clientId));
+
+        await PresenceAsync(clientId, false, connectedAt.AddSeconds(1), "host-a");
+        Assert.False(await ScalarAsync<bool>("SELECT IsConnected FROM dbo.Clients WHERE Id = @p0", clientId));
+
+        await PresenceAsync(clientId, true, connectedAt.AddSeconds(2), "host-a");
+        Assert.True(await ScalarAsync<bool>("SELECT IsConnected FROM dbo.Clients WHERE Id = @p0", clientId));
+    }
+
+    [SkippableFact]
+    public async Task A_late_disconnect_from_a_superseded_host_leaves_the_client_online()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        (int clientId, _) = await CreateClientAsync(Random.Shared.Next(1_000_000, int.MaxValue));
+        DateTime connectedAt = DateTime.UtcNow.AddMinutes(-1);
+
+        await PresenceAsync(clientId, true, connectedAt, "host-b");
+        await PresenceAsync(clientId, false, connectedAt.AddSeconds(1), "host-a");
+
+        Assert.True(await ScalarAsync<bool>("SELECT IsConnected FROM dbo.Clients WHERE Id = @p0", clientId));
+    }
+
+    [SkippableFact]
     public async Task A_check_for_a_deleted_client_leases_with_no_client()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -111,6 +157,17 @@ public sealed class ClientPresenceCheckIntegrationTests(SqlEdgeFixture fixture)
             ("@TriggerNodeId", nodeId), ("@TriggerKind", "presence"), ("@TriggerKey", key),
             ("@CorrelationExpression", DBNull.Value), ("@ConcurrencyPolicy", "Queue"), ("@FilterExpression", DBNull.Value));
         return key;
+    }
+
+    private async Task PresenceAsync(int clientId, bool isConnected, DateTime at, string hostId)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.Client_UpdatePresence", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@Id", clientId);
+        cmd.Parameters.AddWithValue("@IsConnected", isConnected);
+        cmd.Parameters.Add("@LastActivityAt", SqlDbType.DateTime2).Value = at;
+        cmd.Parameters.AddWithValue("@HostId", hostId);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task ProcAsync(string procedure, params (string Name, object Value)[] parameters)
