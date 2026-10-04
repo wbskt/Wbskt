@@ -16,8 +16,9 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 // the shared key), so the engine is never exposed publicly and manual/signal never get a public route.
 //
 // Hardening for the anonymous edge:
-//   - per-IP rate limiting (PublicCallbackPolicy.RateLimitPolicy) throttles brute-force enumeration
-//     of tokens/paths and blunts request floods;
+//   - rate limiting (PublicCallbackRateLimits): a webhook's budget is its workspace and path, so
+//     devices forwarded through a shared network server are not starved, while a per-IP ceiling
+//     across every callback throttles enumeration of tokens/paths and blunts request floods;
 //   - a request-body cap (RequestSizeLimit) bounds how much attacker-controlled data one call can
 //     push into persisted workflow state;
 //   - responses are uniform and opaque (202 Accepted, no Matched/RunId), so the response cannot be
