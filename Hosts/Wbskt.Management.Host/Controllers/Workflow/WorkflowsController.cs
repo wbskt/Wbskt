@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Events;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -16,14 +19,17 @@ public sealed class WorkflowsController : ApiControllerBase
     private readonly IWorkflowDefinitionService _service;
     private readonly IWorkflowEngineClient _engineClient;
     private readonly IAuthServiceClient _authClient;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowsController> _logger;
 
     public WorkflowsController(
         IWorkflowDefinitionService service, 
         IWorkflowEngineClient engineClient, 
         IAuthServiceClient authClient,
+        [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
         ILogger<WorkflowsController> logger)
     {
+        _eventBus = eventBus;
         _service = service;
         _engineClient = engineClient;
         _authClient = authClient;
@@ -267,6 +273,10 @@ public sealed class WorkflowsController : ApiControllerBase
         }
 
         _logger.LogInformation("Manual run request for workflow '{RefId}' resulted in {Outcome}", refId, response.Outcome);
+        if (response.Outcome is StartRunOutcome.Started or StartRunOutcome.Queued or StartRunOutcome.Duplicate)
+        {
+            await _eventBus.PublishAsync(new WorkflowRunRequestedEvent(refId, workspaceIdResult.Value, response.RunRefId, response.Outcome.ToString()), ct);
+        }
 
         return response.Outcome switch
         {

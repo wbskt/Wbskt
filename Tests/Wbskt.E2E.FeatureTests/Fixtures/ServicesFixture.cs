@@ -1094,4 +1094,4 @@ public sealed class ServicesFixture : IDisposable
 }
 
 /// <summary>Mirror of the Management Host's EventLogResponse (criticality serializes as a number: Info=0, Warning=1, Error=2).</summary>
-public sealed record EventLogItemDto(string EventName, string EventData, int Criticality, Guid? PolicyRefId, Guid? ClientRefId, Guid? WorkflowRefId, DateTime CreatedAtUtc);
+public sealed record EventLogItemDto(string EventName, string EventData, int Criticality, Guid? PolicyRefId, Guid? ClientRefId, Guid? WorkflowRefId, DateTime CreatedAtUtc, Guid? UserRefId = null);

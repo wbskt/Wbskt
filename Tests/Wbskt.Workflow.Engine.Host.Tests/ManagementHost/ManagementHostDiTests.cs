@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -25,7 +26,8 @@ public sealed class ManagementHostDiTests
         services.AddHttpClient();
         services.AddWorkflowManagementServices(configuration);
         services.AddSingleton<IIdentityService, IdentityService>();
-        services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        services.AddQueuedEventBus();
+        services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         services.AddSingleton<WorkflowValidator>();
 

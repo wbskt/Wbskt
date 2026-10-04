@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
@@ -35,6 +37,9 @@ public sealed class WorkflowDeletionTests
         harness.Runs.Verify(r => r.RequestCancellationAsync(101, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Cache.Verify(c => c.Invalidate(11), Times.Once);
         harness.Cache.Verify(c => c.Invalidate(12), Times.Once);
+        harness.Bus.Verify(b => b.PublishAsync(
+            It.Is<WorkflowDeletedEvent>(e => e.WorkflowRefId == RefId && e.WorkflowId == 12 && e.WorkspaceId == WorkspaceId && e.CancelledRuns == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -96,7 +101,7 @@ public sealed class WorkflowDeletionTests
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
             Service = new WorkflowDefinitionService(
                 Provider.Object, Mock.Of<ITriggerRegistrationService>(), Cache.Object,
-                new WorkflowValidator(), identity.Object, Runs.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+                new WorkflowValidator(), identity.Object, Runs.Object, Bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
         }
 
         public Mock<IWorkflowDefinitionProvider> Provider { get; } = new();
@@ -104,6 +109,8 @@ public sealed class WorkflowDeletionTests
         public Mock<IWorkflowDefinitionCache> Cache { get; } = new();
 
         public Mock<IRunCancellationService> Runs { get; } = new();
+
+        public Mock<IEventBus> Bus { get; } = new();
 
         public WorkflowDefinitionService Service { get; }
     }

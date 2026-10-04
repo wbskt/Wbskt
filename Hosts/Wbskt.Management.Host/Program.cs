@@ -87,7 +87,7 @@ public static class Program
         builder.Services.AddHostedService<ClientReadingRetentionService>();
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
-        builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        builder.Services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddSingleton<WorkflowValidator>();
         
@@ -128,6 +128,10 @@ public static class Program
                 // Register Auto SignalR Forwarding Consumers
                 configurator.AddAutoSignalRForwarding();
             });
+
+        // Commands and pings go straight to the bus, so they are attributed to their sender there; the
+        // queued bus does the same for everything else (see ActorStampingEventBus).
+        builder.Services.AddActorStampingEventBus();
 
         // Registered after the bus so it stops first, and can still send what is queued while stopping.
         builder.Services.AddHostedService<QueuedEventDispatcher>();

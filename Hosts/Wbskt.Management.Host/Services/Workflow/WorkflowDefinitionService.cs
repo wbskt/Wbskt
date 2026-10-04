@@ -1,5 +1,7 @@
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives.Exceptions;
@@ -26,6 +28,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private readonly WorkflowValidator _validator;
     private readonly IIdentityService _identityService;
     private readonly IRunCancellationService _runCancellation;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowDefinitionService> _logger;
 
     public WorkflowDefinitionService(
@@ -35,8 +38,10 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         WorkflowValidator validator,
         IIdentityService identityService,
         IRunCancellationService runCancellation,
+        IEventBus eventBus,
         ILogger<WorkflowDefinitionService> logger)
     {
+        _eventBus = eventBus;
         _runCancellation = runCancellation;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _triggerRegistrationService = triggerRegistrationService;
@@ -46,7 +51,12 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         _logger = logger;
     }
 
-    public async Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
+    public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
+    {
+        return PublishCoreAsync(workspaceId, workspaceRef, request, restoredFromVersion: null, ct);
+    }
+
+    private async Task<Result<WorkflowPublishResponse>> PublishCoreAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, int? restoredFromVersion, CancellationToken ct)
     {
         _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}", request.Name, request.RefId, workspaceId);
 
@@ -140,6 +150,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             }
 
             _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, inserted.Version);
+            await _eventBus.PublishAsync(new WorkflowPublishedEvent(inserted.RefId, inserted.Id, workspaceId, inserted.Version, request.Name, restoredFromVersion), ct);
             return Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(inserted.RefId, inserted.Version, "Published"));
         }
         catch (Exception ex)
@@ -197,6 +208,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
             _cache.Invalidate(row.Id);
             _logger.LogInformation("Workflow '{RefId}' version {Version} reinstated", refId, row.Version);
+            await _eventBus.PublishAsync(new WorkflowReinstatedEvent(row.RefId, row.Id, workspaceId, row.Version), ct);
             return Result.Success();
         }
         catch (Exception ex)
@@ -250,10 +262,11 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         // validated, versioned, registered and compensated on failure exactly like any other publish -
         // which matters, because a definition published before a validation rule existed may no longer
         // be valid.
-        return await PublishAsync(
+        return await PublishCoreAsync(
             workspaceId,
             workspaceRef,
             new WorkflowPublishRequest(refId, source.Name, source.Description, definition),
+            restoredFromVersion: version,
             ct);
     }
 
@@ -451,6 +464,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             _cache.Invalidate(row.Id);
 
             _logger.LogInformation("Workflow '{RefId}' deprecated successfully", refId);
+            await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(row.RefId, row.Id, workspaceId, row.Version), ct);
             return Result.Success();
         }
         catch (Exception ex)
@@ -521,6 +535,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             }
 
             _logger.LogInformation("Workflow '{RefId}' deleted: {Versions} version(s) disabled, {Runs} run(s) cancelling", refId, deletion.DefinitionIds.Count, deletion.ActiveRunIds.Count);
+            await _eventBus.PublishAsync(new WorkflowDeletedEvent(refId, deletion.DefinitionIds.DefaultIfEmpty().Max(), workspaceId, deletion.ActiveRunIds.Count), ct);
             return Result.Success();
         }
         catch (Exception ex)

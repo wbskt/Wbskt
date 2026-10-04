@@ -275,7 +275,7 @@ Saved send-panel payloads, optionally pinned to a policy.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `logs.read` | The workspace's event log, filterable by `eventName`, `criticality`, `policyRefId` and `clientRefId`. Newest first, `take` per page (1–200, default 50). The body carries `nextCursor`: pass it back as `cursor` for the next page; it is null on the last one. No total count. |
+| `GET /` | `logs.read` | The workspace's event log, filterable by `eventName`, `criticality`, `policyRefId` and `clientRefId`. Newest first, `take` per page (1–200, default 50). The body carries `nextCursor`: pass it back as `cursor` for the next page; it is null on the last one. No total count. Each entry carries `userRefId`: who took the action, for one taken through the API (device and policy changes, commands and pings, workflow publish, deprecate, reinstate, delete, manual run, cancel and signal); null for events with no signed-in user behind them. |
 
 ### 2.5 Workflows — `…/workflows`
 

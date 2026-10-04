@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Infrastructure.Events;
 
@@ -137,7 +138,45 @@ public static class QueuedEventBusExtensions
     public static IServiceCollection AddQueuedEventBus(this IServiceCollection services)
     {
         services.AddSingleton<QueuedEventBus>();
+        services.AddKeyedScoped<IEventBus>(QueuedKey, (sp, _) => WithActor(sp, sp.GetRequiredService<QueuedEventBus>()));
         return services;
+    }
+
+    /// <summary>
+    /// Key of the queued bus for classes the container builds without a factory, such as controllers:
+    /// <c>[FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus</c>.
+    /// </summary>
+    public const string QueuedKey = "queued";
+
+    /// <summary>
+    /// Puts <see cref="ActorStampingEventBus"/> in front of the host's <see cref="IEventBus"/>, so the
+    /// events published straight to the broker (commands, pings) record who sent them. Call after the
+    /// bus is registered.
+    /// </summary>
+    public static IServiceCollection AddActorStampingEventBus(this IServiceCollection services)
+    {
+        var registration = services.LastOrDefault(d => d.ServiceType == typeof(IEventBus) && !d.IsKeyedService)
+            ?? throw new InvalidOperationException("Register the event bus before AddActorStampingEventBus.");
+        services.Remove(registration);
+        services.Add(new ServiceDescriptor(typeof(IEventBus), sp => WithActor(sp, Resolve(sp, registration)), registration.Lifetime));
+        return services;
+    }
+
+    private static IEventBus Resolve(IServiceProvider sp, ServiceDescriptor registration)
+    {
+        return registration switch
+        {
+            { ImplementationInstance: IEventBus instance } => instance,
+            { ImplementationFactory: { } factory } => (IEventBus)factory(sp),
+            _ => (IEventBus)ActivatorUtilities.CreateInstance(sp, registration.ImplementationType!)
+        };
+    }
+
+    private static IEventBus WithActor(IServiceProvider sp, IEventBus bus)
+    {
+        // Hosts without signed-in users (no IIdentityService) publish as they always did.
+        var identity = sp.GetService<IIdentityService>();
+        return identity is null ? bus : new ActorStampingEventBus(bus, identity);
     }
 
     /// <summary>
@@ -148,7 +187,7 @@ public static class QueuedEventBusExtensions
         where TService : class
         where TImplementation : class, TService
     {
-        services.AddScoped<TService>(sp => ActivatorUtilities.CreateInstance<TImplementation>(sp, (IEventBus)sp.GetRequiredService<QueuedEventBus>()));
+        services.AddScoped<TService>(sp => ActivatorUtilities.CreateInstance<TImplementation>(sp, sp.GetRequiredKeyedService<IEventBus>(QueuedKey)));
         return services;
     }
 }

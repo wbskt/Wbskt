@@ -80,8 +80,9 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
             Guid? clientRefId = (@event as IClientContext)?.ClientRefId ?? GetGuidProperty(targetNode, "clientRefId");
             int? workflowId = (@event as IWorkflowContext)?.WorkflowId ?? GetIntProperty(targetNode, "workflowId");
             Guid? workflowRefId = (@event as IWorkflowContext)?.WorkflowRefId ?? GetGuidProperty(targetNode, "workflowRefId");
-            int? userId = (@event as IUserContext)?.UserId ?? GetIntProperty(targetNode, "userId");
-            Guid? userRefId = (@event as IUserContext)?.UserRefId ?? GetGuidProperty(targetNode, "userRefId");
+            // The user an event is about (a login) or, for an action taken through the API, who took it.
+            int? userId = (@event as IUserContext)?.UserId ?? (@event as IActorContext)?.ActorUserId ?? GetIntProperty(targetNode, "userId");
+            Guid? userRefId = (@event as IUserContext)?.UserRefId ?? (@event as IActorContext)?.ActorUserRefId ?? GetGuidProperty(targetNode, "userRefId");
 
             var entry = new EventLogEntry(
                 eventId, 

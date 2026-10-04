@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Workflow;
@@ -26,7 +27,7 @@ public sealed class PublishToObserveE2ETests
         var cache = new RecordingWorkflowDefinitionCache();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -49,7 +50,7 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);

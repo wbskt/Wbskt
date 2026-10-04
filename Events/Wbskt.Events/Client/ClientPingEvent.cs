@@ -5,4 +5,4 @@ namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientPingEvent")]
-public sealed record ClientPingEvent(Guid ClientRefId, int ClientId, int WorkspaceId, DateTime PingTime) : BaseEvent, IClientContext;
+public sealed record ClientPingEvent(Guid ClientRefId, int ClientId, int WorkspaceId, DateTime PingTime) : ActorEvent, IClientContext;

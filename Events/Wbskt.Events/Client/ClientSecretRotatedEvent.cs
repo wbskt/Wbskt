@@ -14,4 +14,4 @@ public sealed record ClientSecretRotatedEvent(
     Guid ClientRefId,
     int ClientId,
     int WorkspaceId,
-    DateTime RotatedAt) : BaseEvent, IClientContext;
+    DateTime RotatedAt) : ActorEvent, IClientContext;
