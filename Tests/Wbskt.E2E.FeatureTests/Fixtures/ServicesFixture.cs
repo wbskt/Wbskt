@@ -808,21 +808,35 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Lists runs for a workflow definition.</summary>
     public async Task<IReadOnlyList<RunSummaryDto>> ListRunsAsync(string token, Guid workspaceRef, Guid workflowRefId, int top = 50)
     {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs?top={top}");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var resp = await _http.SendAsync(req);
-        if (resp.StatusCode == HttpStatusCode.NotFound)
+        // The endpoint serves at most 200 runs a page, so follow nextCursor until `top` are read.
+        var runs = new List<RunSummaryDto>();
+        long? cursor = null;
+        while (runs.Count < top)
         {
-            return [];
+            var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs?top={top - runs.Count}"
+                + (cursor is { } c ? $"&cursor={c}" : "");
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var resp = await _http.SendAsync(req);
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                return runs;
+            }
+
+            resp.EnsureSuccessStatusCode();
+
+            var result = await resp.Content.ReadFromJsonAsync<RunListResponse>(JsonOptions);
+            runs.AddRange(result?.Runs ?? []);
+            if (result?.NextCursor is not { } next)
+            {
+                break;
+            }
+
+            cursor = next;
         }
 
-        resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<RunListResponse>(JsonOptions);
-        return result?.Runs ?? [];
+        return runs;
     }
 
     /// <summary>Starts a manual run, optionally with an idempotency key (re-posting the same key dedupes).</summary>
@@ -915,16 +929,30 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Fetches the ordered history events for a run (each carrying NodeCompleted/NodeFailed PayloadJson).</summary>
     public async Task<IReadOnlyList<HistoryEventDto>> GetHistoryAsync(string token, Guid workspaceRef, Guid runRefId, int top = 200)
     {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/history?top={top}");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        // The endpoint serves at most 200 events a page, so follow nextCursor until `top` are read.
+        var events = new List<HistoryEventDto>();
+        long fromEventId = 0;
+        while (events.Count < top)
+        {
+            using var req = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/history?top={top - events.Count}&fromEventId={fromEventId}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
+            var resp = await _http.SendAsync(req);
+            resp.EnsureSuccessStatusCode();
 
-        var result = await resp.Content.ReadFromJsonAsync<HistoryListResponse>(JsonOptions);
-        return result?.Events ?? [];
+            var result = await resp.Content.ReadFromJsonAsync<HistoryListResponse>(JsonOptions);
+            events.AddRange(result?.Events ?? []);
+            if (result?.NextCursor is not { } next)
+            {
+                break;
+            }
+
+            fromEventId = next;
+        }
+
+        return events;
     }
 
     /// <summary>Polls until the first run for a workflow appears, returning its RefId (or Guid.Empty on timeout).</summary>
