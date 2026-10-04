@@ -59,6 +59,27 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
         (await ClientLoginAsync(clientRef, secret)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    // ── Timestamps ────────────────────────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task DEV_TIME_01_TimesFromTheDatabase_AreWrittenAsUtc()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
+        var (_, pin) = await fixture.CreatePolicyAsync(token, workspace);
+        var (clientRef, _) = await fixture.RegisterClientAsync(pin, "timestamps");
+
+        var response = await Send(HttpMethod.Get, workspace, $"clients/{clientRef}", token);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        // Read back from SQL with no kind; without the Z a browser shows it in its own time zone.
+        var createdAt = body.RootElement.GetProperty("createdAt").GetString();
+        createdAt.Should().EndWith("Z");
+        DateTimeOffset.Parse(createdAt!).Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+    }
+
     // ── Rotate secret ─────────────────────────────────────────────────────────────────────
 
     [SkippableFact]

@@ -4,6 +4,7 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.HealthChecks;
+using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
@@ -100,6 +101,7 @@ public static class Program
 
         builder.Services.AddAuthorization();
         builder.Services.AddControllers();
+        builder.Services.AddWbsktJson();
 
         var app = builder.Build();
 

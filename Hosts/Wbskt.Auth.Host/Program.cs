@@ -21,6 +21,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Email;
 using Wbskt.Infrastructure.HealthChecks;
+using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
@@ -182,6 +183,7 @@ public static class Program
         builder.Services.AddHealthChecks().AddSqlServerCheck("AuthDBConnection");
 
         builder.Services.AddControllers();
+        builder.Services.AddWbsktJson();
 
         builder.Services.AddCustomOpenApi();
 
