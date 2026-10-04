@@ -14,6 +14,7 @@ namespace Wbskt.Auth.Host.Controllers;
 /// resolution it depends on.
 /// </summary>
 [Route("api/tenants")]
+[AnnouncesWorkspaceAccessChange]
 [ApiController]
 [Authorize]
 public class ManagementController : ApiControllerBase

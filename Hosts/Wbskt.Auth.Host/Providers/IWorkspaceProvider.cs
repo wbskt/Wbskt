@@ -12,6 +12,12 @@ internal interface IWorkspaceProvider : IReferenceProvider
     Task RemoveUserFromWorkspaceAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
     Task<IPagedList<TenantMemberResponse>> GetWorkspaceMembersAsync(int workspaceId, int skip, int take, CancellationToken cancellationToken = default);
     Task<bool> VerifyWorkspaceMembershipAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Looks up the workspace, checks membership and computes the effective permission set in one
+    /// call. Null when no workspace has that reference.
+    /// </summary>
+    Task<WorkspaceAccessResolution?> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default);
     Task UpdateWorkspaceAsync(int workspaceId, string name, string? description, CancellationToken cancellationToken = default);
     Task DeleteWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default);
 

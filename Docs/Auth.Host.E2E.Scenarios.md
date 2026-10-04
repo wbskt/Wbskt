@@ -247,7 +247,7 @@ Run isolated — the partition key is the client IP and these will otherwise poi
 | `AUTH_TK_07` | − | Client token against `GET /api/tenants` | **401** |
 | `AUTH_TK_08` | − | `Authorization` header without the `Bearer ` prefix | **401** |
 | `AUTH_TK_09` | + | Token from a *rotated* refresh still authorizes | **200** |
-| `AUTH_TK_10` | − | Access token of a member suspended in one tenant, on the auth and management hosts | **403** `WORKSPACE_FORBIDDEN` for that tenant's workspaces on both hosts at once; the same token still works in the member's own tenant |
+| `AUTH_TK_10` | − | Access token of a member suspended in one tenant, on the auth and management hosts | **403** `WORKSPACE_FORBIDDEN` for that tenant's workspaces: at once on the auth host, and on the management host as soon as the Redis announcement drops its cached access; the same token still works in the member's own tenant |
 
 ---
 

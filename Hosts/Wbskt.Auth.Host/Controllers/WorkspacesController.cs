@@ -43,7 +43,7 @@ public class WorkspacesController : ApiControllerBase
     [HttpPost("resolve")]
     public async Task<ActionResult<ResolvedWorkspaceResponse>> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}'", request.WorkspaceRef);
+        _logger.LogDebug("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}'", request.WorkspaceRef);
 
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
@@ -51,20 +51,19 @@ public class WorkspacesController : ApiControllerBase
             return MapError(userIdResult.Error);
         }
 
-        var workspaceId = await _workspaceMapper.FindIdByRefIdAsync(request.WorkspaceRef, cancellationToken);
-        if (workspaceId <= 0)
+        var result = await _workspaceService.ResolveAccessAsync(userIdResult.Value, request.WorkspaceRef, cancellationToken);
+        if (result.IsSuccess)
+        {
+            _logger.LogDebug("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId}, Permissions: {PermissionCount})", request.WorkspaceRef, result.Value.WorkspaceId, result.Value.Permissions.Count);
+            _metrics.RecordWorkspaceResolution("success");
+            return Ok(new ResolvedWorkspaceResponse(result.Value.WorkspaceId, result.Value.Permissions.ToArray()));
+        }
+
+        if (result.Error.Code == "WORKSPACE_NOT_FOUND")
         {
             _logger.LogWarning("API: Resolve failed - Workspace with RefId: '{WorkspaceRef}' not found", request.WorkspaceRef);
             _metrics.RecordWorkspaceResolution("not_found");
             return MapError(UnresolvedWorkspace());
-        }
-
-        var result = await _workspaceService.ResolveAccessAsync(userIdResult.Value, workspaceId, cancellationToken);
-        if (result.IsSuccess)
-        {
-            _logger.LogInformation("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId}, Permissions: {PermissionCount})", request.WorkspaceRef, workspaceId, result.Value.Count);
-            _metrics.RecordWorkspaceResolution("success");
-            return Ok(new ResolvedWorkspaceResponse(workspaceId, result.Value.ToArray()));
         }
 
         _metrics.RecordWorkspaceResolution(result.Error.Type == ErrorType.Forbidden ? "forbidden" : "error");
@@ -121,6 +120,7 @@ public class WorkspacesController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{workspaceRef:guid}/members")]
+    [AnnouncesWorkspaceAccessChange]
     public async Task<IActionResult> AddMember(Guid workspaceRef, [FromBody] AddMemberRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: AddMember requested for WorkspaceRef: '{WorkspaceRef}', Member: '{MemberEmail}'", workspaceRef, request.Email);
@@ -175,6 +175,7 @@ public class WorkspacesController : ApiControllerBase
     /// be removed. Requires the users.manage permission in that workspace.
     /// </summary>
     [HttpDelete("{workspaceRef:guid}/members/{userRef:guid}")]
+    [AnnouncesWorkspaceAccessChange]
     public async Task<IActionResult> RemoveMember(Guid workspaceRef, Guid userRef, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: RemoveMember requested for WorkspaceRef: '{WorkspaceRef}', UserRef: '{UserRef}'", workspaceRef, userRef);
@@ -211,6 +212,7 @@ public class WorkspacesController : ApiControllerBase
     /// Requires users.manage in that workspace.
     /// </summary>
     [HttpPut("{workspaceRef:guid}/owner")]
+    [AnnouncesWorkspaceAccessChange]
     public async Task<IActionResult> TransferOwnership(Guid workspaceRef, [FromBody] TransferOwnershipRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: TransferOwnership requested for WorkspaceRef: '{WorkspaceRef}', NewOwner: '{UserRef}'", workspaceRef, request.UserRef);
@@ -230,6 +232,7 @@ public class WorkspacesController : ApiControllerBase
     /// resolving. Requires users.manage in that workspace.
     /// </summary>
     [HttpDelete("{workspaceRef:guid}")]
+    [AnnouncesWorkspaceAccessChange]
     public async Task<IActionResult> DeleteWorkspace(Guid workspaceRef, CancellationToken cancellationToken)
     {
         _logger.LogInformation("API: DeleteWorkspace requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);

@@ -21,4 +21,11 @@ public interface IWorkspaceService
     /// method is callable and testable outside a request.
     /// </summary>
     Task<Result<IReadOnlyCollection<string>>> ResolveAccessAsync(int userId, int workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The same gate and permission set, starting from the workspace's public reference, in a single
+    /// database call. Fails Forbidden with <c>WORKSPACE_NOT_FOUND</c> when the reference matches no
+    /// workspace and <c>WORKSPACE_UNAUTHORIZED</c> when the user is not a member.
+    /// </summary>
+    Task<Result<WorkspaceAccessResolution>> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default);
 }

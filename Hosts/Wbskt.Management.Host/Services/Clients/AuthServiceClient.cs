@@ -1,4 +1,5 @@
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives.Models;
 
 namespace Wbskt.Management.Host.Services.Clients;
@@ -7,16 +8,40 @@ internal sealed class AuthServiceClient : IAuthServiceClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AuthServiceClient> _logger;
+    private readonly WorkspaceAccessCache _cache;
+    private readonly IIdentityService _identityService;
 
-    public AuthServiceClient(HttpClient httpClient, ILogger<AuthServiceClient> logger)
+    public AuthServiceClient(HttpClient httpClient, ILogger<AuthServiceClient> logger, WorkspaceAccessCache cache, IIdentityService identityService)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _cache = cache;
+        _identityService = identityService;
     }
 
     public async Task<Result<WorkspaceAccess>> ResolveWorkspaceAsync(Guid workspaceRef, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Attempting to resolve workspace reference: '{WorkspaceRef}' via Auth Service", workspaceRef);
+        // The auth host answers for whoever the forwarded token names, which is this request's
+        // identity, so that is the cache key. No identity means no caching rather than a shared entry.
+        int? userId = _identityService.TryGetUserIdentity(out var identity) ? identity.UserId : null;
+        if (userId is not null && _cache.TryGet(userId.Value, workspaceRef, out var cached))
+        {
+            return Result<WorkspaceAccess>.Success(cached!);
+        }
+
+        var generation = _cache.Generation;
+        var result = await ResolveWithAuthServiceAsync(workspaceRef, cancellationToken);
+        if (result.IsSuccess && userId is not null)
+        {
+            _cache.Set(userId.Value, workspaceRef, result.Value, generation);
+        }
+
+        return result;
+    }
+
+    private async Task<Result<WorkspaceAccess>> ResolveWithAuthServiceAsync(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("Attempting to resolve workspace reference: '{WorkspaceRef}' via Auth Service", workspaceRef);
 
         try
         {
@@ -53,7 +78,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
             }
 
             var access = new WorkspaceAccess(result.WorkspaceId, result.Permissions.ToHashSet(StringComparer.OrdinalIgnoreCase));
-            _logger.LogInformation("Successfully resolved workspace reference: '{WorkspaceRef}' to internal ID: {WorkspaceId} with {PermissionCount} permissions", workspaceRef, access.WorkspaceId, access.Permissions.Count);
+            _logger.LogDebug("Successfully resolved workspace reference: '{WorkspaceRef}' to internal ID: {WorkspaceId} with {PermissionCount} permissions", workspaceRef, access.WorkspaceId, access.Permissions.Count);
             return Result<WorkspaceAccess>.Success(access);
         }
         catch (Exception ex)
