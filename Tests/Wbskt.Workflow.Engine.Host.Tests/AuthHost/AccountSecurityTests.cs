@@ -122,31 +122,82 @@ public sealed class AccountSecurityTests
 
     // ---------------------------------------------------------------- sessions
 
+    private static readonly Guid SessionId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
     [Fact]
     public async Task Ending_a_session_that_is_not_yours_reads_as_not_found()
     {
         var harness = new Harness();
         harness.Provider
-            .Setup(p => p.RevokeSessionAsync(7, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.RevokeSessionAsync(SessionId, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        var result = await harness.Service.RevokeSessionAsync(42, 7, "10.0.0.1");
+        var result = await harness.Service.RevokeSessionAsync(42, SessionId, "10.0.0.1");
 
         Assert.Equal("AUTH_SESSION_NOT_FOUND", result.Error.Code);
         Assert.Equal(ErrorType.NotFound, result.Error.Type);
+        harness.AccessTokens.Verify(a => a.RevokeSessionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>
+    /// The access token goes too. Without it, a session ended from the list kept working on that
+    /// device until its access token ran out.
+    /// </summary>
     [Fact]
-    public async Task Ending_your_own_session_succeeds()
+    public async Task Ending_your_own_session_ends_its_access_token_too()
     {
         var harness = new Harness();
         harness.Provider
-            .Setup(p => p.RevokeSessionAsync(7, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.RevokeSessionAsync(SessionId, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var result = await harness.Service.RevokeSessionAsync(42, 7, "10.0.0.1");
+        var result = await harness.Service.RevokeSessionAsync(42, SessionId, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
+        harness.AccessTokens.Verify(a => a.RevokeSessionAsync(SessionId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Logging_out_ends_the_sessions_access_token()
+    {
+        var harness = new Harness();
+        harness.Provider
+            .Setup(p => p.RevokeRefreshTokenAsync("refresh", It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SessionId);
+
+        var result = await harness.Service.LogoutAsync("refresh", "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        harness.AccessTokens.Verify(a => a.RevokeSessionAsync(SessionId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Logging_out_with_a_dead_token_ends_nothing_and_still_succeeds()
+    {
+        var harness = new Harness();
+        harness.Provider
+            .Setup(p => p.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
+
+        var result = await harness.Service.LogoutAsync("dead", "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        harness.AccessTokens.Verify(a => a.RevokeSessionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task The_session_list_marks_the_one_the_request_came_from()
+    {
+        var harness = new Harness();
+        var other = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        harness.Provider
+            .Setup(p => p.GetActiveSessionsAsync(42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new SessionResponse(other, now, now, now.AddDays(7), null), new SessionResponse(SessionId, now, now, now.AddDays(7), null)]);
+
+        var result = await harness.Service.GetSessionsAsync(42, SessionId);
+
+        Assert.Equal([false, true], result.Value.Select(s => s.IsCurrent));
     }
 
     private static User AUser(DateTime? lockedUntil = null) => new()

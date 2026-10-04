@@ -210,6 +210,9 @@ The most security-sensitive area, and entirely uncovered today.
 | `AUTH_PW_03` | − | No token | **401** |
 | `AUTH_SES_01` | + | Two sign-ins, list, end the older | Both listed; after `DELETE` the ended one is gone and its refresh token fails, the other still refreshes |
 | `AUTH_SES_02` | − | End another user's session by id | **404**; the owner's session is untouched |
+| `AUTH_SES_03` | + | List, refresh, list again | The session keeps its id and sign-in time; `isCurrent` marks it both times |
+| `AUTH_SES_04` | − | End one session from another | Its access token gets **401** on the auth host at once and on the management host shortly after; the other session's token still works |
+| `AUTH_SES_05` | − | Log out, then use that session's access token | **401**; a fresh sign-in works |
 | `AUTH_LOCK_01` | − | Ten wrong passwords, then the right one | **401** `AUTH_INVALID_CREDENTIALS`, identical to a wrong password; sessions issued earlier still work |
 | `AUTH_LOCK_02` | + | Nine wrong passwords, a success, one more wrong one | The next correct sign-in still succeeds: a success resets the count |
 

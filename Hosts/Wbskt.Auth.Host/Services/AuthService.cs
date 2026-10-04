@@ -73,6 +73,8 @@ internal sealed class AuthService : IAuthService
     private readonly AuthMetrics _metrics;
     private readonly IAccessTokenRevocation _accessTokens;
     private readonly TimeSpan _accessTokenLifetime;
+    private readonly TimeSpan _refreshTokenLifetime;
+    private readonly TimeSpan _sessionLifetime;
     private readonly bool _requireVerifiedEmail;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
@@ -99,6 +101,8 @@ internal sealed class AuthService : IAuthService
     {
         _accessTokens = accessTokens;
         _accessTokenLifetime = accessTokenOptions.Value.AccessTokenLifetime;
+        _refreshTokenLifetime = accessTokenOptions.Value.RefreshTokenLifetime;
+        _sessionLifetime = accessTokenOptions.Value.SessionLifetime;
         _provider = provider;
         _jwtService = jwtService;
         _eventBus = eventBus;
@@ -187,8 +191,8 @@ internal sealed class AuthService : IAuthService
             await _provider.RecordLoginSuccessAsync(user.Id, cancellationToken);
 
             _logger.LogDebug("Credentials verified successfully for user: {Username} ({Email}). Generating tokens...", user.Username, email);
-            var accessToken = GenerateAccessToken(user);
             var refreshToken = GenerateRefreshToken(user.Id);
+            var accessToken = GenerateAccessToken(user, refreshToken.SessionId);
 
             await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
             _logger.LogDebug("Refresh token inserted for user ID: {UserId}", user.Id);
@@ -225,10 +229,11 @@ internal sealed class AuthService : IAuthService
             // the client holding a dead token, and its next attempt read as a replay that ended every
             // session the user had. The procedure also tells a replay (already retired when read)
             // from a lost race (retired by a concurrent exchange in between); see RefreshToken_Rotate.
-            // The user id is not needed here: the procedure stores the replacement under whoever owns
-            // the presented token.
+            // The user id and session are not needed here: the procedure stores the replacement under
+            // whoever owns the presented token, in the same session, and refuses to extend a session
+            // past its absolute lifetime.
             var newRefreshToken = GenerateRefreshToken(0);
-            var rotation = await _provider.RotateRefreshTokenAsync(token, newRefreshToken, ipAddress, cancellationToken);
+            var rotation = await _provider.RotateRefreshTokenAsync(token, newRefreshToken, _sessionLifetime, ipAddress, cancellationToken);
 
             switch (rotation.Outcome)
             {
@@ -262,6 +267,13 @@ internal sealed class AuthService : IAuthService
                     _metrics.RecordRefresh("token_inactive");
                     return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
 
+                case RefreshRotationOutcome.SessionExpired:
+                    // Used often enough to stay alive, but signed in too long ago. The same answer as
+                    // an expired token: the client signs in again, with the password.
+                    _logger.LogInformation("Token refresh refused: session for user ID {UserId} reached its absolute lifetime. IP: {IpAddress}", rotation.UserId, ipAddress);
+                    _metrics.RecordRefresh("session_expired");
+                    return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_TOKEN_INACTIVE", "Token is no longer active."));
+
                 case RefreshRotationOutcome.UserInactive:
                     _logger.LogWarning("Token refresh failed: Account is inactive for user ID {UserId}. IP: {IpAddress}", rotation.UserId, ipAddress);
                     _metrics.RecordRefresh("user_inactive");
@@ -278,7 +290,7 @@ internal sealed class AuthService : IAuthService
             }
 
             var user = rotation.User!;
-            var newAccessToken = GenerateAccessToken(user);
+            var newAccessToken = GenerateAccessToken(user, rotation.SessionId!.Value);
 
             // Queued, not awaited on the broker (QueuedEventBus): the rotation is committed, and an
             // event that fails to go out must not turn it into an error the client acts on.
@@ -305,8 +317,14 @@ internal sealed class AuthService : IAuthService
         {
             // Deliberately not reporting whether the token existed: logout is unauthenticated by
             // necessity, and a distinguishable response would turn it into a token oracle.
-            var revoked = await _provider.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
-            _logger.LogInformation("Logout revoked {RevokedCount} refresh token(s). IP: {IpAddress}", revoked, ipAddress);
+            var sessionId = await _provider.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
+            if (sessionId is not null)
+            {
+                // The refresh token is gone, so this ends the access token the device still holds.
+                await _accessTokens.RevokeSessionAsync(sessionId.Value, cancellationToken);
+            }
+
+            _logger.LogInformation("Logout {Outcome}. IP: {IpAddress}", sessionId is null ? "found no live token" : "ended a session", ipAddress);
             return Result.Success();
         }
         catch (Exception ex)
@@ -369,7 +387,7 @@ internal sealed class AuthService : IAuthService
             await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
 
             _logger.LogInformation("Password changed for user {UserId}; all other sessions revoked. IP: {IpAddress}", userId, ipAddress);
-            return Result<LoginResponse>.Success(new LoginResponse(GenerateAccessToken(user), refreshToken.Token));
+            return Result<LoginResponse>.Success(new LoginResponse(GenerateAccessToken(user, refreshToken.SessionId), refreshToken.Token));
         }
         catch (SecurityException)
         {
@@ -382,11 +400,13 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, Guid? currentSessionId, CancellationToken cancellationToken = default)
     {
         try
         {
-            return Result<IReadOnlyCollection<SessionResponse>>.Success(await _provider.GetActiveSessionsAsync(userId, cancellationToken));
+            var sessions = await _provider.GetActiveSessionsAsync(userId, cancellationToken);
+            return Result<IReadOnlyCollection<SessionResponse>>.Success(
+                sessions.Select(s => s with { IsCurrent = s.Id == currentSessionId }).ToList());
         }
         catch (Exception ex)
         {
@@ -395,7 +415,7 @@ internal sealed class AuthService : IAuthService
         }
     }
 
-    public async Task<Result> RevokeSessionAsync(int userId, int sessionId, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> RevokeSessionAsync(int userId, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -405,6 +425,9 @@ internal sealed class AuthService : IAuthService
                 // Someone else's session reads exactly like one that does not exist.
                 return Result.Failure(Error.NotFound("AUTH_SESSION_NOT_FOUND", "Session not found."));
             }
+
+            // After the refresh token, so the device cannot mint an access token the revocation misses.
+            await _accessTokens.RevokeSessionAsync(sessionId, cancellationToken);
 
             _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
             return Result.Success();
@@ -800,14 +823,15 @@ internal sealed class AuthService : IAuthService
         return Result.Success();
     }
 
-    private string GenerateAccessToken(User user)
+    private string GenerateAccessToken(User user, Guid sessionId)
     {
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Email, user.Email),
-            new Claim("type", "user")
+            new Claim("type", "user"),
+            new Claim(JwtServiceCollectionExtensions.JwtSessionClaim, sessionId.ToString())
         };
 
         return _jwtService.GenerateToken(claims, JwtAudiences.Api, _accessTokenLifetime);
@@ -819,11 +843,14 @@ internal sealed class AuthService : IAuthService
         var randomBytes = new byte[64];
         rng.GetBytes(randomBytes);
 
+        // A new session id: used as-is when this token starts a sign-in, and ignored by rotation,
+        // which keeps the presented token's.
         return new RefreshToken
         {
             UserId = userId,
+            SessionId = Guid.NewGuid(),
             Token = Convert.ToBase64String(randomBytes),
-            Expires = DateTime.UtcNow.AddDays(7),
+            Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
         };
     }
 }

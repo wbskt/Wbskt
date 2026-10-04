@@ -13,6 +13,19 @@ public sealed class AccessTokenOptions
     /// its signature and the revocation watermark; the refresh token carries the session.
     /// </summary>
     public TimeSpan AccessTokenLifetime { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// <c>Jwt:RefreshTokenLifetime</c>. How long a session survives without being used: every refresh
+    /// issues a token good for this long again.
+    /// </summary>
+    public TimeSpan RefreshTokenLifetime { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// <c>Jwt:SessionLifetime</c>. How long a session survives however often it is used, counted from
+    /// the sign-in. Past it the refresh token is refused and the user enters their password again, so
+    /// a refresh token that keeps being rotated, by its owner or by whoever stole it, still ends.
+    /// </summary>
+    public TimeSpan SessionLifetime { get; set; } = TimeSpan.FromDays(30);
 }
 
 /// <summary>Ends a user's access tokens before they expire.</summary>
@@ -21,11 +34,21 @@ public interface IAccessTokenRevocation
     /// <summary>Every access token issued to <paramref name="userId"/> up to now stops validating, on every host.</summary>
     Task RevokeUserAsync(int userId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Every access token carrying <paramref name="sessionId"/> as its <c>sid</c> stops validating, on
+    /// every host. Call it after the session's refresh token is revoked, so no new one can be minted.
+    /// </summary>
+    Task RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
     bool IsRevoked(int userId, DateTimeOffset issuedAt);
+
+    bool IsSessionRevoked(Guid sessionId);
 }
 
 /// <summary>
-/// A per-user watermark: a token issued at or before the moment its user was revoked is refused.
+/// A per-user watermark: a token issued at or before the moment its user was revoked is refused. And
+/// a set of ended sessions: a token whose <c>sid</c> is in it is refused whenever it was issued, since
+/// a session's refresh token is revoked before the session is, so nothing can mint another.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -41,7 +64,8 @@ public interface IAccessTokenRevocation
 /// that merely validates them may be configured differently, or not at all. So the host recording a
 /// revocation (always the issuer: the auth host) stamps it with an expiry of its own token lifetime
 /// plus clock skew, and every host, here and in Redis, prunes by that stamp rather than by its own
-/// configuration. In the set the member is <c>userId:watermark</c> and the score is the expiry.
+/// configuration. In the set the member is <c>userId:watermark</c>, or <c>s:sessionId</c> for an
+/// ended session, and the score is the expiry.
 /// Revocation is best effort: if Redis is unreachable the refresh tokens are still revoked in the
 /// database, and the cost is that already-issued access tokens live out their (short) lifetime.
 /// </para>
@@ -63,7 +87,12 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     private readonly TimeProvider _time;
     private readonly ILogger<AccessTokenRevocation> _logger;
     private readonly TimeSpan _retention;
+    private const string SessionPrefix = "s:";
+
     private readonly ConcurrentDictionary<int, Watermark> _watermarks = new();
+
+    // Ended session -> when the entry can go (unix seconds), by the same rule as a watermark.
+    private readonly ConcurrentDictionary<Guid, long> _sessions = new();
     private CancellationTokenSource? _stopping;
     private Task? _resync;
 
@@ -97,6 +126,30 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
             _logger.LogError(ex, "Could not publish the access-token revocation for user {UserId}; other hosts will accept that user's current access tokens until they expire", userId);
         }
     }
+
+    public async Task RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        long expiresAt = _time.GetUtcNow().ToUnixTimeSeconds() + (long)_retention.TotalSeconds;
+        ApplySession(sessionId, expiresAt);
+
+        if (_redis is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IDatabase db = _redis.GetDatabase();
+            await db.SortedSetAddAsync(SetKey, $"{SessionPrefix}{sessionId:N}", expiresAt);
+            await db.PublishAsync(RedisChannel.Literal(Channel), $"{SessionPrefix}{sessionId:N}:{expiresAt}");
+        }
+        catch (Exception ex) when (ex is RedisException or TimeoutException)
+        {
+            _logger.LogError(ex, "Could not publish the end of session {SessionId}; other hosts will accept its current access token until it expires", sessionId);
+        }
+    }
+
+    public bool IsSessionRevoked(Guid sessionId) => _sessions.ContainsKey(sessionId);
 
     public bool IsRevoked(int userId, DateTimeOffset issuedAt)
     {
@@ -155,6 +208,14 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
             }
         }
 
+        foreach ((Guid sessionId, long expiresAt) in _sessions)
+        {
+            if (expiresAt < now)
+            {
+                _sessions.TryRemove(new KeyValuePair<Guid, long>(sessionId, expiresAt));
+            }
+        }
+
         if (_redis is null)
         {
             return;
@@ -164,7 +225,15 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         await db.SortedSetRemoveRangeByScoreAsync(SetKey, double.NegativeInfinity, now, Exclude.Stop);
         foreach (SortedSetEntry entry in await db.SortedSetRangeByScoreWithScoresAsync(SetKey, now, double.PositiveInfinity))
         {
-            if (TryParse(entry.Element.ToString(), out int userId, out long revokedAt))
+            string member = entry.Element.ToString();
+            if (member.StartsWith(SessionPrefix, StringComparison.Ordinal))
+            {
+                if (Guid.TryParse(member.AsSpan(SessionPrefix.Length), out Guid sessionId))
+                {
+                    ApplySession(sessionId, (long)entry.Score);
+                }
+            }
+            else if (TryParse(member, out int userId, out long revokedAt))
             {
                 Apply(userId, new Watermark(revokedAt, (long)entry.Score));
             }
@@ -199,7 +268,15 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     {
         string? text = message;
         int last = text?.LastIndexOf(':') ?? -1;
-        if (last > 0
+        if (last > 0 && text!.StartsWith(SessionPrefix, StringComparison.Ordinal))
+        {
+            if (Guid.TryParse(text.AsSpan(SessionPrefix.Length, last - SessionPrefix.Length), out Guid sessionId)
+                && long.TryParse(text.AsSpan(last + 1), out long sessionExpiresAt))
+            {
+                ApplySession(sessionId, sessionExpiresAt);
+            }
+        }
+        else if (last > 0
             && TryParse(text.AsSpan(0, last), out int userId, out long revokedAt)
             && long.TryParse(text.AsSpan(last + 1), out long expiresAt))
         {
@@ -222,6 +299,9 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         _watermarks.AddOrUpdate(userId, watermark, (_, existing) => new Watermark(
             Math.Max(existing.RevokedAt, watermark.RevokedAt),
             Math.Max(existing.ExpiresAt, watermark.ExpiresAt)));
+
+    private void ApplySession(Guid sessionId, long expiresAt) =>
+        _sessions.AddOrUpdate(sessionId, expiresAt, (_, existing) => Math.Max(existing, expiresAt));
 
     /// <summary>Tokens issued before <see cref="RevokedAt"/> are refused until <see cref="ExpiresAt"/>, both unix seconds.</summary>
     private sealed record Watermark(long RevokedAt, long ExpiresAt);

@@ -126,6 +126,60 @@ public sealed class AccessTokenRevocationTests
         Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
     }
 
+    // ---------------------------------------------------------------- sessions
+
+    [Fact]
+    public async Task An_ended_session_is_refused_and_other_sessions_are_not()
+    {
+        var (revocation, _) = Create();
+        var ended = Guid.NewGuid();
+
+        await revocation.RevokeSessionAsync(ended);
+
+        Assert.True(revocation.IsSessionRevoked(ended));
+        Assert.False(revocation.IsSessionRevoked(Guid.NewGuid()));
+        // A session is not a user: their other sessions keep working.
+        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+    }
+
+    [Fact]
+    public async Task An_ended_session_is_dropped_once_its_access_token_has_expired()
+    {
+        var (revocation, time) = Create(TimeSpan.FromMinutes(15));
+        var ended = Guid.NewGuid();
+        await revocation.RevokeSessionAsync(ended);
+
+        time.Advance(TimeSpan.FromMinutes(14));
+        await revocation.ResyncAsync();
+        Assert.True(revocation.IsSessionRevoked(ended));
+
+        time.Advance(TimeSpan.FromMinutes(3));
+        await revocation.ResyncAsync();
+        Assert.False(revocation.IsSessionRevoked(ended));
+    }
+
+    [Fact]
+    public void A_session_ended_on_another_host_is_applied_here()
+    {
+        var (revocation, _) = Create();
+        var ended = Guid.NewGuid();
+
+        revocation.OnMessage($"s:{ended:N}:{Now.ToUnixTimeSeconds() + 600}");
+
+        Assert.True(revocation.IsSessionRevoked(ended));
+    }
+
+    [Fact]
+    public void A_malformed_session_message_is_ignored()
+    {
+        var (revocation, _) = Create();
+
+        revocation.OnMessage("s:not-a-guid:1");
+        revocation.OnMessage($"s:{Guid.NewGuid():N}:soon");
+
+        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+    }
+
     private static (AccessTokenRevocation Revocation, ManualTime Time) Create(TimeSpan? lifetime = null)
     {
         var time = new ManualTime(Now);

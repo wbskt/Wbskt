@@ -16,6 +16,12 @@ public static class JwtServiceCollectionExtensions
     public const string JwksPath = "/.well-known/jwks.json";
 
     /// <summary>
+    /// The access token claim naming the sign-in session it belongs to (the refresh token chain), so
+    /// ending one session can end its access token too.
+    /// </summary>
+    public const string JwtSessionClaim = "sid";
+
+    /// <summary>
     /// This host signs tokens as <paramref name="issuer"/>: loads its key pair (<c>Jwt:SigningKey</c>)
     /// and registers <see cref="IJwtService"/>. Pair with <see cref="MapWbsktJwks"/>.
     /// </summary>
@@ -110,6 +116,14 @@ public static class JwtServiceCollectionExtensions
         if (revocation is null || context.SecurityToken is not JsonWebToken token)
         {
             return false;
+        }
+
+        // Read from the token itself rather than the principal, so inbound claim mapping cannot rename it.
+        if (token.TryGetPayloadValue<string>(JwtSessionClaim, out var sid)
+            && Guid.TryParse(sid, out var sessionId)
+            && revocation.IsSessionRevoked(sessionId))
+        {
+            return true;
         }
 
         var subject = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;

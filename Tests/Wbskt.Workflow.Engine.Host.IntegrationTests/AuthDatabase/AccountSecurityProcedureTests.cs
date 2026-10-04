@@ -76,12 +76,12 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
         Skip.IfNot(fixture.IsAvailable, Skipped);
         int userId = await CreateUserAsync();
         int otherUserId = await CreateUserAsync();
-        int live = await AddSessionAsync(userId);
-        int expired = await AddSessionAsync(userId, expires: "2000-01-01");
-        int revoked = await AddSessionAsync(userId);
-        await ExecAsync("UPDATE dbo.RefreshTokens SET Revoked = SYSUTCDATETIME() WHERE Id = @p0", revoked);
+        Guid live = await AddSessionAsync(userId);
+        Guid expired = await AddSessionAsync(userId, expires: "2000-01-01");
+        Guid revoked = await AddSessionAsync(userId);
+        await ExecAsync("UPDATE dbo.RefreshTokens SET Revoked = SYSUTCDATETIME() WHERE SessionId = @p0", revoked);
 
-        List<int> listed = await ListSessionsAsync(userId);
+        List<Guid> listed = await ListSessionsAsync(userId);
         Assert.Equal([live], listed);
 
         // Another user's id, an expired one and an already-revoked one all revoke nothing.
@@ -102,9 +102,9 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
             VALUES (@u, CONCAT(@u, '@example.test'), 'hash', 1);
             """);
 
-    private Task<int> AddSessionAsync(int userId, string expires = "2999-01-01") =>
-        ScalarAsync<int>("""
-            INSERT INTO dbo.RefreshTokens (UserId, TokenHash, Expires, CreatedByIp) OUTPUT INSERTED.Id
+    private Task<Guid> AddSessionAsync(int userId, string expires = "2999-01-01") =>
+        ScalarAsync<Guid>("""
+            INSERT INTO dbo.RefreshTokens (UserId, TokenHash, Expires, CreatedByIp) OUTPUT INSERTED.SessionId
             VALUES (@p0, CRYPT_GEN_RANDOM(32), CONVERT(DATETIME2(3), @p1), N'10.0.0.1');
             """, userId, expires);
 
@@ -119,26 +119,26 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
         return result is DateTime value ? value : null;
     }
 
-    private async Task<List<int>> ListSessionsAsync(int userId)
+    private async Task<List<Guid>> ListSessionsAsync(int userId)
     {
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("dbo.RefreshToken_GetActiveForUser", conn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@UserId", userId);
         await using var reader = await cmd.ExecuteReaderAsync();
-        var ids = new List<int>();
+        var ids = new List<Guid>();
         while (await reader.ReadAsync())
         {
-            ids.Add(reader.GetInt32(reader.GetOrdinal("Id")));
+            ids.Add(reader.GetGuid(reader.GetOrdinal("SessionId")));
         }
 
         return ids;
     }
 
-    private async Task<int> RevokeAsync(int sessionId, int userId)
+    private async Task<int> RevokeAsync(Guid sessionId, int userId)
     {
         await using var conn = await OpenAsync();
         await using var cmd = new SqlCommand("dbo.RefreshToken_RevokeForUser", conn) { CommandType = CommandType.StoredProcedure };
-        cmd.Parameters.AddWithValue("@Id", sessionId);
+        cmd.Parameters.AddWithValue("@SessionId", sessionId);
         cmd.Parameters.AddWithValue("@UserId", userId);
         return (int)(await cmd.ExecuteScalarAsync())!;
     }

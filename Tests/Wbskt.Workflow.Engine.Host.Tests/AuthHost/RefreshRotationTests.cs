@@ -21,6 +21,8 @@ namespace Wbskt.Workflow.Engine.Host.Tests.AuthHost;
 /// </summary>
 public sealed class RefreshRotationTests
 {
+    private static readonly Guid TheSession = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
     private static readonly User TheUser = new()
     {
         Id = 42,
@@ -36,9 +38,9 @@ public sealed class RefreshRotationTests
         var harness = new Harness();
         RefreshToken? stored = null;
         harness.Provider
-            .Setup(p => p.RotateRefreshTokenAsync("old", It.IsAny<RefreshToken>(), "10.0.0.1", It.IsAny<CancellationToken>()))
-            .Callback<string, RefreshToken, string, CancellationToken>((_, replacement, _, _) => stored = replacement)
-            .ReturnsAsync(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser));
+            .Setup(p => p.RotateRefreshTokenAsync("old", It.IsAny<RefreshToken>(), It.IsAny<TimeSpan>(), "10.0.0.1", It.IsAny<CancellationToken>()))
+            .Callback<string, RefreshToken, TimeSpan, string, CancellationToken>((_, replacement, _, _, _) => stored = replacement)
+            .ReturnsAsync(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
 
         var result = await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
 
@@ -57,11 +59,37 @@ public sealed class RefreshRotationTests
         harness.Bus
             .Setup(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser));
+        harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
 
         var result = await harness.QueuedService.RefreshTokenAsync("old", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
+    }
+
+    /// <summary>
+    /// The sid has to stay the session's, not the fresh id the replacement token was minted with, or
+    /// ending the session from the list would miss the access token this refresh hands out.
+    /// </summary>
+    [Fact]
+    public async Task The_new_access_token_carries_the_session_it_was_refreshed_in()
+    {
+        var harness = new Harness();
+        harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
+
+        await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+
+        Assert.Equal(TheSession.ToString(), harness.LastClaims!.Single(c => c.Type == "sid").Value);
+    }
+
+    [Fact]
+    public async Task The_session_lifetime_is_handed_to_the_rotation()
+    {
+        var harness = new Harness();
+        harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
+
+        await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+
+        harness.Provider.Verify(p => p.RotateRefreshTokenAsync("old", It.IsAny<RefreshToken>(), TimeSpan.FromDays(30), "10.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -80,6 +108,7 @@ public sealed class RefreshRotationTests
     [Theory]
     [InlineData(RefreshRotationOutcome.Unknown, "AUTH_INVALID_TOKEN")]
     [InlineData(RefreshRotationOutcome.Expired, "AUTH_TOKEN_INACTIVE")]
+    [InlineData(RefreshRotationOutcome.SessionExpired, "AUTH_TOKEN_INACTIVE")]
     [InlineData(RefreshRotationOutcome.UserInactive, "AUTH_USER_INACTIVE")]
     [InlineData(RefreshRotationOutcome.Raced, "AUTH_TOKEN_INACTIVE")]
     public async Task Every_other_outcome_is_refused_without_ending_any_session(RefreshRotationOutcome outcome, string expectedCode)
@@ -100,7 +129,9 @@ public sealed class RefreshRotationTests
         public Harness()
         {
             var jwt = new Mock<IJwtService>();
-            jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns("access-token");
+            jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<string>(), It.IsAny<TimeSpan>()))
+                .Callback<IEnumerable<Claim>, string, TimeSpan>((claims, _, _) => LastClaims = claims.ToList())
+                .Returns("access-token");
 
             Service = Create(jwt.Object, Bus.Object);
             QueuedService = Create(jwt.Object, new Wbskt.Auth.Host.Services.Events.QueuedEventBus(NullLogger<Wbskt.Auth.Host.Services.Events.QueuedEventBus>.Instance));
@@ -112,6 +143,9 @@ public sealed class RefreshRotationTests
 
         public Mock<IEventBus> Bus { get; } = new();
 
+        /// <summary>The claims of the last access token issued.</summary>
+        public List<Claim>? LastClaims { get; private set; }
+
         /// <summary>Publishes straight to <see cref="Bus"/>, so a test can see what was sent.</summary>
         public AuthService Service { get; }
 
@@ -120,7 +154,7 @@ public sealed class RefreshRotationTests
 
         public void Rotates(RefreshRotation rotation) =>
             Provider
-                .Setup(p => p.RotateRefreshTokenAsync(It.IsAny<string>(), It.IsAny<RefreshToken>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Setup(p => p.RotateRefreshTokenAsync(It.IsAny<string>(), It.IsAny<RefreshToken>(), It.IsAny<TimeSpan>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(rotation);
 
         private AuthService Create(IJwtService jwt, IEventBus bus) => new(

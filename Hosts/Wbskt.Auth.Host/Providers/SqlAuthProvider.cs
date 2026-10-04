@@ -63,24 +63,29 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token.Token);
             p.AddWithValue("@Expires", token.Expires);
             p.AddWithValue("@CreatedByIp", ipAddress ?? (object)DBNull.Value);
+            p.AddWithValue("@SessionId", token.SessionId);
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
         }, cancellationToken);
 
         token.Id = (int)parameters["@Id"].Value;
     }
 
-    public async Task<int> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default)
+    public async Task<Guid?> RevokeRefreshTokenAsync(string token, string ipAddress, string? replacedByToken, CancellationToken cancellationToken = default)
     {
-        return await ExecuteScalarAsync<int>("dbo.RefreshToken_Revoke", p =>
-        {
-            p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
-            p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
-            p.Add("@ReplacedByTokenHash", SqlDbType.VarBinary, 32).Value =
-                replacedByToken is null ? DBNull.Value : SecurityTokens.Hash(replacedByToken);
-        }, cancellationToken);
+        return await ExecuteSingleAsync<Guid?>(
+            "dbo.RefreshToken_Revoke",
+            p =>
+            {
+                p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
+                p.AddWithValue("@RevokedByIp", ipAddress ?? (object)DBNull.Value);
+                p.Add("@ReplacedByTokenHash", SqlDbType.VarBinary, 32).Value =
+                    replacedByToken is null ? DBNull.Value : SecurityTokens.Hash(replacedByToken);
+            },
+            reader => reader.IsDBNull(reader.GetOrdinal("SessionId")) ? null : reader.GetGuid(reader.GetOrdinal("SessionId")),
+            cancellationToken: cancellationToken);
     }
 
-    public async Task<RefreshRotation> RotateRefreshTokenAsync(string token, RefreshToken replacement, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<RefreshRotation> RotateRefreshTokenAsync(string token, RefreshToken replacement, TimeSpan sessionLifetime, string ipAddress, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleAsync(
             "dbo.RefreshToken_Rotate",
@@ -89,6 +94,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
                 p.Add("@TokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(token);
                 p.Add("@NewTokenHash", SqlDbType.VarBinary, 32).Value = SecurityTokens.Hash(replacement.Token);
                 p.AddWithValue("@NewExpires", replacement.Expires);
+                p.AddWithValue("@SessionLifetimeSeconds", (int)sessionLifetime.TotalSeconds);
                 p.AddWithValue("@Ip", ipAddress ?? (object)DBNull.Value);
             },
             reader =>
@@ -96,6 +102,8 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
                 var outcome = Enum.Parse<RefreshRotationOutcome>(reader.GetString(reader.GetOrdinal("Outcome")));
                 var userIdOrdinal = reader.GetOrdinal("UserId");
                 int? userId = reader.IsDBNull(userIdOrdinal) ? null : reader.GetInt32(userIdOrdinal);
+                var sessionIdOrdinal = reader.GetOrdinal("SessionId");
+                Guid? sessionId = reader.IsDBNull(sessionIdOrdinal) ? null : reader.GetGuid(sessionIdOrdinal);
 
                 User? user = null;
                 if (outcome == RefreshRotationOutcome.Rotated && userId is not null)
@@ -110,7 +118,7 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
                     };
                 }
 
-                return new RefreshRotation(outcome, userId, user);
+                return new RefreshRotation(outcome, userId, user, sessionId);
             },
             cancellationToken: cancellationToken
         );
@@ -156,18 +164,19 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             "dbo.RefreshToken_GetActiveForUser",
             p => p.AddWithValue("@UserId", userId),
             r => new SessionResponse(
-                r.GetInt32(r.GetOrdinal("Id")),
+                r.GetGuid(r.GetOrdinal("SessionId")),
+                r.GetDateTime(r.GetOrdinal("SessionStarted")),
                 r.GetDateTime(r.GetOrdinal("Created")),
                 r.GetDateTime(r.GetOrdinal("Expires")),
                 r.IsDBNull(r.GetOrdinal("CreatedByIp")) ? null : r.GetString(r.GetOrdinal("CreatedByIp"))),
             cancellationToken);
     }
 
-    public async Task<int> RevokeSessionAsync(int sessionId, int userId, string? revokedByIp, CancellationToken cancellationToken = default)
+    public async Task<int> RevokeSessionAsync(Guid sessionId, int userId, string? revokedByIp, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.RefreshToken_RevokeForUser", p =>
         {
-            p.AddWithValue("@Id", sessionId);
+            p.AddWithValue("@SessionId", sessionId);
             p.AddWithValue("@UserId", userId);
             p.AddWithValue("@RevokedByIp", (object?)revokedByIp ?? DBNull.Value);
         }, cancellationToken);

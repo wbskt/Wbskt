@@ -18,6 +18,15 @@ CREATE TABLE dbo.RefreshTokens
     -- Hash of the token this one was rotated into, for tracing a session family. Never the token.
     ReplacedByTokenHash VARBINARY(32) NULL,
 
+    -- One sign-in, carried unchanged across every rotation. It is the session id the API and the
+    -- access token's sid claim use, so it stays valid while the token underneath it changes.
+    SessionId UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_RefreshTokens_SessionId DEFAULT NEWID(),
+
+    -- When that sign-in happened, also carried across rotations. dbo.RefreshToken_Rotate refuses to
+    -- extend a session past an absolute lifetime counted from here, so a refresh token that keeps
+    -- being rotated (by its owner or by a thief) still ends in a fresh password entry.
+    SessionStarted DATETIME2(3) NOT NULL CONSTRAINT DF_RefreshTokens_SessionStarted DEFAULT SYSUTCDATETIME(),
+
     CONSTRAINT FK_RefreshTokens_User FOREIGN KEY (UserId) REFERENCES dbo.Users(Id),
 
     -- Every lookup is by token hash, and the service assumes a token identifies at most one row.
@@ -29,6 +38,12 @@ GO
 CREATE NONCLUSTERED INDEX IX_RefreshTokens_UserId
     ON dbo.RefreshTokens (UserId)
     INCLUDE (Revoked)
+GO
+
+-- Ending one session (dbo.RefreshToken_RevokeForUser) finds its live row by session id.
+CREATE NONCLUSTERED INDEX IX_RefreshTokens_SessionId
+    ON dbo.RefreshTokens (SessionId)
+    INCLUDE (UserId, Revoked)
 GO
 
 -- Drives the retention sweep (dbo.Credential_DeleteExpired).

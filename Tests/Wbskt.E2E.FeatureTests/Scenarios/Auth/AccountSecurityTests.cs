@@ -17,7 +17,7 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private sealed record SessionDto(int Id, DateTime CreatedAt, DateTime ExpiresAt, string? CreatedByIp);
+    private sealed record SessionDto(Guid Id, DateTime CreatedAt, DateTime LastUsedAt, DateTime ExpiresAt, string? IpAddress, bool IsCurrent);
 
     // ── Change password ───────────────────────────────────────────────────────────────────
 
@@ -94,8 +94,10 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         // CreateUserAsync signs in once too, so there are at least the two made here.
         before.Should().HaveCountGreaterThanOrEqualTo(2);
 
-        // Newest first by id: the second sign-in, then the first. End the first.
-        var target = before.OrderByDescending(s => s.Id).Skip(1).First();
+        // The second sign-in is the one asking, so it is marked current. The newest of the others is
+        // the first sign-in. End it.
+        before.Should().ContainSingle(s => s.IsCurrent);
+        var target = before.Where(s => !s.IsCurrent).OrderByDescending(s => s.CreatedAt).First();
         (await fixture.SendAsync(HttpMethod.Delete, $"{Sessions}/{target.Id}", second.AccessToken))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
@@ -123,6 +125,69 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ListSessionsAsync(owner.Token)).Select(s => s.Id).Should().Contain(target.Id);
+    }
+
+    /// <summary>
+    /// A session keeps its id through refreshes, so an id the list showed still names the session
+    /// after the device behind it has refreshed.
+    /// </summary>
+    [SkippableFact]
+    public async Task AUTH_SES_03_ASessionKeepsItsIdAcrossRefreshes()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var user = await fixture.CreateUserAsync();
+        var session = await fixture.LoginAsync(user.Email, user.Password);
+        var listed = (await ListSessionsAsync(session.AccessToken)).Single(s => s.IsCurrent);
+
+        var refreshed = await ServicesFixture.ReadSessionAsync(await fixture.RefreshAsync(session.RefreshToken));
+        var relisted = (await ListSessionsAsync(refreshed.AccessToken)).Single(s => s.IsCurrent);
+
+        relisted.Id.Should().Be(listed.Id);
+        relisted.CreatedAt.Should().Be(listed.CreatedAt);
+        relisted.LastUsedAt.Should().BeOnOrAfter(listed.LastUsedAt);
+    }
+
+    /// <summary>
+    /// Ending a session ends the access token that device holds, on the auth host and on the
+    /// management host, not just its refresh token. The user's other sessions carry on.
+    /// </summary>
+    [SkippableFact]
+    public async Task AUTH_SES_04_EndingASession_EndsItsAccessTokenOnEveryHost()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var user = await fixture.CreateUserAsync();
+        var phone = await fixture.LoginAsync(user.Email, user.Password);
+        var laptop = await fixture.LoginAsync(user.Email, user.Password);
+        var workspace = (await fixture.GetWorkspaceRefsAsync(phone.AccessToken)).First();
+        var managementEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/registration-policies");
+        var phoneSession = (await ListSessionsAsync(phone.AccessToken)).Single(s => s.IsCurrent);
+
+        (await fixture.SendAsync(HttpMethod.Delete, $"{Sessions}/{phoneSession.Id}", laptop.AccessToken))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await fixture.SendAsync(HttpMethod.Get, Sessions, phone.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await TokenAcceptanceTests.EventuallyAsync(() => fixture.SendAsync(HttpMethod.Get, managementEndpoint, phone.AccessToken), HttpStatusCode.Unauthorized))
+            .Should().Be(HttpStatusCode.Unauthorized, "the management host hears of the ended session over Redis");
+        (await fixture.SendAsync(HttpMethod.Get, managementEndpoint, laptop.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [SkippableFact]
+    public async Task AUTH_SES_05_LoggingOut_EndsThatSessionsAccessToken()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var user = await fixture.CreateUserAsync();
+        var session = await fixture.LoginAsync(user.Email, user.Password);
+        (await fixture.SendAsync(HttpMethod.Get, Sessions, session.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await fixture.LogoutAsync(session.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await fixture.SendAsync(HttpMethod.Get, Sessions, session.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // The account itself is fine: signing in again works and gets a token that is accepted.
+        var again = await fixture.LoginAsync(user.Email, user.Password);
+        (await fixture.SendAsync(HttpMethod.Get, Sessions, again.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ── Lockout ───────────────────────────────────────────────────────────────────────────
