@@ -2,7 +2,9 @@
 # Builds both .sqlproj (Microsoft.Build.Sql is cross-platform) into DACPACs, then publishes them
 # with sqlpackage. Deploy-Databases.ps1 stays the Windows-dev path; this is the container path,
 # run via: docker compose --profile migrate run --rm migrator
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# DACPACs are architecture-neutral, so the build stage runs natively on the build machine (see the
+# note in deploy/docker/Dockerfile).
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Databases/ Databases/
 COPY Directory.Packages.props nuget.config global.json ./

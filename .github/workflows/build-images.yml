@@ -326,6 +326,9 @@ jobs:
         with:
           context: .
           file: deploy/docker/Dockerfile
+          # The production VM is x64, and the self-hosted runner may not be: an unpinned build
+          # would publish the runner's architecture.
+          platforms: linux/amd64
           build-args: |
             HOST_PROJECT=${{ matrix.project }}
             HOST_DLL=${{ matrix.dll }}
@@ -359,6 +362,7 @@ jobs:
         with:
           context: .
           file: deploy/docker/Dockerfile.migrator
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ needs.meta.outputs.prefix }}-migrator:${{ needs.meta.outputs.tag }}
