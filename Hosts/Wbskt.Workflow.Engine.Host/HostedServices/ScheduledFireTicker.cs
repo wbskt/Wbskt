@@ -197,7 +197,8 @@ public sealed class ScheduledFireTicker : BackgroundService
             return (true, null);
         }
 
-        return (false, cron!.GetNextOccurrence(fire.NextFireAt, TimeZoneInfo.Utc));
+        // Cronos insists on a Utc-kind DateTime; a value read back from SQL is Unspecified.
+        return (false, cron!.GetNextOccurrence(DateTime.SpecifyKind(fire.NextFireAt, DateTimeKind.Utc), TimeZoneInfo.Utc));
     }
 
     private sealed class StaticScopeFactory(IScheduledFireProvider scheduledFireProvider, IInboundHub inboundHub) : IServiceScopeFactory

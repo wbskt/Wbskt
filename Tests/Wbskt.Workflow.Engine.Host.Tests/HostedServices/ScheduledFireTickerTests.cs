@@ -93,6 +93,20 @@ public sealed class ScheduledFireTickerTests
     }
 
     [Fact]
+    public async Task Tick_advances_a_fire_read_back_without_a_utc_kind()
+    {
+        // SQL hands DATETIME2 back as Unspecified; Cronos throws on anything but Utc, which used to
+        // stop a recurring schedule after its first fire.
+        var fire = CreateFire(46, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Unspecified));
+        var provider = new RecordingScheduledFireProvider([fire]);
+        var ticker = new ScheduledFireTicker(new FixedClock(), new RecordingLeaseHolder(isHeld: true), provider, new RecordingInboundHub(), NullLogger<ScheduledFireTicker>.Instance);
+
+        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+
+        Assert.Equal([(46, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
+    }
+
+    [Fact]
     public async Task Tick_advances_recurring_fire_with_5field_cron()
     {
         // Arrange: a standard 5-field cron (no seconds) must keep firing after the first tick,
