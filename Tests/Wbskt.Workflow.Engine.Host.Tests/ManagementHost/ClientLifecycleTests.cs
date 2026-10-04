@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
@@ -32,6 +33,7 @@ public sealed class ClientLifecycleTests
         var result = await harness.Service.DeleteAsync(WorkspaceId, client.RefId);
 
         result.IsSuccess.Should().BeTrue();
+        harness.Cutoffs.Verify(c => c.RevokeAsync(client.RefId), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<ClientDeletedEvent>(e => e.ClientRefId == client.RefId && e.WorkspaceId == WorkspaceId),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -50,6 +52,7 @@ public sealed class ClientLifecycleTests
         foreignResult.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
         harness.Provider.Verify(p => p.DeleteAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Cutoffs.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -68,9 +71,51 @@ public sealed class ClientLifecycleTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ClientRefId.Should().Be(client.RefId);
         ClientSecrets.Matches(storedHash, result.Value.Secret).Should().BeTrue();
+        // The cutoff and the event carry the same moment, so the socket host's list and Redis agree.
+        harness.Cutoffs.Verify(c => c.RevokeIssuedBeforeAsync(client.RefId, It.IsAny<DateTime>()), Times.Once);
+        var cutoff = (DateTime)harness.Cutoffs.Invocations.Single(i => i.Method.Name == nameof(IClientTokenCutoffs.RevokeIssuedBeforeAsync)).Arguments[1];
         harness.Bus.Verify(b => b.PublishAsync(
-            It.Is<ClientSecretRotatedEvent>(e => e.ClientRefId == client.RefId),
+            It.Is<ClientSecretRotatedEvent>(e => e.ClientRefId == client.RefId && e.RotatedAt == cutoff),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Revoking_a_device_records_a_cutoff_for_every_token_it_holds()
+    {
+        var harness = new Harness();
+        var client = harness.AddClient(status: ClientStatus.Registered);
+
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.Id, ClientStatus.Revoked);
+
+        result.IsSuccess.Should().BeTrue();
+        harness.Cutoffs.Verify(c => c.RevokeAsync(client.RefId), Times.Once);
+        harness.Cutoffs.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Approving_a_device_again_lets_it_back_in_with_a_fresh_token_only()
+    {
+        var harness = new Harness();
+        var client = harness.AddClient(status: ClientStatus.Revoked);
+        var before = DateTime.UtcNow;
+
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.Id, ClientStatus.Registered);
+
+        result.IsSuccess.Should().BeTrue();
+        harness.Cutoffs.Verify(c => c.ReinstateAsync(client.RefId, It.Is<DateTime>(t => t >= before)), Times.Once);
+        harness.Cutoffs.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Rejecting_a_pending_device_records_nothing_because_it_holds_no_token()
+    {
+        var harness = new Harness();
+        var client = harness.AddClient(status: ClientStatus.Pending);
+
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.Id, ClientStatus.Rejected);
+
+        result.IsSuccess.Should().BeTrue();
+        harness.Cutoffs.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -121,7 +166,7 @@ public sealed class ClientLifecycleTests
             Policies
                 .Setup(p => p.GetByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId });
-            Service = new ClientService(Provider.Object, Policies.Object, Bus.Object, NullLogger<ClientService>.Instance);
+            Service = new ClientService(Provider.Object, Policies.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientService>.Instance);
         }
 
         public Mock<IClientProvider> Provider { get; } = new();
@@ -129,6 +174,8 @@ public sealed class ClientLifecycleTests
         public Mock<IRegistrationPolicyProvider> Policies { get; } = new();
 
         public Mock<IEventBus> Bus { get; } = new();
+
+        public Mock<IClientTokenCutoffs> Cutoffs { get; } = new();
 
         public ClientService Service { get; }
 

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Models;
@@ -15,13 +16,14 @@ public sealed class ClientServiceRenameTests
     private const int WorkspaceId = 7;
     private const int ClientId = 42;
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly IClientTokenCutoffs NoCutoffs = Mock.Of<IClientTokenCutoffs>();
 
     private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateService(ClientRow client)
     {
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetByIdAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var bus = new Mock<IEventBus>();
-        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NullLogger<ClientService>.Instance);
+        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
         return (service, provider, bus);
     }
 
@@ -101,7 +103,7 @@ public sealed class ClientServiceRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("no rows"));
-        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), NullLogger<ClientService>.Instance);
+        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
         var (foreignService, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
 
         var unknown = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
@@ -116,7 +118,7 @@ public sealed class ClientServiceRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
         var bus = new Mock<IEventBus>();
-        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NullLogger<ClientService>.Instance);
+        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
         return (service, provider, bus);
     }
 

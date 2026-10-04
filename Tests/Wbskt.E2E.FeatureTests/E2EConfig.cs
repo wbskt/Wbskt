@@ -30,6 +30,15 @@ internal static class E2EConfig
     public static bool RateLimitTestsEnabled =>
         Environment.GetEnvironmentVariable("E2E_RATE_LIMIT_TESTS") is "1" or "true";
 
+    /// <summary>
+    /// Opt-in: a shell command that restarts the socket host and returns once it is serving again,
+    /// e.g. <c>Tests/Wbskt.E2E.FeatureTests/start-hosts.sh socket</c>. The device-revocation
+    /// scenarios that need a restart skip without it; they drop every live device connection, so
+    /// they are meant to run on their own.
+    /// </summary>
+    public static string? SocketRestartCommand =>
+        Environment.GetEnvironmentVariable("E2E_SOCKET_RESTART_COMMAND") is { Length: > 0 } command ? command : null;
+
     /// <summary>Must match RateLimiting:Authentication:PermitLimit on the host under test.</summary>
     public static int AuthPermitLimit =>
         int.TryParse(Environment.GetEnvironmentVariable("E2E_AUTH_PERMIT_LIMIT"), out var limit) ? limit : 10;

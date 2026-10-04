@@ -6,6 +6,7 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Telemetry;
 
@@ -23,6 +24,7 @@ internal sealed class SocketHandler : ISocketHandler
 
     private readonly IConnectionManager _connectionManager;
     private readonly IRevocationCache _revocationCache;
+    private readonly IClientTokenCutoffs _cutoffs;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
@@ -32,6 +34,7 @@ internal sealed class SocketHandler : ISocketHandler
     public SocketHandler(
         IConnectionManager connectionManager,
         IRevocationCache revocationCache,
+        IClientTokenCutoffs cutoffs,
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime,
         IEventBus eventBus,
@@ -41,6 +44,7 @@ internal sealed class SocketHandler : ISocketHandler
         _metrics = metrics;
         _connectionManager = connectionManager;
         _revocationCache = revocationCache;
+        _cutoffs = cutoffs;
         _logger = logger;
         _appLifetime = appLifetime;
         _eventBus = eventBus;
@@ -71,11 +75,14 @@ internal sealed class SocketHandler : ISocketHandler
         }
 
         // A revoked client's JWT stays valid for up to an hour; the deny-list closes that window. A
-        // token without a readable issue time is treated as older than any cutoff.
+        // token without a readable issue time is treated as older than any cutoff. This host's list
+        // is filled by events and lost on restart, so the cutoff the management host keeps in Redis
+        // is asked too; the list alone decides only when Redis cannot answer.
         var issuedAt = long.TryParse(context.User.FindFirst("iat")?.Value, out var iat)
             ? DateTimeOffset.FromUnixTimeSeconds(iat).UtcDateTime
             : DateTime.MinValue;
-        if (_revocationCache.IsRevoked(clientRefId, issuedAt))
+        if (_revocationCache.IsRevoked(clientRefId, issuedAt)
+            || await _cutoffs.IsRevokedAsync(clientRefId, issuedAt, cts.Token) == true)
         {
             _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;

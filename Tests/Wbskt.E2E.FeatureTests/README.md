@@ -67,9 +67,18 @@ E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
 
 `E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with. `AUTH_RL_04` exhausts the separate refresh bucket instead, so restart the auth host with `RateLimiting__TokenRefresh__PermitLimit=120` for it (`E2E_REFRESH_PERMIT_LIMIT` defaults to 120 and must match); `AUTH_RL_05` and `AUTH_RL_11` spend it too. `AUTH_RL_12` exhausts the verification bucket, so restart with `RateLimiting__EmailVerification__PermitLimit=10` for it (`E2E_VERIFICATION_PERMIT_LIMIT` defaults to 10 and must match).
 
+### 6. Socket host restart scenario (opt-in)
+
+`DeviceRevocationTests.DEV_REV_02` revokes, deletes and rotates the secret of devices, restarts the socket host, and checks their old tokens are still refused: the socket host forgets every revocation event it heard, so this proves the cutoffs the management host keeps in Redis. It skips unless `E2E_SOCKET_RESTART_COMMAND` holds a command that restarts the socket host, and since the restart drops every live device connection, run it on its own:
+
+```bash
+E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh socket" \
+  dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~DeviceRevocationTests.DEV_REV_02
+```
+
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs both passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the four hosts started with `start-hosts.sh`. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs all three passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the four hosts started with `start-hosts.sh`. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
 
 ---
 

@@ -2,6 +2,7 @@ using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Events.Client;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -24,6 +25,7 @@ public sealed class WorkspaceDeletedHandler : IConsumer<WorkspaceDeletedEvent>
     private readonly IEventBus _eventBus;
     private readonly IRunCancellationService _runCancellation;
     private readonly IWorkflowDefinitionCache _definitionCache;
+    private readonly IClientTokenCutoffs _cutoffs;
     private readonly ILogger<WorkspaceDeletedHandler> _logger;
 
     public WorkspaceDeletedHandler(
@@ -31,12 +33,14 @@ public sealed class WorkspaceDeletedHandler : IConsumer<WorkspaceDeletedEvent>
         IEventBus eventBus,
         IRunCancellationService runCancellation,
         IWorkflowDefinitionCache definitionCache,
+        IClientTokenCutoffs cutoffs,
         ILogger<WorkspaceDeletedHandler> logger)
     {
         _provider = provider;
         _eventBus = eventBus;
         _runCancellation = runCancellation;
         _definitionCache = definitionCache;
+        _cutoffs = cutoffs;
         _logger = logger;
     }
 
@@ -49,6 +53,7 @@ public sealed class WorkspaceDeletedHandler : IConsumer<WorkspaceDeletedEvent>
 
         foreach (var client in retired.RevokedClients)
         {
+            await _cutoffs.RevokeAsync(client.ClientRefId);
             await _eventBus.PublishAsync(new ClientStatusChangedEvent(
                 client.ClientRefId, client.ClientId, client.PolicyRefId, client.PolicyId, workspaceId, (byte)ClientStatus.Revoked), ct);
         }

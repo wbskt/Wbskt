@@ -50,15 +50,7 @@ public static class JwtServiceCollectionExtensions
         services.Configure<AccessTokenOptions>(configuration.GetSection("Jwt"));
         services.TryAddSingleton(TimeProvider.System);
 
-        var redis = configuration.GetConnectionString("Redis");
-        if (!string.IsNullOrWhiteSpace(redis))
-        {
-            // Not AbortOnConnectFail: Redis being down at startup must not take the host with it -
-            // revocation degrades to this host alone and the resync catches up once it is back.
-            var options = ConfigurationOptions.Parse(redis);
-            options.AbortOnConnectFail = false;
-            services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(options));
-        }
+        TryAddRedis(services, configuration);
 
         services.AddSingleton(sp => new AccessTokenRevocation(
             sp.GetService<IConnectionMultiplexer>(),
@@ -74,6 +66,32 @@ public static class JwtServiceCollectionExtensions
             sp.GetService<IConnectionMultiplexer>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<WorkspaceAccessChanges>>()));
         return services;
+    }
+
+    /// <summary>
+    /// Per-device token cutoffs shared through Redis (<c>ConnectionStrings:Redis</c>): the management
+    /// host writes them, the socket host checks them when a device connects.
+    /// </summary>
+    public static IServiceCollection AddClientTokenCutoffs(this IServiceCollection services, IConfiguration configuration)
+    {
+        TryAddRedis(services, configuration);
+        services.TryAddSingleton<IClientTokenCutoffs>(sp => new ClientTokenCutoffs(
+            sp.GetService<IConnectionMultiplexer>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClientTokenCutoffs>>()));
+        return services;
+    }
+
+    private static void TryAddRedis(IServiceCollection services, IConfiguration configuration)
+    {
+        var redis = configuration.GetConnectionString("Redis");
+        if (!string.IsNullOrWhiteSpace(redis))
+        {
+            // Not AbortOnConnectFail: Redis being down at startup must not take the host with it -
+            // what rides on it degrades to this host alone and catches up once it is back.
+            var options = ConfigurationOptions.Parse(redis);
+            options.AbortOnConnectFail = false;
+            services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(options));
+        }
     }
 
     /// <summary>The bearer scheme, validating against the registered <see cref="JwtTrust"/>.</summary>

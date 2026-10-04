@@ -42,6 +42,8 @@ public static class Program
         // Add services to the container.
         builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
         builder.Services.AddSingleton<IRevocationCache, RevocationCache>();
+        // The durable copy of the same revocations, written by the management host; see ClientTokenCutoffs.
+        builder.Services.AddClientTokenCutoffs(builder.Configuration);
         // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();

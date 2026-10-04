@@ -61,6 +61,9 @@ public static class Program
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddAccessTokenRevocation(builder.Configuration);
+        // Device revocations, written before answering so a socket host that restarts or misses the
+        // event still refuses the device; see ClientTokenCutoffs.
+        builder.Services.AddClientTokenCutoffs(builder.Configuration);
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         // These services publish after their change is committed, so they publish through the queued
         // bus: a broker outage must not turn a rotated secret or a registration into a 500 (see
