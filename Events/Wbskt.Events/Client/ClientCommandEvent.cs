@@ -19,4 +19,4 @@ public sealed record ClientCommandEvent(
     // Past this instant the command is refused instead of delivered, by the socket host and by the
     // SDK, so a command is never acted on late.
     DateTime? ExpiresAtUtc = null
-) : BaseEvent, IClientContext;
+) : ActorEvent, IClientContext;

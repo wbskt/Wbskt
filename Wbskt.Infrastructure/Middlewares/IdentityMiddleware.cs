@@ -19,7 +19,10 @@ public class IdentityMiddleware
 
         if (!string.IsNullOrWhiteSpace(userIdStr) && int.TryParse(userIdStr, out var userId))
         {
-            var userIdentity = new UserIdentity(userId);
+            var userIdentity = new UserIdentity(userId)
+            {
+                UserRefId = Guid.TryParse(context.User.FindFirst(JwtServiceCollectionExtensions.JwtUserRefClaim)?.Value, out var userRefId) ? userRefId : null
+            };
             using (identityService.BeginScope(userIdentity))
             {
                 await _next(context);

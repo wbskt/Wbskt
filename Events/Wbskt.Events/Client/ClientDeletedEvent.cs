@@ -15,4 +15,4 @@ public sealed record ClientDeletedEvent(
     Guid PolicyRefId,
     int PolicyId,
     int WorkspaceId,
-    string Name) : BaseEvent, IClientContext, IPolicyContext;
+    string Name) : ActorEvent, IClientContext, IPolicyContext;

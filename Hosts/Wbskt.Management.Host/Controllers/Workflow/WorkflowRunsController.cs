@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Events;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -16,14 +19,17 @@ public sealed class WorkflowRunsController : ApiControllerBase
     private readonly IWorkflowRunQueryService _runQueryService;
     private readonly IWorkflowEngineClient _engineClient;
     private readonly IAuthServiceClient _authClient;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowRunsController> _logger;
 
     public WorkflowRunsController(
         IWorkflowRunQueryService runQueryService, 
         IWorkflowEngineClient engineClient, 
         IAuthServiceClient authClient,
+        [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
         ILogger<WorkflowRunsController> logger)
     {
+        _eventBus = eventBus;
         _runQueryService = runQueryService;
         _engineClient = engineClient;
         _authClient = authClient;
@@ -145,6 +151,11 @@ public sealed class WorkflowRunsController : ApiControllerBase
         }
 
         var result = await _runQueryService.CancelAsync(workspaceIdResult.Value, runRefId, req.Reason, ct);
+        if (result.IsSuccess)
+        {
+            await _eventBus.PublishAsync(new WorkflowRunCancelRequestedEvent(runRefId, workspaceIdResult.Value, req.Reason), ct);
+        }
+
         return MapResult(result);
     }
 
@@ -169,6 +180,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
         {
             var response = await _engineClient.SignalAsync(runRefId, signalName, req, ct);
             _logger.LogInformation("Successfully sent signal '{SignalName}' to RunRefId: '{RunRefId}'", signalName, runRefId);
+            await _eventBus.PublishAsync(new WorkflowRunSignalSentEvent(runRefId, workspaceIdResult.Value, signalName), ct);
             return Ok(response);
         }
         catch (Exception ex)

@@ -39,6 +39,7 @@ BEGIN
         el.PolicyRefId,
         el.ClientRefId,
         el.WorkflowRefId,
+        el.UserRefId,
         el.CreatedAt
     FROM dbo.EventLogs el
     JOIN dbo.Events e ON el.EventId = e.Id

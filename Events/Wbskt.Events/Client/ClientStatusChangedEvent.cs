@@ -11,4 +11,4 @@ public sealed record ClientStatusChangedEvent(
     Guid PolicyRefId,
     int PolicyId,
     int WorkspaceId,
-    byte Status) : BaseEvent, IClientContext, IPolicyContext;
+    byte Status) : ActorEvent, IClientContext, IPolicyContext;

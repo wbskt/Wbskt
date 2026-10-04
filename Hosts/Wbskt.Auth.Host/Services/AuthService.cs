@@ -855,7 +855,8 @@ internal sealed class AuthService : IAuthService
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim("type", "user"),
-            new Claim(JwtServiceCollectionExtensions.JwtSessionClaim, sessionId.ToString())
+            new Claim(JwtServiceCollectionExtensions.JwtSessionClaim, sessionId.ToString()),
+            new Claim(JwtServiceCollectionExtensions.JwtUserRefClaim, user.RefId.ToString())
         };
 
         return _jwtService.GenerateToken(claims, JwtAudiences.Api, _accessTokenLifetime);

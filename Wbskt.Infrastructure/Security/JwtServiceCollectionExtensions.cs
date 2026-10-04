@@ -21,6 +21,9 @@ public static class JwtServiceCollectionExtensions
     /// </summary>
     public const string JwtSessionClaim = "sid";
 
+    /// <summary>The user's public reference on an access token, for attributing actions (audit), not for authorization.</summary>
+    public const string JwtUserRefClaim = "uref";
+
     /// <summary>
     /// This host signs tokens as <paramref name="issuer"/>: loads its key pair (<c>Jwt:SigningKey</c>)
     /// and registers <see cref="IJwtService"/>. Pair with <see cref="MapWbsktJwks"/>.
