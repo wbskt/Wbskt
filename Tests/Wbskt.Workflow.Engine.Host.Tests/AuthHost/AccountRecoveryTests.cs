@@ -292,6 +292,40 @@ public sealed class AccountRecoveryTests
         Assert.Equal(["verify:someone@example.test"], harness.Mailer.Sent);
     }
 
+    /// <summary>
+    /// A second request inside the cooldown answers the same and issues nothing, so the link from
+    /// the first mail is still the one that works.
+    /// </summary>
+    [Fact]
+    public async Task ForgotPassword_twice_in_a_row_mails_once_and_keeps_the_first_link()
+    {
+        var harness = new Harness();
+        harness.WithUser(Verified(true));
+
+        var first = await harness.Service.ForgotPasswordAsync("someone@example.test", "10.0.0.1");
+        var second = await harness.Service.ForgotPasswordAsync("someone@example.test", "10.0.0.2");
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        harness.Provider.Verify(p => p.CreatePasswordResetTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["reset:someone@example.test"], harness.Mailer.Sent);
+    }
+
+    [Fact]
+    public async Task ResendVerification_straight_after_registering_waits_out_the_cooldown()
+    {
+        var harness = new Harness();
+        harness.WithSuccessfulRegistration();
+        await harness.Service.RegisterUserAsync("someone", "someone@example.test", "a perfectly long password");
+        harness.WithUser(Verified(false));
+
+        var result = await harness.Service.ResendVerificationAsync("someone@example.test");
+
+        Assert.True(result.IsSuccess);
+        harness.Provider.Verify(p => p.CreateEmailVerificationTokenAsync(42, It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["verify:someone@example.test"], harness.Mailer.Sent);
+    }
+
     [Fact]
     public async Task ResendVerification_sends_nothing_to_an_account_that_is_already_verified()
     {
@@ -404,7 +438,8 @@ public sealed class AccountRecoveryTests
                 NullLogger<AuthService>.Instance,
                 new AuthMetrics(),
                 AccessTokens.Object,
-                Options.Create(new AccessTokenOptions()));
+                Options.Create(new AccessTokenOptions()),
+                MailCooldownTests.InProcess());
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();
@@ -520,6 +555,25 @@ public sealed class RegistrationDisclosureTests
         Assert.Empty(harness.Mailer.Sent);
     }
 
+    /// <summary>
+    /// Registering over and over with someone else's address must not become a way to fill their
+    /// inbox. Every attempt still answers 204.
+    /// </summary>
+    [Fact]
+    public async Task Repeated_attempts_on_a_taken_address_mail_the_owner_once()
+    {
+        var harness = new ConflictHarness();
+        harness.WithExistingAccount();
+
+        for (var i = 0; i < 3; i++)
+        {
+            var result = await harness.Service.HandleRegistrationConflictAsync($"newname{i}", "taken@example.test", new InvalidOperationException("unique index"), CancellationToken.None);
+            Assert.True(result.IsSuccess);
+        }
+
+        Assert.Equal(["exists:taken@example.test"], harness.Mailer.Sent);
+    }
+
     [Fact]
     public async Task A_relay_failure_does_not_turn_a_taken_address_into_a_visible_error()
     {
@@ -546,7 +600,8 @@ public sealed class RegistrationDisclosureTests
                 NullLogger<AuthService>.Instance,
                 new AuthMetrics(),
                 AccessTokens.Object,
-                Options.Create(new AccessTokenOptions()));
+                Options.Create(new AccessTokenOptions()),
+                MailCooldownTests.InProcess());
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();

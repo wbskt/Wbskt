@@ -289,7 +289,9 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
   set. Both succeed regardless of whether the token existed, so neither can be used to probe.
 - Suspending a member (`PUT /api/tenants/{tenantRef}/members/{userRef}/suspended`) does not touch
   their tokens; it closes that one tenant to them on their next request.
-- The credential endpoints are rate limited per client IP (`RateLimiting:Authentication`).
+- The credential endpoints are rate limited per client IP, in three buckets (`RateLimiting:Authentication`,
+  `RateLimiting:TokenRefresh`, `RateLimiting:EmailVerification`), and mail they send is throttled per
+  recipient address (`Auth:MailCooldown`).
 
 ## Error semantics
 

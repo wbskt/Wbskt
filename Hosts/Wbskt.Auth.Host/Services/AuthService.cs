@@ -68,6 +68,7 @@ internal sealed class AuthService : IAuthService
     private readonly IJwtService _jwtService;
     private readonly IEventBus _eventBus;
     private readonly IAuthMailer _mailer;
+    private readonly MailCooldown _mailCooldown;
     private readonly ILogger<AuthService> _logger;
     private readonly AuthMetrics _metrics;
     private readonly IAccessTokenRevocation _accessTokens;
@@ -93,7 +94,8 @@ internal sealed class AuthService : IAuthService
         ILogger<AuthService> logger,
         AuthMetrics metrics,
         IAccessTokenRevocation accessTokens,
-        IOptions<AccessTokenOptions> accessTokenOptions)
+        IOptions<AccessTokenOptions> accessTokenOptions,
+        MailCooldown mailCooldown)
     {
         _accessTokens = accessTokens;
         _accessTokenLifetime = accessTokenOptions.Value.AccessTokenLifetime;
@@ -101,6 +103,7 @@ internal sealed class AuthService : IAuthService
         _jwtService = jwtService;
         _eventBus = eventBus;
         _mailer = mailer;
+        _mailCooldown = mailCooldown;
         _requireVerifiedEmail = emailOptions.Value.RequireVerifiedEmailForSignIn;
         _logger = logger;
         _metrics = metrics;
@@ -467,6 +470,10 @@ internal sealed class AuthService : IAuthService
             // transaction here to join - the user insert and Tenant_Create are already separate calls,
             // and Tenant_Create is the only one that is atomic internally. If this step or the mail
             // fails, resend-verification is the way back, which is why it is anonymous.
+            //
+            // Always sent: the address had no account a moment ago, so nothing has been mailed to
+            // it. Still counted, so a resend straight after signing up waits out the cooldown.
+            await _mailCooldown.TryAcquireAsync(user.Email, MailKind.EmailVerification);
             await IssueEmailVerificationAsync(user, cancellationToken);
 
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
@@ -523,6 +530,15 @@ internal sealed class AuthService : IAuthService
             // A deactivated account must not be recoverable by its former owner - reactivating is an
             // administrator's decision. Answering identically keeps that from being discoverable.
             _logger.LogWarning("Password reset requested for deactivated user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
+            return Result.Success();
+        }
+
+        // Before the token, not after: a new token supersedes the last one, and superseding it
+        // without a mail would leave the owner holding a dead link.
+        if (!await _mailCooldown.TryAcquireAsync(user.Email, MailKind.PasswordReset))
+        {
+            _logger.LogInformation("Password reset for user {UserId} suppressed by the mail cooldown. IP: {IpAddress}", user.Id, ipAddress);
+            _metrics.RecordMailSuppressed(nameof(MailKind.PasswordReset));
             return Result.Success();
         }
 
@@ -620,6 +636,15 @@ internal sealed class AuthService : IAuthService
 
         if (user.IsEmailVerified || !user.IsActive)
         {
+            return Result.Success();
+        }
+
+        // Before the token, for the same reason as ForgotPasswordAsync: the link already in the
+        // owner's inbox keeps working.
+        if (!await _mailCooldown.TryAcquireAsync(user.Email, MailKind.EmailVerification))
+        {
+            _logger.LogInformation("Email verification for user {UserId} suppressed by the mail cooldown", user.Id);
+            _metrics.RecordMailSuppressed(nameof(MailKind.EmailVerification));
             return Result.Success();
         }
 
@@ -725,7 +750,15 @@ internal sealed class AuthService : IAuthService
 
         try
         {
-            await _mailer.QueueAccountAlreadyExistsAsync(existing.Email, existing.Username, cancellationToken);
+            if (await _mailCooldown.TryAcquireAsync(existing.Email, MailKind.AccountAlreadyExists))
+            {
+                await _mailer.QueueAccountAlreadyExistsAsync(existing.Email, existing.Username, cancellationToken);
+            }
+            else
+            {
+                _logger.LogInformation("Account-exists notice for user {UserId} suppressed by the mail cooldown", existing.Id);
+                _metrics.RecordMailSuppressed(nameof(MailKind.AccountAlreadyExists));
+            }
         }
         catch (Exception mailEx)
         {

@@ -225,12 +225,14 @@ Run isolated — the partition key is the client IP and these will otherwise poi
 | `AUTH_RL_02` | + | After the window elapses, login works again | **200**. The window is exhausted with an unknown address, so the per-account lockout does not also apply |
 | `AUTH_RL_03` | − | The limit applies to `register` | **429** |
 | `AUTH_RL_04` | − | The limit applies to `refresh-token` | **429** |
-| `AUTH_RL_05` | − | The limit applies to `logout` | **429** |
+| `AUTH_RL_05` | − | `logout` is limited, in the refresh bucket (`RateLimiting:TokenRefresh`) | **429** past the refresh limit |
 | `AUTH_RL_06` | + | `logout-all` is **not** rate limited (no `[EnableRateLimiting]`) | No 429 — asserts the current shape so a future change is deliberate |
 | `AUTH_RL_07` | + | `/healthz` is anonymous | **200** |
 | `AUTH_RL_08` | − | `/metrics` without a token | Not **200** — nothing on a public router serves metrics |
 | `AUTH_RL_09` | − | `/metrics` with a valid token | **404** — metrics are pushed over OTLP to the in-network collector, not scraped |
 | `AUTH_RL_10` | − | Successful logins also count toward the limit | Confirms the brake cannot be bypassed by interleaving valid credentials |
+| `AUTH_RL_11` | + | More logouts than the credential limit, then login | No 429 on logout, login **200**: signing out does not spend the sign-in budget |
+| `AUTH_RL_12` | − | Exceed `RateLimiting:EmailVerification:PermitLimit` on `verify-email`, then login | **429** on verify-email, login **200**: its own bucket |
 
 ---
 

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using StackExchange.Redis;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
@@ -75,6 +76,12 @@ public static class Program
         builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
         builder.Services.AddSingleton<OutboundMailQueue>();
         builder.Services.AddSingleton<IAuthMailer, QueuedAuthMailer>();
+        builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:MailCooldown").Get<MailCooldownOptions>() ?? new MailCooldownOptions()));
+        builder.Services.AddSingleton(sp => new MailCooldown(
+            sp.GetRequiredService<IOptions<MailCooldownOptions>>(),
+            sp.GetService<IConnectionMultiplexer>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<MailCooldown>>()));
         builder.Services.AddHostedService<OutboundMailDispatcher>();
 
         builder.AddWbsktTelemetry(AuthMetrics.MeterName);
@@ -128,34 +135,27 @@ public static class Program
         // Partitioned on the caller's IP, which UseForwardedHeaders has already resolved to the real
         // client address rather than Traefik's. Unauthenticated endpoints have no better partition
         // key available, so this is a brake on bulk attempts rather than per-account lockout.
+        //
+        // Three buckets, so routine traffic cannot spend the credential budget: on a shared office
+        // address, people signing out or following a verification link must not lock their
+        // colleagues out of signing in. In memory, which is right for one replica; a second auth
+        // replica needs a Redis-backed limiter, or each replica allows the full budget.
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-            options.AddPolicy(RateLimitPolicies.Authentication, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = builder.Configuration.GetValue("RateLimiting:Authentication:PermitLimit", 10),
-                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Authentication:WindowMinutes", 1)),
-                        QueueLimit = 0
-                    }));
+            // Everything that checks or sets a password, and register, which creates an account.
+            AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.Authentication, "Authentication", defaultPermitLimit: 10);
 
-            // Refresh gets its own, looser bucket. Access tokens last minutes, so every signed-in
-            // console refreshes several times an hour, and a shared office address would otherwise
-            // spend the login budget on routine refreshes and lock its own users out. A refresh
-            // costs no password hash and needs a 64-byte random token, so there is nothing for a
-            // tighter limit to protect.
-            options.AddPolicy(RateLimitPolicies.TokenRefresh, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = builder.Configuration.GetValue("RateLimiting:TokenRefresh:PermitLimit", 120),
-                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:TokenRefresh:WindowMinutes", 1)),
-                        QueueLimit = 0
-                    }));
+            // Refresh and logout. Access tokens last minutes, so every signed-in console refreshes
+            // several times an hour, and a shared office address would otherwise spend the login
+            // budget on routine refreshes. Neither costs a password hash and both need a 64-byte
+            // random token, so there is nothing for a tighter limit to protect.
+            AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.TokenRefresh, "TokenRefresh", defaultPermitLimit: 120);
+
+            // Verify-email and resend-verification. Resend sends mail, so it stays tight; the
+            // per-address cooldown (MailCooldown) is what protects the recipient.
+            AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.EmailVerification, "EmailVerification", defaultPermitLimit: 10);
         });
 
         // Readiness probes. The bus check is registered by AddMassTransit itself (masstransit-bus,
@@ -219,5 +219,22 @@ public static class Program
         app.MapControllers();
 
         await app.RunAsync();
+    }
+
+    /// <summary>A fixed window per client IP, read from <c>RateLimiting:{section}</c>.</summary>
+    private static void AddPerIpPolicy(RateLimiterOptions options, IConfiguration configuration, string policy, string section, int defaultPermitLimit)
+    {
+        var permitLimit = configuration.GetValue($"RateLimiting:{section}:PermitLimit", defaultPermitLimit);
+        var window = TimeSpan.FromMinutes(configuration.GetValue($"RateLimiting:{section}:WindowMinutes", 1));
+
+        options.AddPolicy(policy, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = permitLimit,
+                    Window = window,
+                    QueueLimit = 0
+                }));
     }
 }
