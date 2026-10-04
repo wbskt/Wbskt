@@ -3,7 +3,8 @@ name: Build images
 # Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
 # deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests run only the
 # tests and the package scan: the image jobs are skipped there, so a broken Dockerfile first shows
-# up on the master push that would publish it.
+# up on the master push that would publish it. On master, once the tests, E2E and every image have
+# succeeded, the deploy job hands that run's sha-<short> tag to deploy.yml.
 #
 # Every job stays on GitHub-hosted runners. The repository is public, and a self-hosted runner would
 # run code from any fork's pull request on the machine that hosts it.
@@ -376,3 +377,15 @@ jobs:
             ${{ needs.meta.outputs.prefix }}-migrator:latest
           cache-from: type=gha,scope=migrator
           cache-to: type=gha,mode=max,scope=migrator
+
+  # Every master push that gets this far lands on the VM. E2E gates only this job, not the image
+  # builds, so the images still publish while it runs and a red E2E stops the deploy alone.
+  deploy:
+    needs: [meta, hosts, migrator, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ needs.meta.outputs.tag }}
+    secrets: inherit

@@ -4,10 +4,23 @@ name: Deploy
 # listens on the VM, so there is no always-on control plane to defend - the SSH key is the only
 # credential, and it should be locked to a forced command (see deploy/README.md).
 #
-# Deliberately manual. Chain it off "Build images" with a workflow_run trigger if you later want
-# every master push to land on the VM automatically.
+# "Build images" calls this automatically after every master push, with that run's sha-<short> tag,
+# once the tests and E2E have passed and all five images are published. Dispatch it by hand to
+# redeploy or roll back to an older tag.
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      services:
+        type: string
+        required: false
+        default: ""
+      skip_migrations:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag:
@@ -22,15 +35,15 @@ on:
         type: boolean
         default: false
 
-# Never let two deploys interleave on the same box; queue instead of cancelling, since cancelling
-# mid-deploy would leave a half-updated stack.
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Never let two deploys interleave on the same box; queue instead of cancelling, since cancelling
+    # mid-deploy would leave a half-updated stack. Set on the job rather than the workflow so the
+    # automatic deploys from "Build images" and manual dispatches share the one queue.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
     environment: production
     steps:

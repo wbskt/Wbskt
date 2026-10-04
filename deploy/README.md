@@ -36,8 +36,8 @@ there. See [Build and release flow](#build-and-release-flow).
 - `scripts/ssh-forced-command.sh` — what the CI deploy key is pinned to in `authorized_keys`, so
   that key can only ever invoke `deploy.sh`.
 - `..\..\.github\workflows\build-images.yml` — builds and pushes the 5 backend images to GHCR.
-- `..\..\.github\workflows\deploy.yml` — manual (`workflow_dispatch`) deploy that SSHes to the VM
-  and invokes `scripts/deploy.sh`.
+- `..\..\.github\workflows\deploy.yml` — SSHes to the VM and invokes `scripts/deploy.sh`. Called
+  automatically by `build-images.yml` after each master push; can also be dispatched by hand.
 
 ## Build and release flow
 
@@ -46,7 +46,7 @@ Two repos, two independent release streams, one VM.
 ```
 Wbskt      push to master ─> build-images.yml ─> ghcr.io/wbskt/wbskt-<service>:sha-<short>
                                                               │
-                     you dispatch deploy.yml ────────────────-┘
+      tests + E2E green ─> deploy.yml (automatic) ──────────-┘
                                   │ ssh
                                   v
              deploy.sh --tag sha-<short>
@@ -65,7 +65,10 @@ Five images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-sock
 `wbskt-migrator` — each tagged `sha-<short-commit>` and `latest`. The console is a sixth,
 published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IMAGE_TAG`.
 
-The backend deploy is a manual dispatch of the **Deploy** workflow with the tag from the build run:
+Every push to master deploys itself: once the tests, E2E and all five images succeed, **Build
+images** calls the **Deploy** workflow with that run's tag, deploying all four hosts with
+migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
+an approval. To redeploy or pick services, dispatch **Deploy** by hand:
 
 | Input | Meaning |
 |---|---|
@@ -73,7 +76,7 @@ The backend deploy is a manual dispatch of the **Deploy** workflow with the tag 
 | `services` | blank for all four hosts, or e.g. `auth management` |
 | `skip_migrations` | leave unchecked. Migrations run by **default** — the incremental publish is idempotent, so skipping is what needs justifying |
 
-Rollback is just dispatching an older tag. Because the tag encodes the commit, the VM's
+Rollback is dispatching an older tag by hand. Because the tag encodes the commit, the VM's
 `docker-compose.yml` and `config/` roll back with it.
 
 ### One-time setup
