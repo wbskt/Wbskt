@@ -63,6 +63,11 @@ public sealed class DeviceRevocationTests(ServicesFixture fixture)
         var deletedToken = await fixture.LoginClientAsync(deletedRef, deletedSecret);
         var oldToken = await fixture.LoginClientAsync(rotatedRef, oldSecret);
 
+        // Token issue times have whole seconds, and a token from the rotation's own second is let
+        // through (it may be the device signing in with the new secret), so the rotation has to
+        // land in a later second than the old token for that token to be refused.
+        await Task.Delay(TimeSpan.FromSeconds(1.1));
+
         (await RevokeAsync(workspace, revokedRef, token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await Send(HttpMethod.Delete, workspace, $"clients/{deletedRef}", token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
         var rotation = await Send(HttpMethod.Post, workspace, $"clients/{rotatedRef}/rotate-secret", token);
