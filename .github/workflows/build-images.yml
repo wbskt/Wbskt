@@ -2,8 +2,11 @@ name: Build images
 
 # Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
 # deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests run only the
-# tests and the package scan: the image jobs are skipped there, since every one runs on the single
-# self-hosted runner, so a broken Dockerfile first shows up on the master push that would publish it.
+# tests and the package scan: the image jobs are skipped there, so a broken Dockerfile first shows
+# up on the master push that would publish it.
+#
+# Every job stays on GitHub-hosted runners. The repository is public, and a self-hosted runner would
+# run code from any fork's pull request on the machine that hosts it.
 
 on:
   push:
@@ -17,7 +20,7 @@ jobs:
   # separate one so that `needs:` can enforce it directly — a `workflow_run` chain would let a red
   # commit publish first and report second.
   test:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +36,7 @@ jobs:
             --nologo -v q --logger "console;verbosity=normal"
 
   integration:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -114,7 +117,7 @@ jobs:
   # as Development. That environment is what raises the auth host's per-IP rate limit (every test
   # shares the runner's address) and lets freshly registered users sign in without a mailbox.
   e2e:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -251,7 +254,7 @@ jobs:
           done
 
   scan:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -276,7 +279,7 @@ jobs:
 
   meta:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.v.outputs.tag }}
       prefix: ${{ steps.v.outputs.prefix }}
@@ -293,7 +296,7 @@ jobs:
   hosts:
     needs: [meta, test, integration, scan]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -346,7 +349,7 @@ jobs:
   migrator:
     needs: [meta, test, integration, scan]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
