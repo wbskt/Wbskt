@@ -81,8 +81,12 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
             int? workflowId = (@event as IWorkflowContext)?.WorkflowId ?? GetIntProperty(targetNode, "workflowId");
             Guid? workflowRefId = (@event as IWorkflowContext)?.WorkflowRefId ?? GetGuidProperty(targetNode, "workflowRefId");
             // The user an event is about (a login) or, for an action taken through the API, who took it.
-            int? userId = (@event as IUserContext)?.UserId ?? (@event as IActorContext)?.ActorUserId ?? GetIntProperty(targetNode, "userId");
-            Guid? userRefId = (@event as IUserContext)?.UserRefId ?? (@event as IActorContext)?.ActorUserRefId ?? GetGuidProperty(targetNode, "userRefId");
+            // The message is consumed as IEvent, so on the bus these casts miss and the values come from
+            // the JSON body, where an actor event names its user actorUserId/actorUserRefId.
+            int? userId = (@event as IUserContext)?.UserId ?? (@event as IActorContext)?.ActorUserId
+                ?? GetIntProperty(targetNode, "userId") ?? GetIntProperty(targetNode, "actorUserId");
+            Guid? userRefId = (@event as IUserContext)?.UserRefId ?? (@event as IActorContext)?.ActorUserRefId
+                ?? GetGuidProperty(targetNode, "userRefId") ?? GetGuidProperty(targetNode, "actorUserRefId");
 
             var entry = new EventLogEntry(
                 eventId, 
