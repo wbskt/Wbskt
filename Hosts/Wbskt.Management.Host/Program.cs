@@ -16,6 +16,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.HealthChecks;
+using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
@@ -229,12 +230,14 @@ public static class Program
         builder.Services.AddHealthChecks().AddSqlServerCheck("DefaultConnection");
 
         builder.Services.AddControllers();
+        builder.Services.AddWbsktJson();
         var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options =>
         {
             options.PayloadSerializerOptions.TypeInfoResolver = new DefaultJsonTypeInfoResolver
             {
                 Modifiers = { IgnoreSignalRPrivateProperties }
             };
+            WbsktJsonExtensions.Apply(options.PayloadSerializerOptions);
         });
 
         var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
