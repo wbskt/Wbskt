@@ -17,6 +17,7 @@ public sealed class AuthMetrics : IDisposable
         
         WorkspaceResolutions = _meter.CreateCounter<long>("wbskt_auth_workspace_resolutions_total");
         PermissionChecks = _meter.CreateCounter<long>("wbskt_auth_permission_checks_total");
+        MailSuppressed = _meter.CreateCounter<long>("wbskt_auth_mail_suppressed_total");
         
         PasswordHashDuration = _meter.CreateHistogram<double>("wbskt_auth_password_hash_duration_ms");
     }
@@ -26,6 +27,7 @@ public sealed class AuthMetrics : IDisposable
     public Counter<long> Registrations { get; }
     public Counter<long> WorkspaceResolutions { get; }
     public Counter<long> PermissionChecks { get; }
+    public Counter<long> MailSuppressed { get; }
     public Histogram<double> PasswordHashDuration { get; }
 
     public void RecordLogin(string outcome) => 
@@ -48,6 +50,10 @@ public sealed class AuthMetrics : IDisposable
         PermissionChecks.Add(1, 
             new KeyValuePair<string, object?>("permission_slug", permissionSlug), 
             new KeyValuePair<string, object?>("outcome", outcome));
+
+    /// <summary>A mail the per-address cooldown dropped. A steady count is someone aiming our mail at an inbox.</summary>
+    public void RecordMailSuppressed(string kind) =>
+        MailSuppressed.Add(1, new KeyValuePair<string, object?>("kind", kind));
 
     public void RecordPasswordHash(double durationMs) => 
         PasswordHashDuration.Record(durationMs);

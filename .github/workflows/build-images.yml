@@ -211,6 +211,8 @@ jobs:
           E2E_AUTH_PERMIT_LIMIT: "10"
           RateLimiting__TokenRefresh__PermitLimit: "120"
           E2E_REFRESH_PERMIT_LIMIT: "120"
+          RateLimiting__EmailVerification__PermitLimit: "10"
+          E2E_VERIFICATION_PERMIT_LIMIT: "10"
           E2E_RATE_LIMIT_TESTS: "1"
         run: |
           set -o pipefail

@@ -111,7 +111,8 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
     {
         SkipUnlessEnabled();
 
-        var statuses = await ExhaustAsync(() => fixture.LogoutAsync($"bogus-{Guid.NewGuid():N}"));
+        // In the refresh bucket, not the credential one: see AUTH_RL_11.
+        var statuses = await ExhaustAsync(() => fixture.LogoutAsync($"bogus-{Guid.NewGuid():N}"), E2EConfig.RefreshPermitLimit);
 
         statuses.Should().Contain(HttpStatusCode.TooManyRequests);
     }
@@ -143,6 +144,41 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
         // The window counts requests, not failures. Otherwise the brake could be walked around by
         // interleaving valid credentials between guesses.
         statuses.Should().Contain(HttpStatusCode.TooManyRequests);
+    }
+
+    [SkippableFact]
+    public async Task AUTH_RL_11_SigningOutDoesNotSpendTheSignInBudget()
+    {
+        SkipUnlessEnabled();
+
+        var user = await fixture.CreateUserAsync();
+
+        // More logouts than the credential bucket holds. On a shared office address, people signing
+        // out must not lock their colleagues out of signing in.
+        var statuses = await ExhaustAsync(() => fixture.LogoutAsync($"bogus-{Guid.NewGuid():N}"));
+        statuses.Should().NotContain(HttpStatusCode.TooManyRequests);
+
+        var response = await fixture.LoginRawAsync(user.Email, user.Password);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [SkippableFact]
+    public async Task AUTH_RL_12_VerificationLinksHaveTheirOwnBucket()
+    {
+        SkipUnlessEnabled();
+
+        var user = await fixture.CreateUserAsync();
+
+        var statuses = await ExhaustAsync(
+            () => fixture.SendAsync(HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/verify-email"), body: new { Token = $"bogus-{Guid.NewGuid():N}" }),
+            E2EConfig.VerificationPermitLimit);
+        statuses.Should().Contain(HttpStatusCode.TooManyRequests);
+
+        // Exhausting it leaves signing in alone.
+        var response = await fixture.LoginRawAsync(user.Email, user.Password);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ── Operational endpoints (not rate limited, but part of §7) ──────────────────────────

@@ -177,7 +177,8 @@ public sealed class AccountSecurityTests
                 NullLogger<AuthService>.Instance,
                 new AuthMetrics(),
                 AccessTokens.Object,
-                Options.Create(new AccessTokenOptions()));
+                Options.Create(new AccessTokenOptions()),
+                MailCooldownTests.InProcess());
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();

@@ -87,7 +87,7 @@ public class AuthController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [AllowAnonymous]
-    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [EnableRateLimiting(RateLimitPolicies.TokenRefresh)]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
@@ -225,7 +225,7 @@ public class AuthController : ApiControllerBase
     /// this succeeds.
     /// </summary>
     [AllowAnonymous]
-    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [EnableRateLimiting(RateLimitPolicies.EmailVerification)]
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail(VerifyEmailRequest request, CancellationToken cancellationToken)
     {
@@ -243,7 +243,7 @@ public class AuthController : ApiControllerBase
     /// <see cref="ForgotPassword"/> and for the same reason.
     /// </remarks>
     [AllowAnonymous]
-    [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [EnableRateLimiting(RateLimitPolicies.EmailVerification)]
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification(ResendVerificationRequest request, CancellationToken cancellationToken)
     {

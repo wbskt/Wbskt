@@ -43,8 +43,16 @@ Two conventions run through every table below:
 
 ### 1.1 Credentials — `api/auth`
 
-Anonymous except where noted, and rate limited per client IP (`RateLimiting:Authentication`) so the
-password hasher cannot be used as a work amplifier.
+Anonymous except where noted, and rate limited per client IP so the password hasher cannot be used as
+a work amplifier. There are three buckets, so routine traffic cannot spend the sign-in budget:
+`RateLimiting:Authentication` (10/min: register, login, change-password, forgot-password,
+reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout) and
+`RateLimiting:EmailVerification` (10/min: verify-email, resend-verification).
+
+register, forgot-password and resend-verification also respect a per-address mail cooldown
+(`Auth:MailCooldown`: one mail of each kind per address per 2 minutes, at most 5 per address an hour),
+kept in Redis when it is configured. A suppressed mail is answered with the same 204, and no new token
+is issued, so the link already in the inbox keeps working.
 
 | Endpoint | Auth | What it does |
 |---|---|---|
