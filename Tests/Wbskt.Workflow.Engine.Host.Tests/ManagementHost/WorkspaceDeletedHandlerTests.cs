@@ -4,6 +4,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Events.Client;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Handlers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
@@ -25,9 +26,10 @@ public sealed class WorkspaceDeletedHandlerTests
         var bus = new Mock<IEventBus>();
         var cancellation = new Mock<IRunCancellationService>();
         var cache = new Mock<IWorkflowDefinitionCache>();
+        var cutoffs = new Mock<IClientTokenCutoffs>();
 
         var handler = new WorkspaceDeletedHandler(
-            provider.Object, bus.Object, cancellation.Object, cache.Object, NullLogger<WorkspaceDeletedHandler>.Instance);
+            provider.Object, bus.Object, cancellation.Object, cache.Object, cutoffs.Object, NullLogger<WorkspaceDeletedHandler>.Instance);
 
         var ctx = new Mock<ConsumeContext<WorkspaceDeletedEvent>>();
         ctx.SetupGet(x => x.Message).Returns(new WorkspaceDeletedEvent(workspaceId, DeletedByUserId: 3));
@@ -43,6 +45,7 @@ public sealed class WorkspaceDeletedHandlerTests
                 e.WorkspaceId == workspaceId && e.Status == (byte)ClientStatus.Revoked),
             It.IsAny<CancellationToken>()), Times.Once);
 
+        cutoffs.Verify(c => c.RevokeAsync(client.ClientRefId), Times.Once);
         cancellation.Verify(c => c.RequestCancellationAsync(101L, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         cancellation.Verify(c => c.RequestCancellationAsync(102L, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         cache.Verify(c => c.Invalidate(31), Times.Once);

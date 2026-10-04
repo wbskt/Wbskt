@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models;
@@ -18,17 +19,20 @@ internal sealed class ClientService : IClientService
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly IEventBus _eventBus;
+    private readonly IClientTokenCutoffs _cutoffs;
     private readonly ILogger<ClientService> _logger;
 
     public ClientService(
         IClientProvider clientProvider, 
         IRegistrationPolicyProvider policyProvider,
         IEventBus eventBus,
+        IClientTokenCutoffs cutoffs,
         ILogger<ClientService> logger)
     {
         _clientProvider = clientProvider;
         _policyProvider = policyProvider;
         _eventBus = eventBus;
+        _cutoffs = cutoffs;
         _logger = logger;
     }
 
@@ -143,6 +147,15 @@ internal sealed class ClientService : IClientService
 
             _logger.LogInformation("Successfully updated client ID {ClientId} status from '{OldStatus}' to '{NewStatus}'", id, oldStatus, status);
 
+            if (status == ClientStatus.Registered)
+            {
+                await _cutoffs.ReinstateAsync(client.RefId, DateTime.UtcNow);
+            }
+            else if (oldStatus == ClientStatus.Registered)
+            {
+                await _cutoffs.RevokeAsync(client.RefId);
+            }
+
             await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, (byte)status), cancellationToken);
 
             return Result.Success();
@@ -204,6 +217,7 @@ internal sealed class ClientService : IClientService
             }
 
             _logger.LogInformation("Deleted client ID {ClientId} ('{Name}') from WorkspaceId: {WorkspaceId}", client.Id, client.Name, workspaceId);
+            await _cutoffs.RevokeAsync(client.RefId);
             await _eventBus.PublishAsync(
                 new ClientDeletedEvent(client.RefId, client.Id, client.PolicyRefId, client.PolicyId, workspaceId, client.Name),
                 cancellationToken);
@@ -237,7 +251,9 @@ internal sealed class ClientService : IClientService
             }
 
             _logger.LogInformation("Rotated secret for client ID {ClientId}", client.Id);
-            await _eventBus.PublishAsync(new ClientSecretRotatedEvent(client.RefId, client.Id, workspaceId, DateTime.UtcNow), cancellationToken);
+            var rotatedAt = DateTime.UtcNow;
+            await _cutoffs.RevokeIssuedBeforeAsync(client.RefId, rotatedAt);
+            await _eventBus.PublishAsync(new ClientSecretRotatedEvent(client.RefId, client.Id, workspaceId, rotatedAt), cancellationToken);
 
             return Result<ClientSecretResponse>.Success(new ClientSecretResponse(client.RefId, secret));
         }

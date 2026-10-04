@@ -9,6 +9,7 @@ using Wbskt.Events.Client;
 using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Events;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
@@ -122,6 +123,7 @@ public sealed class BrokerOutageTests
             services.AddSingleton(Clients.Object);
             services.AddSingleton(Policies.Object);
             services.AddSingleton(_bus.Object);
+            services.AddSingleton(Mock.Of<IClientTokenCutoffs>());
             services.AddQueuedEventBus();
             services.AddScopedWithQueuedEvents<IClientService, ClientService>();
             services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();

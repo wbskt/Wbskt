@@ -546,7 +546,9 @@ performed, what exists is a backup script, not a backup.
 
 Both decisions, written down so the next person does not have to guess:
 
-- **Redis** — a SignalR backplane and cache. Losing it costs reconnects, nothing durable.
+- **Redis** — a SignalR backplane and cache, plus token revocations that live at most a little
+  over an hour (signed-out users, revoked or rotated devices). Losing it costs reconnects, and
+  revocations from that last hour then hold only on hosts that have not restarted since.
 - **RabbitMQ** — holds in-flight events only. Losing it drops whatever was queued at that instant,
   which is a real but bounded loss; the durable record of every run lives in SQL.
 
