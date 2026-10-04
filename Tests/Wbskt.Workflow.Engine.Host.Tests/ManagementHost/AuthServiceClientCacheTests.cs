@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using StackExchange.Redis;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
@@ -149,16 +151,151 @@ public sealed class AuthServiceClientCacheTests
         auth.Calls.Should().Be(2);
     }
 
-    private static (AuthServiceClient Client, IdentityService Identity, WorkspaceAccessCache Cache) CreateClient(FakeAuthHost auth, int seconds = 30)
+    // ---------------------------------------------------------------- the change counter
+
+    [Fact]
+    public async Task Without_Redis_an_entry_lasts_the_short_lifetime()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.OK);
+        var clock = new ManualClock();
+        var (client, identity, _) = CreateClient(auth, time: clock);
+
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+            clock.Advance(TimeSpan.FromSeconds(29));
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+            clock.Advance(TimeSpan.FromSeconds(2));
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        auth.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task While_the_counter_is_confirmed_an_entry_lasts_the_long_lifetime()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.OK);
+        var clock = new ManualClock();
+        var redis = new FakeVersion();
+        var (client, identity, cache) = CreateClient(auth, time: clock, redis: redis);
+        await cache.CheckVersionAsync();
+
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+            for (var i = 0; i < 48; i++)
+            {
+                clock.Advance(TimeSpan.FromSeconds(5));
+                await cache.CheckVersionAsync();
+            }
+
+            // Four minutes on, nothing changed and every check got through.
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        auth.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_moved_counter_drops_everything_even_without_the_message()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.OK);
+        var redis = new FakeVersion();
+        var (client, identity, cache) = CreateClient(auth, redis: redis);
+        await cache.CheckVersionAsync();
+
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+            redis.Version++;
+            await cache.CheckVersionAsync();
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        auth.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task When_checks_stop_getting_through_only_young_entries_are_served()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.OK);
+        var clock = new ManualClock();
+        var redis = new FakeVersion();
+        var (client, identity, cache) = CreateClient(auth, time: clock, redis: redis);
+        await cache.CheckVersionAsync();
+
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+            redis.Connected = false;
+            clock.Advance(TimeSpan.FromSeconds(31));
+            await cache.CheckVersionAsync();
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        auth.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task The_first_check_drops_entries_stored_before_any_version_was_known()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.OK);
+        var redis = new FakeVersion();
+        var (client, identity, cache) = CreateClient(auth, redis: redis);
+
+        using (identity.BeginScope(new UserIdentity(7)))
+        {
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+            await cache.CheckVersionAsync();
+            await client.ResolveWorkspaceAsync(WorkspaceRef);
+        }
+
+        auth.Calls.Should().Be(2);
+    }
+
+    private static (AuthServiceClient Client, IdentityService Identity, WorkspaceAccessCache Cache) CreateClient(
+        FakeAuthHost auth, int seconds = 30, TimeProvider? time = null, FakeVersion? redis = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { [WorkspaceAccessCache.SecondsKey] = seconds.ToString() })
             .Build();
         var identity = new IdentityService();
         var http = new HttpClient(auth) { BaseAddress = new Uri("http://auth.test") };
-        var cache = new WorkspaceAccessCache(configuration);
+        var changes = redis is null ? null : new WorkspaceAccessChanges(redis.Multiplexer, NullLogger<WorkspaceAccessChanges>.Instance);
+        var cache = new WorkspaceAccessCache(configuration, changes, time);
         var client = new AuthServiceClient(http, NullLogger<AuthServiceClient>.Instance, cache, identity);
         return (client, identity, cache);
+    }
+
+    /// <summary>A Redis that holds only the change counter.</summary>
+    private sealed class FakeVersion
+    {
+        public FakeVersion()
+        {
+            var database = new Mock<IDatabase>();
+            database.Setup(d => d.StringGetAsync(It.Is<RedisKey>(k => k == "wbskt:workspace-access-version"), It.IsAny<CommandFlags>()))
+                .ReturnsAsync(() => (RedisValue)Version);
+            var redis = new Mock<IConnectionMultiplexer>();
+            redis.SetupGet(r => r.IsConnected).Returns(() => Connected);
+            redis.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(database.Object);
+            Multiplexer = redis.Object;
+        }
+
+        public long Version { get; set; } = 3;
+
+        public bool Connected { get; set; } = true;
+
+        public IConnectionMultiplexer Multiplexer { get; }
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
     }
 
     private sealed class FakeAuthHost(HttpStatusCode status) : HttpMessageHandler
