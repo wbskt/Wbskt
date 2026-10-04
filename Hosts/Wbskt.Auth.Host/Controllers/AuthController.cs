@@ -40,10 +40,11 @@ public class AuthController : ApiControllerBase
     /// <returns>A task representing the asynchronous operation.</returns>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HashesPassword]
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Register requested for Username: '{Username}', Email: '{Email}'", request.Username, request.Email);
+        _logger.LogDebug("API: Register requested for Username: '{Username}'", request.Username);
         var result = await _authService.RegisterUserAsync(request.Username, request.Email, request.Password, request.InvitationToken, cancellationToken);
         return MapResult(result);
     }
@@ -56,10 +57,11 @@ public class AuthController : ApiControllerBase
     /// <returns>A response containing the JWT access token and refresh token.</returns>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HashesPassword]
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Login requested for Email: '{Email}'", request.Email);
+        _logger.LogDebug("API: Login requested");
         var result = await _authService.LoginAsync(request.Email, request.Password, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -76,7 +78,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("refresh-token")]
     public async Task<ActionResult<LoginResponse>> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: RefreshToken requested");
+        _logger.LogDebug("API: RefreshToken requested");
         var result = await _authService.RefreshTokenAsync(request.RefreshToken, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -94,7 +96,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Logout requested");
+        _logger.LogDebug("API: Logout requested");
         var result = await _authService.LogoutAsync(request.RefreshToken, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -109,7 +111,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("logout-all")]
     public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: LogoutAll requested");
+        _logger.LogDebug("API: LogoutAll requested");
 
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
@@ -132,10 +134,11 @@ public class AuthController : ApiControllerBase
     /// </remarks>
     [Authorize]
     [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HashesPassword]
     [HttpPost("change-password")]
     public async Task<ActionResult<LoginResponse>> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: ChangePassword requested");
+        _logger.LogDebug("API: ChangePassword requested");
 
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
@@ -173,7 +176,7 @@ public class AuthController : ApiControllerBase
     [HttpDelete("sessions/{id:guid}")]
     public async Task<IActionResult> RevokeSession(Guid id, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: RevokeSession requested for session {SessionId}", id);
+        _logger.LogDebug("API: RevokeSession requested for session {SessionId}", id);
 
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
@@ -207,7 +210,7 @@ public class AuthController : ApiControllerBase
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
         // The address is the subject of the request rather than a lookup key, and is logged as such.
-        _logger.LogInformation("API: ForgotPassword requested");
+        _logger.LogDebug("API: ForgotPassword requested");
         var result = await _authService.ForgotPasswordAsync(request.Email, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -222,11 +225,12 @@ public class AuthController : ApiControllerBase
     /// </remarks>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Authentication)]
+    [HashesPassword]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
     {
         // The token is a bearer credential and is deliberately absent from this log line.
-        _logger.LogInformation("API: ResetPassword requested");
+        _logger.LogDebug("API: ResetPassword requested");
         var result = await _authService.ResetPasswordAsync(request.Token, request.NewPassword, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -240,7 +244,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail(VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: VerifyEmail requested");
+        _logger.LogDebug("API: VerifyEmail requested");
         var result = await _authService.VerifyEmailAsync(request.Token, cancellationToken);
         return MapResult(result);
     }
@@ -258,7 +262,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification(ResendVerificationRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: ResendVerification requested");
+        _logger.LogDebug("API: ResendVerification requested");
         var result = await _authService.ResendVerificationAsync(request.Email, cancellationToken);
         return MapResult(result);
     }

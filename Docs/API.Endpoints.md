@@ -49,6 +49,12 @@ a work amplifier. There are three buckets, so routine traffic cannot spend the s
 reset-password), `RateLimiting:TokenRefresh` (120/min: refresh-token, logout) and
 `RateLimiting:EmailVerification` (10/min: verify-email, resend-verification).
 
+The endpoints that hash a password (register, login, change-password, reset-password) also share one
+host-wide concurrency limit, `RateLimiting:PasswordHashing` (`PermitLimit`, default twice the CPU
+count, with up to `QueueLimit` 20 waiting), so a burst from many addresses queues instead of starving
+every other request of CPU. A request that finds the queue full gets 429. A password stored with
+older hashing settings is re-hashed with the current ones on the next successful sign-in.
+
 register, forgot-password and resend-verification also respect a per-address mail cooldown
 (`Auth:MailCooldown`: one mail of each kind per address per 2 minutes, at most 5 per address an hour),
 kept in Redis when it is configured. A suppressed mail is answered with the same 204, and no new token

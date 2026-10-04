@@ -148,6 +148,16 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         await ExecuteNonQueryAsync("dbo.User_RecordLoginSuccess", p => p.AddWithValue("@UserId", userId), cancellationToken);
     }
 
+    public async Task<bool> UpgradePasswordHashAsync(int userId, string currentPasswordHash, string newPasswordHash, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.User_UpgradePasswordHash", p =>
+        {
+            p.AddWithValue("@UserId", userId);
+            p.AddWithValue("@CurrentPasswordHash", currentPasswordHash);
+            p.AddWithValue("@NewPasswordHash", newPasswordHash);
+        }, cancellationToken) == 1;
+    }
+
     public async Task ChangePasswordAsync(int userId, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.User_ChangePassword", p =>

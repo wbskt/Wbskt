@@ -66,6 +66,57 @@ public sealed class AccountSecurityTests
         harness.Provider.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // ---------------------------------------------------------------- rehash on sign-in
+
+    [Fact]
+    public async Task A_hash_from_older_settings_is_upgraded_on_sign_in()
+    {
+        var harness = new Harness();
+        var weak = new PasswordHasher<User>(Options.Create(new PasswordHasherOptions { IterationCount = 1_000 }));
+        var user = AUser();
+        user.PasswordHash = weak.HashPassword(new User(), Password);
+        harness.WithUser(user);
+        string? newHash = null;
+        harness.Provider
+            .Setup(p => p.UpgradePasswordHashAsync(42, user.PasswordHash, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback<int, string, string, CancellationToken>((_, _, hash, _) => newHash = hash)
+            .ReturnsAsync(true);
+
+        var result = await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(newHash);
+        Assert.Equal(PasswordVerificationResult.Success,
+            new PasswordHasher<User>().VerifyHashedPassword(new User(), newHash!, Password));
+    }
+
+    [Fact]
+    public async Task A_current_hash_is_left_alone()
+    {
+        var harness = new Harness();
+        harness.WithUser(AUser());
+
+        await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+
+        harness.Provider.Verify(p => p.UpgradePasswordHashAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_failed_upgrade_does_not_fail_the_sign_in()
+    {
+        var harness = new Harness();
+        var user = AUser();
+        user.PasswordHash = new PasswordHasher<User>(Options.Create(new PasswordHasherOptions { IterationCount = 1_000 })).HashPassword(new User(), Password);
+        harness.WithUser(user);
+        harness.Provider
+            .Setup(p => p.UpgradePasswordHashAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+
+        var result = await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+    }
+
     // ---------------------------------------------------------------- change password
 
     [Fact]
