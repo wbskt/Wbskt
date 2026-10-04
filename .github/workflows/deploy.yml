@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     # Gate on a GitHub Environment so production deploys can require a reviewer's approval.
     environment: production
     steps:
