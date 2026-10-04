@@ -36,12 +36,14 @@ public sealed class MetricsExporterTests
 
         Assert.NotNull(cutoff);
         Assert.InRange(DateTime.UtcNow - cutoff!.Value, TimeSpan.FromSeconds(55), TimeSpan.FromSeconds(65));
-        Assert.Equal(3, Observe(metrics, "wbskt_workflow_bookmarks_overdue"));
+        Assert.Contains(3L, Observe(metrics, "wbskt_workflow_bookmarks_overdue"));
     }
 
-    private static long Observe(WorkflowMetrics metrics, string instrument)
+    // Every WorkflowMetrics shares the meter name, and tests running in parallel keep their own alive,
+    // so the listener sees one reading per live instance. This test's reading is among them.
+    private static List<long> Observe(WorkflowMetrics metrics, string instrument)
     {
-        long value = -1;
+        var values = new List<long>();
         using var listener = new MeterListener();
         listener.InstrumentPublished = (i, l) =>
         {
@@ -50,10 +52,10 @@ public sealed class MetricsExporterTests
                 l.EnableMeasurementEvents(i);
             }
         };
-        listener.SetMeasurementEventCallback<long>((_, measurement, _, _) => value = measurement);
+        listener.SetMeasurementEventCallback<long>((_, measurement, _, _) => values.Add(measurement));
         listener.Start();
         listener.RecordObservableInstruments();
         GC.KeepAlive(metrics);
-        return value;
+        return values;
     }
 }
