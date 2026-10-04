@@ -115,7 +115,7 @@ internal sealed class AuthService : IAuthService
 
     public async Task<Result<LoginResponse>> LoginAsync(string email, string password, string ipAddress, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Attempting login for email: {Email} from IP: {IpAddress}", email, ipAddress);
+        _logger.LogDebug("Attempting login from IP: {IpAddress}", ipAddress);
 
         try 
         {
@@ -190,6 +190,11 @@ internal sealed class AuthService : IAuthService
 
             await _provider.RecordLoginSuccessAsync(user.Id, cancellationToken);
 
+            if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+            {
+                await UpgradePasswordHashAsync(user, password, cancellationToken);
+            }
+
             _logger.LogDebug("Credentials verified successfully for user: {Username} ({Email}). Generating tokens...", user.Username, email);
             var refreshToken = GenerateRefreshToken(user.Id);
             var accessToken = GenerateAccessToken(user, refreshToken.SessionId);
@@ -220,7 +225,7 @@ internal sealed class AuthService : IAuthService
 
     public async Task<Result<LoginResponse>> RefreshTokenAsync(string token, string ipAddress, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Attempting token refresh from IP: {IpAddress}", ipAddress);
+        _logger.LogDebug("Attempting token refresh from IP: {IpAddress}", ipAddress);
 
         try
         {
@@ -296,7 +301,8 @@ internal sealed class AuthService : IAuthService
             // event that fails to go out must not turn it into an error the client acts on.
             await _eventBus.PublishAsync(new TokenRotatedEvent(user.Id, user.RefId, ipAddress), cancellationToken);
 
-            _logger.LogInformation("Token refreshed successfully for user: {Username}. IP: {IpAddress}", user.Username, ipAddress);
+            // Debug: the most frequent call this host serves. AuthMetrics counts the outcomes.
+            _logger.LogDebug("Token refreshed for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
             _metrics.RecordRefresh("success");
             return Result<LoginResponse>.Success(new LoginResponse(newAccessToken, newRefreshToken.Token));
         }
@@ -311,7 +317,7 @@ internal sealed class AuthService : IAuthService
 
     public async Task<Result> LogoutAsync(string token, string ipAddress, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Attempting logout from IP: {IpAddress}", ipAddress);
+        _logger.LogDebug("Attempting logout from IP: {IpAddress}", ipAddress);
 
         try
         {
@@ -441,7 +447,7 @@ internal sealed class AuthService : IAuthService
 
     public async Task<Result> RegisterUserAsync(string username, string email, string password, string? invitationToken = null, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Attempting to register user: {Username} with email: {Email}", username, email);
+        _logger.LogDebug("Attempting to register user: {Username}", username);
 
         // Checked before the account is created, not after. Redeeming an invitation is the last step
         // of registration, so a token that turns out to be unusable would otherwise leave behind an
@@ -690,6 +696,24 @@ internal sealed class AuthService : IAuthService
     private void SpendPasswordCheck(string password)
     {
         _passwordHasher.VerifyHashedPassword(new User(), DummyPasswordHash.Value, password);
+    }
+
+    /// <summary>
+    /// Re-hashes a password the hasher reported as stored with outdated settings, so raising the work
+    /// factor takes effect as people sign in rather than never. Best effort: the sign-in has already
+    /// succeeded, and the old hash keeps working until the next one.
+    /// </summary>
+    private async Task UpgradePasswordHashAsync(User user, string password, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var upgraded = await _provider.UpgradePasswordHashAsync(user.Id, user.PasswordHash, _passwordHasher.HashPassword(user, password), cancellationToken);
+            _logger.LogInformation("Password hash for user {UserId} {Outcome}", user.Id, upgraded ? "upgraded to the current settings" : "changed meanwhile; not upgraded");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not upgrade the password hash for user {UserId}", user.Id);
+        }
     }
 
     /// <summary>

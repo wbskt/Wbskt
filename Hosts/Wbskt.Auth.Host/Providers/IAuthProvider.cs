@@ -43,6 +43,12 @@ internal interface IAuthProvider : IReferenceProvider
     /// <summary>Clears the failure count and stamps the last sign-in.</summary>
     Task RecordLoginSuccessAsync(int userId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Stores a stronger hash of the same password (<c>User_UpgradePasswordHash</c>), only while the
+    /// stored hash is still <paramref name="currentPasswordHash"/>. Returns false when it had changed.
+    /// </summary>
+    Task<bool> UpgradePasswordHashAsync(int userId, string currentPasswordHash, string newPasswordHash, CancellationToken cancellationToken = default);
+
     /// <summary>Writes the new password and revokes every refresh token the user holds, in one transaction.</summary>
     Task ChangePasswordAsync(int userId, string passwordHash, string? revokedByIp, CancellationToken cancellationToken = default);
 

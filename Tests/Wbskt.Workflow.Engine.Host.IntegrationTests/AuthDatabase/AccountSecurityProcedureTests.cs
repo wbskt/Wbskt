@@ -53,6 +53,19 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_hash_upgrade_applies_only_while_the_old_hash_is_still_stored()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int userId = await CreateUserAsync();
+        string stored = await ScalarAsync<string>("SELECT PasswordHash FROM dbo.Users WHERE Id = @p0", userId);
+
+        Assert.Equal(1, await UpgradeAsync(userId, stored, "upgraded-hash"));
+        // A second sign-in still holding the old hash, or a password change that landed first, wins.
+        Assert.Equal(0, await UpgradeAsync(userId, stored, "late-hash"));
+        Assert.Equal("upgraded-hash", await ScalarAsync<string>("SELECT PasswordHash FROM dbo.Users WHERE Id = @p0", userId));
+    }
+
+    [SkippableFact]
     public async Task Changing_the_password_revokes_every_session_and_lifts_a_lock()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -132,6 +145,16 @@ public sealed class AccountSecurityProcedureTests(AuthSqlFixture fixture)
         }
 
         return ids;
+    }
+
+    private async Task<int> UpgradeAsync(int userId, string currentHash, string newHash)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.User_UpgradePasswordHash", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@CurrentPasswordHash", currentHash);
+        cmd.Parameters.AddWithValue("@NewPasswordHash", newHash);
+        return (int)(await cmd.ExecuteScalarAsync())!;
     }
 
     private async Task<int> RevokeAsync(Guid sessionId, int userId)

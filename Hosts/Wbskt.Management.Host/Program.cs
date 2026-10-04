@@ -83,6 +83,11 @@ public static class Program
         {
             client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
+
+            // Every management request waits on this call (or its cache). HttpClient's default of 100
+            // seconds would let a stalled auth host hold every request that long; a resolve is one
+            // stored procedure, so a few seconds is already generous.
+            client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:AuthTimeoutSeconds", 5));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         builder.Services.AddHttpClient<IWorkflowEngineClient, WorkflowEngineClient>(client =>

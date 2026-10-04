@@ -330,7 +330,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             // 2. Compute the effective permission set (an empty set is still a successful resolution)
             var permissions = await _authProvider.GetEffectivePermissionsAsync(userId, workspaceId, cancellationToken);
 
-            _logger.LogInformation("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, permissions.Count, workspaceId);
+            _logger.LogDebug("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, permissions.Count, workspaceId);
             _metrics.RecordPermissionCheck("effective-set", "resolved");
             return Result<IReadOnlyCollection<string>>.Success(permissions);
         }

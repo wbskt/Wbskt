@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using StackExchange.Redis;
 using Microsoft.Extensions.Options;
+using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
@@ -143,6 +144,20 @@ public static class Program
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // Across every caller, not per IP: how many password hashes run at once. See
+            // HashesPasswordAttribute. Twice the cores keeps them busy without starving the rest.
+            var hashingPermits = builder.Configuration.GetValue("RateLimiting:PasswordHashing:PermitLimit", Environment.ProcessorCount * 2);
+            var hashingQueue = builder.Configuration.GetValue("RateLimiting:PasswordHashing:QueueLimit", 20);
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+                httpContext.GetEndpoint()?.Metadata.GetMetadata<HashesPasswordAttribute>() is null
+                    ? RateLimitPartition.GetNoLimiter(string.Empty)
+                    : RateLimitPartition.GetConcurrencyLimiter("password-hashing", _ => new ConcurrencyLimiterOptions
+                    {
+                        PermitLimit = hashingPermits,
+                        QueueLimit = hashingQueue,
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                    }));
 
             // Everything that checks or sets a password, and register, which creates an account.
             AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.Authentication, "Authentication", defaultPermitLimit: 10);

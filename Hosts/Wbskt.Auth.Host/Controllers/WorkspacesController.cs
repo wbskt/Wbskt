@@ -79,7 +79,7 @@ public class WorkspacesController : ApiControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspaces(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: GetWorkspaces requested");
+        _logger.LogDebug("API: GetWorkspaces requested");
         
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
