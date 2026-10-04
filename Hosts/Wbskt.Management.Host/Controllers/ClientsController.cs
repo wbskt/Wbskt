@@ -386,7 +386,11 @@ public class ClientsController : ApiControllerBase
         }
 
         var commandId = Guid.NewGuid();
-        await _eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, request.Type, request.Payload, commandId), cancellationToken);
+        if (!await TryPublishActionAsync(new ClientCommandEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, request.Type, request.Payload, commandId), cancellationToken))
+        {
+            return BrokerUnavailable();
+        }
+
         _logger.LogInformation("Successfully published client command event '{CommandId}' for ClientRefId: '{ClientRefId}'", commandId, clientRefId);
         return Accepted(new ClientCommandResponse(commandId));
     }
@@ -469,13 +473,46 @@ public class ClientsController : ApiControllerBase
             return MapError(clientResult.Error);
         }
 
-        await _eventBus.PublishAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, DateTime.UtcNow), cancellationToken);
+        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, DateTime.UtcNow), cancellationToken))
+        {
+            return BrokerUnavailable();
+        }
+
         _logger.LogInformation("Successfully published client ping event for ClientRefId: '{ClientRefId}'", clientRefId);
         return NoContent();
     }
 
+    /// <summary>How long a command or ping waits for the broker before the caller is told to retry.</summary>
+    internal static readonly TimeSpan ActionPublishTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Publishes an event that is itself the action - a command or a ping - on the real bus. Unlike the
+    /// services' post-commit events these are not queued: a queued command would be reported as sent
+    /// when it might never go out. So a broker that fails or does not answer in time is reported as
+    /// such, rather than as a 500 or a hung request.
+    /// </summary>
+    private async Task<bool> TryPublishActionAsync<TEvent>(TEvent @event, CancellationToken cancellationToken) where TEvent : IEvent
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ActionPublishTimeout);
 
+        try
+        {
+            await _eventBus.PublishAsync(@event, timeout.Token);
+            return true;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Publishing {EventType} failed; the event bus is unavailable. {Message}", typeof(TEvent).Name, ex.Message);
+            return false;
+        }
+    }
+
+    private ObjectResult BrokerUnavailable()
+    {
+        Response.Headers.RetryAfter = "5";
+        return StatusCode(StatusCodes.Status503ServiceUnavailable, Error.Failure("EVENT_BUS_UNAVAILABLE", "The device could not be reached right now. Try again shortly."));
+    }
 }
 
 public record UpdateClientStatusRequest(ClientStatus Status);

@@ -14,6 +14,7 @@ using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Configuration;
+using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
@@ -61,12 +62,17 @@ public static class Program
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddAccessTokenRevocation(builder.Configuration);
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
-        builder.Services.AddScoped<IRegistrationPolicyService, RegistrationPolicyService>();
+        // These services publish after their change is committed, so they publish through the queued
+        // bus: a broker outage must not turn a rotated secret or a registration into a 500 (see
+        // QueuedEventBus). Commands and pings in ClientsController keep the real bus, because there
+        // the publish is the action.
+        builder.Services.AddQueuedEventBus();
+        builder.Services.AddScopedWithQueuedEvents<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
         builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
-        builder.Services.AddScoped<IClientRegistrationService, ClientRegistrationService>();
-        builder.Services.AddScoped<IClientService, ClientService>();
+        builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
+        builder.Services.AddScopedWithQueuedEvents<IClientService, ClientService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
@@ -111,6 +117,9 @@ public static class Program
                 // Register Auto SignalR Forwarding Consumers
                 configurator.AddAutoSignalRForwarding();
             });
+
+        // Registered after the bus so it stops first, and can still send what is queued while stopping.
+        builder.Services.AddHostedService<QueuedEventDispatcher>();
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>(ReferenceType.RegistrationPolicy);

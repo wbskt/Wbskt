@@ -134,7 +134,7 @@ public sealed class RefreshRotationTests
                 .Returns("access-token");
 
             Service = Create(jwt.Object, Bus.Object);
-            QueuedService = Create(jwt.Object, new Wbskt.Auth.Host.Services.Events.QueuedEventBus(NullLogger<Wbskt.Auth.Host.Services.Events.QueuedEventBus>.Instance));
+            QueuedService = Create(jwt.Object, new Wbskt.Infrastructure.Events.QueuedEventBus(NullLogger<Wbskt.Infrastructure.Events.QueuedEventBus>.Instance));
         }
 
         public Mock<IAuthProvider> Provider { get; } = new();

@@ -14,7 +14,7 @@ using Wbskt.Auth.Host.Extensions;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
-using Wbskt.Auth.Host.Services.Events;
+using Wbskt.Infrastructure.Events;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
@@ -59,8 +59,8 @@ public static class Program
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
         // AuthService publishes through the queued bus, so sign-in never waits on RabbitMQ; see
         // QueuedEventBus. Every other service here keeps the real bus.
-        builder.Services.AddSingleton<QueuedEventBus>();
-        builder.Services.AddScoped<IAuthService>(sp => ActivatorUtilities.CreateInstance<AuthService>(sp, sp.GetRequiredService<QueuedEventBus>()));
+        builder.Services.AddQueuedEventBus();
+        builder.Services.AddScopedWithQueuedEvents<IAuthService, AuthService>();
         builder.Services.AddScoped<IManagementService, ManagementService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();

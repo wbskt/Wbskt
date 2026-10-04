@@ -1,7 +1,8 @@
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Wbskt.EventBus.Abstractions;
 
-namespace Wbskt.Auth.Host.Services.Events;
+namespace Wbskt.Infrastructure.Events;
 
 /// <summary>
 /// An <see cref="IEventBus"/> that never waits for the broker. Publishing queues the event in process
@@ -9,10 +10,16 @@ namespace Wbskt.Auth.Host.Services.Events;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Sign-in, refresh and their failure paths publish audit events, and awaiting the broker there made
-/// RabbitMQ a dependency of signing in: a slow or unreachable broker meant a slow or failed login,
-/// and a refresh that had already rotated the token could still answer 500 because the event after
-/// it did not go out. The events record what happened; they are not part of deciding it.
+/// For events published after the work they describe has already been committed. Awaiting the broker
+/// there makes RabbitMQ a dependency of the request: a slow or unreachable broker means a slow or
+/// failed answer for a change that was in fact made. In the auth host that was a refresh that had
+/// rotated the token answering 500; in the management host it was a rotated device secret replaced
+/// by a 500, so the only copy of the new secret was lost, and a registration whose device retried
+/// and created another client. The events record what happened; they are not part of deciding it.
+/// </para>
+/// <para>
+/// Not for publishes that are the action itself (a device command, a ping): queuing those would
+/// report success for something that may never happen. They keep the real bus.
 /// </para>
 /// <para>
 /// Same shape as <c>OutboundMailQueue</c>: bounded, <see cref="ChannelWriter{T}.TryWrite"/> only, and
@@ -21,7 +28,7 @@ namespace Wbskt.Auth.Host.Services.Events;
 /// queuing the bare <see cref="IEvent"/> would publish everything as that interface.
 /// </para>
 /// </remarks>
-internal sealed class QueuedEventBus : IEventBus
+public sealed class QueuedEventBus : IEventBus
 {
     internal const int Capacity = 10_000;
 
@@ -47,7 +54,7 @@ internal sealed class QueuedEventBus : IEventBus
         var queued = new QueuedEvent(typeof(TEvent).Name, (bus, token) => bus.PublishAsync(@event, token));
         if (!_channel.Writer.TryWrite(queued))
         {
-            _logger.LogError("The auth event queue is full; {EventType} was dropped. The event bus is not keeping up.", queued.Name);
+            _logger.LogError("The event queue is full; {EventType} was dropped. The event bus is not keeping up.", queued.Name);
         }
 
         return Task.CompletedTask;
