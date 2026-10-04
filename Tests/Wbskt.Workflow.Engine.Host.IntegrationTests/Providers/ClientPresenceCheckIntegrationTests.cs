@@ -71,7 +71,9 @@ public sealed class ClientPresenceCheckIntegrationTests(SqlEdgeFixture fixture)
         // A client that drops straight after connecting: the two events can be consumed out of order.
         Skip.IfNot(fixture.IsAvailable, Skipped);
         (int clientId, _) = await CreateClientAsync(Random.Shared.Next(1_000_000, int.MaxValue));
-        DateTime connectedAt = DateTime.UtcNow.AddMinutes(-1);
+        // Whole seconds, so the value survives the DATETIME2(3) column unchanged.
+        DateTime now = DateTime.UtcNow;
+        DateTime connectedAt = new DateTime(now.Ticks - now.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc).AddMinutes(-1);
         DateTime disconnectedAt = connectedAt.AddSeconds(1);
 
         await PresenceAsync(clientId, false, disconnectedAt, "host-a");
