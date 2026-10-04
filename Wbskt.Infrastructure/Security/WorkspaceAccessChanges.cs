@@ -10,13 +10,15 @@ namespace Wbskt.Infrastructure.Security;
 /// </summary>
 /// <remarks>
 /// The message carries nothing: changes are rare administrative actions, so a listener simply forgets
-/// everything, which is never wrong. Delivery is best effort. A listener that was disconnected may have
-/// missed messages, so it should also forget everything when its connection comes back, and its cache
-/// lifetime remains the bound when Redis is not configured or down.
+/// everything, which is never wrong. Pub/sub delivery is best effort, so every change also bumps a
+/// counter that stays in Redis (<see cref="ReadVersionAsync"/>). A listener that reads it every few
+/// seconds catches a change whose message it missed, which lets it keep entries for longer while
+/// those reads succeed. Its short lifetime remains the bound when Redis is not configured or down.
 /// </remarks>
 public sealed class WorkspaceAccessChanges
 {
     internal const string Channel = "wbskt:workspace-access-changes";
+    internal const string VersionKey = "wbskt:workspace-access-version";
 
     private readonly IConnectionMultiplexer? _redis;
     private readonly ILogger<WorkspaceAccessChanges> _logger;
@@ -37,11 +39,37 @@ public sealed class WorkspaceAccessChanges
 
         try
         {
+            // The counter first, so a listener woken by the message already reads the new version.
+            _redis.GetDatabase().StringIncrement(VersionKey, flags: CommandFlags.FireAndForget);
             _redis.GetSubscriber().Publish(RedisChannel.Literal(Channel), "1", CommandFlags.FireAndForget);
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)
         {
             _logger.LogWarning(ex, "Could not announce a workspace access change; cached access elsewhere expires on its own");
+        }
+    }
+
+    /// <summary>
+    /// The number of changes announced so far, or null when Redis is not configured, not connected or
+    /// did not answer. A value that differs from the last one read means a change happened in between,
+    /// whether or not its message arrived.
+    /// </summary>
+    public async Task<long?> ReadVersionAsync()
+    {
+        if (_redis is not { IsConnected: true })
+        {
+            return null;
+        }
+
+        try
+        {
+            var value = await _redis.GetDatabase().StringGetAsync(VersionKey);
+            return value.IsNull ? 0 : (long)value;
+        }
+        catch (Exception ex) when (ex is RedisException or TimeoutException)
+        {
+            _logger.LogDebug(ex, "Could not read the workspace access version");
+            return null;
         }
     }
 
