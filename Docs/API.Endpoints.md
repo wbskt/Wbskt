@@ -351,7 +351,12 @@ exactly like a webhook URL.
 
 Hardened for an anonymous edge, on three axes:
 
-- **Rate limited per client IP** (60 requests/minute) to throttle token enumeration and blunt floods.
+- **Rate limited per target.** A webhook's budget is its workspace and path (600 requests/minute,
+  `RateLimiting:Webhook`), not the caller's IP, because LoRaWAN network servers and vendor clouds
+  forward many devices, and many workspaces, from a few shared addresses. A wake is limited per
+  client IP (60/minute, `RateLimiting:Wake`). Every callback from one IP also shares a ceiling
+  (1200/minute, `RateLimiting:PublicCallbacks`) that throttles token and path enumeration and blunts
+  floods. Each section takes `PermitLimit` and `WindowSeconds`.
 - **Body capped at 128 KiB**, bounding how much attacker-controlled data one call can persist into
   workflow state.
 - **Responses are uniform and opaque** — always 202, never the match result — so the response cannot
