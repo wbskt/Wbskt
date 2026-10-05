@@ -28,4 +28,11 @@ public static class RateLimitPolicies
     /// workspace, so guessing at it has to be slow. Partitioned per IP.
     /// </summary>
     public const string DeviceRegistration = "device-registration";
+
+    /// <summary>
+    /// Device login with its client secret. Anonymous like enrollment, but a secret is far longer
+    /// than a PIN and a whole fleet behind one NAT logs in after every restart, so the budget is
+    /// generous: it stops a runaway loop or a flood, not a fleet. Partitioned per IP.
+    /// </summary>
+    public const string DeviceLogin = "device-login";
 }

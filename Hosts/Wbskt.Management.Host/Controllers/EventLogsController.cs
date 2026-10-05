@@ -59,7 +59,7 @@ public sealed class EventLogsController : ApiControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("API: GetLogs requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+        _logger.LogDebug("API: GetLogs requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
         if (workspaceIdResult.IsFailure)

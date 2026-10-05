@@ -35,7 +35,7 @@ public sealed class WorkflowHistoryController : ApiControllerBase
     [HttpGet]
     public async Task<ActionResult<HistoryListResponse>> List(Guid workspaceRef, Guid runRefId, [FromQuery] long fromEventId = 0, [FromQuery] int top = 200, CancellationToken ct = default)
     {
-        _logger.LogInformation("API: List history requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", workspaceRef, runRefId);
+        _logger.LogDebug("API: List history requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", workspaceRef, runRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
         if (workspaceIdResult.IsFailure)
