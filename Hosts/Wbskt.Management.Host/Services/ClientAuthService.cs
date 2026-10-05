@@ -22,7 +22,7 @@ internal sealed class ClientAuthService : IClientAuthService
 
     public async Task<Result<ClientLoginResponse>> LoginAsync(ClientLoginRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Client login attempt for ClientRefId: {ClientRefId}", request.ClientRefId);
+        _logger.LogDebug("Client login attempt for ClientRefId: {ClientRefId}", request.ClientRefId);
 
         try
         {
@@ -66,7 +66,7 @@ internal sealed class ClientAuthService : IClientAuthService
             };
 
             var token = _jwtService.GenerateToken(claims, JwtAudiences.Socket, ClientTokenCutoffs.TokenLifetime);
-            _logger.LogInformation("Client logged in successfully. ClientRefId: {ClientRefId}, ClientId: {ClientId}", request.ClientRefId, client.Id);
+            _logger.LogDebug("Client logged in successfully. ClientRefId: {ClientRefId}, ClientId: {ClientId}", request.ClientRefId, client.Id);
 
             return Result<ClientLoginResponse>.Success(new ClientLoginResponse(token, (int)ClientTokenCutoffs.TokenLifetime.TotalSeconds));
         }

@@ -65,7 +65,7 @@ public class ClientsController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("API: GetAll requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+        _logger.LogDebug("API: GetAll requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
         
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -108,7 +108,7 @@ public class ClientsController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("API: GetByPolicy requested for WorkspaceRef: '{WorkspaceRef}', PolicyRefId: '{PolicyRefId}'", workspaceRef, policyRefId);
+        _logger.LogDebug("API: GetByPolicy requested for WorkspaceRef: '{WorkspaceRef}', PolicyRefId: '{PolicyRefId}'", workspaceRef, policyRefId);
 
         // 1. Authorize workspace access
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
@@ -159,7 +159,7 @@ public class ClientsController : ApiControllerBase
     [HttpGet("{clientRefId:guid}")]
     public async Task<ActionResult<ClientDetailResponse>> GetDetail(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: GetDetail requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: GetDetail requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -182,7 +182,7 @@ public class ClientsController : ApiControllerBase
     [HttpPatch("{clientRefId:guid}/status")]
     public async Task<IActionResult> UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: UpdateStatus requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}' to Status: '{Status}'", workspaceRef, clientRefId, request.Status);
+        _logger.LogDebug("API: UpdateStatus requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}' to Status: '{Status}'", workspaceRef, clientRefId, request.Status);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -212,7 +212,7 @@ public class ClientsController : ApiControllerBase
     [HttpPatch("status")]
     public async Task<ActionResult<BulkClientStatusResponse>> UpdateStatuses(Guid workspaceRef, BulkClientStatusRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: UpdateStatuses requested for WorkspaceRef: '{WorkspaceRef}' ({Count} clients) to Status: '{Status}'", workspaceRef, request.ClientRefIds?.Count ?? 0, request.Status);
+        _logger.LogDebug("API: UpdateStatuses requested for WorkspaceRef: '{WorkspaceRef}' ({Count} clients) to Status: '{Status}'", workspaceRef, request.ClientRefIds?.Count ?? 0, request.Status);
 
         if (request.ClientRefIds is null || request.ClientRefIds.Count == 0 || request.ClientRefIds.Count > BulkClientStatusRequest.MaxClients)
         {
@@ -240,7 +240,7 @@ public class ClientsController : ApiControllerBase
     [HttpDelete("{clientRefId:guid}")]
     public async Task<IActionResult> Delete(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Delete requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: Delete requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -263,7 +263,7 @@ public class ClientsController : ApiControllerBase
     [HttpPost("{clientRefId:guid}/rotate-secret")]
     public async Task<ActionResult<ClientSecretResponse>> RotateSecret(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: RotateSecret requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: RotateSecret requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -285,7 +285,7 @@ public class ClientsController : ApiControllerBase
     [HttpGet("{clientRefId:guid}/state")]
     public async Task<ActionResult<ListResponse<ClientStateVariableResponse>>> GetState(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: GetState requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: GetState requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -319,7 +319,7 @@ public class ClientsController : ApiControllerBase
     [HttpPatch("{clientRefId:guid}/name")]
     public async Task<IActionResult> Rename(Guid workspaceRef, Guid clientRefId, UpdateClientNameRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Rename requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: Rename requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 100)
         {
@@ -353,7 +353,7 @@ public class ClientsController : ApiControllerBase
     [HttpPost("{clientRefId:guid}/command")]
     public async Task<IActionResult> SendCommand(Guid workspaceRef, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: SendCommand requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: SendCommand requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         if (string.IsNullOrWhiteSpace(request.Type) || request.Type.Length > 100)
         {
@@ -401,7 +401,7 @@ public class ClientsController : ApiControllerBase
             return BrokerUnavailable();
         }
 
-        _logger.LogInformation("Successfully published client command event '{CommandId}' for ClientRefId: '{ClientRefId}'", commandId, clientRefId);
+        _logger.LogDebug("Successfully published client command event '{CommandId}' for ClientRefId: '{ClientRefId}'", commandId, clientRefId);
         return Accepted(new ClientCommandResponse(commandId));
     }
 
@@ -425,7 +425,7 @@ public class ClientsController : ApiControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("API: GetComms requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: GetComms requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         if (direction is not (null or "in" or "out"))
         {
@@ -460,7 +460,7 @@ public class ClientsController : ApiControllerBase
     [HttpPost("{clientRefId:guid}/ping")]
     public async Task<IActionResult> Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Ping requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+        _logger.LogDebug("API: Ping requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsPing, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -481,7 +481,7 @@ public class ClientsController : ApiControllerBase
             return BrokerUnavailable();
         }
 
-        _logger.LogInformation("Successfully published client ping event for ClientRefId: '{ClientRefId}'", clientRefId);
+        _logger.LogDebug("Successfully published client ping event for ClientRefId: '{ClientRefId}'", clientRefId);
         return NoContent();
     }
 

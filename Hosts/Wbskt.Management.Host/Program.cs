@@ -111,6 +111,10 @@ public static class Program
         {
             client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"]
                                          ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:WorkflowEngine configuration is missing."));
+
+            // HttpClient's default of 100 seconds would hold a console request, or a public callback,
+            // that long on a stalled engine. A failed call already maps to 503 with Retry-After.
+            client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:WorkflowEngineTimeoutSeconds", 10));
         })
         .AddHttpMessageHandler<WorkflowEngineApiKeyHandler>();
 
@@ -183,8 +187,8 @@ public static class Program
             options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
         });
 
-        // Throttles for the anonymous edges: the public callback (see PublicCallbackRateLimits) and
-        // device enrollment (see ClientRegistrationsController).
+        // Throttles for the anonymous edges: the public callback (see PublicCallbackRateLimits),
+        // device enrollment (see ClientRegistrationsController) and device login (ClientAuthController).
         var callbackLimits = new PublicCallbackRateLimits(builder.Configuration);
         builder.Services.AddRateLimiter(options =>
         {
@@ -201,6 +205,17 @@ public static class Program
                     {
                         PermitLimit = builder.Configuration.GetValue("RateLimiting:DeviceRegistration:PermitLimit", 20),
                         Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:DeviceRegistration:WindowMinutes", 1)),
+                        QueueLimit = 0
+                    }));
+
+            // Device login. Same per-IP partitioning, with room for a fleet behind one address.
+            options.AddPolicy(RateLimitPolicies.DeviceLogin, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = builder.Configuration.GetValue("RateLimiting:DeviceLogin:PermitLimit", 300),
+                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:DeviceLogin:WindowMinutes", 1)),
                         QueueLimit = 0
                     }));
         });

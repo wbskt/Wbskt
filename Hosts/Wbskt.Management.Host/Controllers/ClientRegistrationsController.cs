@@ -28,7 +28,7 @@ public class ClientRegistrationsController : ApiControllerBase
     [EnableRateLimiting(RateLimitPolicies.DeviceRegistration)]
     public async Task<ActionResult<ClientRegistrationResponse>> Initiate(ClientRegistrationRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Client Registration initiated for Client Name: '{ClientName}'", request.Name);
+        _logger.LogDebug("API: Client Registration initiated for Client Name: '{ClientName}'", request.Name);
         var result = await _registrationService.InitiateRegistrationAsync(request, cancellationToken);
         return MapResult(result);
     }

@@ -45,7 +45,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("API: GetAll message templates requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+        _logger.LogDebug("API: GetAll message templates requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -73,7 +73,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     [HttpPost]
     public async Task<ActionResult<MessageTemplateResponse>> Create(Guid workspaceRef, MessageTemplateRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Create message template requested for WorkspaceRef: '{WorkspaceRef}' (Name: '{TemplateName}')", workspaceRef, request.Name);
+        _logger.LogDebug("API: Create message template requested for WorkspaceRef: '{WorkspaceRef}' (Name: '{TemplateName}')", workspaceRef, request.Name);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -96,7 +96,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     [HttpPut("{refId:guid}")]
     public async Task<IActionResult> Update(Guid workspaceRef, Guid refId, MessageTemplateRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Update message template requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+        _logger.LogDebug("API: Update message template requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -118,7 +118,7 @@ public sealed class MessageTemplatesController : ApiControllerBase
     [HttpDelete("{refId:guid}")]
     public async Task<IActionResult> Delete(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Delete message template requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+        _logger.LogDebug("API: Delete message template requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.TemplatesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)

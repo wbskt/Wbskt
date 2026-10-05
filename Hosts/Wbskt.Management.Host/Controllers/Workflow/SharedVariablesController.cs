@@ -35,7 +35,7 @@ public sealed class SharedVariablesController : ApiControllerBase
     [HttpGet("{name}")]
     public async Task<ActionResult<SharedVariableDto>> Get(Guid workspaceRef, Guid workflowRefId, string name, CancellationToken ct)
     {
-        _logger.LogInformation("API: Get shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
+        _logger.LogDebug("API: Get shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
         if (workspaceIdResult.IsFailure)
@@ -65,7 +65,7 @@ public sealed class SharedVariablesController : ApiControllerBase
     [HttpPut("{name}")]
     public async Task<ActionResult<SharedVariableDto>> Set(Guid workspaceRef, Guid workflowRefId, string name, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
     {
-        _logger.LogInformation("API: Set shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
+        _logger.LogDebug("API: Set shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
         if (workspaceIdResult.IsFailure)

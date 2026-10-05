@@ -49,7 +49,7 @@ public sealed class PublicCallbackController : ControllerBase
     [HttpPost("api/callbacks/wake/{token}")]
     public async Task<IActionResult> Wake(string token, [FromBody] JsonElement payload, CancellationToken ct)
     {
-        _logger.LogInformation("API: Public http-wake callback received.");
+        _logger.LogDebug("API: Public http-wake callback received.");
 
         try
         {
@@ -59,7 +59,7 @@ public sealed class PublicCallbackController : ControllerBase
             _logger.LogInformation("Public http-wake callback outcome {Outcome} (matched={Matched}).", response.Outcome, response.Matched);
             return Accepted();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (IsEngineUnavailable(ex, ct))
         {
             return EngineUnavailable(ex);
         }
@@ -68,7 +68,7 @@ public sealed class PublicCallbackController : ControllerBase
     [HttpPost("api/callbacks/webhook/{workspaceRef:guid}/{path}")]
     public async Task<IActionResult> Webhook(Guid workspaceRef, string path, [FromBody] JsonElement payload, CancellationToken ct)
     {
-        _logger.LogInformation("API: Public webhook callback received.");
+        _logger.LogDebug("API: Public webhook callback received.");
 
         try
         {
@@ -95,7 +95,7 @@ public sealed class PublicCallbackController : ControllerBase
             _logger.LogInformation("Public webhook callback outcome {Outcome} (runId={RunId}).", response.Outcome, response.RunId);
             return Accepted();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (IsEngineUnavailable(ex, ct))
         {
             return EngineUnavailable(ex);
         }
@@ -103,7 +103,12 @@ public sealed class PublicCallbackController : ControllerBase
 
     // The engine is unreachable or rejected the relay (e.g. 503 during leader failover). Surface a
     // retryable status without leaking internal detail to the anonymous caller.
-    private ActionResult EngineUnavailable(HttpRequestException ex)
+    // A refused or failed call, or one that hit the client's timeout (a TaskCanceledException the
+    // caller's own token did not cause): either way the sender should retry later.
+    private static bool IsEngineUnavailable(Exception ex, CancellationToken ct) =>
+        ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested);
+
+    private ActionResult EngineUnavailable(Exception ex)
     {
         _logger.LogWarning("Relaying callback to the engine failed: {Message}", ex.Message);
         Response.Headers.RetryAfter = "5";

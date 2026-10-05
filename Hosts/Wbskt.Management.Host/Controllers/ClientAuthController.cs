@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
@@ -23,9 +24,10 @@ public class ClientAuthController : ApiControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(RateLimitPolicies.DeviceLogin)]
     public async Task<ActionResult<ClientLoginResponse>> Login(ClientLoginRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Client Login requested for ClientRefId: {ClientRefId}", request.ClientRefId);
+        _logger.LogDebug("API: Client Login requested for ClientRefId: {ClientRefId}", request.ClientRefId);
         var result = await _authService.LoginAsync(request, cancellationToken);
         return MapResult(result);
     }

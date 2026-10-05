@@ -51,7 +51,7 @@ public class RegistrationPoliciesController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("API: GetAll registration policies requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+        _logger.LogDebug("API: GetAll registration policies requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -83,7 +83,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [HttpGet("{refId:guid}")]
     public async Task<ActionResult<RegistrationPolicyResponse>> Get(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Get registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+        _logger.LogDebug("API: Get registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesRead, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -132,7 +132,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [HttpPost]
     public async Task<ActionResult<RegistrationPolicyResponse>> Create(Guid workspaceRef, RegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Create registration policy requested for WorkspaceRef: '{WorkspaceRef}' (Name: '{PolicyName}')", workspaceRef, request.Name);
+        _logger.LogDebug("API: Create registration policy requested for WorkspaceRef: '{WorkspaceRef}' (Name: '{PolicyName}')", workspaceRef, request.Name);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -155,7 +155,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [HttpPatch("{refId:guid}")]
     public async Task<IActionResult> Update(Guid workspaceRef, Guid refId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Update registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+        _logger.LogDebug("API: Update registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -184,7 +184,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [HttpPost("{refId:guid}/rotate-pin")]
     public async Task<ActionResult<RegistrationPolicyResponse>> RotatePin(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Rotate PIN requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+        _logger.LogDebug("API: Rotate PIN requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
@@ -212,7 +212,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [HttpPost("{refId:guid}/disable")]
     public async Task<IActionResult> Disable(Guid workspaceRef, Guid refId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: Disable registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
+        _logger.LogDebug("API: Disable registration policy requested for WorkspaceRef: '{WorkspaceRef}', RefId: '{RefId}'", workspaceRef, refId);
 
         var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.PoliciesManage, cancellationToken);
         if (workspaceIdResult.IsFailure)
