@@ -3,6 +3,7 @@ using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Events.Client;
 
+[DeviceTraffic]
 [EventCriticality(EventCriticality.Warning)]
 [SignalRNotify("OnClientCommandFailedEvent")]
 public sealed record ClientCommandFailedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, string Reason, Guid? CommandId = null) : BaseEvent, IClientContext;

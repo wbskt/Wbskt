@@ -33,12 +33,13 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
-    public async Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default)
+    public async Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, IReadOnlyCollection<int>? eventIds = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.EventLogs_DeleteBefore", p =>
         {
             p.Add("@CutoffUtc", SqlDbType.DateTime2).Value = cutoffUtc;
             p.AddWithValue("@BatchSize", batchSize);
+            p.Add("@EventIds", SqlDbType.NVarChar, -1).Value = eventIds is null ? DBNull.Value : string.Join(',', eventIds);
         }, cancellationToken);
     }
 

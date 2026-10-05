@@ -13,6 +13,13 @@ public sealed class EventLoggingOptions
     /// <summary>How long an event log entry is kept before the retention sweep deletes it.</summary>
     public int RetentionDays { get; set; } = 90;
 
+    /// <summary>
+    /// How long raw device traffic (events marked <c>[DeviceTraffic]</c>: messages, replies, command
+    /// delivery) is kept. Much shorter than the audit log, since it arrives at the rate devices talk;
+    /// readings keep their own, longer history in dbo.ClientReadings. Capped at <see cref="RetentionDays"/>.
+    /// </summary>
+    public int DeviceTrafficRetentionDays { get; set; } = 14;
+
     /// <summary>How often the retention sweep runs.</summary>
     public TimeSpan RetentionInterval { get; set; } = TimeSpan.FromHours(1);
 }

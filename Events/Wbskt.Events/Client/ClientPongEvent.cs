@@ -3,6 +3,7 @@ using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Events.Client;
 
+[DeviceTraffic]
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientPongEvent")]
 public sealed record ClientPongEvent(Guid ClientRefId, int ClientId, int WorkspaceId, DateTime OriginalPingTime) : BaseEvent, IClientContext;

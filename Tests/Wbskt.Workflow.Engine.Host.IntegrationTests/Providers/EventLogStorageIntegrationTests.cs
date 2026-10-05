@@ -93,6 +93,36 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
     }
 
+    [SkippableFact]
+    public async Task A_sweep_limited_to_some_events_leaves_the_others()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int traffic = await ScalarAsync<int>("""
+            IF NOT EXISTS (SELECT 1 FROM dbo.Events WHERE EventName = N'TrafficTestEvent')
+                INSERT INTO dbo.Events (EventName, EventCriticality) VALUES (N'TrafficTestEvent', 1);
+            SELECT Id FROM dbo.Events WHERE EventName = N'TrafficTestEvent';
+            """);
+        int audit = await ScalarAsync<int>("""
+            IF NOT EXISTS (SELECT 1 FROM dbo.Events WHERE EventName = N'AuditTestEvent')
+                INSERT INTO dbo.Events (EventName, EventCriticality) VALUES (N'AuditTestEvent', 1);
+            SELECT Id FROM dbo.Events WHERE EventName = N'AuditTestEvent';
+            """);
+        await ExecAsync("""
+            INSERT INTO dbo.EventLogs (EventId, WorkspaceId, CreatedAt)
+            VALUES (@p1, @p0, '2000-01-01'), (@p1, @p0, '2000-01-02'), (@p2, @p0, '2000-01-01'), (@p1, @p0, SYSUTCDATETIME());
+            """, workspaceId, traffic, audit);
+
+        Assert.Equal(2, await Provider().DeleteBeforeAsync(Cutoff, batchSize: 100, eventIds: [traffic]));
+
+        // The old audit row and the recent traffic row are untouched.
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE WorkspaceId = @p0 AND EventId = @p1", workspaceId, audit));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE WorkspaceId = @p0 AND EventId = @p1", workspaceId, traffic));
+
+        // The old audit row would otherwise be counted by the other sweep test in this class.
+        await ExecAsync("DELETE FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId);
+    }
+
     private IEventProvider Provider() =>
         new EventProvider(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = fixture.ConnectionString })
