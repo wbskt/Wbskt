@@ -4,8 +4,10 @@ public sealed class EventLoggingOptions
 {
     public const string SectionName = "EventLogging";
 
-    public int MaxBufferSize { get; set; } = 10000;
+    /// <summary>The most events written in one insert.</summary>
     public int BatchSize { get; set; } = 100;
+
+    /// <summary>The longest an event waits for its batch to fill before the batch is written anyway.</summary>
     public int FlushIntervalLimitInSeconds { get; set; } = 5;
 
     /// <summary>How long an event log entry is kept before the retention sweep deletes it.</summary>

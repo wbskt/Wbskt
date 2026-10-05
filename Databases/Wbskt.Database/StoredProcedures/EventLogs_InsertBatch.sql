@@ -4,8 +4,16 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId)
-    SELECT EventId, EventData, CreatedAtUtc, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId
-    FROM @Logs;
+    -- At-least-once delivery: a batch can be redelivered after it was saved, and a batch can carry
+    -- the same message twice. Each MessageId is written once; rows without one are always written.
+    WITH Incoming AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY MessageId ORDER BY (SELECT NULL)) AS Copy
+        FROM @Logs
+    )
+    INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId, MessageId)
+    SELECT i.EventId, i.EventData, i.CreatedAtUtc, i.WorkspaceId, i.PolicyRefId, i.ClientRefId, i.WorkflowRefId, i.PolicyId, i.ClientId, i.WorkflowId, i.UserId, i.UserRefId, i.MessageId
+    FROM Incoming i
+    WHERE i.MessageId IS NULL
+       OR (i.Copy = 1 AND NOT EXISTS (SELECT 1 FROM dbo.EventLogs e WHERE e.MessageId = i.MessageId));
 END
 GO

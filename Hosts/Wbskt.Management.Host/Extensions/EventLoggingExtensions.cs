@@ -17,8 +17,6 @@ public static class EventLoggingExtensions
         services.AddSingleton<IEventRegistry, EventRegistry>();
         services.AddTransient<IStartupTask, EventRegistryInitializationTask>();
 
-        services.AddSingleton<EventLogBuffer>();
-        services.AddHostedService<DatabaseBatchFlusherService>();
         services.AddHostedService<EventLogRetentionService>();
 
         // Return the action so it can be passed into AddRabbitMQEventBus

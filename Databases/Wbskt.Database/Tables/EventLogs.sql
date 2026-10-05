@@ -16,6 +16,10 @@ CREATE TABLE dbo.EventLogs (
     UserRefId   UNIQUEIDENTIFIER NULL,
     EventData   NVARCHAR(MAX) NULL, -- JSON payload
     CreatedAt   DATETIME2(3)  NOT NULL           DEFAULT SYSUTCDATETIME(),
+    -- The bus message the row was written from. The event log consumer saves a batch before it
+    -- acknowledges it, so a crash in between redelivers messages already saved; the insert skips a
+    -- MessageId that is already here. Last, so adding it to an existing table needs no rebuild.
+    MessageId   UNIQUEIDENTIFIER NULL,
 
     -- Constraints
     CONSTRAINT PK_EventLogs        PRIMARY KEY (Id),
@@ -49,6 +53,11 @@ CREATE INDEX IX_EventLogs_UserId_CreatedAt
 GO
 CREATE INDEX IX_EventLogs_PolicyId
     ON dbo.EventLogs (PolicyId) WHERE PolicyId IS NOT NULL;
+GO
+-- Backs the duplicate check in dbo.EventLogs_InsertBatch, and stops two consumers that receive the
+-- same redelivered message at once from both inserting it. Rows from before the column are NULL.
+CREATE UNIQUE INDEX UX_EventLogs_MessageId
+    ON dbo.EventLogs (MessageId) WHERE MessageId IS NOT NULL;
 GO
 CREATE INDEX IX_EventLogs_WorkflowId
     ON dbo.EventLogs (WorkflowId) WHERE WorkflowId IS NOT NULL;
