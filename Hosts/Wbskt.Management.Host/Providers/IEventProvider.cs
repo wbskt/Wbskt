@@ -10,7 +10,8 @@ public interface IEventProvider
     Task InsertBatchAsync(System.Data.DataTable logs, CancellationToken cancellationToken = default);
 
     /// <summary>Deletes up to <paramref name="batchSize"/> entries older than the cutoff; returns how many went.</summary>
-    Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default);
+    /// <summary>Deletes up to <paramref name="batchSize"/> entries older than the cutoff, only of the given events when <paramref name="eventIds"/> is set.</summary>
+    Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, IReadOnlyCollection<int>? eventIds = null, CancellationToken cancellationToken = default);
 
     /// <summary>Up to <paramref name="take"/> entries, newest first, older than <paramref name="cursorId"/> when given.</summary>
     Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(

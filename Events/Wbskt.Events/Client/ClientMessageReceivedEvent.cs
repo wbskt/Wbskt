@@ -3,6 +3,7 @@ using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Events.Client;
 
+[DeviceTraffic]
 [EventCriticality(EventCriticality.Info)]
 [SignalRNotify("OnClientMessageReceivedEvent")]
 public sealed record ClientMessageReceivedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, string Payload) : BaseEvent, IClientContext
