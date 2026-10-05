@@ -106,6 +106,9 @@ services:
       AUTH_URL: https://auth.${DOMAIN}
       WORKSPACE_URL: https://api.${DOMAIN}
       NOTIFICATIONS_URL: https://api.${DOMAIN}/hubs/notifications
+      # Where devices connect. The console never connects here itself; it only puts this in the
+      # device pairing QR code on a policy, which it hides when this is unset.
+      SOCKET_URL: wss://ws.${DOMAIN}
     healthcheck:
       # 127.0.0.1, not localhost: the container's /etc/hosts maps localhost to both 127.0.0.1 and
       # ::1, busybox wget tries ::1 first, and nginx only listens on IPv4 - so `localhost` fails
