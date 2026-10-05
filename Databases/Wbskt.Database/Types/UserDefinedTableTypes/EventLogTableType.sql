@@ -11,6 +11,7 @@ CREATE TYPE dbo.EventLogTableType AS TABLE
     ClientRefId   UNIQUEIDENTIFIER NULL,
     WorkflowRefId UNIQUEIDENTIFIER NULL,
     UserId        INT NULL,
-    UserRefId     UNIQUEIDENTIFIER NULL
+    UserRefId     UNIQUEIDENTIFIER NULL,
+    MessageId     UNIQUEIDENTIFIER NULL
 )
 GO

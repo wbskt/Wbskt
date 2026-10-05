@@ -12,5 +12,7 @@ public sealed record EventLogEntry(
     int? WorkflowId = null,
     Guid? WorkflowRefId = null,
     int? UserId = null,
-    Guid? UserRefId = null
+    Guid? UserRefId = null,
+    // The bus message it came from; the insert skips one already logged, so a redelivery is harmless.
+    Guid? MessageId = null
 );

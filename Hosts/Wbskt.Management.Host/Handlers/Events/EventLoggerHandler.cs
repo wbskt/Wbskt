@@ -10,58 +10,74 @@ using Wbskt.Management.Host.Services;
 
 namespace Wbskt.Management.Host.Handlers.Events;
 
-public sealed class EventLoggerHandler : IConsumer<IEvent>
+/// <summary>
+/// Writes every event on the bus to dbo.EventLogs, a batch at a time. The batch is inserted before
+/// the consumer returns, so RabbitMQ only drops the messages once they are saved: a crash, a deploy
+/// or a SQL outage leaves them on the queue to be redelivered rather than lost. A redelivered
+/// message is not logged twice, because the insert skips a MessageId the table already holds.
+/// </summary>
+public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
 {
-    private readonly EventLogBuffer _buffer;
     private readonly IEventRegistry _registry;
     private readonly IEventProvider _eventProvider;
     private readonly ILogger<EventLoggerHandler> _logger;
 
     public EventLoggerHandler(
-        EventLogBuffer buffer,
         IEventRegistry registry,
         IEventProvider eventProvider,
         ILogger<EventLoggerHandler> logger)
     {
-        _buffer = buffer;
         _registry = registry;
         _eventProvider = eventProvider;
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<IEvent> context)
+    public async Task Consume(ConsumeContext<Batch<IEvent>> context)
     {
+        var entries = new List<EventLogEntry>(context.Message.Length);
+        foreach (ConsumeContext<IEvent> message in context.Message)
+        {
+            if (await BuildEntryAsync(message) is { } entry)
+            {
+                entries.Add(entry);
+            }
+        }
+
+        if (entries.Count > 0)
+        {
+            // Throwing here fails the whole batch, so the retry policy and then the broker keep every
+            // message in it until the insert succeeds.
+            await _eventProvider.InsertBatchAsync(EventLogTable.Build(entries), context.CancellationToken);
+        }
+    }
+
+    private async Task<EventLogEntry?> BuildEntryAsync(ConsumeContext<IEvent> context)
+    {
+        var @event = context.Message;
+        var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
+        var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
+
+        var eventId = _registry.GetEventId(eventName);
+
+        if (eventId <= 0)
+        {
+            // Registered on demand for an event type the startup task did not know about. A database
+            // failure here propagates, like the insert's, so the batch is retried rather than dropped.
+            var attribute = @event.GetType().GetCustomAttribute<EventCriticalityAttribute>();
+            var criticality = attribute?.Criticality ?? EventCriticality.Info;
+
+            eventId = await _eventProvider.GetOrInsertEventIdAsync(eventName, (short)criticality, context.CancellationToken);
+            _registry.RegisterEvent(eventName, eventId);
+        }
+
+        if (eventId <= 0)
+        {
+            _logger.LogWarning("Event {EventName} is not registered in the EventRegistry. Skipping DB log.", eventName);
+            return null;
+        }
+
         try
         {
-            var @event = context.Message;
-            var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
-            var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
-
-            var eventId = _registry.GetEventId(eventName);
-
-            if (eventId <= 0)
-            {
-                // Fallback to dynamic registration on demand to handle startup timing race conditions
-                try
-                {
-                    var attribute = @event.GetType().GetCustomAttribute<EventCriticalityAttribute>();
-                    var criticality = attribute?.Criticality ?? EventCriticality.Info;
-
-                    eventId = await _eventProvider.GetOrInsertEventIdAsync(eventName, (short)criticality, context.CancellationToken);
-                    _registry.RegisterEvent(eventName, eventId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to dynamically register event {EventName} on demand.", eventName);
-                }
-            }
-
-            if (eventId <= 0)
-            {
-                _logger.LogWarning("Event {EventName} is not registered in the EventRegistry. Skipping DB log.", eventName);
-                return;
-            }
-
             var bodyBytes = context.ReceiveContext.GetBody();
             using var doc = JsonDocument.Parse(bodyBytes);
             
@@ -100,14 +116,17 @@ public sealed class EventLoggerHandler : IConsumer<IEvent>
                 WorkflowId: workflowId,
                 WorkflowRefId: workflowRefId,
                 UserId: userId,
-                UserRefId: userRefId
+                UserRefId: userRefId,
+                MessageId: context.MessageId
             );
 
-            await _buffer.WriteAsync(entry, context.CancellationToken);
+            return entry;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to write event to buffer.");
+            // A body that can't be read now never will be, so it is skipped rather than retried.
+            _logger.LogWarning(ex, "Could not read event {EventName} (message {MessageId}) for the event log; skipping it.", eventName, context.MessageId);
+            return null;
         }
     }
 

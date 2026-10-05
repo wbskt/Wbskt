@@ -4,7 +4,6 @@ namespace Wbskt.Auth.Host.Services.Email;
 
 /// <summary>
 /// A bounded in-process queue of rendered mail, drained by <see cref="OutboundMailDispatcher"/>.
-/// Modelled on the management host's <c>EventLogBuffer</c>.
 /// </summary>
 /// <remarks>
 /// <b>Nothing here ever blocks a caller.</b> A full queue means the relay is wedged, and making a

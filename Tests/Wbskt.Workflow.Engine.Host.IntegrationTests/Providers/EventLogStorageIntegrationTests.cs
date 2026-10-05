@@ -33,12 +33,36 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         var entry = new EventLogEntry(eventId, "{}", DateTime.UtcNow, workspaceId,
             WorkflowId: 77, WorkflowRefId: workflowRefId, UserId: 42, UserRefId: userRefId);
 
-        await Provider().InsertBatchAsync(DatabaseBatchFlusherService.BuildDataTable([entry]));
+        await Provider().InsertBatchAsync(EventLogTable.Build([entry]));
 
         Assert.Equal(42, await ScalarAsync<int>("SELECT UserId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
         Assert.Equal(userRefId, await ScalarAsync<Guid>("SELECT UserRefId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
         Assert.Equal(77, await ScalarAsync<int>("SELECT WorkflowId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
         Assert.Equal(workflowRefId, await ScalarAsync<Guid>("SELECT WorkflowRefId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
+    }
+
+    [SkippableFact]
+    public async Task A_redelivered_message_is_logged_once()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int eventId = await ScalarAsync<int>("""
+            IF NOT EXISTS (SELECT 1 FROM dbo.Events WHERE EventName = N'StorageTestEvent')
+                INSERT INTO dbo.Events (EventName, EventCriticality) VALUES (N'StorageTestEvent', 1);
+            SELECT Id FROM dbo.Events WHERE EventName = N'StorageTestEvent';
+            """);
+        EventLogEntry Entry(Guid? messageId) => new(eventId, "{}", DateTime.UtcNow, workspaceId, MessageId: messageId);
+        var saved = Guid.NewGuid();
+        var fresh = Guid.NewGuid();
+
+        await Provider().InsertBatchAsync(EventLogTable.Build([Entry(saved)]));
+        // The same message again (a redelivery), twice within one batch, next to a new one and two
+        // entries without an id, which are always written.
+        await Provider().InsertBatchAsync(EventLogTable.Build([Entry(saved), Entry(fresh), Entry(fresh), Entry(null), Entry(null)]));
+
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE MessageId = @p0", saved));
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE MessageId = @p0", fresh));
+        Assert.Equal(4, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
     }
 
     /// <summary>Rows are dated in 2000 so the shared database's other rows are never old enough to be swept here.</summary>
