@@ -56,7 +56,7 @@ public sealed class BrokerOutageTests
     {
         await using var harness = new Harness();
         var policy = new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, Name = "lab", IsEnabled = true, AutoApproval = true };
-        harness.Policies.Setup(p => p.GetByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+        harness.Policies.Setup(p => p.FindByPinAsync("PIN", It.IsAny<CancellationToken>())).ReturnsAsync(policy);
         harness.Clients
             .Setup(p => p.InsertClientAsync(WorkspaceId, policy.Id, "sensor", It.IsAny<byte[]>(), ClientStatus.Registered, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Wbskt.Management.Host.Models.Client { Id = 50, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId, PolicyId = policy.Id, Name = "sensor", Status = ClientStatus.Registered });
@@ -111,8 +111,8 @@ public sealed class BrokerOutageTests
         public Harness()
         {
             Clients
-                .Setup(p => p.GetDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new NotFoundException("Client not found."));
+                .Setup(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ClientDetail?)null);
 
             var services = new ServiceCollection();
             services.AddLogging();
@@ -169,7 +169,7 @@ public sealed class BrokerOutageTests
                 Name = $"device-{_nextId}",
                 Status = ClientStatus.Registered
             };
-            Clients.Setup(p => p.GetDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+            Clients.Setup(p => p.FindDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
             return client;
         }
 

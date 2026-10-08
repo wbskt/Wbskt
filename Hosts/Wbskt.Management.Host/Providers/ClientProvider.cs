@@ -31,17 +31,6 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return result;
     }
 
-    public async Task<Client> GetByIdAsync(int id, CancellationToken cancellationToken = default)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.Client_GetBy_Id",
-            p => p.AddWithValue("@Id", id),
-            MapClient,
-            new NotFoundException($"Client with Id {id} not found."),
-            cancellationToken
-        );
-    }
-
     public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, string? tag,
         int skip, int take, CancellationToken cancellationToken = default)
     {
@@ -103,13 +92,12 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return await GetByRefIdAsync(refId, cancellationToken);
     }
 
-    public async Task<ClientCredential> GetCredentialAsync(Guid refId, CancellationToken cancellationToken = default)
+    public async Task<ClientCredential?> FindCredentialAsync(Guid refId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.Client_GetCredentialBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             MapCredential,
-            new SecurityException("Invalid client credentials."),
             cancellationToken
         );
     }
@@ -222,13 +210,12 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
     }
 
-    public async Task<ClientDetail> GetDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
+    public async Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.Client_GetDetailBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             MapClientDetail,
-            new NotFoundException($"Client with RefId {refId} not found."),
             cancellationToken
         );
     }

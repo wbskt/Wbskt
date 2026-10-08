@@ -39,20 +39,11 @@ internal sealed class ClientService : IClientService
             return Result<IPagedList<ClientResponse>>.Failure(TagInvalid);
         }
 
-        try
-        {
-            var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, normalizedTag, skip, take, cancellationToken);
-            _logger.LogTrace("Retrieved {Count} clients for WorkspaceId: {WorkspaceId}", pagedClients.TotalCount, workspaceId);
-            
-            var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
-            return Result<IPagedList<ClientResponse>>.Success(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query clients for WorkspaceId: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
-            _logger.LogTrace(ex, "GetAllAsync exception stack trace for WorkspaceId {WorkspaceId}", workspaceId);
-            return Result<IPagedList<ClientResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
-        }
+        var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, normalizedTag, skip, take, cancellationToken);
+        _logger.LogTrace("Retrieved {Count} clients for WorkspaceId: {WorkspaceId}", pagedClients.TotalCount, workspaceId);
+        
+        var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
+        return Result<IPagedList<ClientResponse>>.Success(result);
     }
 
     public async Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId,
@@ -65,50 +56,32 @@ internal sealed class ClientService : IClientService
             return Result<IPagedList<ClientResponse>>.Failure(TagInvalid);
         }
 
-        try
-        {
-            var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, normalizedTag, skip, take, cancellationToken);
-            _logger.LogTrace("Retrieved {Count} clients by PolicyId: {PolicyId}", pagedClients.TotalCount, policyId);
-            
-            var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
-            return Result<IPagedList<ClientResponse>>.Success(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query clients by PolicyId: {PolicyId}. Error: {Message}", policyId, ex.Message);
-            _logger.LogTrace(ex, "GetByPolicyIdAsync exception stack trace for PolicyId {PolicyId}", policyId);
-            return Result<IPagedList<ClientResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
-        }
+        var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, normalizedTag, skip, take, cancellationToken);
+        _logger.LogTrace("Retrieved {Count} clients by PolicyId: {PolicyId}", pagedClients.TotalCount, policyId);
+        
+        var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
+        return Result<IPagedList<ClientResponse>>.Success(result);
     }
 
     public async Task<Result> UpdateStatusAsync(int workspaceId, Guid clientRefId, ClientStatus status, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Updating client RefId {ClientRefId} status to '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefId, status, workspaceId);
 
-        try
+        var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, cancellationToken)).Single();
+        switch (change.Outcome)
         {
-            var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, cancellationToken)).Single();
-            switch (change.Outcome)
-            {
-                case ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace:
-                    _logger.LogWarning("Failed to update client status: RefId {ClientRefId} not found in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-                    return Result.Failure(WorkspaceOwnership.ClientNotFound);
-                case ClientStatusOutcome.PolicyLimitReached:
-                    _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", change.PolicyId);
-                    return Result.Failure(PolicyFull);
-                case ClientStatusOutcome.Updated:
-                    await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
-                    break;
-            }
+            case ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace:
+                _logger.LogWarning("Failed to update client status: RefId {ClientRefId} not found in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+                return Result.Failure(WorkspaceOwnership.ClientNotFound);
+            case ClientStatusOutcome.PolicyLimitReached:
+                _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", change.PolicyId);
+                return Result.Failure(PolicyFull);
+            case ClientStatusOutcome.Updated:
+                await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
+                break;
+        }
 
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error updating client RefId {ClientRefId} status. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "UpdateStatusAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
-        }
+        return Result.Success();
     }
 
     public async Task<Result<BulkClientStatusResponse>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds,
@@ -119,16 +92,7 @@ internal sealed class ClientService : IClientService
         // One database call for the whole list, in the order given: approvals compete for the
         // policy's remaining places, and a predictable order decides which ones get them.
         IReadOnlyList<ClientStatusChange> changes;
-        try
-        {
-            changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error updating {Count} clients' status. Error: {Message}", clientRefIds.Count, ex.Message);
-            _logger.LogTrace(ex, "UpdateStatusesAsync exception stack trace");
-            return Result<BulkClientStatusResponse>.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
-        }
+        changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, cancellationToken);
 
         var updated = new List<Guid>();
         var failed = new List<BulkClientStatusFailure>();
@@ -179,127 +143,91 @@ internal sealed class ClientService : IClientService
     {
         _logger.LogInformation("Deleting client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
-        try
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (lookup.IsFailure)
         {
-            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (lookup.IsFailure)
-            {
-                return Result.Failure(lookup.Error);
-            }
+            return Result.Failure(lookup.Error);
+        }
 
-            var client = lookup.Value;
+        var client = lookup.Value;
 
-            if (!await _clientProvider.DeleteAsync(client.Id, workspaceId, cancellationToken))
-            {
-                // Deleted by someone else between the lookup and here: the outcome they asked for.
-                return Result.Success();
-            }
-
-            _logger.LogInformation("Deleted client ID {ClientId} ('{Name}') from WorkspaceId: {WorkspaceId}", client.Id, client.Name, workspaceId);
-            await _access.DeletedAsync(client, cancellationToken);
-
+        if (!await _clientProvider.DeleteAsync(client.Id, workspaceId, cancellationToken))
+        {
+            // Deleted by someone else between the lookup and here: the outcome they asked for.
             return Result.Success();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error deleting client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "DeleteAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result.Failure(Error.Failure("CLIENT_DELETE_ERROR", ex.Message));
-        }
+
+        _logger.LogInformation("Deleted client ID {ClientId} ('{Name}') from WorkspaceId: {WorkspaceId}", client.Id, client.Name, workspaceId);
+        await _access.DeletedAsync(client, cancellationToken);
+
+        return Result.Success();
     }
 
     public async Task<Result<ClientSecretResponse>> RotateSecretAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Rotating secret for client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
-        try
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (lookup.IsFailure)
         {
-            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (lookup.IsFailure)
-            {
-                return Result<ClientSecretResponse>.Failure(lookup.Error);
-            }
-
-            var client = lookup.Value;
-
-            var secret = ClientSecrets.Generate();
-            if (!await _clientProvider.UpdateSecretAsync(client.Id, workspaceId, ClientSecrets.Hash(secret), cancellationToken))
-            {
-                return Result<ClientSecretResponse>.Failure(WorkspaceOwnership.ClientNotFound);
-            }
-
-            _logger.LogInformation("Rotated secret for client ID {ClientId}", client.Id);
-            await _access.SecretRotatedAsync(client, cancellationToken);
-
-            return Result<ClientSecretResponse>.Success(new ClientSecretResponse(client.RefId, secret));
+            return Result<ClientSecretResponse>.Failure(lookup.Error);
         }
-        catch (Exception ex)
+
+        var client = lookup.Value;
+
+        var secret = ClientSecrets.Generate();
+        if (!await _clientProvider.UpdateSecretAsync(client.Id, workspaceId, ClientSecrets.Hash(secret), cancellationToken))
         {
-            _logger.LogError("Unexpected error rotating secret for client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "RotateSecretAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result<ClientSecretResponse>.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
+            return Result<ClientSecretResponse>.Failure(WorkspaceOwnership.ClientNotFound);
         }
+
+        _logger.LogInformation("Rotated secret for client ID {ClientId}", client.Id);
+        await _access.SecretRotatedAsync(client, cancellationToken);
+
+        return Result<ClientSecretResponse>.Success(new ClientSecretResponse(client.RefId, secret));
     }
 
     private Task<Result<ClientDetail>> FindInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        return WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);
+        return WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.FindDetailByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);
     }
 
     public async Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying client detail for RefId: {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
-        try
-        {
-            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            return lookup.IsSuccess
-                ? Result<ClientDetailResponse>.Success(MapToDetailResponse(lookup.Value))
-                : Result<ClientDetailResponse>.Failure(lookup.Error);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query client detail for RefId: {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "GetDetailAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result<ClientDetailResponse>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
-        }
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        return lookup.IsSuccess
+            ? Result<ClientDetailResponse>.Success(MapToDetailResponse(lookup.Value))
+            : Result<ClientDetailResponse>.Failure(lookup.Error);
     }
 
     public async Task<Result> RenameAsync(int workspaceId, Guid clientRefId, string name, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Renaming client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
-        try
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (lookup.IsFailure)
         {
-            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (lookup.IsFailure)
-            {
-                return Result.Failure(lookup.Error);
-            }
+            return Result.Failure(lookup.Error);
+        }
 
-            var client = lookup.Value;
-            var id = client.Id;
+        var client = lookup.Value;
+        var id = client.Id;
 
-            var oldName = client.Name;
-            if (oldName == name)
-            {
-                _logger.LogDebug("Client ID {ClientId} is already named '{Name}'. Skipping update.", id, name);
-                return Result.Success();
-            }
-
-            await _clientProvider.UpdateNameAsync(id, name, cancellationToken);
-            _logger.LogInformation("Successfully renamed client ID {ClientId} from '{OldName}' to '{NewName}'", id, oldName, name);
-
-            await _eventBus.PublishAsync(new ClientRenamedEvent(client.RefId, client.Id, client.WorkspaceId, oldName, name), cancellationToken);
-
+        var oldName = client.Name;
+        if (oldName == name)
+        {
+            _logger.LogDebug("Client ID {ClientId} is already named '{Name}'. Skipping update.", id, name);
             return Result.Success();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error renaming client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "RenameAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
-        }
+
+        await _clientProvider.UpdateNameAsync(id, name, cancellationToken);
+        _logger.LogInformation("Successfully renamed client ID {ClientId} from '{OldName}' to '{NewName}'", id, oldName, name);
+
+        await _eventBus.PublishAsync(new ClientRenamedEvent(client.RefId, client.Id, client.WorkspaceId, oldName, name), cancellationToken);
+
+        return Result.Success();
     }
 
     public async Task<Result<ClientTagsResponse>> SetTagsAsync(int workspaceId, Guid clientRefId, IReadOnlyList<string>? tags, CancellationToken cancellationToken = default)
@@ -327,48 +255,30 @@ internal sealed class ClientService : IClientService
             return Result<ClientTagsResponse>.Failure(Error.Validation("CLIENT_TAGS_TOO_MANY", $"A client can have at most {ClientTags.MaxPerClient} tags."));
         }
 
-        try
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (lookup.IsFailure)
         {
-            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (lookup.IsFailure)
-            {
-                return Result<ClientTagsResponse>.Failure(lookup.Error);
-            }
-
-            var client = lookup.Value;
-            if (!await _clientProvider.SetTagsAsync(client.Id, workspaceId, normalized, cancellationToken))
-            {
-                // Deleted between the lookup and the write.
-                return Result<ClientTagsResponse>.Failure(WorkspaceOwnership.ClientNotFound);
-            }
-
-            _logger.LogInformation("Set {Count} tags on client ID {ClientId}", normalized.Count, client.Id);
-            return Result<ClientTagsResponse>.Success(new ClientTagsResponse(client.RefId, normalized.ToList()));
+            return Result<ClientTagsResponse>.Failure(lookup.Error);
         }
-        catch (Exception ex)
+
+        var client = lookup.Value;
+        if (!await _clientProvider.SetTagsAsync(client.Id, workspaceId, normalized, cancellationToken))
         {
-            _logger.LogError("Unexpected error setting tags on client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "SetTagsAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result<ClientTagsResponse>.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
+            // Deleted between the lookup and the write.
+            return Result<ClientTagsResponse>.Failure(WorkspaceOwnership.ClientNotFound);
         }
+
+        _logger.LogInformation("Set {Count} tags on client ID {ClientId}", normalized.Count, client.Id);
+        return Result<ClientTagsResponse>.Success(new ClientTagsResponse(client.RefId, normalized.ToList()));
     }
 
     public async Task<Result<IReadOnlyList<ClientTagCountResponse>>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying client tags for WorkspaceId: {WorkspaceId}", workspaceId);
 
-        try
-        {
-            var tags = await _clientProvider.GetTagsAsync(workspaceId, cancellationToken);
-            IReadOnlyList<ClientTagCountResponse> response = tags.Select(t => new ClientTagCountResponse(t.Tag, t.ClientCount)).ToList();
-            return Result<IReadOnlyList<ClientTagCountResponse>>.Success(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query client tags for WorkspaceId: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
-            _logger.LogTrace(ex, "GetTagsAsync exception stack trace for WorkspaceId {WorkspaceId}", workspaceId);
-            return Result<IReadOnlyList<ClientTagCountResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
-        }
+        var tags = await _clientProvider.GetTagsAsync(workspaceId, cancellationToken);
+        IReadOnlyList<ClientTagCountResponse> response = tags.Select(t => new ClientTagCountResponse(t.Tag, t.ClientCount)).ToList();
+        return Result<IReadOnlyList<ClientTagCountResponse>>.Success(response);
     }
 
     private static readonly Error TagInvalid = Error.Validation("CLIENT_TAG_INVALID",
@@ -396,28 +306,19 @@ internal sealed class ClientService : IClientService
     {
         _logger.LogDebug("Querying state variables for client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
-        try
+        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (lookup.IsFailure)
         {
-            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (lookup.IsFailure)
-            {
-                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(lookup.Error);
-            }
-
-            var variables = await _clientProvider.GetStateVariablesAsync(lookup.Value.Id, cancellationToken);
-            IReadOnlyCollection<ClientStateVariableResponse> response = variables
-                .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt))
-                .ToList()
-                .AsReadOnly();
-
-            return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Success(response);
+            return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(lookup.Error);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query state variables for client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "GetStateAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
-            return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
-        }
+
+        var variables = await _clientProvider.GetStateVariablesAsync(lookup.Value.Id, cancellationToken);
+        IReadOnlyCollection<ClientStateVariableResponse> response = variables
+            .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt))
+            .ToList()
+            .AsReadOnly();
+
+        return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Success(response);
     }
 
     public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)

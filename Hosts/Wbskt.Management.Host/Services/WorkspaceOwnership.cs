@@ -1,6 +1,5 @@
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Services;
 
@@ -25,28 +24,15 @@ internal static class WorkspaceOwnership
     /// <summary>
     /// Loads a resource and keeps it only when <paramref name="workspaceId"/> owns it; otherwise
     /// <paramref name="notFound"/>, whether the lookup found nothing or found another workspace's.
-    /// Any other failure of the lookup is not a "not found" and is left to propagate.
+    /// A lookup that fails rather than finding nothing is a fault, and propagates.
     /// </summary>
-    public static Task<Result<T>> LoadAsync<T>(int workspaceId, Func<Task<T>> load, Error notFound)
-        where T : IWorkspaceOwned
+    public static async Task<Result<T>> LoadAsync<T>(int workspaceId, Func<Task<T?>> find, Error notFound)
+        where T : class, IWorkspaceOwned
     {
-        return LoadAsync(workspaceId, load, resource => resource.WorkspaceId, notFound);
-    }
-
-    /// <inheritdoc cref="LoadAsync{T}(int, Func{Task{T}}, Error)"/>
-    public static async Task<Result<T>> LoadAsync<T>(int workspaceId, Func<Task<T>> load, Func<T, int> workspaceOf, Error notFound)
-    {
-        T resource;
-        try
-        {
-            resource = await load();
-        }
-        catch (Exception ex) when (ex is NotFoundException or KeyNotFoundException)
-        {
-            return Result<T>.Failure(notFound);
-        }
-
-        return Check(resource, workspaceId, workspaceOf, notFound);
+        var resource = await find();
+        return resource is null
+            ? Result<T>.Failure(notFound)
+            : Check(resource, workspaceId, r => r.WorkspaceId, notFound);
     }
 
     /// <summary>The ownership check alone, for a resource already in hand.</summary>

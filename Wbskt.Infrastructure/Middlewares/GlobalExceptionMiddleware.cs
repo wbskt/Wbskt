@@ -36,16 +36,17 @@ public partial class GlobalExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError("An unhandled exception occurred: {Message}", ex.Message);
-            LogAnUnhandledExceptionOccurredMessage(LogLevel.Trace, ex.Message, ex);
-            await HandleExceptionAsync(context, ex, eventBus);
+            // Faults are logged here, once, with the stack; services let them propagate rather than
+            // logging them again and turning them into a Result.
+            LogAnUnhandledExceptionOccurredMessage(LogLevel.Error, ex.Message, ex);
+            await HandleExceptionAsync(context, ex, eventBus, _logger);
         }
     }
 
     // Safety net only. Expected failures travel as Result/Error and are given their status code by
     // ApiControllerBase; anything reaching here is either a deliberate throw from a non-controller
     // path or a genuine bug.
-    private static async Task HandleExceptionAsync(HttpContext context, Exception exception, IEventBus eventBus)
+    private static async Task HandleExceptionAsync(HttpContext context, Exception exception, IEventBus eventBus, ILogger logger)
     {
         context.Response.ContentType = "application/json";
 
@@ -67,13 +68,21 @@ public partial class GlobalExceptionMiddleware
 
         if (isServerFault)
         {
-            await eventBus.PublishAsync(new SystemErrorEvent(
-                exception.GetType().Name,
-                exception.Message,
-                exception.StackTrace,
-                context.Request.Path,
-                context.TraceIdentifier
-            ));
+            try
+            {
+                await eventBus.PublishAsync(new SystemErrorEvent(
+                    exception.GetType().Name,
+                    exception.Message,
+                    exception.StackTrace,
+                    context.Request.Path,
+                    context.TraceIdentifier
+                ));
+            }
+            catch (Exception publishFailure)
+            {
+                // The caller still gets their 500 when the broker is down too.
+                logger.LogWarning("Could not announce the unhandled exception: {Message}", publishFailure.Message);
+            }
         }
 
         context.Response.StatusCode = statusCode;

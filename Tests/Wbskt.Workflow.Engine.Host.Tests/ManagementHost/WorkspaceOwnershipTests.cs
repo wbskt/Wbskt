@@ -27,7 +27,7 @@ public sealed class WorkspaceOwnershipTests
     {
         var policy = Policy(WorkspaceId);
 
-        var result = await WorkspaceOwnership.LoadAsync(WorkspaceId, () => Task.FromResult(policy), WorkspaceOwnership.PolicyNotFound);
+        var result = await WorkspaceOwnership.LoadAsync(WorkspaceId, () => Task.FromResult<RegistrationPolicy?>(policy), WorkspaceOwnership.PolicyNotFound);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeSameAs(policy);
@@ -36,13 +36,11 @@ public sealed class WorkspaceOwnershipTests
     [Fact]
     public async Task Another_workspaces_resource_reads_exactly_like_a_missing_one()
     {
-        var foreign = await WorkspaceOwnership.LoadAsync(WorkspaceId, () => Task.FromResult(Policy(OtherWorkspaceId)), WorkspaceOwnership.PolicyNotFound);
-        var missing = await WorkspaceOwnership.LoadAsync<RegistrationPolicy>(WorkspaceId, () => throw new NotFoundException("no rows"), WorkspaceOwnership.PolicyNotFound);
-        var missingRow = await WorkspaceOwnership.LoadAsync<RegistrationPolicy>(WorkspaceId, () => throw new KeyNotFoundException("no rows"), WorkspaceOwnership.PolicyNotFound);
+        var foreign = await WorkspaceOwnership.LoadAsync(WorkspaceId, () => Task.FromResult<RegistrationPolicy?>(Policy(OtherWorkspaceId)), WorkspaceOwnership.PolicyNotFound);
+        var missing = await WorkspaceOwnership.LoadAsync(WorkspaceId, () => Task.FromResult<RegistrationPolicy?>(null), WorkspaceOwnership.PolicyNotFound);
 
         foreign.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
         missing.Error.Should().Be(foreign.Error);
-        missingRow.Error.Should().Be(foreign.Error);
         foreign.Error.Type.Should().Be(ErrorType.NotFound);
     }
 
@@ -58,7 +56,7 @@ public sealed class WorkspaceOwnershipTests
     public async Task Updating_another_workspaces_policy_is_not_found_and_changes_nothing()
     {
         var provider = new Mock<IRegistrationPolicyProvider>();
-        provider.Setup(p => p.GetByIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(Policy(OtherWorkspaceId));
+        provider.Setup(p => p.FindByIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(Policy(OtherWorkspaceId));
         var bus = new Mock<IEventBus>();
         var service = new RegistrationPolicyService(provider.Object, Mock.Of<IClientProvider>(), bus.Object, NullLogger<RegistrationPolicyService>.Instance);
 
@@ -80,7 +78,7 @@ public sealed class WorkspaceOwnershipTests
     {
         var foreignPolicy = Policy(OtherWorkspaceId);
         var policies = new Mock<IRegistrationPolicyProvider>();
-        policies.Setup(p => p.GetByRefIdAsync(foreignPolicy.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(foreignPolicy);
+        policies.Setup(p => p.FindByRefIdAsync(foreignPolicy.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(foreignPolicy);
         var templates = new Mock<IMessageTemplateProvider>();
         var service = new MessageTemplateService(templates.Object, policies.Object, NullLogger<MessageTemplateService>.Instance);
 
@@ -95,7 +93,7 @@ public sealed class WorkspaceOwnershipTests
     {
         var template = new MessageTemplate { Id = 3, RefId = Guid.NewGuid(), WorkspaceId = OtherWorkspaceId, Name = "reboot", MessageType = "reboot", PayloadJson = "{}" };
         var templates = new Mock<IMessageTemplateProvider>();
-        templates.Setup(p => p.GetByRefIdAsync(template.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(template);
+        templates.Setup(p => p.FindByRefIdAsync(template.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(template);
         var service = new MessageTemplateService(templates.Object, Mock.Of<IRegistrationPolicyProvider>(), NullLogger<MessageTemplateService>.Instance);
 
         var result = await service.DeleteAsync(WorkspaceId, template.RefId);

@@ -7,7 +7,6 @@ namespace Wbskt.Management.Host.Providers;
 public interface IClientProvider : IReferenceProvider
 {
     Task<int> GetRegisteredCountByPolicyIdAsync(int policyId, CancellationToken cancellationToken = default);
-    Task<Client> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     /// <summary><paramref name="tag"/>, when given, must already be normalised (<see cref="ClientTags.TryNormalize"/>).</summary>
     Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, string? tag, int skip, int take,
         CancellationToken cancellationToken = default);
@@ -19,7 +18,7 @@ public interface IClientProvider : IReferenceProvider
     /// The client plus its stored secret hash, for authentication. Comparison happens in the
     /// service, not here and not in SQL - see <c>ClientSecrets.Matches</c>.
     /// </summary>
-    Task<ClientCredential> GetCredentialAsync(Guid refId, CancellationToken cancellationToken = default);
+    Task<ClientCredential?> FindCredentialAsync(Guid refId, CancellationToken cancellationToken = default);
     /// <summary>
     /// Sets <paramref name="status"/> on each client in <paramref name="clientRefIds"/> that belongs to
     /// the workspace, in one call, and returns one result per reference in the same order. When
@@ -39,7 +38,7 @@ public interface IClientProvider : IReferenceProvider
     Task<bool> UpdateSecretAsync(int id, int workspaceId, byte[] secretHash, CancellationToken cancellationToken = default);
     Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default);
     Task ResetAllPresenceAsync(string? hostId = null, CancellationToken cancellationToken = default);
-    Task<ClientDetail> GetDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);
     Task UpsertCapabilitiesAsync(int clientId, string agentName, string agentVersion, string platform,
