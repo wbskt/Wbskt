@@ -164,10 +164,10 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         Assert.True(await Clients().SetTagsAsync(clientId, workspaceId, ["greenhouse", "shed"]));
         Assert.False(await Clients().SetTagsAsync(clientId, workspaceId + 1, ["stolen"]));
 
-        Assert.Equal(["greenhouse", "shed"], (await Clients().GetDetailByRefIdAsync(refId)).Tags);
+        Assert.Equal(["greenhouse", "shed"], (await Clients().FindDetailByRefIdAsync(refId))!.Tags);
 
         Assert.True(await Clients().SetTagsAsync(clientId, workspaceId, []));
-        Assert.Empty((await Clients().GetDetailByRefIdAsync(refId)).Tags);
+        Assert.Empty((await Clients().FindDetailByRefIdAsync(refId))!.Tags);
     }
 
     [SkippableFact]

@@ -29,13 +29,12 @@ internal sealed class MessageTemplateProvider : BaseSqlProvider, IMessageTemplat
         );
     }
 
-    public async Task<MessageTemplate> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
+    public async Task<MessageTemplate?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.MessageTemplate_GetBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             MapTemplate,
-            new NotFoundException($"Message template with RefId {refId} not found."),
             cancellationToken
         );
     }
@@ -56,7 +55,8 @@ internal sealed class MessageTemplateProvider : BaseSqlProvider, IMessageTemplat
         }, cancellationToken);
 
         var refId = (Guid)parameters["@RefId"].Value;
-        return await GetByRefIdAsync(refId, cancellationToken);
+        return await FindByRefIdAsync(refId, cancellationToken)
+            ?? throw new InvalidOperationException($"Message template {refId} was not found right after it was inserted.");
     }
 
     public async Task UpdateAsync(int workspaceId, int id, int? policyId, string name, string messageType,

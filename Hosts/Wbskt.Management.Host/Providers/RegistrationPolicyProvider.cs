@@ -22,35 +22,32 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         }, cancellationToken);
     }
 
-    public async Task<RegistrationPolicy> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
+    public async Task<RegistrationPolicy?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.RegistrationPolicy_GetBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             MapPolicy,
-            new NotFoundException($"Policy with RefId {refId} not found."),
             cancellationToken
         );
     }
 
-    public async Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<RegistrationPolicy?> FindByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.RegistrationPolicy_GetBy_Id",
             p => p.AddWithValue("@Id", id),
             MapPolicy,
-            new NotFoundException($"Policy with Id {id} not found."),
             cancellationToken
         );
     }
 
-    public async Task<RegistrationPolicy> GetByPinAsync(string pin, CancellationToken cancellationToken = default)
+    public async Task<RegistrationPolicy?> FindByPinAsync(string pin, CancellationToken cancellationToken = default)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.RegistrationPolicy_GetBy_Pin",
             p => p.AddWithValue("@Pin", pin),
             MapPolicy,
-            new SecurityException("Invalid registration PIN."),
             cancellationToken
         );
     }
@@ -97,7 +94,8 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
                 var refId = (Guid)parameters["@RefId"].Value;
 
                 // Fetch the full record to return complete data (including CreatedAt)
-                return await GetByRefIdAsync(refId, cancellationToken);
+                return await FindByRefIdAsync(refId, cancellationToken)
+                    ?? throw new InvalidOperationException($"Policy {refId} was not found right after it was inserted.");
             }
             catch (SqlException ex) when (ex.Number is 2601 or 2627 && attempt < MaxPinAttempts)
             {
@@ -133,7 +131,8 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
                     p.Add("@Pin", SqlDbType.NVarChar, 20).Value = RegistrationPins.Generate();
                 }, cancellationToken);
 
-                return await GetByIdAsync(id, cancellationToken);
+                return await FindByIdAsync(id, cancellationToken)
+                    ?? throw new InvalidOperationException($"Policy {id} was not found right after its PIN was rotated.");
             }
             catch (SqlException ex) when (ex.Number is 2601 or 2627 && attempt < MaxPinAttempts)
             {

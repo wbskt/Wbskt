@@ -23,7 +23,7 @@ public sealed class ClientServiceTagTests
 
     public ClientServiceTagTests()
     {
-        _provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
+        _provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClientDetail { Id = ClientId, RefId = ClientRefId, WorkspaceId = WorkspaceId, Name = "client" });
         _provider.Setup(x => x.SetTagsAsync(ClientId, WorkspaceId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -85,7 +85,7 @@ public sealed class ClientServiceTagTests
         var result = await _service.SetTagsAsync(WorkspaceId, ClientRefId, ["garage", "a,b"]);
 
         result.Error.Code.Should().Be("CLIENT_TAG_INVALID");
-        _provider.Verify(x => x.GetDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _provider.Verify(x => x.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         _provider.Verify(x => x.SetTagsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -111,7 +111,7 @@ public sealed class ClientServiceTagTests
     public async Task Tagging_an_unknown_or_another_workspaces_client_is_not_found()
     {
         var unknown = Guid.NewGuid();
-        _provider.Setup(x => x.GetDetailByRefIdAsync(unknown, It.IsAny<CancellationToken>())).ThrowsAsync(new NotFoundException("no rows"));
+        _provider.Setup(x => x.FindDetailByRefIdAsync(unknown, It.IsAny<CancellationToken>())).ReturnsAsync((ClientDetail?)null);
 
         (await _service.SetTagsAsync(WorkspaceId, unknown, ["garage"])).Error.Code.Should().Be("CLIENT_NOT_FOUND");
         (await _service.SetTagsAsync(WorkspaceId + 1, ClientRefId, ["garage"])).Error.Code.Should().Be("CLIENT_NOT_FOUND");

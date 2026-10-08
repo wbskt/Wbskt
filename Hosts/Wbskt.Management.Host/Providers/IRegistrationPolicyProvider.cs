@@ -6,9 +6,9 @@ namespace Wbskt.Management.Host.Providers;
 
 public interface IRegistrationPolicyProvider : IReferenceProvider
 {
-    Task<RegistrationPolicy> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
-    Task<RegistrationPolicy> GetByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<RegistrationPolicy> GetByPinAsync(string pin, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicy?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicy?> FindByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<RegistrationPolicy?> FindByPinAsync(string pin, CancellationToken cancellationToken = default);
     Task<IPagedList<RegistrationPolicy>> GetAllAsync(int workSpaceId, bool? autoApproval, string? name, int skip,
         int take, CancellationToken cancellationToken = default);
     Task<RegistrationPolicy> InsertAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);

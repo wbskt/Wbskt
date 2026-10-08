@@ -29,31 +29,22 @@ internal sealed class MessageTemplateService : IMessageTemplateService
     {
         _logger.LogDebug("Querying message templates for WorkspaceId: {WorkspaceId}", workspaceId);
 
-        try
+        int? policyId = null;
+        if (policyRefId.HasValue)
         {
-            int? policyId = null;
-            if (policyRefId.HasValue)
+            // Another workspace's policy is as unknown here as one that does not exist, not an empty page.
+            var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.FindByRefIdAsync(policyRefId.Value, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+            if (policy.IsFailure)
             {
-                // Another workspace's policy is as unknown here as one that does not exist, not an empty page.
-                var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.GetByRefIdAsync(policyRefId.Value, cancellationToken), WorkspaceOwnership.PolicyNotFound);
-                if (policy.IsFailure)
-                {
-                    return Result<IPagedList<MessageTemplateResponse>>.Failure(policy.Error);
-                }
-
-                policyId = policy.Value.Id;
+                return Result<IPagedList<MessageTemplateResponse>>.Failure(policy.Error);
             }
 
-            var templates = await _templateProvider.GetAllAsync(workspaceId, policyId, skip, take, cancellationToken);
-            var result = new PagedList<MessageTemplateResponse>(templates.Select(MapToResponse), templates.TotalCount);
-            return Result<IPagedList<MessageTemplateResponse>>.Success(result);
+            policyId = policy.Value.Id;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query message templates for WorkspaceId: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
-            _logger.LogTrace(ex, "GetAllAsync exception stack trace for WorkspaceId {WorkspaceId}", workspaceId);
-            return Result<IPagedList<MessageTemplateResponse>>.Failure(Error.Failure("TEMPLATE_QUERY_ERROR", ex.Message));
-        }
+
+        var templates = await _templateProvider.GetAllAsync(workspaceId, policyId, skip, take, cancellationToken);
+        var result = new PagedList<MessageTemplateResponse>(templates.Select(MapToResponse), templates.TotalCount);
+        return Result<IPagedList<MessageTemplateResponse>>.Success(result);
     }
 
     public async Task<Result<MessageTemplateResponse>> CreateAsync(int workspaceId, MessageTemplateRequest request,
@@ -67,18 +58,9 @@ internal sealed class MessageTemplateService : IMessageTemplateService
             return Result<MessageTemplateResponse>.Failure(validation.Result.Error);
         }
 
-        try
-        {
-            var template = await _templateProvider.InsertAsync(workspaceId, validation.PolicyId, request.Name.Trim(),
-                request.MessageType.Trim(), request.PayloadJson, cancellationToken);
-            return Result<MessageTemplateResponse>.Success(MapToResponse(template));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to create message template '{TemplateName}'. Error: {Message}", request.Name, ex.Message);
-            _logger.LogTrace(ex, "CreateAsync exception stack trace for '{TemplateName}'", request.Name);
-            return Result<MessageTemplateResponse>.Failure(Error.Failure("TEMPLATE_CREATE_ERROR", ex.Message));
-        }
+        var template = await _templateProvider.InsertAsync(workspaceId, validation.PolicyId, request.Name.Trim(),
+            request.MessageType.Trim(), request.PayloadJson, cancellationToken);
+        return Result<MessageTemplateResponse>.Success(MapToResponse(template));
     }
 
     public async Task<Result> UpdateAsync(int workspaceId, Guid refId, MessageTemplateRequest request,
@@ -92,52 +74,34 @@ internal sealed class MessageTemplateService : IMessageTemplateService
             return validation.Result;
         }
 
-        try
+        var existing = await FindOwnedTemplateAsync(workspaceId, refId, cancellationToken);
+        if (existing.IsFailure)
         {
-            var existing = await FindOwnedTemplateAsync(workspaceId, refId, cancellationToken);
-            if (existing.IsFailure)
-            {
-                return Result.Failure(existing.Error);
-            }
+            return Result.Failure(existing.Error);
+        }
 
-            await _templateProvider.UpdateAsync(workspaceId, existing.Value.Id, validation.PolicyId, request.Name.Trim(),
-                request.MessageType.Trim(), request.PayloadJson, cancellationToken);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to update message template '{RefId}'. Error: {Message}", refId, ex.Message);
-            _logger.LogTrace(ex, "UpdateAsync exception stack trace for '{RefId}'", refId);
-            return Result.Failure(Error.Failure("TEMPLATE_UPDATE_ERROR", ex.Message));
-        }
+        await _templateProvider.UpdateAsync(workspaceId, existing.Value.Id, validation.PolicyId, request.Name.Trim(),
+            request.MessageType.Trim(), request.PayloadJson, cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result> DeleteAsync(int workspaceId, Guid refId, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Deleting message template '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
 
-        try
+        var existing = await FindOwnedTemplateAsync(workspaceId, refId, cancellationToken);
+        if (existing.IsFailure)
         {
-            var existing = await FindOwnedTemplateAsync(workspaceId, refId, cancellationToken);
-            if (existing.IsFailure)
-            {
-                return Result.Failure(existing.Error);
-            }
+            return Result.Failure(existing.Error);
+        }
 
-            await _templateProvider.DeleteAsync(workspaceId, existing.Value.Id, cancellationToken);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to delete message template '{RefId}'. Error: {Message}", refId, ex.Message);
-            _logger.LogTrace(ex, "DeleteAsync exception stack trace for '{RefId}'", refId);
-            return Result.Failure(Error.Failure("TEMPLATE_DELETE_ERROR", ex.Message));
-        }
+        await _templateProvider.DeleteAsync(workspaceId, existing.Value.Id, cancellationToken);
+        return Result.Success();
     }
 
     private async Task<Result<MessageTemplate>> FindOwnedTemplateAsync(int workspaceId, Guid refId, CancellationToken cancellationToken)
     {
-        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _templateProvider.GetByRefIdAsync(refId, cancellationToken), WorkspaceOwnership.TemplateNotFound);
+        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _templateProvider.FindByRefIdAsync(refId, cancellationToken), WorkspaceOwnership.TemplateNotFound);
         if (lookup.IsFailure)
         {
             _logger.LogWarning("Message template '{RefId}' not found in WorkspaceId: {WorkspaceId}", refId, workspaceId);
@@ -181,7 +145,7 @@ internal sealed class MessageTemplateService : IMessageTemplateService
         int? policyId = null;
         if (request.PolicyRefId.HasValue)
         {
-            var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.GetByRefIdAsync(request.PolicyRefId.Value, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+            var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.FindByRefIdAsync(request.PolicyRefId.Value, cancellationToken), WorkspaceOwnership.PolicyNotFound);
             if (policy.IsFailure)
             {
                 return (Result.Failure(policy.Error), null);

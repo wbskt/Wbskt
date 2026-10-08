@@ -20,7 +20,7 @@ public sealed class ClientServiceRenameTests
     private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateService(ClientDetail client)
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var bus = new Mock<IEventBus>();
         var service = new ClientService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
         return (service, provider, bus);
@@ -62,8 +62,8 @@ public sealed class ClientServiceRenameTests
     public async Task Rename_of_an_unknown_client_is_not_found()
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Wbskt.Primitives.Exceptions.NotFoundException("no rows"));
+        provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ClientDetail?)null);
         var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
 
         var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
@@ -114,8 +114,8 @@ public sealed class ClientServiceRenameTests
     public async Task EnsureClientInWorkspace_reports_an_unknown_reference_exactly_as_a_foreign_one()
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Wbskt.Primitives.Exceptions.NotFoundException("no rows"));
+        provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ClientDetail?)null);
         var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
         var (foreignService, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
 
@@ -129,7 +129,7 @@ public sealed class ClientServiceRenameTests
     private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateServiceWithDetail(ClientDetail detail)
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
+        provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
         var bus = new Mock<IEventBus>();
         var service = new ClientService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
         return (service, provider, bus);
