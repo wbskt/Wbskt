@@ -37,7 +37,9 @@
 ### The ID Boundary
 *   **RefId vs. Id:** Public APIs must only expose **`RefId` (GUID)**. The **`Id` (Int)** is strictly for internal database relations.
 *   **Mapping Responsibility:** The **Controller** is responsible for mapping a public `RefId` to an internal `Id`. This is achieved using the **Reference Mapping Pattern**.
-*   **Security:** If a `RefId` fails to resolve to an internal `Id` in a Controller, prefer `Error.Forbidden` (403) over `Error.NotFound` to prevent resource enumeration. `SecurityException` reaching `GlobalExceptionMiddleware` also maps to 403.
+*   **Workspace first, 403:** A workspace reference the caller is not a member of, or that does not exist, is `Error.Forbidden` (403) and the two cases are not told apart. This is the auth host's `resolve` answer, and it is what stops the API from confirming that a workspace exists.
+*   **Resources inside a workspace, 404:** Once the caller has been resolved as a member of the workspace in the route, a resource reference (client, policy, template, workflow, run, ...) that does not exist **or** belongs to another workspace is `Error.NotFound` (404) with the resource's `<RESOURCE>_NOT_FOUND` code and the same message in both cases. The caller learns nothing beyond "not in this workspace", which is all a member needs to know. The same holds for a reference used as a filter (`?clientRefId=`): it is a 404, never an empty page.
+*   **403 inside a workspace means a missing permission** (`PERMISSION_UNAUTHORIZED`), never an unknown or foreign reference.
 
 ### Reference Mapping Pattern
 To decouple public GUIDs from internal integer IDs without polluting every service with lookup logic:
@@ -99,7 +101,8 @@ public class TemplateController : ControllerBase
         
         if (internalId <= 0) 
         {
-            throw new SecurityException("Access denied.");
+            // Unknown and foreign references read the same: 404, see "The ID Boundary".
+            throw new NotFoundException("Template not found.");
         }
 
         // 2. Use the internal ID for service layer calls
