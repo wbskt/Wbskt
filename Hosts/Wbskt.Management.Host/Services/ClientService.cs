@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
@@ -13,24 +12,18 @@ namespace Wbskt.Management.Host.Services;
 
 internal sealed class ClientService : IClientService
 {
-    // THROW number from dbo.Client_UpdateStatus (and dbo.Client_Create) when a policy is full.
-    private const int PolicyLimitReached = 50020;
-
     private readonly IClientProvider _clientProvider;
-    private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly IEventBus _eventBus;
     private readonly IClientTokenCutoffs _cutoffs;
     private readonly ILogger<ClientService> _logger;
 
     public ClientService(
-        IClientProvider clientProvider, 
-        IRegistrationPolicyProvider policyProvider,
+        IClientProvider clientProvider,
         IEventBus eventBus,
         IClientTokenCutoffs cutoffs,
         ILogger<ClientService> logger)
     {
         _clientProvider = clientProvider;
-        _policyProvider = policyProvider;
         _eventBus = eventBus;
         _cutoffs = cutoffs;
         _logger = logger;
@@ -78,92 +71,35 @@ internal sealed class ClientService : IClientService
         }
     }
 
-    public async Task<Result> UpdateStatusAsync(int workspaceId, int id, ClientStatus status, CancellationToken cancellationToken = default)
+    public async Task<Result> UpdateStatusAsync(int workspaceId, Guid clientRefId, ClientStatus status, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating client ID {ClientId} status to '{ClientStatus}' in WorkspaceId: {WorkspaceId}", id, status, workspaceId);
+        _logger.LogInformation("Updating client RefId {ClientRefId} status to '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefId, status, workspaceId);
 
         try
         {
-            Client client;
-            try
+            var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, cancellationToken)).Single();
+            switch (change.Outcome)
             {
-                client = await _clientProvider.GetByIdAsync(id, cancellationToken);
+                case ClientStatusOutcome.NotFound:
+                    _logger.LogWarning("Failed to update client status: RefId {ClientRefId} not found", clientRefId);
+                    return Result.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+                case ClientStatusOutcome.OtherWorkspace:
+                    _logger.LogWarning("Client status update rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+                    return Result.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+                case ClientStatusOutcome.PolicyLimitReached:
+                    _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", change.PolicyId);
+                    return Result.Failure(PolicyFull);
+                case ClientStatusOutcome.Updated:
+                    await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
+                    break;
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to update client status: Client ID {ClientId} not found. Error: {Message}", id, ex.Message);
-                _logger.LogTrace(ex, "GetByIdAsync lookup failure stack trace for ClientId {ClientId}", id);
-                return Result.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-            }
-
-            if (client.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("Client status update rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
-                return Result.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
-            }
-            
-            var oldStatus = client.Status;
-            if (oldStatus == status)
-            {
-                _logger.LogDebug("Client ID {ClientId} is already in status '{ClientStatus}'. Skipping update.", id, status);
-                return Result.Success();
-            }
-
-            RegistrationPolicy policy;
-            try
-            {
-                policy = await _policyProvider.GetByRefIdAsync(client.PolicyRefId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to resolve policy reference: '{PolicyRefId}' for client ID: {ClientId}", client.PolicyRefId, id);
-                return Result.Failure(Error.Failure("POLICY_RESOLVE_ERROR", "Failed to resolve policy associated with the client."));
-            }
-
-            if (status == ClientStatus.Registered)
-            {
-                if (policy.MaxClients.HasValue)
-                {
-                    var currentCount = await _clientProvider.GetRegisteredCountByPolicyIdAsync(policy.Id, cancellationToken);
-                    if (currentCount >= policy.MaxClients.Value)
-                    {
-                        _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", policy.Id);
-                        return Result.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients."));
-                    }
-                }
-            }
-
-            try
-            {
-                await _clientProvider.UpdateStatusAsync(id, status, cancellationToken);
-            }
-            catch (SqlException ex) when (ex.Number == PolicyLimitReached)
-            {
-                // The check above is the friendly early answer; this one, under a lock on the policy,
-                // is the one that holds when approvals race.
-                _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", policy.Id);
-                return Result.Failure(Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients."));
-            }
-
-            _logger.LogInformation("Successfully updated client ID {ClientId} status from '{OldStatus}' to '{NewStatus}'", id, oldStatus, status);
-
-            if (status == ClientStatus.Registered)
-            {
-                await _cutoffs.ReinstateAsync(client.RefId, DateTime.UtcNow);
-            }
-            else if (oldStatus == ClientStatus.Registered)
-            {
-                await _cutoffs.RevokeAsync(client.RefId);
-            }
-
-            await _eventBus.PublishAsync(new ClientStatusChangedEvent(client.RefId, client.Id, policy.RefId, policy.Id, client.WorkspaceId, (byte)status), cancellationToken);
 
             return Result.Success();
         }
         catch (Exception ex)
         {
-            _logger.LogError("Unexpected error updating client ID {ClientId} status. Error: {Message}", id, ex.Message);
-            _logger.LogTrace(ex, "UpdateStatusAsync exception stack trace for ClientId {ClientId}", id);
+            _logger.LogError("Unexpected error updating client RefId {ClientRefId} status. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "UpdateStatusAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
             return Result.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
         }
     }
@@ -173,29 +109,76 @@ internal sealed class ClientService : IClientService
     {
         _logger.LogInformation("Updating {Count} clients to status '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefIds.Count, status, workspaceId);
 
+        // One database call for the whole list, in the order given: approvals compete for the
+        // policy's remaining places, and a predictable order decides which ones get them.
+        IReadOnlyList<ClientStatusChange> changes;
+        try
+        {
+            changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error updating {Count} clients' status. Error: {Message}", clientRefIds.Count, ex.Message);
+            _logger.LogTrace(ex, "UpdateStatusesAsync exception stack trace");
+            return Result<BulkClientStatusResponse>.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
+        }
+
         var updated = new List<Guid>();
         var failed = new List<BulkClientStatusFailure>();
-
-        // One at a time, in the order given: approvals compete for the policy's remaining places, and
-        // a predictable order decides which ones get them.
-        foreach (var clientRefId in clientRefIds.Distinct())
+        foreach (var change in changes)
         {
-            var idResult = await EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            var result = idResult.IsSuccess
-                ? await UpdateStatusAsync(workspaceId, idResult.Value, status, cancellationToken)
-                : Result.Failure(idResult.Error);
-
-            if (result.IsSuccess)
+            Error? error = change.Outcome switch
             {
-                updated.Add(clientRefId);
+                // A missing client and another workspace's read the same; see Unauthorized.
+                ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace => Unauthorized,
+                ClientStatusOutcome.PolicyLimitReached => PolicyFull,
+                _ => null
+            };
+
+            if (error is null && change.Outcome == ClientStatusOutcome.Updated)
+            {
+                try
+                {
+                    await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError("Client RefId {ClientRefId} changed status but announcing it failed. Error: {Message}", change.RefId, ex.Message);
+                    _logger.LogTrace(ex, "AnnounceStatusChangeAsync exception stack trace for ClientRefId {ClientRefId}", change.RefId);
+                    error = Error.Failure("CLIENT_UPDATE_ERROR", ex.Message);
+                }
+            }
+
+            if (error is null)
+            {
+                updated.Add(change.RefId);
             }
             else
             {
-                failed.Add(new BulkClientStatusFailure(clientRefId, result.Error.Code, result.Error.Message));
+                failed.Add(new BulkClientStatusFailure(change.RefId, error.Code, error.Message));
             }
         }
 
         return Result<BulkClientStatusResponse>.Success(new BulkClientStatusResponse(updated, failed));
+    }
+
+    // Token cutoffs first, so a revoked device is refused before anyone hears it was revoked.
+    private async Task AnnounceStatusChangeAsync(int workspaceId, ClientStatusChange change, ClientStatus status, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Updated client ID {ClientId} status from '{OldStatus}' to '{NewStatus}'", change.Id, change.OldStatus, status);
+
+        if (status == ClientStatus.Registered)
+        {
+            await _cutoffs.ReinstateAsync(change.RefId, DateTime.UtcNow);
+        }
+        else if (change.OldStatus == ClientStatus.Registered)
+        {
+            await _cutoffs.RevokeAsync(change.RefId);
+        }
+
+        await _eventBus.PublishAsync(
+            new ClientStatusChangedEvent(change.RefId, change.Id, change.PolicyRefId, change.PolicyId, workspaceId, (byte)status),
+            cancellationToken);
     }
 
     public async Task<Result> DeleteAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
@@ -315,28 +298,20 @@ internal sealed class ClientService : IClientService
         }
     }
 
-    public async Task<Result> RenameAsync(int workspaceId, int id, string name, CancellationToken cancellationToken = default)
+    public async Task<Result> RenameAsync(int workspaceId, Guid clientRefId, string name, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Renaming client ID {ClientId} in WorkspaceId: {WorkspaceId}", id, workspaceId);
+        _logger.LogInformation("Renaming client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
         try
         {
-            Client client;
-            try
+            var lookup = await GetInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (lookup.IsFailure)
             {
-                client = await _clientProvider.GetByIdAsync(id, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to rename client: Client ID {ClientId} not found. Error: {Message}", id, ex.Message);
-                return Result.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+                return Result.Failure(lookup.Error);
             }
 
-            if (client.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("Client rename rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
-                return Result.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
-            }
+            var client = lookup.Value;
+            var id = client.Id;
 
             var oldName = client.Name;
             if (oldName == name)
@@ -354,36 +329,25 @@ internal sealed class ClientService : IClientService
         }
         catch (Exception ex)
         {
-            _logger.LogError("Unexpected error renaming client ID {ClientId}. Error: {Message}", id, ex.Message);
-            _logger.LogTrace(ex, "RenameAsync exception stack trace for ClientId {ClientId}", id);
+            _logger.LogError("Unexpected error renaming client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "RenameAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
             return Result.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
         }
     }
 
-    public async Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying state variables for client ID {ClientId} in WorkspaceId: {WorkspaceId}", id, workspaceId);
+        _logger.LogDebug("Querying state variables for client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
 
         try
         {
-            Client client;
-            try
+            var lookup = await GetInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (lookup.IsFailure)
             {
-                client = await _clientProvider.GetByIdAsync(id, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("State query failed: Client ID {ClientId} not found. Error: {Message}", id, ex.Message);
-                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(lookup.Error);
             }
 
-            if (client.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("State query rejected: Client ID {ClientId} does not belong to WorkspaceId: {WorkspaceId}", id, workspaceId);
-                return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
-            }
-
-            var variables = await _clientProvider.GetStateVariablesAsync(id, cancellationToken);
+            var variables = await _clientProvider.GetStateVariablesAsync(lookup.Value.Id, cancellationToken);
             IReadOnlyCollection<ClientStateVariableResponse> response = variables
                 .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt))
                 .ToList()
@@ -393,10 +357,34 @@ internal sealed class ClientService : IClientService
         }
         catch (Exception ex)
         {
-            _logger.LogError("Failed to query state variables for client ID {ClientId}. Error: {Message}", id, ex.Message);
-            _logger.LogTrace(ex, "GetStateAsync exception stack trace for ClientId {ClientId}", id);
+            _logger.LogError("Failed to query state variables for client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "GetStateAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
             return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
         }
+    }
+
+    // One read for both the lookup and the workspace check, for the console endpoints that tell a
+    // missing client (404) from another workspace's (403), as they always have.
+    private async Task<Result<ClientDetail>> GetInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
+    {
+        ClientDetail client;
+        try
+        {
+            client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
+        }
+        catch (NotFoundException)
+        {
+            _logger.LogWarning("Client RefId {ClientRefId} not found", clientRefId);
+            return Result<ClientDetail>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+        }
+
+        if (client.WorkspaceId != workspaceId)
+        {
+            _logger.LogWarning("Client RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+            return Result<ClientDetail>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+        }
+
+        return Result<ClientDetail>.Success(client);
     }
 
     public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
@@ -449,6 +437,8 @@ internal sealed class ClientService : IClientService
 
         return Result<ClientDetail>.Success(client);
     }
+
+    private static readonly Error PolicyFull = Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients.");
 
     private static readonly Error DeviceOffline = Error.Conflict("DEVICE_OFFLINE", "The device is offline. Commands are only delivered to connected devices.");
 

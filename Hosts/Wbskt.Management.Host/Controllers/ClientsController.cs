@@ -18,7 +18,6 @@ namespace Wbskt.Management.Host.Controllers;
 public class ClientsController : ApiControllerBase
 {
     private readonly IClientService _clientService;
-    private readonly IReferenceMapper _clientMapper;
     private readonly IAuthServiceClient _authClient;
     private readonly IEventBus _eventBus;
     private readonly IReferenceMapper _policyMapper;
@@ -28,7 +27,6 @@ public class ClientsController : ApiControllerBase
 
     public ClientsController(
         IClientService clientService,
-        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper,
         IAuthServiceClient authClient,
         IEventBus eventBus,
         [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
@@ -37,7 +35,6 @@ public class ClientsController : ApiControllerBase
         ILogger<ClientsController> logger)
     {
         _clientService = clientService;
-        _clientMapper = clientMapper;
         _authClient = authClient;
         _eventBus = eventBus;
         _policyMapper = policyMapper;
@@ -190,13 +187,7 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result.Failure(workspaceIdResult.Error));
         }
 
-        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        if (id <= 0)
-        {
-            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-        }
-
-        var result = await _clientService.UpdateStatusAsync(workspaceIdResult.Value, id, request.Status, cancellationToken);
+        var result = await _clientService.UpdateStatusAsync(workspaceIdResult.Value, clientRefId, request.Status, cancellationToken);
         return MapResult(result);
     }
 
@@ -293,13 +284,7 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(workspaceIdResult.Error));
         }
 
-        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        if (id <= 0)
-        {
-            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-        }
-
-        var result = await _clientService.GetStateAsync(workspaceIdResult.Value, id, cancellationToken);
+        var result = await _clientService.GetStateAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(result.Error));
@@ -332,13 +317,7 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result.Failure(workspaceIdResult.Error));
         }
 
-        var id = await _clientMapper.FindIdByRefIdAsync(clientRefId, cancellationToken);
-        if (id <= 0)
-        {
-            return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-        }
-
-        var result = await _clientService.RenameAsync(workspaceIdResult.Value, id, request.Name.Trim(), cancellationToken);
+        var result = await _clientService.RenameAsync(workspaceIdResult.Value, clientRefId, request.Name.Trim(), cancellationToken);
         return MapResult(result);
     }
 

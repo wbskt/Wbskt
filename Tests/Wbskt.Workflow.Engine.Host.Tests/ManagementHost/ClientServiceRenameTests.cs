@@ -7,7 +7,6 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Models;
-using ClientRow = Wbskt.Management.Host.Models.Client;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -18,18 +17,18 @@ public sealed class ClientServiceRenameTests
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly IClientTokenCutoffs NoCutoffs = Mock.Of<IClientTokenCutoffs>();
 
-    private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateService(ClientRow client)
+    private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateService(ClientDetail client)
     {
         var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.GetByIdAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var bus = new Mock<IEventBus>();
-        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
+        var service = new ClientService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
         return (service, provider, bus);
     }
 
-    private static ClientRow CreateClient(int workspaceId = WorkspaceId, string name = "old-name")
+    private static ClientDetail CreateClient(int workspaceId = WorkspaceId, string name = "old-name")
     {
-        return new ClientRow { Id = ClientId, RefId = ClientRefId, WorkspaceId = workspaceId, Name = name };
+        return new ClientDetail { Id = ClientId, RefId = ClientRefId, WorkspaceId = workspaceId, Name = name };
     }
 
     [Fact]
@@ -37,7 +36,7 @@ public sealed class ClientServiceRenameTests
     {
         var (service, provider, bus) = CreateService(CreateClient());
 
-        var result = await service.RenameAsync(WorkspaceId, ClientId, "new-name");
+        var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
 
         result.IsSuccess.Should().BeTrue();
         provider.Verify(x => x.UpdateNameAsync(ClientId, "new-name", It.IsAny<CancellationToken>()), Times.Once);
@@ -51,7 +50,7 @@ public sealed class ClientServiceRenameTests
     {
         var (service, provider, bus) = CreateService(CreateClient(workspaceId: 99));
 
-        var result = await service.RenameAsync(WorkspaceId, ClientId, "new-name");
+        var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
@@ -60,11 +59,25 @@ public sealed class ClientServiceRenameTests
     }
 
     [Fact]
+    public async Task Rename_of_an_unknown_client_is_not_found()
+    {
+        var provider = new Mock<IClientProvider>();
+        provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Wbskt.Primitives.Exceptions.NotFoundException("no rows"));
+        var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
+
+        var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
+
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
+        provider.Verify(x => x.UpdateNameAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Rename_to_the_same_name_is_a_no_op()
     {
         var (service, provider, bus) = CreateService(CreateClient(name: "same-name"));
 
-        var result = await service.RenameAsync(WorkspaceId, ClientId, "same-name");
+        var result = await service.RenameAsync(WorkspaceId, ClientRefId, "same-name");
 
         result.IsSuccess.Should().BeTrue();
         provider.Verify(x => x.UpdateNameAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -103,7 +116,7 @@ public sealed class ClientServiceRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("no rows"));
-        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
+        var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
         var (foreignService, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
 
         var unknown = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
@@ -118,7 +131,7 @@ public sealed class ClientServiceRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
         var bus = new Mock<IEventBus>();
-        var service = new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
+        var service = new ClientService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
         return (service, provider, bus);
     }
 

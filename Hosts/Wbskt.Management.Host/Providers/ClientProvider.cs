@@ -112,13 +112,35 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ClientStatusChange>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds,
+        ClientStatus status, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.Client_UpdateStatus", p =>
+        using var table = new DataTable();
+        table.Columns.Add("Ordinal", typeof(int));
+        table.Columns.Add("RefId", typeof(Guid));
+        for (var i = 0; i < clientRefIds.Count; i++)
         {
-            p.AddWithValue("@Id", id);
-            p.AddWithValue("@Status", (byte)status);
-        }, cancellationToken);
+            table.Rows.Add(i, clientRefIds[i]);
+        }
+
+        var changes = await ExecuteCollectionAsync("dbo.Client_UpdateStatuses", p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@Status", (byte)status);
+                var parameter = p.AddWithValue("@Clients", table);
+                parameter.SqlDbType = SqlDbType.Structured;
+                parameter.TypeName = "dbo.OrderedRefIdTableType";
+            },
+            reader => new ClientStatusChange(
+                reader.GetGuid(reader.GetOrdinal("RefId")),
+                reader.IsDBNull(reader.GetOrdinal("Id")) ? 0 : reader.GetInt32(reader.GetOrdinal("Id")),
+                reader.IsDBNull(reader.GetOrdinal("PolicyId")) ? 0 : reader.GetInt32(reader.GetOrdinal("PolicyId")),
+                reader.IsDBNull(reader.GetOrdinal("PolicyRefId")) ? Guid.Empty : reader.GetGuid(reader.GetOrdinal("PolicyRefId")),
+                reader.IsDBNull(reader.GetOrdinal("OldStatus")) ? default : (ClientStatus)reader.GetByte(reader.GetOrdinal("OldStatus")),
+                (ClientStatusOutcome)reader.GetByte(reader.GetOrdinal("Outcome"))),
+            cancellationToken);
+
+        return changes.ToList();
     }
 
     public async Task<bool> DeleteAsync(int id, int workspaceId, CancellationToken cancellationToken = default)
