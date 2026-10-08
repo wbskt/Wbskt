@@ -151,7 +151,7 @@ public sealed class ClientLifecycleTests
             It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { b.RefId, a.RefId })),
             ClientStatus.Registered,
             It.IsAny<CancellationToken>()), Times.Once);
-        harness.Provider.Verify(p => p.GetDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Provider.Verify(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -188,8 +188,8 @@ public sealed class ClientLifecycleTests
         public Harness()
         {
             Provider
-                .Setup(p => p.GetDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new NotFoundException("Client not found."));
+                .Setup(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ClientDetail?)null);
             // A stand-in for dbo.Client_UpdateStatuses, answering from the clients added below.
             Provider
                 .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<CancellationToken>()))
@@ -223,7 +223,7 @@ public sealed class ClientLifecycleTests
                 Name = $"device-{_nextId}",
                 Status = status
             };
-            Provider.Setup(p => p.GetDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+            Provider.Setup(p => p.FindDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
             Clients[client.RefId] = client;
             return client;
         }

@@ -22,10 +22,10 @@ public sealed class ClientServiceCommandTargetTests
     private static ClientService CreateService(ClientDetail? client)
     {
         var provider = new Mock<IClientProvider>();
-        var lookup = provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()));
+        var lookup = provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()));
         if (client is null)
         {
-            lookup.ThrowsAsync(new Wbskt.Primitives.Exceptions.NotFoundException("not found"));
+            lookup.ReturnsAsync((ClientDetail?)null);
         }
         else
         {

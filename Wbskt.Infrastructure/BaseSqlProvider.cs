@@ -39,6 +39,29 @@ public abstract class BaseSqlProvider
         throw exceptionIfNotFound ?? new KeyNotFoundException($"Record not found in {procedureName}.");
     }
 
+    /// <summary>
+    /// The first row mapped, or null when there is none. For lookups where "no such row" is an
+    /// expected answer: the caller decides what it means, and only a real fault throws.
+    /// </summary>
+    protected async Task<T?> ExecuteFindAsync<T>(
+        string procedureName,
+        Action<SqlParameterCollection> addParameters,
+        Func<SqlDataReader, T> map,
+        CancellationToken cancellationToken = default)
+        where T : class
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(procedureName, connection);
+        command.CommandType = CommandType.StoredProcedure;
+
+        addParameters(command.Parameters);
+
+        await connection.OpenAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        return await reader.ReadAsync(cancellationToken) ? map(reader) : null;
+    }
+
     protected async Task<IReadOnlyCollection<T>> ExecuteCollectionAsync<T>(
         string procedureName, 
         Action<SqlParameterCollection>? addParameters, 

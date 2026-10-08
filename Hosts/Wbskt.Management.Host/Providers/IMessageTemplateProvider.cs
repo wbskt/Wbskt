@@ -7,7 +7,7 @@ public interface IMessageTemplateProvider
 {
     Task<IPagedList<MessageTemplate>> GetAllAsync(int workspaceId, int? policyId, int skip, int take,
         CancellationToken cancellationToken = default);
-    Task<MessageTemplate> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
+    Task<MessageTemplate?> FindByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task<MessageTemplate> InsertAsync(int workspaceId, int? policyId, string name, string messageType,
         string payloadJson, CancellationToken cancellationToken = default);
     Task UpdateAsync(int workspaceId, int id, int? policyId, string name, string messageType, string payloadJson,
