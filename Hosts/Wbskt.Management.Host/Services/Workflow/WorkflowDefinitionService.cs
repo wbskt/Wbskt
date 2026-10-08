@@ -94,7 +94,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             if (existing is not null && existing.WorkspaceId != workspaceId)
             {
                 _logger.LogWarning("Workflow publish rejected: Workflow '{RefId}' does not belong to WorkspaceId: {WorkspaceId}", request.RefId, workspaceId);
-                return Result<WorkflowPublishResponse>.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{request.RefId}' does not belong to the workspace."));
+                return Result<WorkflowPublishResponse>.Failure(WorkflowRefTaken);
             }
 
             // The version is assigned by WorkflowDefinition_Publish under HOLDLOCK, which also stamps
@@ -128,7 +128,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             {
                 // Another workspace's first publish of the same RefId won the race past the check above.
                 _logger.LogWarning("Workflow publish rejected under lock: Workflow '{RefId}' belongs to another workspace", request.RefId);
-                return Result<WorkflowPublishResponse>.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{request.RefId}' does not belong to the workspace."));
+                return Result<WorkflowPublishResponse>.Failure(WorkflowRefTaken);
             }
 
             // From here the row exists. Anything that fails must not leave a published version whose
@@ -175,7 +175,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             catch (Exception ex) when (IsNotFound(ex))
             {
                 _logger.LogWarning("Failed to reinstate: workflow '{RefId}' not found.", refId);
-                return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+                return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
 
             var ensureWorkspaceResult = EnsureWorkspace(row, workspaceId, refId);
@@ -368,6 +368,13 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         return ex is KeyNotFoundException or NotFoundException;
     }
 
+    /// <summary>
+    /// A publish names its own RefId, so it can land on one another workspace already uses. That is
+    /// a conflict to resolve by choosing another RefId, not a permission the caller lacks: inside a
+    /// workspace a 403 only ever means a missing permission (see "The ID Boundary").
+    /// </summary>
+    private static readonly Error WorkflowRefTaken = Error.Conflict("WORKFLOW_REF_TAKEN", "This workflow reference is already in use. Publish under a new RefId.");
+
     public async Task<Result<WorkflowDefinitionDto>> GetCurrentAsync(int workspaceId, Guid refId, CancellationToken ct)
     {
         _logger.LogDebug("Querying current workflow definition for RefId: '{RefId}'", refId);
@@ -382,7 +389,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             catch (Exception ex)
             {
                 _logger.LogWarning("Workflow not found for RefId: '{RefId}'. Error: {Message}", refId, ex.Message);
-                return Result<WorkflowDefinitionDto>.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+                return Result<WorkflowDefinitionDto>.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
 
             var ensureWorkspaceResult = EnsureWorkspace(row, workspaceId, refId);
@@ -415,7 +422,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             catch (Exception ex)
             {
                 _logger.LogWarning("Workflow not found for RefId: '{RefId}' version {Version}. Error: {Message}", refId, version, ex.Message);
-                return Result<WorkflowDefinitionDto>.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+                return Result<WorkflowDefinitionDto>.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
 
             var ensureWorkspaceResult = EnsureWorkspace(row, workspaceId, refId);
@@ -448,7 +455,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             catch (Exception ex)
             {
                 _logger.LogWarning("Failed to deprecate: workflow '{RefId}' not found. Error: {Message}", refId, ex.Message);
-                return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+                return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
 
             var ensureWorkspaceResult = EnsureWorkspace(row, workspaceId, refId);
@@ -483,7 +490,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             {
                 // Unknown, deleted, or another workspace's: the procedure is workspace-scoped, so all
                 // three read alike, as for a client or run reference that does not resolve here.
-                return Result<IReadOnlyList<WorkflowVersionDto>>.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+                return Result<IReadOnlyList<WorkflowVersionDto>>.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
 
             // Only the newest version can be live; an older one was superseded when the next was published.
@@ -516,7 +523,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             if (deletion is null)
             {
                 // Same answer for unknown, already deleted, and another workspace's workflow.
-                return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+                return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
 
             // The triggers are gone, so nothing new starts; runs already going are stopped rather than
@@ -581,7 +588,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         catch (Exception ex)
         {
             _logger.LogWarning("Failed workflow membership check: workflow '{WorkflowRefId}' not found. Error: {Message}", workflowRefId, ex.Message);
-            return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+            return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
         }
     }
 
@@ -589,8 +596,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     {
         if (row.WorkspaceId != workspaceId)
         {
-            _logger.LogWarning("Workspace access denied for workflow '{RefId}'", refId);
-            return Result.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{refId}' does not belong to the workspace."));
+            _logger.LogWarning("Workflow '{RefId}' is not in WorkspaceId: {WorkspaceId}", refId, workspaceId);
+            return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
         }
         return Result.Success();
     }

@@ -20,7 +20,6 @@ public class ClientsController : ApiControllerBase
 {
     private readonly IClientService _clientService;
     private readonly IEventBus _eventBus;
-    private readonly IReferenceMapper _policyMapper;
     private readonly IRegistrationPolicyService _policyService;
     private readonly IEventLogService _eventLogService;
     private readonly ILogger<ClientsController> _logger;
@@ -28,14 +27,12 @@ public class ClientsController : ApiControllerBase
     public ClientsController(
         IClientService clientService,
         IEventBus eventBus,
-        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
         IRegistrationPolicyService policyService,
         IEventLogService eventLogService,
         ILogger<ClientsController> logger)
     {
         _clientService = clientService;
         _eventBus = eventBus;
-        _policyMapper = policyMapper;
         _policyService = policyService;
         _eventLogService = eventLogService;
         _logger = logger;
@@ -120,28 +117,14 @@ public class ClientsController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        // 2. Resolve Policy RefId
-        var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
-        if (policyId <= 0)
+        // Another workspace's policy is as unknown here as one that does not exist, not an empty page.
+        var policy = await _policyService.FindInWorkspaceAsync(workspaceId, policyRefId, cancellationToken);
+        if (policy.IsFailure)
         {
-            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+            return MapResult(Result<ListResponse<ClientResponse>>.Failure(policy.Error));
         }
 
-        // 3. Verify Policy belongs to Workspace
-        var policyResult = await _policyService.GetByIdAsync(policyId, cancellationToken);
-        if (policyResult.IsFailure)
-        {
-            return MapResult(Result<ListResponse<ClientResponse>>.Failure(policyResult.Error));
-        }
-
-        if (policyResult.Value.WorkspaceId != workspaceId)
-        {
-            _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceId);
-            return MapError(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
-        }
-
-        // 4. All checks pass, get the data
-        var result = await _clientService.GetByPolicyIdAsync(workspaceId, policyId, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
+        var result = await _clientService.GetByPolicyIdAsync(workspaceId, policy.Value.Id, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));

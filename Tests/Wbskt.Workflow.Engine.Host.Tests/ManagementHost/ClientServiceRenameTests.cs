@@ -53,7 +53,7 @@ public sealed class ClientServiceRenameTests
         var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
         provider.Verify(x => x.UpdateNameAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientRenamedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -103,7 +103,7 @@ public sealed class ClientServiceRenameTests
         var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ public sealed class ClientServiceRenameTests
     {
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("no rows"));
+            .ThrowsAsync(new Wbskt.Primitives.Exceptions.NotFoundException("no rows"));
         var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
         var (foreignService, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
 

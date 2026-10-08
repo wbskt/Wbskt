@@ -53,6 +53,7 @@ To decouple public GUIDs from internal integer IDs without polluting every servi
 *   **Declare, don't check:** A workspace-scoped action (`api/workspaces/{workspaceRef}/...`) states what it needs with `[RequiresPermission(PermissionNames.X)]` and takes `[FromWorkspace] int workspaceId`. `WorkspacePermissionFilter` resolves the workspace once, before model binding, and answers the refusal itself; controllers never call `ResolveWorkspaceAsync`.
 *   **All or any:** Several permissions on one attribute need all of them; `Mode = PermissionMatch.Any` needs one. Several attributes on an action must all pass. Attributes on a controller are its actions' default; an action with its own replaces them.
 *   **Enforced by a test:** `ManagementEndpointPermissionTests` fails for a workspace-scoped action without the attribute, and pins every action's permissions.
+*   **Owned references:** Load a resource through `WorkspaceOwnership.LoadAsync` (or `Check` for one already in hand). It answers the resource's one `<RESOURCE>_NOT_FOUND` 404 both for a reference that names nothing and for another workspace's, including references used as list filters. A 403 inside a workspace only ever means a missing permission.
 
 ### Provider Pattern
 *   **Base Provider Pattern:** Do not repeat `SqlConnection` or `SqlCommand` boilerplate in every method. Inherit from a `BaseSqlProvider` (or equivalent) that encapsulates connection lifecycle, command execution, and mapping.

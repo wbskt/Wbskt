@@ -34,11 +34,14 @@ internal sealed class MessageTemplateService : IMessageTemplateService
             int? policyId = null;
             if (policyRefId.HasValue)
             {
-                policyId = await _policyProvider.FindIdByRefIdAsync(policyRefId.Value, cancellationToken);
-                if (policyId <= 0)
+                // Another workspace's policy is as unknown here as one that does not exist, not an empty page.
+                var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.GetByRefIdAsync(policyRefId.Value, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+                if (policy.IsFailure)
                 {
-                    return Result<IPagedList<MessageTemplateResponse>>.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+                    return Result<IPagedList<MessageTemplateResponse>>.Failure(policy.Error);
                 }
+
+                policyId = policy.Value.Id;
             }
 
             var templates = await _templateProvider.GetAllAsync(workspaceId, policyId, skip, take, cancellationToken);
@@ -134,24 +137,13 @@ internal sealed class MessageTemplateService : IMessageTemplateService
 
     private async Task<Result<MessageTemplate>> FindOwnedTemplateAsync(int workspaceId, Guid refId, CancellationToken cancellationToken)
     {
-        MessageTemplate template;
-        try
+        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _templateProvider.GetByRefIdAsync(refId, cancellationToken), WorkspaceOwnership.TemplateNotFound);
+        if (lookup.IsFailure)
         {
-            template = await _templateProvider.GetByRefIdAsync(refId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Message template '{RefId}' not found. Error: {Message}", refId, ex.Message);
-            return Result<MessageTemplate>.Failure(Error.NotFound("TEMPLATE_NOT_FOUND", "Message template not found."));
+            _logger.LogWarning("Message template '{RefId}' not found in WorkspaceId: {WorkspaceId}", refId, workspaceId);
         }
 
-        if (template.WorkspaceId != workspaceId)
-        {
-            _logger.LogWarning("Template access rejected: '{RefId}' does not belong to WorkspaceId: {WorkspaceId}", refId, workspaceId);
-            return Result<MessageTemplate>.Failure(Error.Forbidden("TEMPLATE_UNAUTHORIZED", "Template does not belong to this workspace."));
-        }
-
-        return Result<MessageTemplate>.Success(template);
+        return lookup;
     }
 
     private async Task<(Result Result, int? PolicyId)> ValidateAsync(int workspaceId, MessageTemplateRequest request, CancellationToken cancellationToken)
@@ -189,22 +181,13 @@ internal sealed class MessageTemplateService : IMessageTemplateService
         int? policyId = null;
         if (request.PolicyRefId.HasValue)
         {
-            RegistrationPolicy policy;
-            try
+            var policy = await WorkspaceOwnership.LoadAsync(workspaceId, () => _policyProvider.GetByRefIdAsync(request.PolicyRefId.Value, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+            if (policy.IsFailure)
             {
-                policy = await _policyProvider.GetByRefIdAsync(request.PolicyRefId.Value, cancellationToken);
-            }
-            catch (Exception)
-            {
-                return (Result.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found.")), null);
+                return (Result.Failure(policy.Error), null);
             }
 
-            if (policy.WorkspaceId != workspaceId)
-            {
-                return (Result.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace.")), null);
-            }
-
-            policyId = policy.Id;
+            policyId = policy.Value.Id;
         }
 
         return (Result.Success(), policyId);

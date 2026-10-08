@@ -108,7 +108,7 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task DEV_TAG_05_TaggingAnUnknownDevice_Is404_AndAnotherWorkspacesIsForbidden()
+    public async Task DEV_TAG_05_TaggingAnUnknownDevice_OrAnotherWorkspaces_Is404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -123,8 +123,8 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
         (await ServicesFixture.ReadErrorCodeAsync(unknown)).Should().Be("CLIENT_NOT_FOUND");
 
         var foreign = await SetTagsAsync(strangerWorkspace, clientRef, strangerToken, ["shed"]);
-        foreign.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be("CLIENT_UNAUTHORIZED");
+        foreign.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be("CLIENT_NOT_FOUND");
 
         (await TagsOfAsync(ownerWorkspace, clientRef, ownerToken)).Should().Equal("garage");
     }

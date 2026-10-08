@@ -47,7 +47,7 @@ public sealed class ClientLifecycleTests
         var missingResult = await harness.Service.DeleteAsync(WorkspaceId, Guid.NewGuid());
 
         foreignResult.Error.Should().Be(missingResult.Error);
-        foreignResult.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        foreignResult.Error.Code.Should().Be("CLIENT_NOT_FOUND");
         harness.Provider.Verify(p => p.DeleteAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
         harness.Cutoffs.VerifyNoOtherCalls();
@@ -132,7 +132,7 @@ public sealed class ClientLifecycleTests
         result.Value.Updated.Should().Equal(first.RefId);
         result.Value.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal(
             (full.RefId, "POLICY_LIMIT_REACHED"),
-            (foreign.RefId, "CLIENT_UNAUTHORIZED"));
+            (foreign.RefId, "CLIENT_NOT_FOUND"));
         harness.Bus.Verify(b => b.PublishAsync(It.Is<ClientStatusChangedEvent>(e => e.ClientRefId == first.RefId), It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -155,7 +155,7 @@ public sealed class ClientLifecycleTests
     }
 
     [Fact]
-    public async Task One_client_tells_a_missing_client_from_another_workspaces_as_before()
+    public async Task One_client_reads_another_workspaces_client_like_a_missing_one()
     {
         var harness = new Harness();
         var foreign = harness.AddClient(workspaceId: 99);
@@ -164,7 +164,7 @@ public sealed class ClientLifecycleTests
         var other = await harness.Service.UpdateStatusAsync(WorkspaceId, foreign.RefId, ClientStatus.Revoked);
 
         missing.Error.Code.Should().Be("CLIENT_NOT_FOUND");
-        other.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        other.Error.Should().Be(missing.Error);
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

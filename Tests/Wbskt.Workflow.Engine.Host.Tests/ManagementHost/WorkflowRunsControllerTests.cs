@@ -399,7 +399,7 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
-    public async Task ListByWorkflowAsync_throws_security_when_workflow_in_other_workspace()
+    public async Task ListByWorkflowAsync_is_not_found_when_workflow_in_other_workspace()
     {
         var runProvider = new Mock<IRunProvider>();
         var branchProvider = new Mock<IBranchProvider>();
@@ -412,7 +412,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, 10, null, CancellationToken.None);
         
         Assert.True(response.IsFailure);
-        Assert.Equal(ErrorType.Forbidden, response.Error.Type);
+        Assert.Equal("WORKFLOW_NOT_FOUND", response.Error.Code);
     }
 
     [Fact]
@@ -480,7 +480,7 @@ public sealed class WorkflowRunsControllerTests
     }
 
     [Fact]
-    public async Task EnsureRunInWorkspaceAsync_throws_security_when_run_in_other_workspace()
+    public async Task EnsureRunInWorkspaceAsync_is_not_found_when_run_in_other_workspace()
     {
         var runProvider = new Mock<IRunProvider>();
         var branchProvider = new Mock<IBranchProvider>();
@@ -495,7 +495,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, CancellationToken.None);
         
         Assert.True(response.IsFailure);
-        Assert.Equal(ErrorType.Forbidden, response.Error.Type);
+        Assert.Equal("RUN_NOT_FOUND", response.Error.Code);
     }
 
     /// <summary>
