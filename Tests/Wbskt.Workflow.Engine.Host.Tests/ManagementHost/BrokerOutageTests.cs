@@ -83,7 +83,7 @@ public sealed class BrokerOutageTests
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
         var controller = new ClientsController(
-            clientService.Object, bus.Object, Mock.Of<IReferenceMapper>(),
+            clientService.Object, bus.Object,
             Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>(), NullLogger<ClientsController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }

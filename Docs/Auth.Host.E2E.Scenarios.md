@@ -369,29 +369,29 @@ workspace scenarios it depends on.
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
 | `DEV_DEL_01` | + | Delete a registered device | **204**; its secret no longer signs in (**401**) and its detail is **404** |
-| `DEV_DEL_02` | − | Delete another workspace's device | **403** `CLIENT_UNAUTHORIZED`; the device still signs in |
+| `DEV_DEL_02` | − | Delete another workspace's device | **404** `CLIENT_NOT_FOUND`; the device still signs in |
 | `DEV_SEC_01` | + | Rotate a device's secret | **200** with a new secret; the old one is **401**, the new one signs in |
 | `DEV_PIN_01` | + | Rotate a policy's PIN | **200** with a new PIN; the old PIN no longer registers, the new one does, and existing devices still sign in |
-| `DEV_BULK_01` | + | Approve two pending devices and an unknown ref | **200**; both approved, the unknown ref reported as `CLIENT_UNAUTHORIZED` |
+| `DEV_BULK_01` | + | Approve two pending devices and an unknown ref | **200**; both approved, the unknown ref reported as `CLIENT_NOT_FOUND` |
 | `DEV_BULK_02` | − | Approve two pending devices under a one-device policy | The first is approved, the second reported as `POLICY_LIMIT_REACHED` |
 | `DEV_BULK_03` | − | Empty batch, or more than 100 | **400** |
 | `DEV_BULK_04` | − | Approve three pending devices, in the order c, a, b, under a two-device policy | c and a are approved; b is reported as `POLICY_LIMIT_REACHED` and stays pending |
-| `DEV_BULK_05` | − | Approve a pending device twice, an already-registered one, another workspace's and an unknown ref | **200**; the pending and registered devices are each listed once as updated; the foreign and unknown refs are both `CLIENT_UNAUTHORIZED`; the foreign device stays pending |
+| `DEV_BULK_05` | − | Approve a pending device twice, an already-registered one, another workspace's and an unknown ref | **200**; the pending and registered devices are each listed once as updated; the foreign and unknown refs are both `CLIENT_NOT_FOUND`; the foreign device stays pending |
 | `DEV_BULK_06` | + | Revoke two registered devices | Both updated; neither signs in (**401**) |
 | `DEV_STATUS_01` | + | Approve a pending device | **204**; status Registered and it signs in |
 | `DEV_STATUS_02` | + | Revoke a registered device | **204**; status Revoked and it no longer signs in (**401**) |
 | `DEV_STATUS_03` | + | Approve a device that is already registered | **204**; nothing changes and it still signs in |
 | `DEV_STATUS_04` | − | Change an unknown device's status | **404** `CLIENT_NOT_FOUND` |
-| `DEV_STATUS_05` | − | Revoke another workspace's device | **403** `CLIENT_UNAUTHORIZED`; it stays registered and still signs in |
+| `DEV_STATUS_05` | − | Revoke another workspace's device | **404** `CLIENT_NOT_FOUND`; it stays registered and still signs in |
 | `DEV_STATUS_06` | − | Approve a device into a full policy | **400** `POLICY_LIMIT_REACHED`; it stays pending |
 | `DEV_NAME_01` | + | Rename a device (name padded with spaces) | **204**; the detail shows the trimmed name |
-| `DEV_NAME_02` | − | Rename an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND`, then **403** `CLIENT_UNAUTHORIZED`; the name is unchanged |
-| `DEV_STATE_01` | ± | Read a new device's state, an unknown device's, and another workspace's | **200** with no items; **404** `CLIENT_NOT_FOUND`; **403** `CLIENT_UNAUTHORIZED` |
+| `DEV_NAME_02` | − | Rename an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND` both times; the name is unchanged |
+| `DEV_STATE_01` | ± | Read a new device's state, an unknown device's, and another workspace's | **200** with no items; **404** `CLIENT_NOT_FOUND` for both of the others |
 | `DEV_TAG_01` | + | Tag a device `Greenhouse`, ` garage ` and `GARAGE` | **200** with `garage`, `greenhouse`; the detail and the list show the same |
 | `DEV_TAG_02` | + | Tag a device again, then with an empty list | The second set replaces the first; the empty list clears them |
 | `DEV_TAG_03` | − | Tag with `a,b`, an empty tag, `-garage` or 33 characters, or send no list | **400** `CLIENT_TAG_INVALID`; the tags are unchanged |
 | `DEV_TAG_04` | − | Tag with 11 distinct tags, then 10 plus repeats | **400** `CLIENT_TAGS_TOO_MANY` and nothing stored; then **200** with 10 tags |
-| `DEV_TAG_05` | − | Tag an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND`, then **403** `CLIENT_UNAUTHORIZED`; its tags are unchanged |
+| `DEV_TAG_05` | − | Tag an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND` both times; its tags are unchanged |
 | `DEV_TAG_06` | + | List devices with `?tag=Garage`, `?tag=greenhouse`, `?tag=attic`, and a policy's devices with `?tag=garage` | Only the devices carrying the tag, with a matching `X-Total-Count`; none for an unused tag |
 | `DEV_TAG_07` | − | List devices with `?tag=a,b`, in the workspace and policy lists | **400** `CLIENT_TAG_INVALID` |
 | `DEV_TAG_08` | + | List the workspace's tags, delete a tagged device, list again | Each tag with its device count, this workspace's only; the deleted device's tags drop out |
@@ -415,6 +415,18 @@ Covered by `Scenarios/Workflows/WorkflowLifecycleTests.cs`.
 | `WF_DEL_02` | − | Delete another workspace's workflow | **404**; the owner still reads it |
 | `WF_IDEM_01` | + | Send one webhook three times with the same `Idempotency-Key`, then once with another | One run for the repeated key, a second for the new one |
 | `WF_IDEM_02` | − | `Idempotency-Key` longer than 255 characters | **400** |
+
+---
+
+## 11d. Another workspace's references (management host)
+
+Covered by `Scenarios/Auth/ForeignReferenceTests.cs`. Inside a workspace the caller can use, another
+workspace's policy or device reads exactly like a reference that names nothing, in a path or a list
+filter (see "The ID Boundary" in `Docs/Coding.Conventions.md`).
+
+| ID | ± | Scenario | Expected |
+|---|---|---|---|
+| `ID_01` | − | Get, update, rotate the PIN of, or disable another workspace's policy; list devices, templates or event logs filtered by it; get, ping or filter event logs by another workspace's device. Each once with the foreign ref and once with a fresh one | **404** `POLICY_NOT_FOUND` or `CLIENT_NOT_FOUND`, the same for both refs; never 403 and never an empty page; the owner's policy is unchanged |
 
 ---
 

@@ -90,12 +90,9 @@ internal sealed class ClientService : IClientService
             var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, cancellationToken)).Single();
             switch (change.Outcome)
             {
-                case ClientStatusOutcome.NotFound:
-                    _logger.LogWarning("Failed to update client status: RefId {ClientRefId} not found", clientRefId);
-                    return Result.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-                case ClientStatusOutcome.OtherWorkspace:
-                    _logger.LogWarning("Client status update rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-                    return Result.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
+                case ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace:
+                    _logger.LogWarning("Failed to update client status: RefId {ClientRefId} not found in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+                    return Result.Failure(WorkspaceOwnership.ClientNotFound);
                 case ClientStatusOutcome.PolicyLimitReached:
                     _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", change.PolicyId);
                     return Result.Failure(PolicyFull);
@@ -139,8 +136,8 @@ internal sealed class ClientService : IClientService
         {
             Error? error = change.Outcome switch
             {
-                // A missing client and another workspace's read the same; see Unauthorized.
-                ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace => Unauthorized,
+                // A missing client and another workspace's read the same; see WorkspaceOwnership.
+                ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace => WorkspaceOwnership.ClientNotFound,
                 ClientStatusOutcome.PolicyLimitReached => PolicyFull,
                 _ => null
             };
@@ -184,11 +181,13 @@ internal sealed class ClientService : IClientService
 
         try
         {
-            var client = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (client is null)
+            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (lookup.IsFailure)
             {
-                return Result.Failure(Unauthorized);
+                return Result.Failure(lookup.Error);
             }
+
+            var client = lookup.Value;
 
             if (!await _clientProvider.DeleteAsync(client.Id, workspaceId, cancellationToken))
             {
@@ -215,16 +214,18 @@ internal sealed class ClientService : IClientService
 
         try
         {
-            var client = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-            if (client is null)
+            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (lookup.IsFailure)
             {
-                return Result<ClientSecretResponse>.Failure(Unauthorized);
+                return Result<ClientSecretResponse>.Failure(lookup.Error);
             }
+
+            var client = lookup.Value;
 
             var secret = ClientSecrets.Generate();
             if (!await _clientProvider.UpdateSecretAsync(client.Id, workspaceId, ClientSecrets.Hash(secret), cancellationToken))
             {
-                return Result<ClientSecretResponse>.Failure(Unauthorized);
+                return Result<ClientSecretResponse>.Failure(WorkspaceOwnership.ClientNotFound);
             }
 
             _logger.LogInformation("Rotated secret for client ID {ClientId}", client.Id);
@@ -240,21 +241,9 @@ internal sealed class ClientService : IClientService
         }
     }
 
-    // The client, or null both when the reference resolves to nothing and when it is another
-    // workspace's; see Unauthorized for why the two are not told apart.
-    private async Task<Client?> FindInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
+    private Task<Result<ClientDetail>> FindInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        Client client;
-        try
-        {
-            client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
-        }
-        catch (NotFoundException)
-        {
-            return null;
-        }
-
-        return client.WorkspaceId == workspaceId ? client : null;
+        return WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);
     }
 
     public async Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
@@ -263,24 +252,10 @@ internal sealed class ClientService : IClientService
 
         try
         {
-            ClientDetail detail;
-            try
-            {
-                detail = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Client detail lookup failed for RefId: {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
-                return Result<ClientDetailResponse>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-            }
-
-            if (detail.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("Client detail rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-                return Result<ClientDetailResponse>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
-            }
-
-            return Result<ClientDetailResponse>.Success(MapToDetailResponse(detail));
+            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            return lookup.IsSuccess
+                ? Result<ClientDetailResponse>.Success(MapToDetailResponse(lookup.Value))
+                : Result<ClientDetailResponse>.Failure(lookup.Error);
         }
         catch (Exception ex)
         {
@@ -296,7 +271,7 @@ internal sealed class ClientService : IClientService
 
         try
         {
-            var lookup = await GetInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
             if (lookup.IsFailure)
             {
                 return Result.Failure(lookup.Error);
@@ -354,7 +329,7 @@ internal sealed class ClientService : IClientService
 
         try
         {
-            var lookup = await GetInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
             if (lookup.IsFailure)
             {
                 return Result<ClientTagsResponse>.Failure(lookup.Error);
@@ -364,7 +339,7 @@ internal sealed class ClientService : IClientService
             if (!await _clientProvider.SetTagsAsync(client.Id, workspaceId, normalized, cancellationToken))
             {
                 // Deleted between the lookup and the write.
-                return Result<ClientTagsResponse>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+                return Result<ClientTagsResponse>.Failure(WorkspaceOwnership.ClientNotFound);
             }
 
             _logger.LogInformation("Set {Count} tags on client ID {ClientId}", normalized.Count, client.Id);
@@ -423,7 +398,7 @@ internal sealed class ClientService : IClientService
 
         try
         {
-            var lookup = await GetInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
             if (lookup.IsFailure)
             {
                 return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(lookup.Error);
@@ -445,33 +420,9 @@ internal sealed class ClientService : IClientService
         }
     }
 
-    // One read for both the lookup and the workspace check, for the console endpoints that tell a
-    // missing client (404) from another workspace's (403), as they always have.
-    private async Task<Result<ClientDetail>> GetInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
-    {
-        ClientDetail client;
-        try
-        {
-            client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
-        }
-        catch (NotFoundException)
-        {
-            _logger.LogWarning("Client RefId {ClientRefId} not found", clientRefId);
-            return Result<ClientDetail>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
-        }
-
-        if (client.WorkspaceId != workspaceId)
-        {
-            _logger.LogWarning("Client RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-            return Result<ClientDetail>.Failure(Error.Forbidden("CLIENT_UNAUTHORIZED", "Client does not belong to this workspace."));
-        }
-
-        return Result<ClientDetail>.Success(client);
-    }
-
     public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
-        var clientResult = await FindDetailInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        var clientResult = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         return clientResult.IsSuccess
             ? Result<int>.Success(clientResult.Value.Id)
             : Result<int>.Failure(clientResult.Error);
@@ -479,7 +430,7 @@ internal sealed class ClientService : IClientService
 
     public async Task<Result<ClientCommandTarget>> ResolveCommandTargetAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
-        var clientResult = await FindDetailInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        var clientResult = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientResult.IsFailure)
         {
             return Result<ClientCommandTarget>.Failure(clientResult.Error);
@@ -495,43 +446,9 @@ internal sealed class ClientService : IClientService
         return Result<ClientCommandTarget>.Success(new ClientCommandTarget(client.Id, client.ConnectedHostId));
     }
 
-    private async Task<Result<ClientDetail>> FindDetailInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
-    {
-        _logger.LogDebug("Verifying client RefId: {ClientRefId} belongs to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-
-        ClientDetail client;
-        try
-        {
-            client = await _clientProvider.GetDetailByRefIdAsync(clientRefId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Client membership check failed: RefId {ClientRefId} not found. Error: {Message}", clientRefId, ex.Message);
-            _logger.LogTrace(ex, "EnsureClientInWorkspaceAsync lookup failure stack trace for {ClientRefId}", clientRefId);
-            return Result<ClientDetail>.Failure(Unauthorized);
-        }
-
-        if (client.WorkspaceId != workspaceId)
-        {
-            _logger.LogWarning("Client membership rejected: RefId {ClientRefId} does not belong to WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-            return Result<ClientDetail>.Failure(Unauthorized);
-        }
-
-        return Result<ClientDetail>.Success(client);
-    }
-
     private static readonly Error PolicyFull = Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients.");
 
     private static readonly Error DeviceOffline = Error.Conflict("DEVICE_OFFLINE", "The device is offline. Commands are only delivered to connected devices.");
-
-    /// <summary>
-    /// One answer for both "no such client" and "not this workspace's client". This gates the
-    /// command and ping endpoints, which is precisely where a caller would probe a reference it
-    /// guessed or kept from a workspace it was removed from — distinguishing the two would confirm
-    /// that a reference names a real client somewhere. Per "The ID Boundary" in
-    /// Docs/Coding.Conventions.md, an unresolvable reference is a permission answer, not a 404.
-    /// </summary>
-    private static readonly Error Unauthorized = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client not found in this workspace.");
 
     private static ClientResponse MapToResponse(Client c)
     {
