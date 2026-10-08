@@ -43,7 +43,7 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task DEV_DEL_02_AnotherWorkspacesDevice_IsForbidden_AndSurvives()
+    public async Task DEV_DEL_02_AnotherWorkspacesDevice_Is404_AndSurvives()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -54,8 +54,8 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
 
         var response = await Send(HttpMethod.Delete, strangerWorkspace, $"clients/{clientRef}", strangerToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("CLIENT_UNAUTHORIZED");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("CLIENT_NOT_FOUND");
         (await ClientLoginAsync(clientRef, secret)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -141,7 +141,7 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<BulkDto>(JsonOptions);
         result!.Updated.Should().BeEquivalentTo([first, second]);
-        result.Failed.Should().ContainSingle().Which.Should().Match<FailureDto>(f => f.ClientRefId == unknown && f.Code == "CLIENT_UNAUTHORIZED");
+        result.Failed.Should().ContainSingle().Which.Should().Match<FailureDto>(f => f.ClientRefId == unknown && f.Code == "CLIENT_NOT_FOUND");
         (await ClientLoginAsync(first, firstSecret)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 

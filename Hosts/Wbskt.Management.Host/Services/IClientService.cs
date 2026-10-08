@@ -36,8 +36,8 @@ public interface IClientService
     /// <c>ClientRefId</c> and has no workspace of its own to check against.
     /// <para>
     /// A reference that does not resolve and one belonging to another workspace fail identically, as
-    /// a single <c>CLIENT_UNAUTHORIZED</c> forbidden error. Callers must not reinstate the
-    /// distinction: telling the two apart confirms that a guessed reference names a real client.
+    /// <c>CLIENT_NOT_FOUND</c>. Callers must not reinstate the distinction: telling the two apart
+    /// confirms that a guessed reference names a real client.
     /// </para>
     /// </summary>
     Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default);

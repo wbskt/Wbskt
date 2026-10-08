@@ -63,18 +63,18 @@ public sealed class WorkflowHistoryControllerTests
     }
 
     [Fact]
-    public async Task List_propagates_security_exception_when_run_not_in_workspace()
+    public async Task List_is_not_found_when_run_not_in_workspace()
     {
         var runQueryService = new Mock<IWorkflowRunQueryService>();
         var historyProvider = new Mock<IHistoryEventProvider>();
         var runRefId = Guid.NewGuid();
         runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<int>.Failure(Error.Forbidden("RUN_UNAUTHORIZED", "denied")));
+            .ReturnsAsync(Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found.")));
         var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
 
         var response = await controller.List(WorkspaceId, runRefId, 0, 200, CancellationToken.None);
         
-        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(response.Result).StatusCode);
+        Assert.IsType<NotFoundObjectResult>(response.Result);
     }
 
     private static HistoryEventRow CreateEvent(long id, int runId, string kind)

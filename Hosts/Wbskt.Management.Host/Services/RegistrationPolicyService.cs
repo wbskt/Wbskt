@@ -47,38 +47,17 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         }
     }
 
-    public async Task<Result<RegistrationPolicyResponse>> GetByRefIdAsync(Guid refId, CancellationToken cancellationToken = default)
+    public async Task<Result<RegistrationPolicy>> FindInWorkspaceAsync(int workspaceId, Guid refId, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Querying registration policy by RefId: '{RefId}'", refId);
+        _logger.LogDebug("Querying registration policy '{RefId}' in WorkspaceId: {WorkspaceId}", refId, workspaceId);
 
-        try
+        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.GetByRefIdAsync(refId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+        if (lookup.IsFailure)
         {
-            var policy = await _provider.GetByRefIdAsync(refId, cancellationToken);
-            return Result<RegistrationPolicyResponse>.Success(MapToResponse(policy));
+            _logger.LogWarning("Registration policy '{RefId}' not found in WorkspaceId: {WorkspaceId}", refId, workspaceId);
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Registration policy not found for RefId: '{RefId}'. Error: {Message}", refId, ex.Message);
-            _logger.LogTrace(ex, "GetByRefIdAsync lookup failure stack trace for RefId: '{RefId}'", refId);
-            return Result<RegistrationPolicyResponse>.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
-        }
-    }
 
-    public async Task<Result<RegistrationPolicy>> GetByIdAsync(int id, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Querying registration policy by ID: {PolicyId}", id);
-
-        try
-        {
-            var policy = await _provider.GetByIdAsync(id, cancellationToken);
-            return Result<RegistrationPolicy>.Success(policy);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Registration policy not found for ID: {PolicyId}. Error: {Message}", id, ex.Message);
-            _logger.LogTrace(ex, "GetByIdAsync lookup failure stack trace for ID: {PolicyId}", id);
-            return Result<RegistrationPolicy>.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
-        }
+        return lookup;
     }
 
     public async Task<Result<RegistrationPolicyResponse>> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
@@ -120,23 +99,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         try
         {
-            RegistrationPolicy policy;
-            try
+            var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.GetByIdAsync(policyId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+            if (lookup.IsFailure)
             {
-                policy = await _provider.GetByIdAsync(policyId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to update policy status: Policy ID {PolicyId} not found. Error: {Message}", policyId, ex.Message);
-                _logger.LogTrace(ex, "GetByIdAsync lookup failure stack trace for PolicyId {PolicyId}", policyId);
-                return Result.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+                _logger.LogWarning("Policy update rejected: Policy ID {PolicyId} not found in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+                return Result.Failure(lookup.Error);
             }
 
-            if (policy.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("Policy update rejected: Policy ID {PolicyId} does not belong to WorkspaceId: {WorkspaceId}", policyId, workspaceId);
-                return Result.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
-            }
+            var policy = lookup.Value;
 
             if (request.MaxClients.HasValue)
             {
@@ -181,22 +151,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         try
         {
-            RegistrationPolicy policy;
-            try
+            var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.GetByIdAsync(policyId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+            if (lookup.IsFailure)
             {
-                policy = await _provider.GetByIdAsync(policyId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to rotate PIN: Policy ID {PolicyId} not found. Error: {Message}", policyId, ex.Message);
-                return Result<RegistrationPolicyResponse>.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+                _logger.LogWarning("PIN rotation rejected: Policy ID {PolicyId} not found in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+                return Result<RegistrationPolicyResponse>.Failure(lookup.Error);
             }
 
-            if (policy.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("PIN rotation rejected: Policy ID {PolicyId} does not belong to WorkspaceId: {WorkspaceId}", policyId, workspaceId);
-                return Result<RegistrationPolicyResponse>.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
-            }
+            var policy = lookup.Value;
 
             var rotated = await _provider.RotatePinAsync(workspaceId, policyId, cancellationToken);
             _logger.LogInformation("Registration policy ID {PolicyId} has a new PIN", policyId);
@@ -219,23 +181,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         try
         {
-            RegistrationPolicy policy;
-            try
+            var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.GetByIdAsync(policyId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+            if (lookup.IsFailure)
             {
-                policy = await _provider.GetByIdAsync(policyId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to disable policy: Policy ID {PolicyId} not found. Error: {Message}", policyId, ex.Message);
-                _logger.LogTrace(ex, "GetByIdAsync lookup failure stack trace for PolicyId {PolicyId}", policyId);
-                return Result.Failure(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+                _logger.LogWarning("Policy disable rejected: Policy ID {PolicyId} not found in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+                return Result.Failure(lookup.Error);
             }
 
-            if (policy.WorkspaceId != workspaceId)
-            {
-                _logger.LogWarning("Policy disable rejected: Policy ID {PolicyId} does not belong to WorkspaceId: {WorkspaceId}", policyId, workspaceId);
-                return Result.Failure(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to this workspace."));
-            }
+            var policy = lookup.Value;
 
             await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
             _logger.LogInformation("Registration policy ID {PolicyId} disabled successfully", policyId);
