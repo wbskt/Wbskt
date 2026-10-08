@@ -34,8 +34,12 @@ Two conventions run through every table below:
 
 - **References, never IDs.** Public routes address resources by opaque `Guid` (`RefId`). Internal
   integer IDs never appear in a URL or a response body.
-- **A reference that does not resolve is a 403, not a 404**, so the endpoints cannot be used to
-  enumerate resources. See "The ID Boundary" in [Coding.Conventions.md](Coding.Conventions.md).
+- **A workspace the caller cannot use is a 403; anything inside it that is not theirs is a 404.**
+  An unknown workspace and one the caller is not a member of both answer 403. Within a workspace
+  the caller belongs to, an unknown resource reference and another workspace's both answer 404
+  `<RESOURCE>_NOT_FOUND`, so the two cannot be told apart. 403 inside a workspace only ever means
+  a missing permission. See "The ID Boundary" in [Coding.Conventions.md](Coding.Conventions.md).
+  (Endpoints still being moved to this rule are tracked in #233.)
 
 ---
 
