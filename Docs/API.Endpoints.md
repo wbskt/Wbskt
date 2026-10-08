@@ -229,7 +229,8 @@ List endpoints clamp their page size (`take`, or `top` for runs and history) to 
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `clients.read` | Lists clients, filterable by `status` and `name`. Paged; total in `X-Total-Count`. |
+| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name` and `tag` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). Each client carries its `tags`. Paged; total in `X-Total-Count`. |
+| `GET tags` | `clients.read` | Every tag in use in the workspace with its client count (`{ tag, clientCount }`), sorted, for a tag filter. |
 | `GET policy/{policyRefId}` | `clients.read` | The same list narrowed to one registration policy, after verifying the policy belongs to the workspace. |
 | `GET {clientRefId}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities. |
 | `GET {clientRefId}/state` | `clients.read` | The client's last-known self-reported state variables. |
@@ -238,6 +239,7 @@ List endpoints clamp their page size (`take`, or `top` for runs and history) to 
 | `DELETE {clientRefId}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
 | `POST {clientRefId}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
 | `PATCH {clientRefId}/name` | `clients.update` | Renames a client (1–100 characters). |
+| `PUT {clientRefId}/tags` | `clients.update` | Replaces the client's tags (`{ tags }`; an empty list clears them) and returns them as stored. Tags are trimmed and lower-cased, and repeats collapse. Each is 1–32 letters, digits, spaces, `-`, `_` or `.`, starting and ending with a letter or digit (else 400 `CLIENT_TAG_INVALID`); at most 10 per client (else 400 `CLIENT_TAGS_TOO_MANY`). |
 | `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Commands are delivered live or not at all: an offline client is answered 409 `DEVICE_OFFLINE`, and a client that drops before delivery raises `ClientCommandFailedEvent` ("not connected"). Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`): past it the socket host does not send the command and the SDK refuses it, both reported as `ClientCommandFailedEvent`. |
 | `POST {clientRefId}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
 | `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged by `cursor`/`take` like the event log. |

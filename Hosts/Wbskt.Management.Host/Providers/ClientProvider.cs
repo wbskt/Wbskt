@@ -42,8 +42,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, int skip,
-        int take, CancellationToken cancellationToken = default)
+    public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, string? tag,
+        int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.Client_GetAll",
@@ -52,17 +52,18 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 p.AddWithValue("@Status", (object?)status ?? DBNull.Value);
                 p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
+                p.AddWithValue("@Tag", (object?)tag ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);
                 p.AddWithValue("@Take", take);
                 p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
-            MapClient,
+            MapListedClient,
             cancellationToken
         );
     }
 
     public async Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, ClientStatus? status,
-        string? name, int skip, int take, CancellationToken cancellationToken = default)
+        string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.Client_GetBy_PolicyId",
@@ -72,11 +73,12 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 p.AddWithValue("@PolicyId", policyId);
                 p.AddWithValue("@Status", (object?)status ?? DBNull.Value);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
+                p.AddWithValue("@Tag", (object?)tag ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);
                 p.AddWithValue("@Take", take);
                 p.Add("@TotalCount", SqlDbType.Int).Direction = ParameterDirection.Output;
             },
-            MapClient,
+            MapListedClient,
             cancellationToken
         );
     }
@@ -152,6 +154,40 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         }, cancellationToken);
 
         return deleted > 0;
+    }
+
+    public async Task<bool> SetTagsAsync(int id, int workspaceId, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Tag", typeof(string));
+        foreach (var tag in tags)
+        {
+            table.Rows.Add(tag);
+        }
+
+        var updated = await ExecuteScalarAsync<int>("dbo.Client_SetTags", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@WorkspaceId", workspaceId);
+            var parameter = p.AddWithValue("@Tags", table);
+            parameter.SqlDbType = SqlDbType.Structured;
+            parameter.TypeName = "dbo.TagTableType";
+        }, cancellationToken);
+
+        return updated > 0;
+    }
+
+    public async Task<IReadOnlyList<ClientTagCount>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default)
+    {
+        var tags = await ExecuteCollectionAsync(
+            "dbo.ClientTag_GetBy_WorkspaceId",
+            p => p.AddWithValue("@WorkspaceId", workspaceId),
+            reader => new ClientTagCount(
+                reader.GetString(reader.GetOrdinal("Tag")),
+                reader.GetInt32(reader.GetOrdinal("ClientCount"))),
+            cancellationToken);
+
+        return tags.ToList();
     }
 
     public async Task<bool> UpdateSecretAsync(int id, int workspaceId, byte[] secretHash, CancellationToken cancellationToken = default)
@@ -288,6 +324,20 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         };
     }
 
+    // The list reads add the client's tags, comma-joined.
+    private static Client MapListedClient(SqlDataReader reader)
+    {
+        var client = MapClient(reader);
+        client.Tags = ReadTags(reader);
+        return client;
+    }
+
+    private static IReadOnlyList<string> ReadTags(SqlDataReader reader)
+    {
+        var ordinal = reader.GetOrdinal("Tags");
+        return ClientTags.Split(reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal));
+    }
+
     private static ClientCredential MapCredential(SqlDataReader reader)
     {
         return new ClientCredential(
@@ -331,7 +381,8 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             AgentVersion = reader.IsDBNull(reader.GetOrdinal("AgentVersion")) ? null : reader.GetString(reader.GetOrdinal("AgentVersion")),
             Platform = reader.IsDBNull(reader.GetOrdinal("Platform")) ? null : reader.GetString(reader.GetOrdinal("Platform")),
             CapabilitiesJson = reader.IsDBNull(reader.GetOrdinal("CapabilitiesJson")) ? null : reader.GetString(reader.GetOrdinal("CapabilitiesJson")),
-            CapabilitiesUpdatedAt = reader.IsDBNull(reader.GetOrdinal("CapabilitiesUpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CapabilitiesUpdatedAt"))
+            CapabilitiesUpdatedAt = reader.IsDBNull(reader.GetOrdinal("CapabilitiesUpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CapabilitiesUpdatedAt")),
+            Tags = ReadTags(reader)
         };
     }
 }

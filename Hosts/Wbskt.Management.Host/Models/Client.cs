@@ -15,4 +15,7 @@ public class Client
     public int? LastRttMs { get; set; }
     public DateTime? RttMeasuredAt { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // Sorted. Filled by the list and detail reads only; other reads leave it empty.
+    public IReadOnlyList<string> Tags { get; set; } = [];
 }

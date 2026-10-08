@@ -30,13 +30,18 @@ internal sealed class ClientService : IClientService
     }
 
     public async Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, ClientStatus? status, string? name,
-        int skip, int take, CancellationToken cancellationToken = default)
+        string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying clients for WorkspaceId: {WorkspaceId}", workspaceId);
 
+        if (!TryNormalizeFilter(tag, out var normalizedTag))
+        {
+            return Result<IPagedList<ClientResponse>>.Failure(TagInvalid);
+        }
+
         try
         {
-            var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, skip, take, cancellationToken);
+            var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, normalizedTag, skip, take, cancellationToken);
             _logger.LogTrace("Retrieved {Count} clients for WorkspaceId: {WorkspaceId}", pagedClients.TotalCount, workspaceId);
             
             var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
@@ -51,13 +56,18 @@ internal sealed class ClientService : IClientService
     }
 
     public async Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId,
-        ClientStatus? status, string? name, int skip, int take, CancellationToken cancellationToken = default)
+        ClientStatus? status, string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying clients by PolicyId: {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
 
+        if (!TryNormalizeFilter(tag, out var normalizedTag))
+        {
+            return Result<IPagedList<ClientResponse>>.Failure(TagInvalid);
+        }
+
         try
         {
-            var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, skip, take, cancellationToken);
+            var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, normalizedTag, skip, take, cancellationToken);
             _logger.LogTrace("Retrieved {Count} clients by PolicyId: {PolicyId}", pagedClients.TotalCount, policyId);
             
             var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
@@ -335,6 +345,96 @@ internal sealed class ClientService : IClientService
         }
     }
 
+    public async Task<Result<ClientTagsResponse>> SetTagsAsync(int workspaceId, Guid clientRefId, IReadOnlyList<string>? tags, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Setting tags on client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
+
+        if (tags is null)
+        {
+            return Result<ClientTagsResponse>.Failure(TagInvalid);
+        }
+
+        var normalized = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var raw in tags)
+        {
+            if (!ClientTags.TryNormalize(raw, out var tag))
+            {
+                return Result<ClientTagsResponse>.Failure(TagInvalid);
+            }
+
+            normalized.Add(tag);
+        }
+
+        if (normalized.Count > ClientTags.MaxPerClient)
+        {
+            return Result<ClientTagsResponse>.Failure(Error.Validation("CLIENT_TAGS_TOO_MANY", $"A client can have at most {ClientTags.MaxPerClient} tags."));
+        }
+
+        try
+        {
+            var lookup = await GetInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+            if (lookup.IsFailure)
+            {
+                return Result<ClientTagsResponse>.Failure(lookup.Error);
+            }
+
+            var client = lookup.Value;
+            if (!await _clientProvider.SetTagsAsync(client.Id, workspaceId, normalized, cancellationToken))
+            {
+                // Deleted between the lookup and the write.
+                return Result<ClientTagsResponse>.Failure(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+            }
+
+            _logger.LogInformation("Set {Count} tags on client ID {ClientId}", normalized.Count, client.Id);
+            return Result<ClientTagsResponse>.Success(new ClientTagsResponse(client.RefId, normalized.ToList()));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Unexpected error setting tags on client RefId {ClientRefId}. Error: {Message}", clientRefId, ex.Message);
+            _logger.LogTrace(ex, "SetTagsAsync exception stack trace for ClientRefId {ClientRefId}", clientRefId);
+            return Result<ClientTagsResponse>.Failure(Error.Failure("CLIENT_UPDATE_ERROR", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<ClientTagCountResponse>>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying client tags for WorkspaceId: {WorkspaceId}", workspaceId);
+
+        try
+        {
+            var tags = await _clientProvider.GetTagsAsync(workspaceId, cancellationToken);
+            IReadOnlyList<ClientTagCountResponse> response = tags.Select(t => new ClientTagCountResponse(t.Tag, t.ClientCount)).ToList();
+            return Result<IReadOnlyList<ClientTagCountResponse>>.Success(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Failed to query client tags for WorkspaceId: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
+            _logger.LogTrace(ex, "GetTagsAsync exception stack trace for WorkspaceId {WorkspaceId}", workspaceId);
+            return Result<IReadOnlyList<ClientTagCountResponse>>.Failure(Error.Failure("CLIENT_QUERY_ERROR", ex.Message));
+        }
+    }
+
+    private static readonly Error TagInvalid = Error.Validation("CLIENT_TAG_INVALID",
+        $"A tag is 1-{ClientTags.MaxLength} letters, digits, spaces, '-', '_' or '.', starting and ending with a letter or digit.");
+
+    // No filter stays no filter; a filter that could never match a stored tag is refused.
+    private static bool TryNormalizeFilter(string? tag, out string? normalized)
+    {
+        normalized = null;
+        if (tag is null)
+        {
+            return true;
+        }
+
+        if (!ClientTags.TryNormalize(tag, out var value))
+        {
+            return false;
+        }
+
+        normalized = value;
+        return true;
+    }
+
     public async Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying state variables for client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
@@ -462,7 +562,8 @@ internal sealed class ClientService : IClientService
             c.ConnectedAt,
             c.LastActivityAt,
             c.LastRttMs,
-            c.CreatedAt
+            c.CreatedAt,
+            c.Tags
         );
     }
 
@@ -498,7 +599,8 @@ internal sealed class ClientService : IClientService
             d.AgentVersion,
             d.Platform,
             capabilities,
-            d.CreatedAt
+            d.CreatedAt,
+            d.Tags
         );
     }
 }

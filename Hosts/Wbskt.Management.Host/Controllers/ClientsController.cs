@@ -49,6 +49,7 @@ public class ClientsController : ApiControllerBase
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
     /// <param name="status">Optional filter by client status (Pending, Registered, etc.).</param>
     /// <param name="name">Optional filter by client name (partial match).</param>
+    /// <param name="tag">Optional filter: only clients carrying this tag (case-insensitive).</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
     /// <param name="take">Number of records to take for pagination.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -58,6 +59,7 @@ public class ClientsController : ApiControllerBase
         Guid workspaceRef,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
+        [FromQuery] string? tag,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
@@ -70,7 +72,7 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(workspaceIdResult.Error));
         }
 
-        var result = await _clientService.GetAllAsync(workspaceIdResult.Value, status, name, Paging.Skip(skip), Paging.Take(take), cancellationToken);
+        var result = await _clientService.GetAllAsync(workspaceIdResult.Value, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
@@ -85,12 +87,39 @@ public class ClientsController : ApiControllerBase
     }
 
     /// <summary>
+    /// Lists every tag in use in the workspace with how many clients carry it, for a tag filter.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The tags, sorted.</returns>
+    [HttpGet("tags")]
+    public async Task<ActionResult<ListResponse<ClientTagCountResponse>>> GetTags(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("API: GetTags requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientTagCountResponse>>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.GetTagsAsync(workspaceIdResult.Value, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<ListResponse<ClientTagCountResponse>>.Failure(result.Error));
+        }
+
+        return Ok(new ListResponse<ClientTagCountResponse> { Items = result.Value });
+    }
+
+    /// <summary>
     /// Retrieves all clients associated with a specific registration policy.
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
     /// <param name="policyRefId">The unique reference ID of the registration policy.</param>
     /// <param name="status">Optional filter by client status.</param>
     /// <param name="name">Optional filter by client name.</param>
+    /// <param name="tag">Optional filter: only clients carrying this tag (case-insensitive).</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
     /// <param name="take">Number of records to take for pagination.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -101,6 +130,7 @@ public class ClientsController : ApiControllerBase
         Guid policyRefId,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
+        [FromQuery] string? tag,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
@@ -135,7 +165,7 @@ public class ClientsController : ApiControllerBase
         }
 
         // 4. All checks pass, get the data
-        var result = await _clientService.GetByPolicyIdAsync(workspaceIdResult.Value, policyId, status, name, Paging.Skip(skip), Paging.Take(take), cancellationToken);
+        var result = await _clientService.GetByPolicyIdAsync(workspaceIdResult.Value, policyId, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
@@ -322,6 +352,30 @@ public class ClientsController : ApiControllerBase
     }
 
     /// <summary>
+    /// Replaces a client's tags. Tags are trimmed and lower-cased, duplicates collapse, and an empty
+    /// list clears them.
+    /// </summary>
+    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="clientRefId">The unique reference ID of the client.</param>
+    /// <param name="request">The client's tags, at most 10.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The tags as stored, sorted.</returns>
+    [HttpPut("{clientRefId:guid}/tags")]
+    public async Task<ActionResult<ClientTagsResponse>> SetTags(Guid workspaceRef, Guid clientRefId, SetClientTagsRequest request, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("API: SetTags requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
+
+        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
+        if (workspaceIdResult.IsFailure)
+        {
+            return MapResult(Result<ClientTagsResponse>.Failure(workspaceIdResult.Error));
+        }
+
+        var result = await _clientService.SetTagsAsync(workspaceIdResult.Value, clientRefId, request.Tags, cancellationToken);
+        return MapResult(result);
+    }
+
+    /// <summary>
     /// Sends an asynchronous command payload to a specific registered client.
     /// </summary>
     /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
@@ -503,6 +557,8 @@ public class ClientsController : ApiControllerBase
 public record UpdateClientStatusRequest(ClientStatus Status);
 
 public record UpdateClientNameRequest(string Name);
+
+public record SetClientTagsRequest(IReadOnlyList<string>? Tags);
 
 // ExpiresAt is optional: past it the command is refused instead of delivered, by the socket host
 // and by the SDK. At most 24 hours ahead.

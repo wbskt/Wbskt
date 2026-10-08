@@ -231,8 +231,8 @@ the slug is the second gate.
 
 | Area | Endpoint | Permission |
 |---|---|---|
-| Clients | `GET clients`, `GET clients/policy/{ref}`, `GET clients/{ref}`, `GET clients/{ref}/state` | `clients.read` |
-| Clients | `PATCH clients/{ref}/status`, `PATCH clients/status` (bulk), `PATCH clients/{ref}/name` | `clients.update` |
+| Clients | `GET clients`, `GET clients/tags`, `GET clients/policy/{ref}`, `GET clients/{ref}`, `GET clients/{ref}/state` | `clients.read` |
+| Clients | `PATCH clients/{ref}/status`, `PATCH clients/status` (bulk), `PATCH clients/{ref}/name`, `PUT clients/{ref}/tags` | `clients.update` |
 | Clients | `DELETE clients/{ref}`, `POST clients/{ref}/rotate-secret` | `clients.manage` |
 | Clients | `POST clients/{ref}/command` | `clients.command` |
 | Clients | `POST clients/{ref}/ping` | `clients.ping` |

@@ -69,7 +69,8 @@ public record ClientResponse(
     DateTime? ConnectedAt,
     DateTime? LastActivityAt,
     int? LastRttMs,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    IReadOnlyList<string> Tags
 );
 
 public record ClientDetailResponse(
@@ -87,8 +88,13 @@ public record ClientDetailResponse(
     string? AgentVersion,
     string? Platform,
     IReadOnlyList<CommandCapability>? Capabilities,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    IReadOnlyList<string> Tags
 );
+
+public record ClientTagsResponse(Guid ClientRefId, IReadOnlyList<string> Tags);
+
+public record ClientTagCountResponse(string Tag, int ClientCount);
 
 public record ClientStateVariableResponse(
     string Name,
