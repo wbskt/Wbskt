@@ -75,11 +75,7 @@ public sealed class BrokerOutageTests
     [Fact]
     public async Task A_command_reports_an_unavailable_broker_as_503()
     {
-        var workspaceRef = Guid.NewGuid();
         var clientRef = Guid.NewGuid();
-        var authClient = new Mock<IAuthServiceClient>();
-        authClient.Setup(x => x.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<int>.Success(WorkspaceId));
         var clientService = new Mock<IClientService>();
         clientService.Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<Wbskt.Management.Host.Models.ClientCommandTarget>.Success(new Wbskt.Management.Host.Models.ClientCommandTarget(42, "socket-a")));
@@ -87,13 +83,13 @@ public sealed class BrokerOutageTests
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
         var controller = new ClientsController(
-            clientService.Object, authClient.Object, bus.Object, Mock.Of<IReferenceMapper>(),
+            clientService.Object, bus.Object, Mock.Of<IReferenceMapper>(),
             Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>(), NullLogger<ClientsController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
 
-        var result = await controller.SendCommand(workspaceRef, clientRef, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = await controller.SendCommand(WorkspaceId, clientRef, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         objectResult.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);

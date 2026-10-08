@@ -8,8 +8,8 @@ using Wbskt.Infrastructure.Security;
 namespace Wbskt.Infrastructure;
 
 /// <summary>
-/// Shared <see cref="Result"/> to <see cref="IActionResult"/> translation for every API controller.
-/// This is the single place HTTP status codes are chosen for expected failures;
+/// Shared <see cref="Result"/> to <see cref="IActionResult"/> translation for every API controller,
+/// through <see cref="ApiErrorResults"/>, the single place HTTP status codes are chosen for expected failures;
 /// <c>GlobalExceptionMiddleware</c> only handles what escapes as an exception.
 /// </summary>
 public abstract class ApiControllerBase : ControllerBase
@@ -65,44 +65,6 @@ public abstract class ApiControllerBase : ControllerBase
 
     protected ActionResult MapError(Error error)
     {
-        // Failure is the "something broke" bucket, so it is the only arm that is a server fault
-        // and the only one whose message cannot be trusted to be caller-safe.
-        if (error.Type == ErrorType.Failure)
-        {
-            return ServerError(error);
-        }
-
-        Logger.LogWarning("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-
-        return error.Type switch
-        {
-            ErrorType.Validation => BadRequest(error),
-            ErrorType.NotFound => NotFound(error),
-            ErrorType.Conflict => Conflict(error),
-
-            // 401 means "we do not know who you are". Never use it for a permission denial, or a
-            // client that redirects to login on 401 signs the user out over a missing permission.
-            ErrorType.Unauthorized => Unauthorized(error),
-
-            // Not Forbid(): that defers to the auth handler's challenge machinery. These are
-            // bearer-token APIs, so a plain 403 carrying the error body is what callers expect.
-            ErrorType.Forbidden => StatusCode(StatusCodes.Status403Forbidden, error),
-            _ => ServerError(error)
-        };
-    }
-
-    /// <summary>
-    /// The message on a <see cref="ErrorType.Failure"/> is typically raw exception text — SQL
-    /// statements, column names, connection details. These hosts are publicly routed, so the
-    /// detail is logged and a generic message is returned in its place. The code is preserved
-    /// because it is a fixed application constant and is what support will ask for.
-    /// </summary>
-    private ObjectResult ServerError(Error error)
-    {
-        Logger.LogError("API Response Failure: Code={ErrorCode}, Message={ErrorMessage}", error.Code, error.Message);
-
-        return StatusCode(
-            StatusCodes.Status500InternalServerError,
-            Error.Failure(error.Code, "An unexpected error occurred while processing the request."));
+        return ApiErrorResults.From(error, Logger);
     }
 }

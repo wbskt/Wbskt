@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
@@ -17,23 +18,22 @@ namespace Wbskt.Management.Host.Controllers;
 [Route("api/workspaces/{workspaceRef:guid}/clients/{clientRefId:guid}/readings")]
 [ApiController]
 [Authorize]
+[RequiresPermission(PermissionNames.ClientsRead)]
 public class ClientReadingsController : ApiControllerBase
 {
     private readonly IClientService _clientService;
     private readonly IClientReadingService _readingService;
-    private readonly IAuthServiceClient _authClient;
 
-    public ClientReadingsController(IClientService clientService, IClientReadingService readingService, IAuthServiceClient authClient)
+    public ClientReadingsController(IClientService clientService, IClientReadingService readingService)
     {
         _clientService = clientService;
         _readingService = readingService;
-        _authClient = authClient;
     }
 
     /// <summary>
     /// One state variable's readings over a time range, as count, min, average and max per bucket.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="name">The state variable, as the device names it in its state reports.</param>
     /// <param name="from">Start of the range (inclusive). Defaults to a day before <paramref name="to"/>.</param>
@@ -43,7 +43,7 @@ public class ClientReadingsController : ApiControllerBase
     /// <returns>The buckets that hold readings, oldest first.</returns>
     [HttpGet]
     public async Task<ActionResult<ClientReadingsResponse>> Get(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         Guid clientRefId,
         [FromQuery] string? name,
         [FromQuery] DateTimeOffset? from,
@@ -51,7 +51,7 @@ public class ClientReadingsController : ApiControllerBase
         [FromQuery] string? bucket,
         CancellationToken cancellationToken = default)
     {
-        var clientId = await ResolveClientAsync(workspaceRef, clientRefId, cancellationToken);
+        var clientId = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientId.IsFailure)
         {
             return MapError(clientId.Error);
@@ -64,7 +64,7 @@ public class ClientReadingsController : ApiControllerBase
     /// Every reading over a time range as CSV (name, deviceTime, receivedAt, value, late), for one
     /// state variable or all of them.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="name">One state variable; every variable when left out.</param>
     /// <param name="from">Start of the range (inclusive). Defaults to a day before <paramref name="to"/>.</param>
@@ -74,14 +74,14 @@ public class ClientReadingsController : ApiControllerBase
     [HttpGet("csv")]
     [Produces("text/csv")]
     public async Task<IActionResult> GetCsv(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         Guid clientRefId,
         [FromQuery] string? name,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
         CancellationToken cancellationToken = default)
     {
-        var clientId = await ResolveClientAsync(workspaceRef, clientRefId, cancellationToken);
+        var clientId = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientId.IsFailure)
         {
             return MapError(clientId.Error);
@@ -94,16 +94,5 @@ public class ClientReadingsController : ApiControllerBase
         }
 
         return File(Encoding.UTF8.GetBytes(ClientReadingsCsv.Write(readings.Value)), "text/csv; charset=utf-8", $"readings-{clientRefId}.csv");
-    }
-
-    private async Task<Result<int>> ResolveClientAsync(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
-    {
-        var workspaceId = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
-        if (workspaceId.IsFailure)
-        {
-            return Result<int>.Failure(workspaceId.Error);
-        }
-
-        return await _clientService.EnsureClientInWorkspaceAsync(workspaceId.Value, clientRefId, cancellationToken);
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
@@ -18,7 +19,6 @@ namespace Wbskt.Management.Host.Controllers;
 public class ClientsController : ApiControllerBase
 {
     private readonly IClientService _clientService;
-    private readonly IAuthServiceClient _authClient;
     private readonly IEventBus _eventBus;
     private readonly IReferenceMapper _policyMapper;
     private readonly IRegistrationPolicyService _policyService;
@@ -27,7 +27,6 @@ public class ClientsController : ApiControllerBase
 
     public ClientsController(
         IClientService clientService,
-        IAuthServiceClient authClient,
         IEventBus eventBus,
         [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
         IRegistrationPolicyService policyService,
@@ -35,7 +34,6 @@ public class ClientsController : ApiControllerBase
         ILogger<ClientsController> logger)
     {
         _clientService = clientService;
-        _authClient = authClient;
         _eventBus = eventBus;
         _policyMapper = policyMapper;
         _policyService = policyService;
@@ -46,7 +44,7 @@ public class ClientsController : ApiControllerBase
     /// <summary>
     /// Retrieves all clients for a specific workspace with optional filtering.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="status">Optional filter by client status (Pending, Registered, etc.).</param>
     /// <param name="name">Optional filter by client name (partial match).</param>
     /// <param name="tag">Optional filter: only clients carrying this tag (case-insensitive).</param>
@@ -55,8 +53,9 @@ public class ClientsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of clients.</returns>
     [HttpGet]
+    [RequiresPermission(PermissionNames.ClientsRead)]
     public async Task<ActionResult<ListResponse<ClientResponse>>> GetAll(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
         [FromQuery] string? tag,
@@ -64,15 +63,7 @@ public class ClientsController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("API: GetAll requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
-        
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ListResponse<ClientResponse>>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.GetAllAsync(workspaceIdResult.Value, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
+        var result = await _clientService.GetAllAsync(workspaceId, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
@@ -89,21 +80,14 @@ public class ClientsController : ApiControllerBase
     /// <summary>
     /// Lists every tag in use in the workspace with how many clients carry it, for a tag filter.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The tags, sorted.</returns>
     [HttpGet("tags")]
-    public async Task<ActionResult<ListResponse<ClientTagCountResponse>>> GetTags(Guid workspaceRef, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsRead)]
+    public async Task<ActionResult<ListResponse<ClientTagCountResponse>>> GetTags([FromWorkspace] int workspaceId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: GetTags requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ListResponse<ClientTagCountResponse>>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.GetTagsAsync(workspaceIdResult.Value, cancellationToken);
+        var result = await _clientService.GetTagsAsync(workspaceId, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientTagCountResponse>>.Failure(result.Error));
@@ -115,7 +99,7 @@ public class ClientsController : ApiControllerBase
     /// <summary>
     /// Retrieves all clients associated with a specific registration policy.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="policyRefId">The unique reference ID of the registration policy.</param>
     /// <param name="status">Optional filter by client status.</param>
     /// <param name="name">Optional filter by client name.</param>
@@ -125,8 +109,9 @@ public class ClientsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of clients linked to the specified policy.</returns>
     [HttpGet("policy/{policyRefId:guid}")]
+    [RequiresPermission(PermissionNames.ClientsRead)]
     public async Task<ActionResult<ListResponse<ClientResponse>>> GetByPolicy(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         Guid policyRefId,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
@@ -135,15 +120,6 @@ public class ClientsController : ApiControllerBase
         [FromQuery] int take = 100,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("API: GetByPolicy requested for WorkspaceRef: '{WorkspaceRef}', PolicyRefId: '{PolicyRefId}'", workspaceRef, policyRefId);
-
-        // 1. Authorize workspace access
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ListResponse<ClientResponse>>.Failure(workspaceIdResult.Error));
-        }
-
         // 2. Resolve Policy RefId
         var policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId, cancellationToken);
         if (policyId <= 0)
@@ -158,14 +134,14 @@ public class ClientsController : ApiControllerBase
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(policyResult.Error));
         }
 
-        if (policyResult.Value.WorkspaceId != workspaceIdResult.Value)
+        if (policyResult.Value.WorkspaceId != workspaceId)
         {
-            _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceIdResult.Value);
+            _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceId);
             return MapError(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
         }
 
         // 4. All checks pass, get the data
-        var result = await _clientService.GetByPolicyIdAsync(workspaceIdResult.Value, policyId, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
+        var result = await _clientService.GetByPolicyIdAsync(workspaceId, policyId, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
@@ -179,45 +155,31 @@ public class ClientsController : ApiControllerBase
     /// Retrieves the full detail of a single client: presence, uptime anchor, latency,
     /// self-reported SDK metadata and command capabilities.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The client detail.</returns>
     [HttpGet("{clientRefId:guid}")]
-    public async Task<ActionResult<ClientDetailResponse>> GetDetail(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsRead)]
+    public async Task<ActionResult<ClientDetailResponse>> GetDetail([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: GetDetail requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ClientDetailResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.GetDetailAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var result = await _clientService.GetDetailAsync(workspaceId, clientRefId, cancellationToken);
         return MapResult(result);
     }
 
     /// <summary>
     /// Updates the status of a specific client (e.g., Revoking or Approving a client).
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client to update.</param>
     /// <param name="request">The new status details.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPatch("{clientRefId:guid}/status")]
-    public async Task<IActionResult> UpdateStatus(Guid workspaceRef, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsUpdate)]
+    public async Task<IActionResult> UpdateStatus([FromWorkspace] int workspaceId, Guid clientRefId, UpdateClientStatusRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: UpdateStatus requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}' to Status: '{Status}'", workspaceRef, clientRefId, request.Status);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.UpdateStatusAsync(workspaceIdResult.Value, clientRefId, request.Status, cancellationToken);
+        var result = await _clientService.UpdateStatusAsync(workspaceId, clientRefId, request.Status, cancellationToken);
         return MapResult(result);
     }
 
@@ -226,27 +188,20 @@ public class ClientsController : ApiControllerBase
     /// Each client is handled as the single-client endpoint would handle it, so one that fails (the
     /// policy is full, or the client is not in this workspace) is reported and the rest still change.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="request">The clients (at most 100) and the status to give them.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Which clients changed and which did not, with why.</returns>
     [HttpPatch("status")]
-    public async Task<ActionResult<BulkClientStatusResponse>> UpdateStatuses(Guid workspaceRef, BulkClientStatusRequest request, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsUpdate)]
+    public async Task<ActionResult<BulkClientStatusResponse>> UpdateStatuses([FromWorkspace] int workspaceId, BulkClientStatusRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: UpdateStatuses requested for WorkspaceRef: '{WorkspaceRef}' ({Count} clients) to Status: '{Status}'", workspaceRef, request.ClientRefIds?.Count ?? 0, request.Status);
-
         if (request.ClientRefIds is null || request.ClientRefIds.Count == 0 || request.ClientRefIds.Count > BulkClientStatusRequest.MaxClients)
         {
             return BadRequest(Error.Validation("CLIENT_REFS_INVALID", $"Name between 1 and {BulkClientStatusRequest.MaxClients} clients."));
         }
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<BulkClientStatusResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.UpdateStatusesAsync(workspaceIdResult.Value, request.ClientRefIds, request.Status, cancellationToken);
+        var result = await _clientService.UpdateStatusesAsync(workspaceId, request.ClientRefIds, request.Status, cancellationToken);
         return MapResult(result);
     }
 
@@ -254,22 +209,15 @@ public class ClientsController : ApiControllerBase
     /// Deletes a client. Its connection is closed, its token refused, and its capabilities and
     /// state removed; its event-log history stays. The device has to register again to come back.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>No content.</returns>
     [HttpDelete("{clientRefId:guid}")]
-    public async Task<IActionResult> Delete(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsManage)]
+    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: Delete requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.DeleteAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var result = await _clientService.DeleteAsync(workspaceId, clientRefId, cancellationToken);
         return result.IsSuccess ? NoContent() : MapError(result.Error);
     }
 
@@ -277,44 +225,30 @@ public class ClientsController : ApiControllerBase
     /// Replaces a client's secret and returns the new one, once. The old secret stops working at
     /// once and the live connection is closed; the device reconnects when it is given the new one.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The new secret.</returns>
     [HttpPost("{clientRefId:guid}/rotate-secret")]
-    public async Task<ActionResult<ClientSecretResponse>> RotateSecret(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsManage)]
+    public async Task<ActionResult<ClientSecretResponse>> RotateSecret([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: RotateSecret requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsManage, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ClientSecretResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.RotateSecretAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var result = await _clientService.RotateSecretAsync(workspaceId, clientRefId, cancellationToken);
         return MapResult(result);
     }
 
     /// <summary>
     /// Retrieves the last-known state variables self-reported by a specific client.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The client's state variables.</returns>
     [HttpGet("{clientRefId:guid}/state")]
-    public async Task<ActionResult<ListResponse<ClientStateVariableResponse>>> GetState(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsRead)]
+    public async Task<ActionResult<ListResponse<ClientStateVariableResponse>>> GetState([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: GetState requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.GetStateAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var result = await _clientService.GetStateAsync(workspaceId, clientRefId, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(result.Error));
@@ -326,28 +260,21 @@ public class ClientsController : ApiControllerBase
     /// <summary>
     /// Renames a specific client.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client to rename.</param>
     /// <param name="request">The new name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPatch("{clientRefId:guid}/name")]
-    public async Task<IActionResult> Rename(Guid workspaceRef, Guid clientRefId, UpdateClientNameRequest request, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsUpdate)]
+    public async Task<IActionResult> Rename([FromWorkspace] int workspaceId, Guid clientRefId, UpdateClientNameRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: Rename requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 100)
         {
             return BadRequest(Error.Validation("CLIENT_NAME_INVALID", "Client name must be 1-100 characters."));
         }
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.RenameAsync(workspaceIdResult.Value, clientRefId, request.Name.Trim(), cancellationToken);
+        var result = await _clientService.RenameAsync(workspaceId, clientRefId, request.Name.Trim(), cancellationToken);
         return MapResult(result);
     }
 
@@ -355,39 +282,31 @@ public class ClientsController : ApiControllerBase
     /// Replaces a client's tags. Tags are trimmed and lower-cased, duplicates collapse, and an empty
     /// list clears them.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="request">The client's tags, at most 10.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The tags as stored, sorted.</returns>
     [HttpPut("{clientRefId:guid}/tags")]
-    public async Task<ActionResult<ClientTagsResponse>> SetTags(Guid workspaceRef, Guid clientRefId, SetClientTagsRequest request, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsUpdate)]
+    public async Task<ActionResult<ClientTagsResponse>> SetTags([FromWorkspace] int workspaceId, Guid clientRefId, SetClientTagsRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: SetTags requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsUpdate, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<ClientTagsResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _clientService.SetTagsAsync(workspaceIdResult.Value, clientRefId, request.Tags, cancellationToken);
+        var result = await _clientService.SetTagsAsync(workspaceId, clientRefId, request.Tags, cancellationToken);
         return MapResult(result);
     }
 
     /// <summary>
     /// Sends an asynchronous command payload to a specific registered client.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the target client.</param>
     /// <param name="request">The command name and payload data.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The command id, for correlating the delivery/ack events that follow.</returns>
     [HttpPost("{clientRefId:guid}/command")]
-    public async Task<IActionResult> SendCommand(Guid workspaceRef, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsCommand)]
+    public async Task<IActionResult> SendCommand([FromWorkspace] int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: SendCommand requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
         if (string.IsNullOrWhiteSpace(request.Type) || request.Type.Length > 100)
         {
             return BadRequest(Error.Validation("COMMAND_TYPE_INVALID", "Command type must be 1-100 characters."));
@@ -409,17 +328,11 @@ public class ClientsController : ApiControllerBase
             return BadRequest(Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away."));
         }
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsCommand, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result.Failure(workspaceIdResult.Error));
-        }
-
         // Ownership has to be settled here: the command goes out over the bus and the socket host
         // routes it by ClientRefId alone, so nothing downstream would notice a client from another
         // workspace. Presence too: commands are delivered live or not at all, so an offline device
         // is a 409 DEVICE_OFFLINE now rather than a 202 for a command that goes nowhere.
-        var targetResult = await _clientService.ResolveCommandTargetAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var targetResult = await _clientService.ResolveCommandTargetAsync(workspaceId, clientRefId, cancellationToken);
         if (targetResult.IsFailure)
         {
             return MapError(targetResult.Error);
@@ -427,7 +340,7 @@ public class ClientsController : ApiControllerBase
 
         var target = targetResult.Value;
         var commandId = Guid.NewGuid();
-        var command = new ClientCommandEvent(clientRefId, target.ClientId, workspaceIdResult.Value, request.Type, request.Payload, commandId,
+        var command = new ClientCommandEvent(clientRefId, target.ClientId, workspaceId, request.Type, request.Payload, commandId,
             TargetHostId: target.HostId, ExpiresAtUtc: request.ExpiresAt?.UtcDateTime);
         if (!await TryPublishActionAsync(command, cancellationToken))
         {
@@ -442,7 +355,7 @@ public class ClientsController : ApiControllerBase
     /// Retrieves the recent in/out communication history for a specific client
     /// (backfill for the Live Comms panel before the realtime stream attaches).
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="direction">Optional direction filter: "in" or "out". Omit for both (plus connect/disconnect rows).</param>
     /// <param name="cursor">The <c>nextCursor</c> of the previous page; omit for the newest entries.</param>
@@ -450,66 +363,52 @@ public class ClientsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A page of comms event-log entries, newest first, with the cursor for the next page.</returns>
     [HttpGet("{clientRefId:guid}/comms")]
+    [RequiresPermission(PermissionNames.LogsRead)]
     public async Task<ActionResult<EventLogListResponse>> GetComms(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         Guid clientRefId,
         [FromQuery] string? direction,
         [FromQuery] long? cursor = null,
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("API: GetComms requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
         if (direction is not (null or "in" or "out"))
         {
             return BadRequest(Error.Validation("DIRECTION_INVALID", "Direction must be 'in', 'out', or omitted."));
         }
 
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<EventLogListResponse>.Failure(workspaceIdResult.Error));
-        }
-
         // The query is workspace-filtered in SQL, so a foreign client would come back as an empty
         // page. Resolving ownership up front reports it as the 403 the sibling endpoints return,
         // rather than as a client that exists but has never said anything.
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientResult.IsFailure)
         {
             return MapResult(Result<EventLogListResponse>.Failure(clientResult.Error));
         }
 
-        return MapResult(await _eventLogService.GetClientCommsAsync(workspaceIdResult.Value, clientResult.Value, direction, cursor, take, cancellationToken));
+        return MapResult(await _eventLogService.GetClientCommsAsync(workspaceId, clientResult.Value, direction, cursor, take, cancellationToken));
     }
 
     /// <summary>
     /// Triggers a ping event for a specific client to verify connectivity or wake state.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the target client.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [HttpPost("{clientRefId:guid}/ping")]
-    public async Task<IActionResult> Ping(Guid workspaceRef, Guid clientRefId, CancellationToken cancellationToken)
+    [RequiresPermission(PermissionNames.ClientsPing)]
+    public async Task<IActionResult> Ping([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: Ping requested for WorkspaceRef: '{WorkspaceRef}', ClientRefId: '{ClientRefId}'", workspaceRef, clientRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.ClientsPing, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result.Failure(workspaceIdResult.Error));
-        }
-
         // Same reasoning as SendCommand: the ping is dispatched by ClientRefId, so the workspace it
         // belongs to is only ever checked here.
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceIdResult.Value, clientRefId, cancellationToken);
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientResult.IsFailure)
         {
             return MapError(clientResult.Error);
         }
 
-        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceIdResult.Value, DateTime.UtcNow), cancellationToken))
+        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceId, DateTime.UtcNow), cancellationToken))
         {
             return BrokerUnavailable();
         }

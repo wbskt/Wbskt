@@ -47,6 +47,11 @@ To decouple public GUIDs from internal integer IDs without polluting every servi
 3.  **`ReferenceMapper<T>`**: A generic implementation that delegates lookups to a specific `IReferenceProvider`.
 4.  **Registration**: Mappers are registered as **Keyed Services** (e.g., `builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IProjectProvider>>("Project")`).
 
+### Workspace Permissions (management host)
+*   **Declare, don't check:** A workspace-scoped action (`api/workspaces/{workspaceRef}/...`) states what it needs with `[RequiresPermission(PermissionNames.X)]` and takes `[FromWorkspace] int workspaceId`. `WorkspacePermissionFilter` resolves the workspace once, before model binding, and answers the refusal itself; controllers never call `ResolveWorkspaceAsync`.
+*   **All or any:** Several permissions on one attribute need all of them; `Mode = PermissionMatch.Any` needs one. Several attributes on an action must all pass. Attributes on a controller are its actions' default; an action with its own replaces them.
+*   **Enforced by a test:** `ManagementEndpointPermissionTests` fails for a workspace-scoped action without the attribute, and pins every action's permissions.
+
 ### Provider Pattern
 *   **Base Provider Pattern:** Do not repeat `SqlConnection` or `SqlCommand` boilerplate in every method. Inherit from a `BaseSqlProvider` (or equivalent) that encapsulates connection lifecycle, command execution, and mapping.
 *   **No Cross-Provider Dependencies:** A Provider must never depend on or inject another Provider. If an operation requires data from multiple sources, it should be orchestrated in the Service layer.

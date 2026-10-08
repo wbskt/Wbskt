@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -17,33 +18,23 @@ public sealed class WorkflowHistoryController : ApiControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
     private readonly IHistoryEventProvider _historyProvider;
-    private readonly IAuthServiceClient _authClient;
     private readonly ILogger<WorkflowHistoryController> _logger;
 
     public WorkflowHistoryController(
         IWorkflowRunQueryService runQueryService,
         IHistoryEventProvider historyProvider,
-        IAuthServiceClient authClient,
         ILogger<WorkflowHistoryController> logger)
     {
         _runQueryService = runQueryService;
         _historyProvider = historyProvider;
-        _authClient = authClient;
         _logger = logger;
     }
 
     [HttpGet]
-    public async Task<ActionResult<HistoryListResponse>> List(Guid workspaceRef, Guid runRefId, [FromQuery] long fromEventId = 0, [FromQuery] int top = 200, CancellationToken ct = default)
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<HistoryListResponse>> List([FromWorkspace] int workspaceId, Guid runRefId, [FromQuery] long fromEventId = 0, [FromQuery] int top = 200, CancellationToken ct = default)
     {
-        _logger.LogDebug("API: List history requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", workspaceRef, runRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<HistoryListResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var ensureRunResult = await _runQueryService.EnsureRunInWorkspaceAsync(workspaceIdResult.Value, runRefId, ct);
+        var ensureRunResult = await _runQueryService.EnsureRunInWorkspaceAsync(workspaceId, runRefId, ct);
         if (ensureRunResult.IsFailure)
         {
             return MapResult(Result<HistoryListResponse>.Failure(ensureRunResult.Error));
