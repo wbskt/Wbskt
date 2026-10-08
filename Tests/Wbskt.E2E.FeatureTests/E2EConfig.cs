@@ -12,6 +12,13 @@ internal static class E2EConfig
     public static string ManagementBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_MANAGEMENT_URL") ?? "https://localhost:7010";
 
+    /// <summary>
+    /// A management host running as Host:Role Devices: device registration and login only, as the
+    /// devices container serves them in production. start-hosts.sh starts one on these ports.
+    /// </summary>
+    public static string DevicesBaseUrl =>
+        Environment.GetEnvironmentVariable("E2E_DEVICES_URL") ?? "https://localhost:7015";
+
     public static string SocketHttpBaseUrl =>
         Environment.GetEnvironmentVariable("E2E_SOCKET_URL") ?? "https://localhost:7020";
 

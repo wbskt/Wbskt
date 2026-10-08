@@ -361,9 +361,9 @@ The cross-service contract. Every workspace-scoped management-host request passe
 
 ---
 
-## 11b. Devices — delete, rotate, status, rename, state, tags (management host)
+## 11b. Devices — delete, rotate, status, rename, state, tags, devices host (management host)
 
-Covered by `Scenarios/Devices/DeviceLifecycleTests.cs`, `Scenarios/Devices/DeviceStatusTests.cs` and `Scenarios/Devices/DeviceTagTests.cs`; listed here so device lifecycle sits beside the
+Covered by `Scenarios/Devices/DeviceLifecycleTests.cs`, `Scenarios/Devices/DeviceStatusTests.cs`, `Scenarios/Devices/DeviceTagTests.cs` and `Scenarios/Devices/DeviceHostTests.cs`; listed here so device lifecycle sits beside the
 workspace scenarios it depends on.
 
 | ID | ± | Scenario | Expected |
@@ -395,6 +395,12 @@ workspace scenarios it depends on.
 | `DEV_TAG_06` | + | List devices with `?tag=Garage`, `?tag=greenhouse`, `?tag=attic`, and a policy's devices with `?tag=garage` | Only the devices carrying the tag, with a matching `X-Total-Count`; none for an unused tag |
 | `DEV_TAG_07` | − | List devices with `?tag=a,b`, in the workspace and policy lists | **400** `CLIENT_TAG_INVALID` |
 | `DEV_TAG_08` | + | List the workspace's tags, delete a tagged device, list again | Each tag with its device count, this workspace's only; the deleted device's tags drop out |
+| `DEV_HOST_01` | + | Run the SDK with a PIN against the devices host alone | It registers, signs in and connects; the console shows it registered and connected |
+| `DEV_HOST_02` | + | Register on a manual-approval policy through the devices host, approve it in the console, sign in through the devices host | Pending, and refused sign-in, until approved; then **200** with a token |
+| `DEV_HOST_03` | − | Revoke in the console a device that signs in through the devices host | Its next sign-in there is **401** |
+| `DEV_HOST_04` | − | Sign in through the devices host with a wrong secret; register there with an unknown PIN | **401** `CLIENT_UNAUTHORIZED`; the PIN is refused with the same status and code the console host gives |
+| `DEV_HOST_05` | − | Call console endpoints (clients, a policy, workflows, the notification hub) on the devices host with a valid user token | **404** for each; nothing changes |
+| `DEV_HOST_06` | + | Read the devices host's readiness and JWKS | **200**; the same signing keys as the console host, so the socket host accepts tokens from either |
 
 ---
 

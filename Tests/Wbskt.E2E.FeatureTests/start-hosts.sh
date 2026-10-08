@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Starts the four hosts the E2E suite runs against, in the background, as Development (so they pick
+# Starts the hosts the E2E suite runs against, in the background, as Development (so they pick
 # up appsettings.Development.json: the dev ports, the raised auth rate limit, sign-in without a
 # confirmed address). Expects SQL Server with both databases deployed and RabbitMQ on localhost,
 # as Deploy-Databases.ps1 and the Docker commands in README.md set up.
 #
-#   Tests/Wbskt.E2E.FeatureTests/start-hosts.sh            # build, start all four, wait for /healthz
+#   Tests/Wbskt.E2E.FeatureTests/start-hosts.sh            # build, start them all, wait for /healthz
 #   Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth       # restart only the auth host (no build)
 #
 # Extra host configuration passes through the environment, e.g.
 #   RateLimiting__Authentication__PermitLimit=10 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+#
+# "devices" is a second management host serving only device registration and login (Host:Role
+# Devices), on its own ports, as the devices container does in deploy/compose.
 #
 # Logs and pid files go to $E2E_HOST_LOGS (default: e2e-hosts/ at the repo root).
 
@@ -21,18 +24,23 @@ mkdir -p "$logs"
 declare -A projects=(
   [auth]=Hosts/Wbskt.Auth.Host
   [management]=Hosts/Wbskt.Management.Host
+  [devices]=Hosts/Wbskt.Management.Host
   [socket]=Hosts/Wbskt.Socket.Host
   [engine]=Hosts/Wbskt.Workflow.Engine.Host
 )
 # The plain-HTTP dev port of each host, for the liveness probe.
-declare -A ports=([auth]=5000 [management]=5010 [socket]=5020 [engine]=5030)
+declare -A ports=([auth]=5000 [management]=5010 [devices]=5015 [socket]=5020 [engine]=5030)
+# Per-service settings on top of appsettings.Development.json, as space-separated KEY=VALUE pairs.
+declare -A settings=(
+  [devices]="Host__Role=Devices Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
+)
 
 if [[ $# -gt 0 ]]; then
   services=("$@")
 else
-  services=(auth management socket engine)
-  for s in "${services[@]}"; do
-    dotnet build "$root/${projects[$s]}" --nologo -v q
+  services=(auth management devices socket engine)
+  for project in $(printf '%s\n' "${projects[@]}" | sort -u); do
+    dotnet build "$root/$project" --nologo -v q
   done
 fi
 
@@ -52,7 +60,8 @@ for s in "${services[@]}"; do
   dll="$(basename "${projects[$s]}").dll"
   (
     cd "$root/${projects[$s]}"
-    ASPNETCORE_ENVIRONMENT=Development exec dotnet "bin/Debug/net10.0/$dll"
+    # shellcheck disable=SC2086 # the settings are deliberately word-split into KEY=VALUE pairs
+    ASPNETCORE_ENVIRONMENT=Development exec env ${settings[$s]:-} dotnet "bin/Debug/net10.0/$dll"
   ) > "$logs/$s.log" 2>&1 &
   echo $! > "$logs/$s.pid"
 done

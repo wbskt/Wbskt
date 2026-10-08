@@ -66,14 +66,14 @@ Five images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-sock
 published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IMAGE_TAG`.
 
 Every push to master deploys itself: once the tests, E2E and all five images succeed, **Build
-images** calls the **Deploy** workflow with that run's tag, deploying all four hosts with
-migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
+images** calls the **Deploy** workflow with that run's tag, deploying every host (auth,
+management, devices, socket, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
 an approval. To redeploy or pick services, dispatch **Deploy** by hand:
 
 | Input | Meaning |
 |---|---|
 | `tag` | `sha-abc1234` — also determines the commit the VM checkout is reset to |
-| `services` | blank for all four hosts, or e.g. `auth management` |
+| `services` | blank for every host, or e.g. `auth management devices` |
 | `skip_migrations` | leave unchecked. Migrations run by **default** — the incremental publish is idempotent, so skipping is what needs justifying |
 
 Rollback is dispatching an older tag by hand. Because the tag encodes the commit, the VM's
@@ -148,10 +148,10 @@ docker compose up -d sql                                    # wait for it to rep
 docker compose --profile migrate pull migrator
 MIGRATE_FRESH=true docker compose --profile migrate run --rm migrator   # first run only - creates the DBs
 
-docker compose pull auth management socket engine
+docker compose pull auth management devices socket engine
 docker compose up -d rabbitmq redis
 docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana
-docker compose up -d --no-build auth management socket engine traefik
+docker compose up -d --no-build auth management devices socket engine traefik
 docker compose ps                                           # everything should report healthy
 ```
 
@@ -229,7 +229,20 @@ docker compose up -d --no-deps auth
 #    AUTH_JWT_PREVIOUS_PUBLIC_KEY and restart auth again.
 ```
 
-The same steps apply to management with the `MANAGEMENT_` variables.
+The same steps apply to management with the `MANAGEMENT_` variables, restarting devices with it
+(`docker compose up -d --no-deps devices management`): devices signs device tokens with the same key.
+
+### Device login and registration (`devices`)
+
+`devices` runs the management image with `Host__Role=Devices`. It serves only
+`/api/client-registrations` and `/api/client-auth` (plus `/healthz` and the JWKS), and Traefik sends
+it those paths on `api.<DOMAIN>`, so a console deploy or a heavy console query does not stop devices
+signing in. Device URLs and SDK settings do not change.
+
+Management still serves the same paths. Its router matches every path on `api.<DOMAIN>`, so while no
+devices instance is healthy (during its restart, say) Traefik sends device traffic there instead.
+`deploy.sh` relies on that: it restarts devices first and waits for it to be healthy before it
+touches management, so device login always has one of the two. Scale it with `DEVICES_REPLICAS`.
 
 ### Running a local console against this backend
 
@@ -537,7 +550,7 @@ a copy restored under a scratch name cannot collide with the live database's fil
 With `--force`, the target is taken `SINGLE_USER WITH ROLLBACK IMMEDIATE` immediately before the
 restore, which disconnects the hosts. The restored database comes back `MULTI_USER`, and so does
 the original if the restore fails. To be sure no host reconnects in between, stop them first
-(`docker compose stop auth management socket engine`) and start them again afterwards.
+(`docker compose stop auth management devices socket engine`) and start them again afterwards.
 
 **Rehearse it at least once, and confirm the row counts.** Until a restore has actually been
 performed, what exists is a backup script, not a backup.

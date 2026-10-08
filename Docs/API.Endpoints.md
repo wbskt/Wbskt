@@ -341,6 +341,10 @@ join their workspaces again; a group joined on the old connection does not carry
 Pre-authentication device flows: a client enrolling or signing in has no token yet. Both are hidden
 from the API docs.
 
+In production the `devices` container serves these two paths on the same `api.` host: a management
+host running as `Host__Role=Devices`, which serves nothing else. The console API's containers serve
+them too, and take over while no devices instance is healthy (see deploy/README.md).
+
 | Endpoint | What it does |
 |---|---|
 | `POST api/client-registrations/initiate` | A device presents a policy PIN and a name; gets back its `RefId` and secret. Auto-approval policies return it registered, otherwise it waits for an operator. |

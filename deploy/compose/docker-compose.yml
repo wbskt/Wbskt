@@ -200,7 +200,7 @@ services:
       args:
         HOST_PROJECT: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
         HOST_DLL: Wbskt.Management.Host.dll
-    environment:
+    environment: &management-env
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-management
       ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
@@ -248,6 +248,56 @@ services:
       - traefik.http.services.management.loadbalancer.sticky.cookie=true
       - traefik.http.services.management.loadbalancer.sticky.cookie.secure=true
       - traefik.http.services.management.loadbalancer.sticky.cookie.httpOnly=true
+
+  # Device registration and login, split off the console API (wbskt/Wbskt#163) so a console deploy or a
+  # heavy console query does not stop devices signing in. The same image as management, run with
+  # Host__Role=Devices: it serves only /api/client-registrations and /api/client-auth (plus health
+  # and JWKS), and Traefik sends it those paths on api.${DOMAIN}, so device URLs and SDKs are
+  # unchanged. Management keeps serving the same paths, and its router (matching every path on the
+  # host) takes them while no devices instance is healthy, as during its own restart. deploy.sh
+  # never restarts the two together.
+  devices:
+    image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-management:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
+        HOST_DLL: Wbskt.Management.Host.dll
+    environment:
+      <<: *management-env
+      OTEL_SERVICE_NAME: wbskt-devices
+      Host__Role: Devices
+      ApiDocs__Enabled: "false"
+    volumes:
+      - ../config:/Config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      sql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [edge, backend]
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      replicas: ${DEVICES_REPLICAS:-1}
+    labels:
+      - traefik.enable=true
+      # Longer than the management router's rule, so Traefik's default priority (rule length)
+      # already prefers it; set explicitly so a longer management rule later cannot take over.
+      - traefik.http.routers.devices.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/client-auth`) || PathPrefix(`/api/client-registrations`))
+      - traefik.http.routers.devices.priority=1000
+      - traefik.http.routers.devices.entrypoints=websecure
+      - traefik.http.routers.devices.tls.certresolver=letsencrypt
+      - traefik.http.services.devices.loadbalancer.server.port=8080
 
   socket:
     image: ${REGISTRY:-ghcr.io/wbskt}/wbskt-socket:${IMAGE_TAG:-latest}

@@ -49,6 +49,12 @@ public sealed class ServicesFixture : IDisposable
     /// </summary>
     public bool EngineAvailable { get; }
 
+    /// <summary>
+    /// A devices-only management host is reachable at DevicesBaseUrl (start-hosts.sh starts one).
+    /// The scenarios that exercise it skip without it.
+    /// </summary>
+    public bool DevicesHostAvailable { get; }
+
     public ServicesFixture()
     {
         var handler = new HttpClientHandler
@@ -59,6 +65,7 @@ public sealed class ServicesFixture : IDisposable
 
         HostsAvailable = ProbePublicHostsAsync().GetAwaiter().GetResult();
         EngineAvailable = ProbeHostAsync(E2EConfig.WorkflowBaseUrl).GetAwaiter().GetResult();
+        DevicesHostAvailable = ProbeHostAsync(E2EConfig.DevicesBaseUrl).GetAwaiter().GetResult();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
