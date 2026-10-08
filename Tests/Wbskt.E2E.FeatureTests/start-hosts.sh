@@ -35,6 +35,20 @@ declare -A settings=(
   [devices]="Host__Role=Devices Kestrel__Endpoints__Http__Url=http://localhost:5015 Kestrel__Endpoints__Https__Url=https://localhost:7015"
 )
 
+# Management and devices sign device tokens with one key, as both read MANAGEMENT_JWT_SIGNING_KEY in
+# deploy/compose. Left unset, each would generate its own, and the socket host, which trusts only
+# management's JWKS, would refuse every token devices issues. Kept in a file so restarting one of
+# them alone keeps the key the other is using.
+if [[ -z "${Jwt__SigningKey:-}" ]]; then
+  key_file="$logs/management-signing-key"
+  if [[ ! -s "$key_file" ]]; then
+    openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0 > "$key_file"
+  fi
+  device_token_key="Jwt__SigningKey=$(cat "$key_file")"
+  settings[management]="$device_token_key"
+  settings[devices]+=" $device_token_key"
+fi
+
 if [[ $# -gt 0 ]]; then
   services=("$@")
 else
