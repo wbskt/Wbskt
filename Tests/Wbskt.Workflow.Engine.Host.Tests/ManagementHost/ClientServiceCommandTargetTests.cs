@@ -25,7 +25,7 @@ public sealed class ClientServiceCommandTargetTests
         var lookup = provider.Setup(x => x.GetDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()));
         if (client is null)
         {
-            lookup.ThrowsAsync(new InvalidOperationException("not found"));
+            lookup.ThrowsAsync(new Wbskt.Primitives.Exceptions.NotFoundException("not found"));
         }
         else
         {
@@ -63,18 +63,18 @@ public sealed class ClientServiceCommandTargetTests
     }
 
     [Fact]
-    public async Task A_foreign_device_is_forbidden_before_its_presence_is_revealed()
+    public async Task A_foreign_device_is_not_found_before_its_presence_is_revealed()
     {
         var result = await CreateService(Client(connected: false, hostId: null, workspaceId: 99)).ResolveCommandTargetAsync(WorkspaceId, ClientRefId);
 
-        result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
     }
 
     [Fact]
-    public async Task An_unknown_device_is_forbidden()
+    public async Task An_unknown_device_is_not_found()
     {
         var result = await CreateService(null).ResolveCommandTargetAsync(WorkspaceId, ClientRefId);
 
-        result.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        result.Error.Code.Should().Be("CLIENT_NOT_FOUND");
     }
 }

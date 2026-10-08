@@ -91,17 +91,17 @@ public sealed class SharedVariablesControllerTests
     }
 
     [Fact]
-    public async Task Get_in_other_workspace_throws_security_and_skips_provider()
+    public async Task Get_in_other_workspace_is_not_found_and_skips_provider()
     {
         var provider = new Mock<ISharedVariableProvider>();
         var workflowRefId = Guid.NewGuid();
         var (controller, workflowService) = CreateController(provider.Object);
         workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", "denied")));
+            .ReturnsAsync(Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found.")));
 
         var result = await controller.Get(WorkspaceId, workflowRefId, "counter", CancellationToken.None);
         
-        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.IsType<NotFoundObjectResult>(result.Result);
         provider.Verify(x => x.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

@@ -18,16 +18,13 @@ public class RegistrationPoliciesController : ApiControllerBase
 {
     private readonly IRegistrationPolicyService _policyService;
     private readonly IReferenceMapper _policyMapper;
-    private readonly ILogger<RegistrationPoliciesController> _logger;
 
     public RegistrationPoliciesController(
         IRegistrationPolicyService policyService,
-        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
-        ILogger<RegistrationPoliciesController> logger)
+        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper)
     {
         _policyService = policyService;
         _policyMapper = policyMapper;
-        _logger = logger;
     }
 
     /// <summary>
@@ -75,24 +72,12 @@ public class RegistrationPoliciesController : ApiControllerBase
     [RequiresPermission(PermissionNames.PoliciesRead)]
     public async Task<ActionResult<RegistrationPolicyResponse>> Get([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
     {
-        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
-        if (policyId <= 0)
-        {
-            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
-        }
-
-        var result = await _policyService.GetByIdAsync(policyId, cancellationToken);
+        var result = await _policyService.FindInWorkspaceAsync(workspaceId, refId, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<RegistrationPolicyResponse>.Failure(result.Error));
         }
 
-        if (result.Value.WorkspaceId != workspaceId)
-        {
-            _logger.LogWarning("Access denied: Policy ID {PolicyId} does not belong to Workspace ID {WorkspaceId}", policyId, workspaceId);
-            return MapError(Error.Forbidden("POLICY_UNAUTHORIZED", "Policy does not belong to the specified workspace."));
-        }
-        
         return Ok(new RegistrationPolicyResponse(
             result.Value.RefId,
             result.Value.Pin,

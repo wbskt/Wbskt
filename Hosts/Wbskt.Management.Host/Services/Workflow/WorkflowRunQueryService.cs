@@ -219,7 +219,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             catch (Exception ex)
             {
                 _logger.LogWarning("Run details query failed: RunRefId '{RunRefId}' not found. Error: {Message}", runRefId, ex.Message);
-                return Result<RunDetailDto>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found."));
+                return Result<RunDetailDto>.Failure(WorkspaceOwnership.RunNotFound);
             }
 
             var ensureWorkspaceResult = await EnsureRunRowInWorkspaceAsync(workspaceId, run, ct);
@@ -287,7 +287,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         catch (Exception ex)
         {
             _logger.LogWarning("Failed run membership check: run '{RunRefId}' not found. Error: {Message}", runRefId, ex.Message);
-            return Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found."));
+            return Result<int>.Failure(WorkspaceOwnership.RunNotFound);
         }
     }
 
@@ -298,8 +298,8 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByRefIdVersionAsync(run.WorkflowRefId, run.WorkflowVersion, ct);
             if (definition.WorkspaceId != workspaceId)
             {
-                _logger.LogWarning("Workspace access denied for Run '{RunRefId}'", run.RefId);
-                return Result.Failure(Error.Forbidden("RUN_UNAUTHORIZED", $"Run '{run.RefId}' does not belong to the workspace."));
+                _logger.LogWarning("Run '{RunRefId}' is not in WorkspaceId: {WorkspaceId}", run.RefId, workspaceId);
+                return Result.Failure(WorkspaceOwnership.RunNotFound);
             }
             return Result.Success();
         }
@@ -317,15 +317,15 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetCurrentByRefIdAsync(workflowRefId, ct);
             if (definition.WorkspaceId != workspaceId)
             {
-                _logger.LogWarning("Workspace access denied for workflow '{WorkflowRefId}'", workflowRefId);
-                return Result.Failure(Error.Forbidden("WORKFLOW_UNAUTHORIZED", $"Workflow '{workflowRefId}' does not belong to the workspace."));
+                _logger.LogWarning("Workflow '{WorkflowRefId}' is not in WorkspaceId: {WorkspaceId}", workflowRefId, workspaceId);
+                return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
             }
             return Result.Success();
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Workflow not found for RefId: '{WorkflowRefId}'. Error: {Message}", workflowRefId, ex.Message);
-            return Result.Failure(Error.NotFound("WORKFLOW_NOT_FOUND", "Workflow not found."));
+            return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
         }
     }
 

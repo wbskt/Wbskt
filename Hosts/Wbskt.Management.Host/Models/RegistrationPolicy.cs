@@ -1,6 +1,6 @@
 namespace Wbskt.Management.Host.Models;
 
-public class RegistrationPolicy
+public class RegistrationPolicy : IWorkspaceOwned
 {
     public int Id { get; set; }
     public Guid RefId { get; set; }

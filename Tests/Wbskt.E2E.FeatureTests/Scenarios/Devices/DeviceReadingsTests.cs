@@ -88,10 +88,10 @@ public sealed class DeviceReadingsTests(ServicesFixture fixture)
         // An unknown device and another workspace's device get the same answer, so a guessed
         // reference does not tell whether it names a real device.
         (await fixture.SendAsync(HttpMethod.Get, Readings(workspace, Guid.NewGuid(), "?name=temp"), token)).StatusCode
-            .Should().Be(HttpStatusCode.Forbidden);
+            .Should().Be(HttpStatusCode.NotFound);
         var (otherToken, otherWorkspace) = await fixture.RegisterAndLoginUserAsync();
         (await fixture.SendAsync(HttpMethod.Get, Readings(otherWorkspace, clientRef, "?name=temp"), otherToken)).StatusCode
-            .Should().Be(HttpStatusCode.Forbidden);
+            .Should().Be(HttpStatusCode.NotFound);
     }
 
     private static string Readings(Guid workspace, Guid clientRef, string rest) =>

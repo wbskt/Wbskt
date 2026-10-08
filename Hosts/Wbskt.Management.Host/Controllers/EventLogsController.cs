@@ -18,17 +18,17 @@ namespace Wbskt.Management.Host.Controllers;
 public sealed class EventLogsController : ApiControllerBase
 {
     private readonly IEventLogService _eventLogService;
-    private readonly IReferenceMapper _policyMapper;
-    private readonly IReferenceMapper _clientMapper;
+    private readonly IRegistrationPolicyService _policyService;
+    private readonly IClientService _clientService;
 
     public EventLogsController(
-        IEventLogService eventLogService, 
-        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
-        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper)
+        IEventLogService eventLogService,
+        IRegistrationPolicyService policyService,
+        IClientService clientService)
     {
         _eventLogService = eventLogService;
-        _policyMapper = policyMapper;
-        _clientMapper = clientMapper;
+        _policyService = policyService;
+        _clientService = clientService;
     }
 
     /// <summary>
@@ -37,8 +37,8 @@ public sealed class EventLogsController : ApiControllerBase
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="eventName">Optional filter for a specific event name.</param>
     /// <param name="criticality">Optional filter by criticality (Information, Warning, Critical).</param>
-    /// <param name="policyRefId"></param>
-    /// <param name="clientRefId"></param>
+    /// <param name="policyRefId">Optional filter: only this policy's entries. A policy this workspace does not own is a 404.</param>
+    /// <param name="clientRefId">Optional filter: only this client's entries. A client this workspace does not own is a 404.</param>
     /// <param name="cursor">The <c>nextCursor</c> of the previous page; omit for the newest entries.</param>
     /// <param name="take">Page size, 1 to 200.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -58,24 +58,29 @@ public sealed class EventLogsController : ApiControllerBase
         int? clientId = null;
         int? policyId = null;
 
+        // A filter naming another workspace's policy or client is a 404, not an empty page.
         if (policyRefId.HasValue)
         {
-            policyId = await _policyMapper.FindIdByRefIdAsync(policyRefId.Value, cancellationToken);
-            if (policyId <= 0)
+            var policy = await _policyService.FindInWorkspaceAsync(workspaceId, policyRefId.Value, cancellationToken);
+            if (policy.IsFailure)
             {
-                return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
+                return MapError(policy.Error);
             }
+
+            policyId = policy.Value.Id;
         }
-        
+
         if (clientRefId.HasValue)
         {
-            clientId = await _clientMapper.FindIdByRefIdAsync(clientRefId.Value, cancellationToken);
-            if (clientId <= 0)
+            var client = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId.Value, cancellationToken);
+            if (client.IsFailure)
             {
-                return NotFound(Error.NotFound("CLIENT_NOT_FOUND", "Client not found."));
+                return MapError(client.Error);
             }
+
+            clientId = client.Value;
         }
-        
+
         return MapResult(await _eventLogService.GetLogsAsync(workspaceId, eventName, criticality, policyId, clientId, null, cursor, take, cancellationToken));
     }
 }
