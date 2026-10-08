@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
@@ -17,33 +18,23 @@ public sealed class SharedVariablesController : ApiControllerBase
 {
     private readonly ISharedVariableProvider _variableProvider;
     private readonly IWorkflowDefinitionService _workflowService;
-    private readonly IAuthServiceClient _authClient;
     private readonly ILogger<SharedVariablesController> _logger;
 
     public SharedVariablesController(
         ISharedVariableProvider variableProvider,
         IWorkflowDefinitionService workflowService,
-        IAuthServiceClient authClient,
         ILogger<SharedVariablesController> logger)
     {
         _variableProvider = variableProvider;
         _workflowService = workflowService;
-        _authClient = authClient;
         _logger = logger;
     }
 
     [HttpGet("{name}")]
-    public async Task<ActionResult<SharedVariableDto>> Get(Guid workspaceRef, Guid workflowRefId, string name, CancellationToken ct)
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<SharedVariableDto>> Get([FromWorkspace] int workspaceId, Guid workflowRefId, string name, CancellationToken ct)
     {
-        _logger.LogDebug("API: Get shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<SharedVariableDto>.Failure(workspaceIdResult.Error));
-        }
-
-        var ensureWorkflowResult = await _workflowService.EnsureWorkflowInWorkspaceAsync(workspaceIdResult.Value, workflowRefId, ct);
+        var ensureWorkflowResult = await _workflowService.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
         {
             return MapResult(Result<SharedVariableDto>.Failure(ensureWorkflowResult.Error));
@@ -63,17 +54,10 @@ public sealed class SharedVariablesController : ApiControllerBase
     }
 
     [HttpPut("{name}")]
-    public async Task<ActionResult<SharedVariableDto>> Set(Guid workspaceRef, Guid workflowRefId, string name, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
+    [RequiresPermission(PermissionNames.WorkflowsExecute)]
+    public async Task<ActionResult<SharedVariableDto>> Set([FromWorkspace] int workspaceId, Guid workflowRefId, string name, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
     {
-        _logger.LogDebug("API: Set shared variable '{Name}' requested for WorkflowRefId: '{WorkflowRefId}'", name, workflowRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<SharedVariableDto>.Failure(workspaceIdResult.Error));
-        }
-
-        var ensureWorkflowResult = await _workflowService.EnsureWorkflowInWorkspaceAsync(workspaceIdResult.Value, workflowRefId, ct);
+        var ensureWorkflowResult = await _workflowService.EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
         {
             return MapResult(Result<SharedVariableDto>.Failure(ensureWorkflowResult.Error));

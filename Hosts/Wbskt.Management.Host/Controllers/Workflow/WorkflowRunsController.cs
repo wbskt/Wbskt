@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
@@ -18,36 +19,26 @@ public sealed class WorkflowRunsController : ApiControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
     private readonly IWorkflowEngineClient _engineClient;
-    private readonly IAuthServiceClient _authClient;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowRunsController> _logger;
 
     public WorkflowRunsController(
         IWorkflowRunQueryService runQueryService, 
         IWorkflowEngineClient engineClient, 
-        IAuthServiceClient authClient,
         [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
         ILogger<WorkflowRunsController> logger)
     {
         _eventBus = eventBus;
         _runQueryService = runQueryService;
         _engineClient = engineClient;
-        _authClient = authClient;
         _logger = logger;
     }
 
     [HttpGet("workflows/{workflowRefId:guid}/runs")]
-    public async Task<ActionResult<RunListResponse>> List(Guid workspaceRef, Guid workflowRefId, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRefId, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
     {
-        _logger.LogDebug("API: List runs requested for WorkspaceRef: '{WorkspaceRef}', WorkflowRefId: '{WorkflowRefId}'", workspaceRef, workflowRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<RunListResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _runQueryService.ListByWorkflowAsync(workspaceIdResult.Value, workflowRefId, status, Paging.Take(top), cursor, ct);
+        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRefId, status, Paging.Take(top), cursor, ct);
         return MapResult(result);
     }
 
@@ -56,17 +47,10 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// per-workflow list once per workflow to show recent activity.
     /// </summary>
     [HttpGet("runs")]
-    public async Task<ActionResult<RunListResponse>> ListForWorkspace(Guid workspaceRef, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<RunListResponse>> ListForWorkspace([FromWorkspace] int workspaceId, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
     {
-        _logger.LogDebug("API: List workspace runs requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<RunListResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _runQueryService.ListByWorkspaceAsync(workspaceIdResult.Value, status, Paging.Take(top), cursor, ct);
+        var result = await _runQueryService.ListByWorkspaceAsync(workspaceId, status, Paging.Take(top), cursor, ct);
         return MapResult(result);
     }
 
@@ -76,24 +60,17 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// to the last 30 days.
     /// </summary>
     [HttpGet("stats")]
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkspaceStatsResponse>> GetWorkspaceStats(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         CancellationToken ct = default)
     {
-        _logger.LogDebug("API: Workspace stats requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<WorkspaceStatsResponse>.Failure(workspaceIdResult.Error));
-        }
-
         DateTime toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         DateTime fromUtc = (from ?? toUtc.AddDays(-30)).ToUniversalTime();
 
-        var result = await _runQueryService.GetWorkspaceStatsAsync(workspaceIdResult.Value, fromUtc, toUtc, ct);
+        var result = await _runQueryService.GetWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, ct);
         return MapResult(result);
     }
 
@@ -102,75 +79,47 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// that actually occur, and which nodes are slowest. Defaults to the last 30 days.
     /// </summary>
     [HttpGet("workflows/{workflowRefId:guid}/stats")]
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkflowStatsResponse>> GetStats(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         Guid workflowRefId,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         CancellationToken ct = default)
     {
-        _logger.LogDebug("API: Stats requested for WorkspaceRef: '{WorkspaceRef}', WorkflowRefId: '{WorkflowRefId}'", workspaceRef, workflowRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<WorkflowStatsResponse>.Failure(workspaceIdResult.Error));
-        }
-
         DateTime toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
         DateTime fromUtc = (from ?? toUtc.AddDays(-30)).ToUniversalTime();
 
-        var result = await _runQueryService.GetStatsAsync(workspaceIdResult.Value, workflowRefId, fromUtc, toUtc, ct);
+        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRefId, fromUtc, toUtc, ct);
         return MapResult(result);
     }
 
     [HttpGet("runs/{runRefId:guid}")]
-    public async Task<ActionResult<RunDetailDto>> Get(Guid workspaceRef, Guid runRefId, CancellationToken ct)
+    [RequiresPermission(PermissionNames.WorkflowsRead)]
+    public async Task<ActionResult<RunDetailDto>> Get([FromWorkspace] int workspaceId, Guid runRefId, CancellationToken ct)
     {
-        _logger.LogDebug("API: Get run details requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", workspaceRef, runRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsRead, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<RunDetailDto>.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _runQueryService.GetDetailAsync(workspaceIdResult.Value, runRefId, ct);
+        var result = await _runQueryService.GetDetailAsync(workspaceId, runRefId, ct);
         return MapResult(result);
     }
 
     [HttpPost("runs/{runRefId:guid}/cancel")]
-    public async Task<IActionResult> Cancel(Guid workspaceRef, Guid runRefId, [FromBody] CancelRunRequest req, CancellationToken ct)
+    [RequiresPermission(PermissionNames.WorkflowsExecute)]
+    public async Task<IActionResult> Cancel([FromWorkspace] int workspaceId, Guid runRefId, [FromBody] CancelRunRequest req, CancellationToken ct)
     {
-        _logger.LogDebug("API: Cancel run requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", workspaceRef, runRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result.Failure(workspaceIdResult.Error));
-        }
-
-        var result = await _runQueryService.CancelAsync(workspaceIdResult.Value, runRefId, req.Reason, ct);
+        var result = await _runQueryService.CancelAsync(workspaceId, runRefId, req.Reason, ct);
         if (result.IsSuccess)
         {
-            await _eventBus.PublishAsync(new WorkflowRunCancelRequestedEvent(runRefId, workspaceIdResult.Value, req.Reason), ct);
+            await _eventBus.PublishAsync(new WorkflowRunCancelRequestedEvent(runRefId, workspaceId, req.Reason), ct);
         }
 
         return MapResult(result);
     }
 
     [HttpPost("runs/{runRefId:guid}/signals/{signalName}")]
-    public async Task<ActionResult<SignalResponse>> Signal(Guid workspaceRef, Guid runRefId, string signalName, [FromBody] SignalRequest req, CancellationToken ct)
+    [RequiresPermission(PermissionNames.WorkflowsExecute)]
+    public async Task<ActionResult<SignalResponse>> Signal([FromWorkspace] int workspaceId, Guid runRefId, string signalName, [FromBody] SignalRequest req, CancellationToken ct)
     {
-        _logger.LogDebug("API: Send signal '{SignalName}' requested for WorkspaceRef: '{WorkspaceRef}', RunRefId: '{RunRefId}'", signalName, workspaceRef, runRefId);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.WorkflowsExecute, ct);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<SignalResponse>.Failure(workspaceIdResult.Error));
-        }
-
-        var ensureRunResult = await _runQueryService.EnsureRunInWorkspaceAsync(workspaceIdResult.Value, runRefId, ct);
+        var ensureRunResult = await _runQueryService.EnsureRunInWorkspaceAsync(workspaceId, runRefId, ct);
         if (ensureRunResult.IsFailure)
         {
             return MapResult(Result<SignalResponse>.Failure(ensureRunResult.Error));
@@ -180,7 +129,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
         {
             var response = await _engineClient.SignalAsync(runRefId, signalName, req, ct);
             _logger.LogDebug("Successfully sent signal '{SignalName}' to RunRefId: '{RunRefId}'", signalName, runRefId);
-            await _eventBus.PublishAsync(new WorkflowRunSignalSentEvent(runRefId, workspaceIdResult.Value, signalName), ct);
+            await _eventBus.PublishAsync(new WorkflowRunSignalSentEvent(runRefId, workspaceId, signalName), ct);
             return Ok(response);
         }
         catch (Exception ex)

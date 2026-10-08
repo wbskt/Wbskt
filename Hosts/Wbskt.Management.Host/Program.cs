@@ -21,6 +21,7 @@ using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
 using Wbskt.Management.Host.Hosting;
@@ -262,7 +263,9 @@ public static class Program
         // that does not warrant it. The bus check comes from AddMassTransit.
         builder.Services.AddHealthChecks().AddSqlServerCheck("DefaultConnection");
 
-        builder.Services.AddControllers().ConfigureApplicationPartManager(manager =>
+        // Workspace-scoped actions declare their permissions with [RequiresPermission]; this filter
+        // resolves the workspace once and refuses the request before it reaches the action.
+        builder.Services.AddControllers(options => options.Filters.Add<WorkspacePermissionFilter>()).ConfigureApplicationPartManager(manager =>
         {
             manager.FeatureProviders.Remove(manager.FeatureProviders.OfType<ControllerFeatureProvider>().Single());
             manager.FeatureProviders.Add(new HostRoleControllerFeatureProvider(role));

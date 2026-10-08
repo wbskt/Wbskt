@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
@@ -17,29 +18,23 @@ namespace Wbskt.Management.Host.Controllers;
 public sealed class EventLogsController : ApiControllerBase
 {
     private readonly IEventLogService _eventLogService;
-    private readonly IAuthServiceClient _authClient;
     private readonly IReferenceMapper _policyMapper;
     private readonly IReferenceMapper _clientMapper;
-    private readonly ILogger<EventLogsController> _logger;
 
     public EventLogsController(
         IEventLogService eventLogService, 
-        IAuthServiceClient authClient, 
         [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper,
-        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper,
-        ILogger<EventLogsController> logger)
+        [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper)
     {
         _eventLogService = eventLogService;
-        _authClient = authClient;
         _policyMapper = policyMapper;
         _clientMapper = clientMapper;
-        _logger = logger;
     }
 
     /// <summary>
     /// Retrieves a list of system and client event logs for a specific workspace.
     /// </summary>
-    /// <param name="workspaceRef">The unique reference ID of the workspace.</param>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="eventName">Optional filter for a specific event name.</param>
     /// <param name="criticality">Optional filter by criticality (Information, Warning, Critical).</param>
     /// <param name="policyRefId"></param>
@@ -49,8 +44,9 @@ public sealed class EventLogsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A page of event logs, newest first, with the cursor for the next page.</returns>
     [HttpGet]
+    [RequiresPermission(PermissionNames.LogsRead)]
     public async Task<ActionResult<EventLogListResponse>> GetLogs(
-        Guid workspaceRef,
+        [FromWorkspace] int workspaceId,
         [FromQuery] string? eventName,
         [FromQuery] EventCriticality? criticality,
         [FromQuery] Guid? policyRefId,
@@ -59,14 +55,6 @@ public sealed class EventLogsController : ApiControllerBase
         [FromQuery] int take = 50,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("API: GetLogs requested for WorkspaceRef: '{WorkspaceRef}'", workspaceRef);
-
-        var workspaceIdResult = await _authClient.ResolveWorkspaceAsync(workspaceRef, Permissions.LogsRead, cancellationToken);
-        if (workspaceIdResult.IsFailure)
-        {
-            return MapResult(Result<EventLogListResponse>.Failure(workspaceIdResult.Error));
-        }
-
         int? clientId = null;
         int? policyId = null;
 
@@ -88,6 +76,6 @@ public sealed class EventLogsController : ApiControllerBase
             }
         }
         
-        return MapResult(await _eventLogService.GetLogsAsync(workspaceIdResult.Value, eventName, criticality, policyId, clientId, null, cursor, take, cancellationToken));
+        return MapResult(await _eventLogService.GetLogsAsync(workspaceId, eventName, criticality, policyId, clientId, null, cursor, take, cancellationToken));
     }
 }

@@ -9,10 +9,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
-using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives;
-using Wbskt.Primitives.Constants;
-using Wbskt.Primitives.Models;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -26,25 +23,21 @@ public sealed class ClientsControllerScopingTests
 {
     private const int WorkspaceId = 7;
     private const int ClientId = 42;
-    private static readonly Guid WorkspaceRef = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private const string HostId = "socket-a";
     private static readonly Error Foreign = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client not found in this workspace.");
 
-    private static (ClientsController Controller, Mock<IClientService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController(PermissionSlug permission)
+    // The workspace and the caller's permission are settled by WorkspacePermissionFilter before the
+    // action runs (see WorkspacePermissionFilterTests), so the actions are handed the resolved ID.
+    private static (ClientsController Controller, Mock<IClientService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController()
     {
-        var authClient = new Mock<IAuthServiceClient>();
-        authClient.Setup(x => x.ResolveWorkspaceAsync(WorkspaceRef, permission, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<int>.Success(WorkspaceId));
-
         var clientService = new Mock<IClientService>();
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
         var controller = new ClientsController(
             clientService.Object,
-            authClient.Object,
             bus.Object,
             Mock.Of<IReferenceMapper>(),
             Mock.Of<IRegistrationPolicyService>(),
@@ -76,10 +69,10 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task SendCommand_does_not_publish_for_a_client_in_another_workspace()
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Foreign));
 
-        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
@@ -89,10 +82,10 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task SendCommand_publishes_with_the_resolved_client_id_when_owned()
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
 
-        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
         Assert.IsType<AcceptedResult>(result);
         bus.Verify(x => x.PublishAsync(
@@ -104,10 +97,10 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task SendCommand_to_an_offline_device_is_a_409_and_publishes_nothing()
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Error.Conflict("DEVICE_OFFLINE", "offline")));
 
-        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
         var objectResult = Assert.IsType<ConflictObjectResult>(result);
         objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("DEVICE_OFFLINE");
@@ -117,11 +110,11 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task SendCommand_carries_expiresAt_to_the_socket_host()
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(2);
 
-        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, new ClientCommandRequest("reboot", "{}", expiresAt), CancellationToken.None);
+        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}", expiresAt), CancellationToken.None);
 
         Assert.IsType<AcceptedResult>(result);
         bus.Verify(x => x.PublishAsync(
@@ -134,11 +127,11 @@ public sealed class ClientsControllerScopingTests
     [InlineData(25 * 60)]
     public async Task SendCommand_rejects_an_expiresAt_in_the_past_or_over_a_day_away(int minutesAhead)
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsCommand);
+        var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
 
         var request = new ClientCommandRequest("reboot", "{}", DateTimeOffset.UtcNow.AddMinutes(minutesAhead));
-        var result = await controller.SendCommand(WorkspaceRef, ClientRefId, request, CancellationToken.None);
+        var result = await controller.SendCommand(WorkspaceId, ClientRefId, request, CancellationToken.None);
 
         var objectResult = Assert.IsType<BadRequestObjectResult>(result);
         objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("COMMAND_EXPIRY_INVALID");
@@ -148,10 +141,10 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task Ping_does_not_publish_for_a_client_in_another_workspace()
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsPing);
+        var (controller, clientService, bus, _) = CreateController();
         SetupOwnership(clientService, Result<int>.Failure(Foreign));
 
-        var result = await controller.Ping(WorkspaceRef, ClientRefId, CancellationToken.None);
+        var result = await controller.Ping(WorkspaceId, ClientRefId, CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
@@ -161,10 +154,10 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task Ping_publishes_with_the_resolved_client_id_when_owned()
     {
-        var (controller, clientService, bus, _) = CreateController(Permissions.ClientsPing);
+        var (controller, clientService, bus, _) = CreateController();
         SetupOwnership(clientService, Result<int>.Success(ClientId));
 
-        var result = await controller.Ping(WorkspaceRef, ClientRefId, CancellationToken.None);
+        var result = await controller.Ping(WorkspaceId, ClientRefId, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         bus.Verify(x => x.PublishAsync(
@@ -175,10 +168,10 @@ public sealed class ClientsControllerScopingTests
     [Fact]
     public async Task GetComms_reports_a_client_in_another_workspace_as_forbidden_rather_than_empty()
     {
-        var (controller, clientService, _, eventLogService) = CreateController(Permissions.LogsRead);
+        var (controller, clientService, _, eventLogService) = CreateController();
         SetupOwnership(clientService, Result<int>.Failure(Foreign));
 
-        var result = await controller.GetComms(WorkspaceRef, ClientRefId, direction: null, cancellationToken: CancellationToken.None);
+        var result = await controller.GetComms(WorkspaceId, ClientRefId, direction: null, cancellationToken: CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
