@@ -108,13 +108,13 @@ public sealed class ClientServiceTagTests
     }
 
     [Fact]
-    public async Task Tagging_an_unknown_client_is_not_found_and_another_workspaces_is_forbidden()
+    public async Task Tagging_an_unknown_or_another_workspaces_client_is_not_found()
     {
         var unknown = Guid.NewGuid();
         _provider.Setup(x => x.GetDetailByRefIdAsync(unknown, It.IsAny<CancellationToken>())).ThrowsAsync(new NotFoundException("no rows"));
 
         (await _service.SetTagsAsync(WorkspaceId, unknown, ["garage"])).Error.Code.Should().Be("CLIENT_NOT_FOUND");
-        (await _service.SetTagsAsync(WorkspaceId + 1, ClientRefId, ["garage"])).Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        (await _service.SetTagsAsync(WorkspaceId + 1, ClientRefId, ["garage"])).Error.Code.Should().Be("CLIENT_NOT_FOUND");
         _provider.Verify(x => x.SetTagsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

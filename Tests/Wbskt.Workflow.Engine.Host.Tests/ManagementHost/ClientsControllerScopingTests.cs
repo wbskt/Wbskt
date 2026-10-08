@@ -26,7 +26,7 @@ public sealed class ClientsControllerScopingTests
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private const string HostId = "socket-a";
-    private static readonly Error Foreign = Error.Forbidden("CLIENT_UNAUTHORIZED", "Client not found in this workspace.");
+    private static readonly Error Foreign = Error.NotFound("CLIENT_NOT_FOUND", "Client not found.");
 
     // The workspace and the caller's permission are settled by WorkspacePermissionFilter before the
     // action runs (see WorkspacePermissionFilterTests), so the actions are handed the resolved ID.
@@ -39,7 +39,6 @@ public sealed class ClientsControllerScopingTests
         var controller = new ClientsController(
             clientService.Object,
             bus.Object,
-            Mock.Of<IReferenceMapper>(),
             Mock.Of<IRegistrationPolicyService>(),
             eventLogService.Object,
             NullLogger<ClientsController>.Instance);
@@ -74,8 +73,7 @@ public sealed class ClientsControllerScopingTests
 
         var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
-        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        Assert.IsType<NotFoundObjectResult>(result);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -146,8 +144,7 @@ public sealed class ClientsControllerScopingTests
 
         var result = await controller.Ping(WorkspaceId, ClientRefId, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
-        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        Assert.IsType<NotFoundObjectResult>(result);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientPingEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -166,15 +163,14 @@ public sealed class ClientsControllerScopingTests
     }
 
     [Fact]
-    public async Task GetComms_reports_a_client_in_another_workspace_as_forbidden_rather_than_empty()
+    public async Task GetComms_reports_a_client_in_another_workspace_as_not_found_rather_than_empty()
     {
         var (controller, clientService, _, eventLogService) = CreateController();
         SetupOwnership(clientService, Result<int>.Failure(Foreign));
 
         var result = await controller.GetComms(WorkspaceId, ClientRefId, direction: null, cancellationToken: CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
-        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        Assert.IsType<NotFoundObjectResult>(result.Result);
         eventLogService.Verify(x => x.GetClientCommsAsync(
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }

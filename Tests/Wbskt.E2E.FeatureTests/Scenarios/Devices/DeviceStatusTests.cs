@@ -92,7 +92,7 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task DEV_STATUS_05_AnotherWorkspacesDevice_IsForbidden_AndKeepsItsStatus()
+    public async Task DEV_STATUS_05_AnotherWorkspacesDevice_Is404_AndKeepsItsStatus()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -103,8 +103,8 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
 
         var response = await SetStatusAsync(strangerWorkspace, clientRef, strangerToken, Revoked);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("CLIENT_UNAUTHORIZED");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("CLIENT_NOT_FOUND");
         (await StatusOfAsync(ownerWorkspace, clientRef, ownerToken)).Should().Be(Registered);
         (await ClientLoginAsync(clientRef, secret)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -145,7 +145,7 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task DEV_NAME_02_RenamingAnUnknownDevice_Is404_AndAnotherWorkspaces_Is403()
+    public async Task DEV_NAME_02_RenamingAnUnknownDevice_OrAnotherWorkspaces_Is404()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -159,8 +159,8 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
 
         missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(missing)).Should().Be("CLIENT_NOT_FOUND");
-        foreign.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be("CLIENT_UNAUTHORIZED");
+        foreign.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be("CLIENT_NOT_FOUND");
         (await DetailAsync(ownerWorkspace, clientRef, ownerToken)).GetProperty("name").GetString().Should().Be("keeps-its-name");
     }
 
@@ -188,8 +188,8 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         (await ServicesFixture.ReadErrorCodeAsync(missing)).Should().Be("CLIENT_NOT_FOUND");
 
         var foreign = await Send(HttpMethod.Get, strangerWorkspace, $"clients/{clientRef}/state", strangerToken);
-        foreign.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be("CLIENT_UNAUTHORIZED");
+        foreign.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ServicesFixture.ReadErrorCodeAsync(foreign)).Should().Be("CLIENT_NOT_FOUND");
     }
 
     // ── Bulk status ───────────────────────────────────────────────────────────────────────
@@ -232,8 +232,8 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         // Each device is reported once; a missing device and another workspace's read the same.
         result.Updated.Should().Equal(pending, registered);
         result.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal(
-            (foreign, "CLIENT_UNAUTHORIZED"),
-            (missing, "CLIENT_UNAUTHORIZED"));
+            (foreign, "CLIENT_NOT_FOUND"),
+            (missing, "CLIENT_NOT_FOUND"));
         (await StatusOfAsync(workspace, pending, token)).Should().Be(Registered);
         (await StatusOfAsync(strangerWorkspace, foreign, strangerToken)).Should().Be(Pending);
     }

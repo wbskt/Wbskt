@@ -357,7 +357,7 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
-    public async Task Publish_new_version_over_other_workspace_throws_security()
+    public async Task Publish_new_version_over_other_workspace_is_a_conflict()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
         var triggerService = new Mock<ITriggerRegistrationService>();
@@ -372,7 +372,8 @@ public sealed class WorkflowDefinitionServiceTests
         var response = await service.PublishAsync(WorkspaceId + 99, Guid.NewGuid(), request, CancellationToken.None);
         
         Assert.True(response.IsFailure);
-        Assert.Equal(ErrorType.Forbidden, response.Error.Type);
+        Assert.Equal(ErrorType.Conflict, response.Error.Type);
+        Assert.Equal("WORKFLOW_REF_TAKEN", response.Error.Code);
         workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -399,7 +400,7 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
-    public async Task GetCurrent_in_other_workspace_throws_security()
+    public async Task GetCurrent_in_other_workspace_is_not_found()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
         var triggerService = new Mock<ITriggerRegistrationService>();
@@ -414,7 +415,8 @@ public sealed class WorkflowDefinitionServiceTests
         var result = await service.GetCurrentAsync(WorkspaceId + 1, refId, CancellationToken.None);
         
         Assert.True(result.IsFailure);
-        Assert.Equal(ErrorType.Forbidden, result.Error.Type);
+        Assert.Equal(ErrorType.NotFound, result.Error.Type);
+        Assert.Equal("WORKFLOW_NOT_FOUND", result.Error.Code);
     }
 
     [Fact]
