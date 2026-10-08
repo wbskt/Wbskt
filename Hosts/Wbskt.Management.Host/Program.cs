@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
@@ -22,6 +23,7 @@ using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
+using Wbskt.Management.Host.Hosting;
 using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
@@ -57,6 +59,10 @@ public static class Program
         builder.Host.UseSerilog(builder.CreateSerilog());
         builder.AddWbsktTelemetry();
 
+        // A Devices instance serves only device registration and login (see HostRole). It keeps the
+        // same service registrations, minus the console's background work and live feed.
+        var role = HostRoles.FromConfiguration(builder.Configuration);
+
         // Add services to the container.
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         // Signs client (device) tokens for the socket host; accepts user tokens signed by the auth host,
@@ -84,7 +90,10 @@ public static class Program
         builder.Services.Configure<ReadingsOptions>(builder.Configuration.GetSection(ReadingsOptions.SectionName));
         builder.Services.AddScoped<IClientReadingProvider, ClientReadingProvider>();
         builder.Services.AddScoped<IClientReadingService, ClientReadingService>();
-        builder.Services.AddHostedService<ClientReadingRetentionService>();
+        if (role == HostRole.All)
+        {
+            builder.Services.AddHostedService<ClientReadingRetentionService>();
+        }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
@@ -129,8 +138,12 @@ public static class Program
             {
                 dbEventLoggingBusConfig(configurator);
 
-                // Register Auto SignalR Forwarding Consumers
-                configurator.AddAutoSignalRForwarding();
+                // Register Auto SignalR Forwarding Consumers. Not on a Devices instance: it has no
+                // hub, so it would only take broadcasts off the shared queue for nobody.
+                if (role == HostRole.All)
+                {
+                    configurator.AddAutoSignalRForwarding();
+                }
             });
 
         // Commands and pings go straight to the bus, so they are attributed to their sender there; the
@@ -249,7 +262,11 @@ public static class Program
         // that does not warrant it. The bus check comes from AddMassTransit.
         builder.Services.AddHealthChecks().AddSqlServerCheck("DefaultConnection");
 
-        builder.Services.AddControllers();
+        builder.Services.AddControllers().ConfigureApplicationPartManager(manager =>
+        {
+            manager.FeatureProviders.Remove(manager.FeatureProviders.OfType<ControllerFeatureProvider>().Single());
+            manager.FeatureProviders.Add(new HostRoleControllerFeatureProvider(role));
+        });
         builder.Services.AddWbsktJson();
         var signalRBuilder = builder.Services.AddSignalR().AddJsonProtocol(options =>
         {
@@ -312,12 +329,17 @@ public static class Program
         app.MapWbsktHealthChecks();
         app.MapWbsktJwks();
 
+        app.Logger.LogInformation("Serving as host role {HostRole}", role);
+
         app.MapControllers();
-        // A connection is authorised once, when it opens, and JoinWorkspace checks permission once,
-        // so without this a signed-out user or a removed member kept the feed for as long as the
-        // socket stayed up. Closing it when the token expires makes the client reconnect with a
-        // fresh token, and its rejoin runs the permission check again.
-        app.MapHub<NotificationHub>("/hubs/notifications", options => options.CloseOnAuthenticationExpiration = true);
+        if (role == HostRole.All)
+        {
+            // A connection is authorised once, when it opens, and JoinWorkspace checks permission once,
+            // so without this a signed-out user or a removed member kept the feed for as long as the
+            // socket stayed up. Closing it when the token expires makes the client reconnect with a
+            // fresh token, and its rejoin runs the permission check again.
+            app.MapHub<NotificationHub>("/hubs/notifications", options => options.CloseOnAuthenticationExpiration = true);
+        }
 
         await app.RunAsync();
     }

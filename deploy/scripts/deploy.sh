@@ -25,8 +25,8 @@ set -euo pipefail
 # Backing services (sql/rabbitmq/redis/traefik) are deliberately absent - they are not rebuilt per
 # release and restarting them is a separate, more disruptive decision. Console is absent too; it
 # has its own mode above.
-readonly ALLOWED_SERVICES=(auth management socket engine)
-readonly DEFAULT_SERVICES=(auth management socket engine)
+readonly ALLOWED_SERVICES=(auth management devices socket engine)
+readonly DEFAULT_SERVICES=(auth management devices socket engine)
 readonly HEALTH_TIMEOUT_SECONDS=240
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -49,8 +49,8 @@ usage: deploy.sh --tag <image-tag> [--services "<a b c>"] [--ref <git-ref>] [--s
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
-  --services         Space-separated subset of: auth management socket engine.
-                     Defaults to all four.
+  --services         Space-separated subset of: auth management devices socket engine.
+                     Defaults to all of them.
   --ref              Git ref to reset the checkout to. Defaults to the commit embedded in a
                      sha-<commit> tag; required for any other tag shape.
   --skip-migrations  Don't run the migrator. Migrations run by DEFAULT - the incremental
@@ -188,15 +188,17 @@ container_state() {
     docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1"
 }
 
+# Waits for the services named, or for all of $SERVICES when none are.
 wait_for_health() {
     local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
     local pending svc cid state
-    local -a cids
+    local -a cids services
+    if [[ $# -gt 0 ]]; then services=("$@"); else services=("${SERVICES[@]}"); fi
 
-    echo "==> waiting for ${SERVICES[*]} to report healthy"
+    echo "==> waiting for ${services[*]} to report healthy"
     while (( SECONDS < deadline )); do
         pending=""
-        for svc in "${SERVICES[@]}"; do
+        for svc in "${services[@]}"; do
             mapfile -t cids < <(docker compose ps -q "$svc")
             if [[ ${#cids[@]} -eq 0 ]]; then
                 pending+=" $svc"
@@ -274,15 +276,34 @@ deploy_backend() {
         docker compose --profile migrate run --rm migrator
     fi
 
-    echo "==> starting ${SERVICES[*]}"
+    # devices and management both serve device login and registration: Traefik sends those paths to
+    # devices and falls back to management while no devices instance is healthy. Restarting them
+    # together would leave devices with neither, so devices goes first and must be healthy before
+    # the rest (management among them) are touched.
+    local -a rest=()
+    local svc
+    if [[ " ${SERVICES[*]} " == *" devices "* && " ${SERVICES[*]} " == *" management "* ]]; then
+        echo "==> starting devices before management"
+        start_services devices
+        for svc in "${SERVICES[@]}"; do
+            [[ "$svc" == devices ]] || rest+=("$svc")
+        done
+        start_services "${rest[@]}"
+    else
+        start_services "${SERVICES[@]}"
+    fi
+
+    echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+}
+
+start_services() {
+    echo "==> starting $*"
     # --no-build: the compose file keeps its build: keys for local development, and without this a
     # missing image would silently trigger a full SDK build on the production box.
     # --no-deps: sql/rabbitmq/redis/traefik are already running and must not be recycled per deploy.
-    docker compose up -d --no-build --no-deps "${SERVICES[@]}"
+    docker compose up -d --no-build --no-deps "$@"
 
-    wait_for_health
-
-    echo "==> deployed $TAG (${SERVICES[*]}) at $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+    wait_for_health "$@"
 }
 
 main() {

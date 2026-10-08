@@ -27,7 +27,7 @@ on:
         description: Image tag to deploy, e.g. sha-abc1234 (see the Build images run)
         required: true
       services:
-        description: Space-separated services to update; blank deploys all four hosts
+        description: Space-separated services to update; blank deploys every host
         required: false
         default: ""
       skip_migrations:
