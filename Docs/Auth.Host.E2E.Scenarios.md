@@ -361,9 +361,9 @@ The cross-service contract. Every workspace-scoped management-host request passe
 
 ---
 
-## 11b. Devices — delete, rotate, status, rename, state (management host)
+## 11b. Devices — delete, rotate, status, rename, state, tags (management host)
 
-Covered by `Scenarios/Devices/DeviceLifecycleTests.cs` and `Scenarios/Devices/DeviceStatusTests.cs`; listed here so device lifecycle sits beside the
+Covered by `Scenarios/Devices/DeviceLifecycleTests.cs`, `Scenarios/Devices/DeviceStatusTests.cs` and `Scenarios/Devices/DeviceTagTests.cs`; listed here so device lifecycle sits beside the
 workspace scenarios it depends on.
 
 | ID | ± | Scenario | Expected |
@@ -387,6 +387,14 @@ workspace scenarios it depends on.
 | `DEV_NAME_01` | + | Rename a device (name padded with spaces) | **204**; the detail shows the trimmed name |
 | `DEV_NAME_02` | − | Rename an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND`, then **403** `CLIENT_UNAUTHORIZED`; the name is unchanged |
 | `DEV_STATE_01` | ± | Read a new device's state, an unknown device's, and another workspace's | **200** with no items; **404** `CLIENT_NOT_FOUND`; **403** `CLIENT_UNAUTHORIZED` |
+| `DEV_TAG_01` | + | Tag a device `Greenhouse`, ` garage ` and `GARAGE` | **200** with `garage`, `greenhouse`; the detail and the list show the same |
+| `DEV_TAG_02` | + | Tag a device again, then with an empty list | The second set replaces the first; the empty list clears them |
+| `DEV_TAG_03` | − | Tag with `a,b`, an empty tag, `-garage` or 33 characters, or send no list | **400** `CLIENT_TAG_INVALID`; the tags are unchanged |
+| `DEV_TAG_04` | − | Tag with 11 distinct tags, then 10 plus repeats | **400** `CLIENT_TAGS_TOO_MANY` and nothing stored; then **200** with 10 tags |
+| `DEV_TAG_05` | − | Tag an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND`, then **403** `CLIENT_UNAUTHORIZED`; its tags are unchanged |
+| `DEV_TAG_06` | + | List devices with `?tag=Garage`, `?tag=greenhouse`, `?tag=attic`, and a policy's devices with `?tag=garage` | Only the devices carrying the tag, with a matching `X-Total-Count`; none for an unused tag |
+| `DEV_TAG_07` | − | List devices with `?tag=a,b`, in the workspace and policy lists | **400** `CLIENT_TAG_INVALID` |
+| `DEV_TAG_08` | + | List the workspace's tags, delete a tagged device, list again | Each tag with its device count, this workspace's only; the deleted device's tags drop out |
 
 ---
 

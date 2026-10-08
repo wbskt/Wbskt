@@ -26,7 +26,9 @@ BEGIN
         cap.AgentVersion,
         cap.Platform,
         cap.CapabilitiesJson,
-        cap.UpdatedAt AS CapabilitiesUpdatedAt
+        cap.UpdatedAt AS CapabilitiesUpdatedAt,
+        (SELECT STRING_AGG(t.Tag, ',') WITHIN GROUP (ORDER BY t.Tag)
+         FROM dbo.ClientTags t WHERE t.ClientId = c.Id) AS Tags
     FROM dbo.Clients c
     INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id
     LEFT JOIN dbo.ClientCapabilities cap ON cap.ClientId = c.Id

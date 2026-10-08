@@ -152,6 +152,84 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = fixture.ConnectionString })
         .Build();
 
+    [SkippableFact]
+    public async Task Tags_replace_the_previous_set_and_change_only_inside_their_workspace()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int clientId = await CreateClientAsync(workspaceId, await CreatePolicyAsync(workspaceId), status: 1);
+        Guid refId = await RefIdOfAsync(clientId);
+
+        Assert.True(await Clients().SetTagsAsync(clientId, workspaceId, ["garage", "greenhouse"]));
+        Assert.True(await Clients().SetTagsAsync(clientId, workspaceId, ["greenhouse", "shed"]));
+        Assert.False(await Clients().SetTagsAsync(clientId, workspaceId + 1, ["stolen"]));
+
+        Assert.Equal(["greenhouse", "shed"], (await Clients().GetDetailByRefIdAsync(refId)).Tags);
+
+        Assert.True(await Clients().SetTagsAsync(clientId, workspaceId, []));
+        Assert.Empty((await Clients().GetDetailByRefIdAsync(refId)).Tags);
+    }
+
+    [SkippableFact]
+    public async Task The_list_filters_by_tag_counts_only_matches_and_carries_each_clients_tags()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int policyId = await CreatePolicyAsync(workspaceId);
+        int otherPolicyId = await CreatePolicyAsync(workspaceId);
+        int garage = await CreateClientAsync(workspaceId, policyId, status: 1);
+        int both = await CreateClientAsync(workspaceId, otherPolicyId, status: 1);
+        int untagged = await CreateClientAsync(workspaceId, policyId, status: 1);
+        await Clients().SetTagsAsync(garage, workspaceId, ["garage"]);
+        await Clients().SetTagsAsync(both, workspaceId, ["garage", "greenhouse"]);
+
+        var tagged = await Clients().GetAllAsync(workspaceId, null, null, "garage", 0, 100);
+        Assert.Equal(2, tagged.TotalCount);
+        Assert.Equal(new[] { both, garage }.Order(), tagged.Select(c => c.Id).Order());
+        Assert.Equal(["garage", "greenhouse"], tagged.Single(c => c.Id == both).Tags);
+
+        var all = await Clients().GetAllAsync(workspaceId, null, null, null, 0, 100);
+        Assert.Equal(3, all.TotalCount);
+        Assert.Empty(all.Single(c => c.Id == untagged).Tags);
+
+        var inPolicy = await Clients().GetByPolicyIdAsync(workspaceId, policyId, null, null, "garage", 0, 100);
+        Assert.Equal(1, inPolicy.TotalCount);
+        Assert.Equal(garage, inPolicy.Single().Id);
+
+        Assert.Equal(0, (await Clients().GetAllAsync(workspaceId, null, null, "attic", 0, 100)).TotalCount);
+    }
+
+    [SkippableFact]
+    public async Task The_workspace_tag_list_counts_its_own_clients_only()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int otherWorkspaceId = NewWorkspaceId();
+        int policyId = await CreatePolicyAsync(workspaceId);
+        int otherPolicyId = await CreatePolicyAsync(otherWorkspaceId);
+        await Clients().SetTagsAsync(await CreateClientAsync(workspaceId, policyId, status: 1), workspaceId, ["garage", "greenhouse"]);
+        await Clients().SetTagsAsync(await CreateClientAsync(workspaceId, policyId, status: 0), workspaceId, ["garage"]);
+        int foreign = await CreateClientAsync(otherWorkspaceId, otherPolicyId, status: 1);
+        await Clients().SetTagsAsync(foreign, otherWorkspaceId, ["garage", "attic"]);
+
+        var tags = await Clients().GetTagsAsync(workspaceId);
+
+        Assert.Equal([new ClientTagCount("garage", 2), new ClientTagCount("greenhouse", 1)], tags);
+    }
+
+    [SkippableFact]
+    public async Task Deleting_a_client_removes_its_tags()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int clientId = await CreateClientAsync(workspaceId, await CreatePolicyAsync(workspaceId), status: 1);
+        await Clients().SetTagsAsync(clientId, workspaceId, ["garage"]);
+
+        Assert.True(await Clients().DeleteAsync(clientId, workspaceId));
+
+        Assert.Equal(0, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.ClientTags WHERE ClientId = @p0", clientId));
+    }
+
     private IClientProvider Clients() => new ClientProvider(Configuration());
 
     private IRegistrationPolicyProvider Policies() => new RegistrationPolicyProvider(Configuration());
