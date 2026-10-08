@@ -30,13 +30,12 @@ public static class WorkflowServiceCollectionExtensions
     public static IServiceCollection AddWorkflowManagementServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddWorkflowProviders();
-        services.AddMemoryCache();
         services.AddSingleton<IClock, SystemClock>();
-        services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
-        // The token registry is process-wide - the service that reads it is per-scope.
-        services.AddSingleton<RunCancellationTokenRegistry>();
-        services.AddScoped<IRunCancellationService, RunCancellationService>();
+
+        // No IRunCancellationService, token registry or definition cache: the engine is the only writer
+        // of run state, so management asks it to cancel (a CancelWorkflowRun command) rather than running
+        // the cancellation state machine itself, and a cache here would only ever be this host's own copy.
 
         WorkflowEngineOptions options = configuration.GetSection("WorkflowEngine").Get<WorkflowEngineOptions>() ?? new WorkflowEngineOptions();
         services.AddSingleton(Options.Create(options));

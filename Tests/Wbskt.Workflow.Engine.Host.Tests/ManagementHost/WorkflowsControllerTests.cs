@@ -22,7 +22,7 @@ public sealed class WorkflowsControllerTests
     public async Task Publish_resolves_workspace_with_create_permission_and_delegates()
     {
         var service = new Mock<IWorkflowDefinitionService>();
-        var engineClient = new Mock<IWorkflowEngineClient>();
+        var engineClient = new Mock<IWorkflowEngineGateway>();
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Greenhouse", "desc", null!);
         var expected = new WorkflowPublishResponse(request.RefId, 1, "Published");
         service.Setup(x => x.PublishAsync(WorkspaceId, WorkspaceRef, request, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowPublishResponse>.Success(expected));
@@ -39,7 +39,7 @@ public sealed class WorkflowsControllerTests
     public async Task GetCurrent_resolves_workspace_with_read_permission_and_returns_dto()
     {
         var service = new Mock<IWorkflowDefinitionService>();
-        var engineClient = new Mock<IWorkflowEngineClient>();
+        var engineClient = new Mock<IWorkflowEngineGateway>();
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 2, "Published", "Workflow", "desc", null!, DateTime.UtcNow);
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowDefinitionDto>.Success(expected));
@@ -56,7 +56,7 @@ public sealed class WorkflowsControllerTests
     public async Task GetVersion_resolves_workspace_with_read_permission_and_returns_dto()
     {
         var service = new Mock<IWorkflowDefinitionService>();
-        var engineClient = new Mock<IWorkflowEngineClient>();
+        var engineClient = new Mock<IWorkflowEngineGateway>();
         var refId = Guid.NewGuid();
         var expected = new WorkflowDefinitionDto(refId, 3, "Published", "Workflow", null, null!, DateTime.UtcNow);
         service.Setup(x => x.GetVersionAsync(WorkspaceId, refId, 3, It.IsAny<CancellationToken>())).ReturnsAsync(Result<WorkflowDefinitionDto>.Success(expected));
@@ -73,7 +73,7 @@ public sealed class WorkflowsControllerTests
     public async Task Deprecate_resolves_workspace_with_delete_permission_and_delegates()
     {
         var service = new Mock<IWorkflowDefinitionService>();
-        var engineClient = new Mock<IWorkflowEngineClient>();
+        var engineClient = new Mock<IWorkflowEngineGateway>();
         var refId = Guid.NewGuid();
         service.Setup(x => x.DeprecateAsync(WorkspaceId, refId, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
         var controller = new WorkflowsController(service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowsController>>());
@@ -88,7 +88,7 @@ public sealed class WorkflowsControllerTests
     public async Task StartManualRun_validates_ownership_then_delegates_to_engine_client()
     {
         var service = new Mock<IWorkflowDefinitionService>();
-        var engineClient = new Mock<IWorkflowEngineClient>();
+        var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
@@ -117,7 +117,7 @@ public sealed class WorkflowsControllerTests
     public async Task StartManualRun_that_the_engine_drops_records_nothing()
     {
         var service = new Mock<IWorkflowDefinitionService>();
-        var engineClient = new Mock<IWorkflowEngineClient>();
+        var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, null!, DateTime.UtcNow)));

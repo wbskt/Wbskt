@@ -920,18 +920,23 @@ public sealed class ServicesFixture : IDisposable
             ?? throw new InvalidOperationException("Run detail returned empty response.");
     }
 
-    /// <summary>Cancels a specific run by RefId.</summary>
+    /// <summary>
+    /// Asks for a run to be cancelled by RefId. The answer is 202: the engine carries the cancel out
+    /// afterwards, so a caller that needs the run cancelled polls for it (<see cref="WaitForRunTerminalAsync"/>).
+    /// </summary>
     public async Task CancelRunAsync(string token, Guid workspaceRef, Guid runRefId)
     {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/cancel");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        req.Content = JsonContent.Create(new CancelRunRequest("test cancellation"), options: JsonOptions);
-
-        var resp = await _http.SendAsync(req);
+        using var resp = await CancelRunRawAsync(token, workspaceRef, runRefId);
         resp.EnsureSuccessStatusCode();
     }
+
+    /// <summary>Asks for a run to be cancelled and returns the raw response, for the scenarios about which status comes back.</summary>
+    public Task<HttpResponseMessage> CancelRunRawAsync(string token, Guid workspaceRef, Guid runRefId) =>
+        SendAsync(
+            HttpMethod.Post,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/cancel",
+            token,
+            new CancelRunRequest("test cancellation"));
 
     /// <summary>Fetches the ordered history events for a run (each carrying NodeCompleted/NodeFailed PayloadJson).</summary>
     public async Task<IReadOnlyList<HistoryEventDto>> GetHistoryAsync(string token, Guid workspaceRef, Guid runRefId, int top = 200)

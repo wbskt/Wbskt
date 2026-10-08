@@ -16,7 +16,7 @@ public sealed class PublicCallbackControllerTests
     [Fact]
     public async Task An_engine_that_times_out_gets_the_sender_a_503_to_retry()
     {
-        var engine = new Mock<IWorkflowEngineClient>();
+        var engine = new Mock<IWorkflowEngineGateway>();
         engine.Setup(e => e.WakeAsync(It.IsAny<string>(), It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.", new TimeoutException()));
         var controller = CreateController(engine.Object);
@@ -30,7 +30,7 @@ public sealed class PublicCallbackControllerTests
     [Fact]
     public async Task An_unreachable_engine_gets_the_sender_a_503()
     {
-        var engine = new Mock<IWorkflowEngineClient>();
+        var engine = new Mock<IWorkflowEngineGateway>();
         engine.Setup(e => e.WebhookAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<JsonElement>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new HttpRequestException("connection refused"));
 
@@ -44,14 +44,14 @@ public sealed class PublicCallbackControllerTests
     {
         using var hungUp = new CancellationTokenSource();
         hungUp.Cancel();
-        var engine = new Mock<IWorkflowEngineClient>();
+        var engine = new Mock<IWorkflowEngineGateway>();
         engine.Setup(e => e.WakeAsync(It.IsAny<string>(), It.IsAny<JsonElement>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TaskCanceledException());
 
         await Assert.ThrowsAsync<TaskCanceledException>(() => CreateController(engine.Object).Wake("token", Payload, hungUp.Token));
     }
 
-    private static PublicCallbackController CreateController(IWorkflowEngineClient engine) =>
+    private static PublicCallbackController CreateController(IWorkflowEngineGateway engine) =>
         new(engine, NullLogger<PublicCallbackController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }

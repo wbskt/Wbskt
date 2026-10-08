@@ -18,19 +18,19 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 public sealed class WorkflowsController : ApiControllerBase
 {
     private readonly IWorkflowDefinitionService _service;
-    private readonly IWorkflowEngineClient _engineClient;
+    private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowsController> _logger;
 
     public WorkflowsController(
         IWorkflowDefinitionService service, 
-        IWorkflowEngineClient engineClient, 
+        IWorkflowEngineGateway engine, 
         [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
         ILogger<WorkflowsController> logger)
     {
         _eventBus = eventBus;
         _service = service;
-        _engineClient = engineClient;
+        _engine = engine;
         _logger = logger;
     }
 
@@ -183,7 +183,7 @@ public sealed class WorkflowsController : ApiControllerBase
         StartRunResponse response;
         try
         {
-            response = await _engineClient.StartManualRunAsync(refId, request, ct);
+            response = await _engine.StartManualRunAsync(refId, request, ct);
         }
         catch (Exception ex)
         {

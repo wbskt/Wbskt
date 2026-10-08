@@ -77,8 +77,8 @@ public static class Program
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         // These services publish after their change is committed, so they publish through the queued
         // bus: a broker outage must not turn a rotated secret or a registration into a 500 (see
-        // QueuedEventBus). Commands and pings in ClientsController keep the real bus, because there
-        // the publish is the action.
+        // QueuedEventBus). Commands and pings in ClientsController, and a run cancel sent to the engine
+        // (IWorkflowEngineGateway), keep the real bus, because there the publish is the action.
         builder.Services.AddQueuedEventBus();
         builder.Services.AddScopedWithQueuedEvents<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
@@ -127,6 +127,10 @@ public static class Program
             client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:WorkflowEngineTimeoutSeconds", 10));
         })
         .AddHttpMessageHandler<WorkflowEngineApiKeyHandler>();
+        // Every engine operation goes through the gateway: start, signal, wake and webhook over the
+        // client above, cancel as a command on the real bus (its send is the action, like a device
+        // command). The engine client itself is only the gateway's transport.
+        builder.Services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
 
         builder.Services.TryAddSingleton<IEventProvider, EventProvider>();
         builder.Services.AddWorkflowManagementServices(builder.Configuration);

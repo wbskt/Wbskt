@@ -24,8 +24,9 @@ public sealed class WorkflowRunCancellationRequestedEventConsumer : IConsumer<Wo
 
         // First, unconditionally: cancellation is read through a short per-host cache, so until this host
         // is told, its own IsCancellationRequestedAsync keeps answering with whatever it cached before the
-        // cancel. This is what makes a cancel issued through the management host visible here immediately
-        // rather than up to a cache window later.
+        // cancel. This is what makes a cancel issued on another engine instance visible here immediately
+        // rather than up to a cache window later. (The management host no longer cancels in process; it
+        // sends CancelWorkflowRun, handled by CancelWorkflowRunConsumer.)
         _runCancellationService.MarkCancellationRequested(runId);
 
         // Then the durable work. The engine host is authoritative for cancellation regardless of whether

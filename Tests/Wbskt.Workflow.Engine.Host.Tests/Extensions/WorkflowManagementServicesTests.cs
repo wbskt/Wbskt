@@ -61,15 +61,6 @@ public sealed class WorkflowManagementServicesTests
     }
 
     [Fact]
-    public void AddWorkflowManagementServices_resolves_IWorkflowDefinitionCache()
-    {
-        using ServiceProvider provider = BuildServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        using IServiceScope scope = provider.CreateScope();
-
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowDefinitionCache>());
-    }
-
-    [Fact]
     public void AddWorkflowManagementServices_resolves_ITriggerRegistrationService()
     {
         using ServiceProvider provider = BuildServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -79,12 +70,22 @@ public sealed class WorkflowManagementServicesTests
     }
 
     [Fact]
-    public void AddWorkflowManagementServices_resolves_IRunCancellationService()
+    public void AddWorkflowManagementServices_does_not_register_IRunCancellationService()
     {
-        using ServiceProvider provider = BuildServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        using IServiceScope scope = provider.CreateScope();
+        // The engine is the only writer of run state; management asks it to cancel with a command.
+        IServiceCollection services = BuildServices();
 
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IRunCancellationService>());
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IRunCancellationService));
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(Wbskt.Workflow.Runtime.RunCancellationTokenRegistry));
+    }
+
+    [Fact]
+    public void AddWorkflowManagementServices_does_not_register_IWorkflowDefinitionCache()
+    {
+        // A cache here could only ever be management's own copy; invalidating it never reached the engine.
+        IServiceCollection services = BuildServices();
+
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IWorkflowDefinitionCache));
     }
 
     [Fact]

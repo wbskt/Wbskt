@@ -20,6 +20,13 @@ public interface IWorkflowRunQueryService
     /// run-weighted rate honest.</summary>
     Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
     Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct);
-    Task<Result> CancelAsync(int workspaceId, Guid runRefId, string reason, CancellationToken ct);
+
+    /// <summary>
+    /// The internal id of a run this workspace may cancel. Reads only: the cancel itself is a command
+    /// to the engine. <c>RUN_NOT_FOUND</c> (404) for a run that is unknown or another workspace's,
+    /// <c>RUN_NOT_CANCELLABLE</c> (409) for one that has already reached a terminal status.
+    /// </summary>
+    Task<Result<int>> ResolveCancellableRunAsync(int workspaceId, Guid runRefId, CancellationToken ct);
+
     Task<Result<int>> EnsureRunInWorkspaceAsync(int workspaceId, Guid runRefId, CancellationToken ct);
 }

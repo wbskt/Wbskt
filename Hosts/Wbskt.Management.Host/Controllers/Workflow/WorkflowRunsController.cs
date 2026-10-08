@@ -18,19 +18,19 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 public sealed class WorkflowRunsController : ApiControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
-    private readonly IWorkflowEngineClient _engineClient;
+    private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowRunsController> _logger;
 
     public WorkflowRunsController(
         IWorkflowRunQueryService runQueryService, 
-        IWorkflowEngineClient engineClient, 
+        IWorkflowEngineGateway engine, 
         [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
         ILogger<WorkflowRunsController> logger)
     {
         _eventBus = eventBus;
         _runQueryService = runQueryService;
-        _engineClient = engineClient;
+        _engine = engine;
         _logger = logger;
     }
 
@@ -102,17 +102,37 @@ public sealed class WorkflowRunsController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Asks the engine to cancel a run. Cancellation is the engine's to carry out, so this sends it a
+    /// command and answers 202 once the broker has it; the run moves to 'Cancelling' and then
+    /// 'Cancelled' shortly after. 404 for a run that is unknown or another workspace's, 409 for one
+    /// that has already finished, 503 when the broker is unavailable - nothing was sent, so the caller
+    /// should retry.
+    /// </summary>
     [HttpPost("runs/{runRefId:guid}/cancel")]
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
     public async Task<IActionResult> Cancel([FromWorkspace] int workspaceId, Guid runRefId, [FromBody] CancelRunRequest req, CancellationToken ct)
     {
-        var result = await _runQueryService.CancelAsync(workspaceId, runRefId, req.Reason, ct);
-        if (result.IsSuccess)
+        var runResult = await _runQueryService.ResolveCancellableRunAsync(workspaceId, runRefId, ct);
+        if (runResult.IsFailure)
         {
-            await _eventBus.PublishAsync(new WorkflowRunCancelRequestedEvent(runRefId, workspaceId, req.Reason), ct);
+            return MapError(runResult.Error);
         }
 
-        return MapResult(result);
+        try
+        {
+            await _engine.CancelRunAsync(runResult.Value, req.Reason, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("Sending the cancel for run '{RunRefId}' failed; the event bus is unavailable. {Message}", runRefId, ex.Message);
+            Response.Headers.RetryAfter = "5";
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, Error.Failure("EVENT_BUS_UNAVAILABLE", "The run could not be cancelled right now. Try again shortly."));
+        }
+
+        _logger.LogInformation("Cancel requested for RunRefId: '{RunRefId}' in WorkspaceId: {WorkspaceId} (Reason: '{Reason}')", runRefId, workspaceId, req.Reason);
+        await _eventBus.PublishAsync(new WorkflowRunCancelRequestedEvent(runRefId, workspaceId, req.Reason), ct);
+        return Accepted();
     }
 
     [HttpPost("runs/{runRefId:guid}/signals/{signalName}")]
@@ -127,7 +147,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
 
         try
         {
-            var response = await _engineClient.SignalAsync(runRefId, signalName, req, ct);
+            var response = await _engine.SignalAsync(runRefId, signalName, req, ct);
             _logger.LogDebug("Successfully sent signal '{SignalName}' to RunRefId: '{RunRefId}'", signalName, runRefId);
             await _eventBus.PublishAsync(new WorkflowRunSignalSentEvent(runRefId, workspaceId, signalName), ct);
             return Ok(response);
@@ -139,7 +159,4 @@ public sealed class WorkflowRunsController : ApiControllerBase
             return MapError(Error.Failure("ENGINE_SIGNAL_ERROR", ex.Message));
         }
     }
-
-
-
 }
