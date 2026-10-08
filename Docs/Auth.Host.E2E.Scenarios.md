@@ -361,9 +361,9 @@ The cross-service contract. Every workspace-scoped management-host request passe
 
 ---
 
-## 11b. Devices — delete, rotate, bulk status (management host)
+## 11b. Devices — delete, rotate, status, rename, state (management host)
 
-Covered by `Scenarios/Devices/DeviceLifecycleTests.cs`; listed here so device lifecycle sits beside the
+Covered by `Scenarios/Devices/DeviceLifecycleTests.cs` and `Scenarios/Devices/DeviceStatusTests.cs`; listed here so device lifecycle sits beside the
 workspace scenarios it depends on.
 
 | ID | ± | Scenario | Expected |
@@ -375,6 +375,18 @@ workspace scenarios it depends on.
 | `DEV_BULK_01` | + | Approve two pending devices and an unknown ref | **200**; both approved, the unknown ref reported as `CLIENT_UNAUTHORIZED` |
 | `DEV_BULK_02` | − | Approve two pending devices under a one-device policy | The first is approved, the second reported as `POLICY_LIMIT_REACHED` |
 | `DEV_BULK_03` | − | Empty batch, or more than 100 | **400** |
+| `DEV_BULK_04` | − | Approve three pending devices, in the order c, a, b, under a two-device policy | c and a are approved; b is reported as `POLICY_LIMIT_REACHED` and stays pending |
+| `DEV_BULK_05` | − | Approve a pending device twice, an already-registered one, another workspace's and an unknown ref | **200**; the pending and registered devices are each listed once as updated; the foreign and unknown refs are both `CLIENT_UNAUTHORIZED`; the foreign device stays pending |
+| `DEV_BULK_06` | + | Revoke two registered devices | Both updated; neither signs in (**401**) |
+| `DEV_STATUS_01` | + | Approve a pending device | **204**; status Registered and it signs in |
+| `DEV_STATUS_02` | + | Revoke a registered device | **204**; status Revoked and it no longer signs in (**401**) |
+| `DEV_STATUS_03` | + | Approve a device that is already registered | **204**; nothing changes and it still signs in |
+| `DEV_STATUS_04` | − | Change an unknown device's status | **404** `CLIENT_NOT_FOUND` |
+| `DEV_STATUS_05` | − | Revoke another workspace's device | **403** `CLIENT_UNAUTHORIZED`; it stays registered and still signs in |
+| `DEV_STATUS_06` | − | Approve a device into a full policy | **400** `POLICY_LIMIT_REACHED`; it stays pending |
+| `DEV_NAME_01` | + | Rename a device (name padded with spaces) | **204**; the detail shows the trimmed name |
+| `DEV_NAME_02` | − | Rename an unknown device, then another workspace's | **404** `CLIENT_NOT_FOUND`, then **403** `CLIENT_UNAUTHORIZED`; the name is unchanged |
+| `DEV_STATE_01` | ± | Read a new device's state, an unknown device's, and another workspace's | **200** with no items; **404** `CLIENT_NOT_FOUND`; **403** `CLIENT_UNAUTHORIZED` |
 
 ---
 
