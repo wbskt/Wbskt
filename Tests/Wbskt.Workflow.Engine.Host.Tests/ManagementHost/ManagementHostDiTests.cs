@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Validation;
@@ -27,6 +30,9 @@ public sealed class ManagementHostDiTests
         services.AddWorkflowManagementServices(configuration);
         services.AddSingleton<IIdentityService, IdentityService>();
         services.AddQueuedEventBus();
+        services.AddSingleton(Mock.Of<IEventBus>());
+        services.AddSingleton(Mock.Of<IWorkflowEngineClient>());
+        services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
         services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         services.AddSingleton<WorkflowValidator>();
@@ -36,6 +42,7 @@ public sealed class ManagementHostDiTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowDefinitionService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowRunQueryService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowEngineGateway>());
         Assert.DoesNotContain(services, d => d.ServiceType == typeof(IInboundHub));
     }
 }

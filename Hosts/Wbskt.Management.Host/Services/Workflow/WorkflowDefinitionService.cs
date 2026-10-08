@@ -4,6 +4,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -15,6 +16,10 @@ using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
+// Publish, deprecate, reinstate, rollback and delete write definitions and trigger registrations
+// directly, and evict nothing from any definition cache: this host keeps none, and the engine's cache
+// is its own (evicting a copy here never reached it). A WorkflowDefinitionChanged event, for the engine
+// to react to, is the planned follow-up in place of a shared cache contract.
 public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
@@ -24,28 +29,25 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ITriggerRegistrationService _triggerRegistrationService;
-    private readonly IWorkflowDefinitionCache _cache;
     private readonly WorkflowValidator _validator;
     private readonly IIdentityService _identityService;
-    private readonly IRunCancellationService _runCancellation;
+    private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowDefinitionService> _logger;
 
     public WorkflowDefinitionService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ITriggerRegistrationService triggerRegistrationService,
-        IWorkflowDefinitionCache cache,
         WorkflowValidator validator,
         IIdentityService identityService,
-        IRunCancellationService runCancellation,
+        IWorkflowEngineGateway engine,
         IEventBus eventBus,
         ILogger<WorkflowDefinitionService> logger)
     {
         _eventBus = eventBus;
-        _runCancellation = runCancellation;
+        _engine = engine;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _triggerRegistrationService = triggerRegistrationService;
-        _cache = cache;
         _validator = validator;
         _identityService = identityService;
         _logger = logger;
@@ -137,11 +139,9 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 {
                     await _workflowDefinitionProvider.DeprecateAsync(existing.Id, ct);
                     await _triggerRegistrationService.OnDeprecatedAsync(existing.Id, ct);
-                    _cache.Invalidate(existing.Id);
                 }
 
                 await _triggerRegistrationService.OnPublishedAsync(inserted.Id, workspaceRef, ct);
-                _cache.Invalidate(inserted.Id);
             }
             catch (Exception ex)
             {
@@ -206,7 +206,6 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 throw;
             }
 
-            _cache.Invalidate(row.Id);
             _logger.LogInformation("Workflow '{RefId}' version {Version} reinstated", refId, row.Version);
             await _eventBus.PublishAsync(new WorkflowReinstatedEvent(row.RefId, row.Id, workspaceId, row.Version), ct);
             return Result.Success();
@@ -353,7 +352,6 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             // The real workspace ref matters: webhook trigger keys are workspace-scoped, so
             // re-registering with anything else would mint keys nothing can ever match.
             await _triggerRegistrationService.OnPublishedAsync(existing.Id, workspaceRef, ct);
-            _cache.Invalidate(existing.Id);
         }
         catch (Exception ex)
         {
@@ -461,7 +459,6 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
             await _workflowDefinitionProvider.DeprecateAsync(row.Id, ct);
             await _triggerRegistrationService.OnDeprecatedAsync(row.Id, ct);
-            _cache.Invalidate(row.Id);
 
             _logger.LogInformation("Workflow '{RefId}' deprecated successfully", refId);
             await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(row.RefId, row.Id, workspaceId, row.Version), ct);
@@ -523,15 +520,12 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             }
 
             // The triggers are gone, so nothing new starts; runs already going are stopped rather than
-            // left to finish a workflow the operator has removed.
+            // left to finish a workflow the operator has removed. The engine does the stopping. The
+            // delete is committed by now, so the commands are queued: a broker outage delays the
+            // cancels instead of turning a finished delete into a 500 that a retry would answer 404.
             foreach (long runId in deletion.ActiveRunIds)
             {
-                await _runCancellation.RequestCancellationAsync(runId, DeletedCancellationReason, ct);
-            }
-
-            foreach (int definitionId in deletion.DefinitionIds)
-            {
-                _cache.Invalidate(definitionId);
+                await _engine.QueueCancelRunAsync(runId, DeletedCancellationReason, ct);
             }
 
             _logger.LogInformation("Workflow '{RefId}' deleted: {Versions} version(s) disabled, {Runs} run(s) cancelling", refId, deletion.DefinitionIds.Count, deletion.ActiveRunIds.Count);

@@ -159,8 +159,9 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     private async Task FinalizeIfIdleAsync(long runId, int? knownActiveBranchCount, CancellationToken ct)
     {
-        // No bare SetTerminalAsync fallback here (2.3): a caller without a finalizer registered (e.g. the
-        // management host) relies on the engine host - which always has one - to finalize. A bare
+        // No bare SetTerminalAsync fallback here (2.3): a caller without a finalizer registered (a test
+        // host; the management host no longer cancels at all) relies on the engine host - which always
+        // has one - to finalize. A bare
         // SetTerminalAsync would skip the pending-trigger drain, run-completed publish, and sub-workflow
         // completion hook, stranding parents.
         var runFinalizer = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IRunFinalizer>(_serviceProvider);

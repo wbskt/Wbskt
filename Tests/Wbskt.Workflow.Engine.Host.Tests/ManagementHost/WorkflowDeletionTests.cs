@@ -4,6 +4,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -13,9 +14,9 @@ using Wbskt.Workflow.Abstraction.Validation;
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
 /// <summary>
-/// Deleting a workflow and listing its versions. What matters is that a delete stops what is
-/// running and evicts every version from the cache, that a workflow which is not this workspace's
-/// reads as not found, and that only the newest version is ever reported live.
+/// Deleting a workflow and listing its versions. What matters is that a delete asks the engine to stop
+/// what is running, that a workflow which is not this workspace's reads as not found, and that only
+/// the newest version is ever reported live.
 /// </summary>
 public sealed class WorkflowDeletionTests
 {
@@ -23,7 +24,7 @@ public sealed class WorkflowDeletionTests
     private static readonly Guid RefId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     [Fact]
-    public async Task Deleting_cancels_runs_in_flight_and_evicts_every_version()
+    public async Task Deleting_queues_a_cancel_command_for_each_run_in_flight()
     {
         var harness = new Harness();
         harness.Provider
@@ -33,10 +34,11 @@ public sealed class WorkflowDeletionTests
         var result = await harness.Service.DeleteAsync(WorkspaceId, RefId, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        harness.Runs.Verify(r => r.RequestCancellationAsync(100, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        harness.Runs.Verify(r => r.RequestCancellationAsync(101, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        harness.Cache.Verify(c => c.Invalidate(11), Times.Once);
-        harness.Cache.Verify(c => c.Invalidate(12), Times.Once);
+        // Queued, not sent: the delete is already committed, so a broker outage must delay the cancels
+        // rather than fail the request.
+        harness.Engine.Verify(e => e.QueueCancelRunAsync(100, "Workflow deleted.", It.IsAny<CancellationToken>()), Times.Once);
+        harness.Engine.Verify(e => e.QueueCancelRunAsync(101, "Workflow deleted.", It.IsAny<CancellationToken>()), Times.Once);
+        harness.Engine.Verify(e => e.CancelRunAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<WorkflowDeletedEvent>(e => e.WorkflowRefId == RefId && e.WorkflowId == 12 && e.WorkspaceId == WorkspaceId && e.CancelledRuns == 2),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -54,7 +56,7 @@ public sealed class WorkflowDeletionTests
 
         Assert.Equal("WORKFLOW_NOT_FOUND", result.Error.Code);
         Assert.Equal(ErrorType.NotFound, result.Error.Type);
-        harness.Runs.Verify(r => r.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Engine.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -100,15 +102,13 @@ public sealed class WorkflowDeletionTests
             var identity = new Mock<IIdentityService>();
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
             Service = new WorkflowDefinitionService(
-                Provider.Object, Mock.Of<ITriggerRegistrationService>(), Cache.Object,
-                new WorkflowValidator(), identity.Object, Runs.Object, Bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+                Provider.Object, Mock.Of<ITriggerRegistrationService>(),
+                new WorkflowValidator(), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
         }
 
         public Mock<IWorkflowDefinitionProvider> Provider { get; } = new();
 
-        public Mock<IWorkflowDefinitionCache> Cache { get; } = new();
-
-        public Mock<IRunCancellationService> Runs { get; } = new();
+        public Mock<IWorkflowEngineGateway> Engine { get; } = new();
 
         public Mock<IEventBus> Bus { get; } = new();
 

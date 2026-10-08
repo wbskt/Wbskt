@@ -5,6 +5,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Exceptions;
@@ -24,10 +25,9 @@ public sealed class PublishToObserveE2ETests
     {
         var provider = new InMemoryWorkflowDefinitionProvider();
         var triggerService = new RecordingTriggerRegistrationService();
-        var cache = new RecordingWorkflowDefinitionCache();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, triggerService, cache, new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowDefinitionService(provider, triggerService, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -41,7 +41,6 @@ public sealed class PublishToObserveE2ETests
         Assert.Equal(2, v2.Value.Version);
         Assert.Equal([1, 2], triggerService.PublishedWorkflowDefinitionIds);
         Assert.Equal([1, 2], triggerService.DeprecatedWorkflowDefinitionIds);
-        Assert.Equal([1, 2], cache.InvalidatedWorkflowDefinitionIds.Distinct().OrderBy(x => x));
     }
 
     [Fact]
@@ -50,7 +49,7 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new RecordingWorkflowDefinitionCache(), new WorkflowValidator(), identity.Object, Mock.Of<IRunCancellationService>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -177,21 +176,6 @@ public sealed class PublishToObserveE2ETests
         {
             DeprecatedWorkflowDefinitionIds.Add(workflowDefinitionId);
             return Task.CompletedTask;
-        }
-    }
-
-    private sealed class RecordingWorkflowDefinitionCache : IWorkflowDefinitionCache
-    {
-        public List<int> InvalidatedWorkflowDefinitionIds { get; } = [];
-
-        public Task<Wbskt.Workflow.Abstraction.Models.WorkflowDefinition> GetAsync(int workflowDefinitionId, CancellationToken ct)
-        {
-            throw new NotSupportedException();
-        }
-
-        public void Invalidate(int workflowDefinitionId)
-        {
-            InvalidatedWorkflowDefinitionIds.Add(workflowDefinitionId);
         }
     }
 }

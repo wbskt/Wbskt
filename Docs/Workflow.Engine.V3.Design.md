@@ -1845,6 +1845,25 @@ function CancelRun(runId, reason):
   //    Cancelling status, and transitions to Cancelled.
 ```
 
+**Who runs it: the engine, only.** The engine is the only writer of run state, so an
+operator cancel does not run `CancelRun` in the management host. The management host reads the
+run (404 `RUN_NOT_FOUND` when it is unknown or another workspace's, 409 `RUN_NOT_CANCELLABLE` when
+it is already terminal), then publishes a `CancelWorkflowRun { RunId, Reason }` command on the bus
+and answers 202. The engine consumes it from one shared, durable queue (`workflow-cancel-run`), so
+exactly one engine instance handles each command, and it calls `RunCancellationService` - the
+function above. Handling is idempotent: a redelivery for a run already `Cancelling` repeats only
+the cleanup (no second history event or announcement), and one for a terminal run does nothing.
+Deleting a workspace sends the same command for each of its runs still in flight; deleting a
+workflow queues it (the delete is already committed, so a broker outage delays the cancels rather
+than failing the request). Every management-to-engine call goes through `IWorkflowEngineGateway`:
+start, signal, wake and webhook over HTTP, cancel over the bus.
+
+Publishing, deprecating and deleting a definition still write definitions and trigger registrations
+from the management host directly. The engine reads definitions through its own
+`IWorkflowDefinitionCache`, which the management host cannot evict (its invalidations only ever
+evicted its own copy, so they were removed). The planned follow-up is a `WorkflowDefinitionChanged`
+event the engine reacts to, in place of a shared cache contract.
+
 **Cooperative, not pre-emptive.** A branch that ignores its CancellationToken
 runs to completion. We log a "branch ignored cancellation for >30s" warning
 but do not thread-abort. Long HTTP call inside an executor is the executor's

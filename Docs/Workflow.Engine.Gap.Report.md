@@ -1895,6 +1895,12 @@ a run `Cancelling` with live bookmarks and no running branch. Recovery only walk
 running branches, so nothing sweeps it and the reaper excludes it. Closing that needs a way to
 enumerate `Cancelling` runs (a new procedure); it is not reachable by any non-crash path.
 
+**Superseded in part (#237).** The management host no longer cancels in process at all: it sends a
+`CancelWorkflowRun` command that the engine handles on a shared queue with `RunCancellationService`,
+so the cross-host, already-`Cancelling` path above is now taken only between engine instances.
+`WorkflowRunQueryService.CancelAsync` is gone; the 409 comes from reading the run's status first, and
+a successful cancel answers 202. See Workflow.Engine.V3.Design.md §5.6.
+
 **Symptom.** A cancel issued through the Management host is not seen by the Engine host until its
 10-second cache entry expires and it re-reads the DB. Cancellation is advertised as cooperative, but
 the latency floor is invisible to the user.

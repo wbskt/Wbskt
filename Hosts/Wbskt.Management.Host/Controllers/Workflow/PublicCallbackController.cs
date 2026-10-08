@@ -12,7 +12,7 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 // and webhook triggers). Deliberately anonymous: authorization is possession of the token/path,
 // which the workflow author defines at design time and hands to whoever is meant to call back -
 // exactly like a webhook URL. The engine's own /api/inbound/* stays backend-network-only and
-// api-key gated; these relay inward through IWorkflowEngineClient (WorkflowEngineApiKeyHandler adds
+// api-key gated; these relay inward through IWorkflowEngineGateway (WorkflowEngineApiKeyHandler adds
 // the shared key), so the engine is never exposed publicly and manual/signal never get a public route.
 //
 // Hardening for the anonymous edge:
@@ -37,12 +37,12 @@ public sealed class PublicCallbackController : ControllerBase
     private static bool IsValidIdempotencyKey(string key) =>
         key.Length is > 0 and <= MaxIdempotencyKeyLength && key.All(c => c is >= '\x21' and <= '\x7e');
 
-    private readonly IWorkflowEngineClient _engineClient;
+    private readonly IWorkflowEngineGateway _engine;
     private readonly ILogger<PublicCallbackController> _logger;
 
-    public PublicCallbackController(IWorkflowEngineClient engineClient, ILogger<PublicCallbackController> logger)
+    public PublicCallbackController(IWorkflowEngineGateway engine, ILogger<PublicCallbackController> logger)
     {
-        _engineClient = engineClient;
+        _engine = engine;
         _logger = logger;
     }
 
@@ -53,7 +53,7 @@ public sealed class PublicCallbackController : ControllerBase
 
         try
         {
-            WakeResponse response = await _engineClient.WakeAsync(token, payload, ct);
+            WakeResponse response = await _engine.WakeAsync(token, payload, ct);
             // Match result is logged for operators but never returned to the anonymous caller - a
             // uniform 202 keeps the endpoint from confirming whether the token matched a parked run.
             _logger.LogInformation("Public http-wake callback outcome {Outcome} (matched={Matched}).", response.Outcome, response.Matched);
@@ -89,7 +89,7 @@ public sealed class PublicCallbackController : ControllerBase
                 return BadRequest(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{MaxIdempotencyKeyLength} printable characters."));
             }
 
-            WebhookResponse response = await _engineClient.WebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);
+            WebhookResponse response = await _engine.WebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);
             // Outcome/RunId logged for operators only; the anonymous caller gets an opaque 202 so the
             // response reveals nothing about whether the path matched a registered trigger.
             _logger.LogInformation("Public webhook callback outcome {Outcome} (runId={RunId}).", response.Outcome, response.RunId);

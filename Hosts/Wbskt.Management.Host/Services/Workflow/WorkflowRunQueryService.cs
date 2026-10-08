@@ -2,7 +2,6 @@ using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
-using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
@@ -14,23 +13,27 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// <summary>Enough rows for a dashboard to show the workspace's real shape without paging.</summary>
     private const int TopWorkflows = 50;
 
+    /// <summary>
+    /// The statuses the engine's cancellation acts on (<c>RunCancellationService</c>). A 'Failing' run
+    /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
+    /// its cleanup. Every other status is terminal.
+    /// </summary>
+    private static readonly HashSet<string> CancellableStatuses = new(StringComparer.Ordinal) { "Running", "Failing", "Cancelling" };
+
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
-    private readonly IRunCancellationService _cancellationService;
     private readonly ILogger<WorkflowRunQueryService> _logger;
 
     public WorkflowRunQueryService(
         IRunProvider runProvider,
         IBranchProvider branchProvider,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
-        IRunCancellationService cancellationService,
         ILogger<WorkflowRunQueryService> logger)
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
         _workflowDefinitionProvider = workflowDefinitionProvider;
-        _cancellationService = cancellationService;
         _logger = logger;
     }
 
@@ -239,35 +242,48 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         }
     }
 
-    public async Task<Result> CancelAsync(int workspaceId, Guid runRefId, string reason, CancellationToken ct)
+    public async Task<Result<int>> ResolveCancellableRunAsync(int workspaceId, Guid runRefId, CancellationToken ct)
     {
-        _logger.LogInformation("Cancelling run RunRefId: '{RunRefId}' in WorkspaceId: {WorkspaceId} (Reason: '{Reason}')", runRefId, workspaceId, reason);
+        _logger.LogDebug("Checking run '{RunRefId}' in WorkspaceId: {WorkspaceId} can be cancelled", runRefId, workspaceId);
 
+        RunRow run;
         try
         {
-            var ensureRunResult = await EnsureRunInWorkspaceAsync(workspaceId, runRefId, ct);
-            if (ensureRunResult.IsFailure)
-            {
-                return ensureRunResult;
-            }
-
-            // A run that has already finished cannot be cancelled. Reporting success there told the caller
-            // their cancel took effect when nothing happened at all.
-            if (!await _cancellationService.RequestCancellationAsync(ensureRunResult.Value, reason, ct))
-            {
-                _logger.LogInformation("Run '{RunRefId}' is already in a terminal status; nothing to cancel.", runRefId);
-                return Result.Failure(Error.Conflict("RUN_NOT_CANCELLABLE", "The run has already reached a terminal status."));
-            }
-
-            _logger.LogInformation("Run cancellation requested successfully for RunRefId: '{RunRefId}'", runRefId);
-            return Result.Success();
+            run = await _runProvider.GetByRefIdAsync(runRefId, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError("Unexpected error cancelling run RunRefId: '{RunRefId}'. Error: {Message}", runRefId, ex.Message);
-            _logger.LogTrace(ex, "CancelAsync exception stack trace for '{RunRefId}'", runRefId);
-            return Result.Failure(Error.Failure("RUN_CANCEL_ERROR", ex.Message));
+            _logger.LogWarning("Cancel refused: run '{RunRefId}' not found. Error: {Message}", runRefId, ex.Message);
+            return Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found."));
         }
+
+        try
+        {
+            // Another workspace's run reads exactly like an unknown one, so a cancel cannot be used to
+            // learn that a run exists elsewhere.
+            WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByRefIdVersionAsync(run.WorkflowRefId, run.WorkflowVersion, ct);
+            if (definition.WorkspaceId != workspaceId)
+            {
+                _logger.LogWarning("Cancel refused: run '{RunRefId}' does not belong to WorkspaceId: {WorkspaceId}", runRefId, workspaceId);
+                return Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found."));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Cancel refused: no workflow definition version {Version} for run '{RunRefId}'. Error: {Message}", run.WorkflowVersion, runRefId, ex.Message);
+            return Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found."));
+        }
+
+        // The cancel itself happens later, on the engine, so this read is what keeps a cancel of a
+        // finished run answering 409 rather than an accepted request that does nothing. A run that
+        // finishes after this read is left alone by the engine.
+        if (!CancellableStatuses.Contains(run.Status))
+        {
+            _logger.LogInformation("Run '{RunRefId}' is {Status}; nothing to cancel.", runRefId, run.Status);
+            return Result<int>.Failure(Error.Conflict("RUN_NOT_CANCELLABLE", "The run has already reached a terminal status."));
+        }
+
+        return Result<int>.Success(run.Id);
     }
 
     public async Task<Result<int>> EnsureRunInWorkspaceAsync(int workspaceId, Guid runRefId, CancellationToken ct)
