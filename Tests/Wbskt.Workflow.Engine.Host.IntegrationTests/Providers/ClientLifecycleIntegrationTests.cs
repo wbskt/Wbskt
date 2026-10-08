@@ -87,28 +87,61 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         int policyId = await CreatePolicyAsync(workspaceId, maxClients: 2);
         await CreateClientAsync(workspaceId, policyId, status: 1);
         int[] pending = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => CreateClientAsync(workspaceId, policyId, status: 0)));
+        Guid[] refs = await Task.WhenAll(pending.Select(RefIdOfAsync));
 
-        var outcomes = await Task.WhenAll(pending.Select(async id =>
-        {
-            try
-            {
-                await Clients().UpdateStatusAsync(id, ClientStatus.Registered);
-                return 0;
-            }
-            catch (SqlException ex)
-            {
-                return ex.Number;
-            }
-        }));
+        var outcomes = await Task.WhenAll(refs.Select(async refId =>
+            (await Clients().UpdateStatusesAsync(workspaceId, [refId], ClientStatus.Registered)).Single().Outcome));
 
-        Assert.Equal(1, outcomes.Count(o => o == 0));
-        Assert.All(outcomes.Where(o => o != 0), o => Assert.Equal(50020, o));
+        Assert.Equal(1, outcomes.Count(o => o == ClientStatusOutcome.Updated));
+        Assert.All(outcomes.Where(o => o != ClientStatusOutcome.Updated), o => Assert.Equal(ClientStatusOutcome.PolicyLimitReached, o));
         Assert.Equal(2, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE PolicyId = @p0 AND Status = 1", policyId));
 
         // Revoking is never limited, and an already-registered client can be re-saved as registered.
-        await Clients().UpdateStatusAsync(pending[0], ClientStatus.Revoked);
-        int registered = await ScalarAsync<int>("SELECT TOP 1 Id FROM dbo.Clients WHERE PolicyId = @p0 AND Status = 1", policyId);
-        await Clients().UpdateStatusAsync(registered, ClientStatus.Registered);
+        // refs[0] may be the one that won the race, so its old status is whatever the table says now.
+        var before = (ClientStatus)await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", refs[0]);
+        var revoked = (await Clients().UpdateStatusesAsync(workspaceId, [refs[0]], ClientStatus.Revoked)).Single();
+        Assert.Equal(ClientStatusOutcome.Updated, revoked.Outcome);
+        Assert.Equal(before, revoked.OldStatus);
+        Guid registered = await ScalarAsync<Guid>("SELECT TOP 1 RefId FROM dbo.Clients WHERE PolicyId = @p0 AND Status = 1", policyId);
+        Assert.Equal(ClientStatusOutcome.AlreadyAtStatus,
+            (await Clients().UpdateStatusesAsync(workspaceId, [registered], ClientStatus.Registered)).Single().Outcome);
+    }
+
+    [SkippableFact]
+    public async Task A_batch_fills_a_policys_last_places_in_the_order_given_and_reports_every_client()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int policyId = await CreatePolicyAsync(workspaceId, maxClients: 3);
+        int unlimitedPolicyId = await CreatePolicyAsync(workspaceId);
+        await CreateClientAsync(workspaceId, policyId, status: 1);
+        Guid[] limited = await Task.WhenAll(Enumerable.Range(0, 3).Select(async _ => await RefIdOfAsync(await CreateClientAsync(workspaceId, policyId, status: 0))));
+        Guid unlimited = await RefIdOfAsync(await CreateClientAsync(workspaceId, unlimitedPolicyId, status: 0));
+        Guid foreign = await RefIdOfAsync(await CreateClientAsync(NewWorkspaceId(), await CreatePolicyAsync(workspaceId + 1), status: 0));
+        Guid alreadyRegistered = await RefIdOfAsync(await CreateClientAsync(workspaceId, unlimitedPolicyId, status: 1));
+        Guid missing = Guid.NewGuid();
+
+        var changes = await Clients().UpdateStatusesAsync(workspaceId,
+            [limited[2], unlimited, foreign, limited[0], missing, alreadyRegistered, limited[1]], ClientStatus.Registered);
+
+        Assert.Equal(
+            new[]
+            {
+                (limited[2], ClientStatusOutcome.Updated),
+                (unlimited, ClientStatusOutcome.Updated),
+                (foreign, ClientStatusOutcome.OtherWorkspace),
+                (limited[0], ClientStatusOutcome.Updated),
+                (missing, ClientStatusOutcome.NotFound),
+                (alreadyRegistered, ClientStatusOutcome.AlreadyAtStatus),
+                (limited[1], ClientStatusOutcome.PolicyLimitReached)
+            },
+            changes.Select(c => (c.RefId, c.Outcome)));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE PolicyId = @p0 AND Status = 1", policyId));
+        Assert.Equal(0, await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", foreign));
+        var updated = changes[0];
+        Assert.Equal(policyId, updated.PolicyId);
+        Assert.Equal(await ScalarAsync<Guid>("SELECT RefId FROM dbo.RegistrationPolicies WHERE Id = @p0", policyId), updated.PolicyRefId);
+        Assert.Equal(ClientStatus.Pending, updated.OldStatus);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -134,6 +167,8 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
             INSERT INTO dbo.Clients (WorkspaceId, PolicyId, Name, SecretHash, Status)
             OUTPUT INSERTED.Id VALUES (@p0, @p1, 'lifecycle-test', 0x00, @p2);
             """, workspaceId, policyId, status);
+
+    private Task<Guid> RefIdOfAsync(int clientId) => ScalarAsync<Guid>("SELECT RefId FROM dbo.Clients WHERE Id = @p0", clientId);
 
     private Task ExecAsync(string sql, params object[] args) => RunAsync(sql, args, scalar: false);
 

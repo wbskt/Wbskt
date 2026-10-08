@@ -32,7 +32,7 @@ public sealed class ClientServiceCommandTargetTests
             lookup.ReturnsAsync(client);
         }
 
-        return new ClientService(provider.Object, Mock.Of<IRegistrationPolicyProvider>(), Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientService>.Instance);
+        return new ClientService(provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientService>.Instance);
     }
 
     private static ClientDetail Client(bool connected, string? hostId, int workspaceId = WorkspaceId)

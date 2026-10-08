@@ -44,7 +44,6 @@ public sealed class ClientsControllerScopingTests
 
         var controller = new ClientsController(
             clientService.Object,
-            Mock.Of<IReferenceMapper>(),
             authClient.Object,
             bus.Object,
             Mock.Of<IReferenceMapper>(),

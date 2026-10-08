@@ -1,6 +1,4 @@
-using System.Runtime.CompilerServices;
 using FluentAssertions;
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -85,7 +83,7 @@ public sealed class ClientLifecycleTests
         var harness = new Harness();
         var client = harness.AddClient(status: ClientStatus.Registered);
 
-        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.Id, ClientStatus.Revoked);
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.RefId, ClientStatus.Revoked);
 
         result.IsSuccess.Should().BeTrue();
         harness.Cutoffs.Verify(c => c.RevokeAsync(client.RefId), Times.Once);
@@ -99,7 +97,7 @@ public sealed class ClientLifecycleTests
         var client = harness.AddClient(status: ClientStatus.Revoked);
         var before = DateTime.UtcNow;
 
-        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.Id, ClientStatus.Registered);
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.RefId, ClientStatus.Registered);
 
         result.IsSuccess.Should().BeTrue();
         harness.Cutoffs.Verify(c => c.ReinstateAsync(client.RefId, It.Is<DateTime>(t => t >= before)), Times.Once);
@@ -112,7 +110,7 @@ public sealed class ClientLifecycleTests
         var harness = new Harness();
         var client = harness.AddClient(status: ClientStatus.Pending);
 
-        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.Id, ClientStatus.Rejected);
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.RefId, ClientStatus.Rejected);
 
         result.IsSuccess.Should().BeTrue();
         harness.Cutoffs.VerifyNoOtherCalls();
@@ -125,9 +123,7 @@ public sealed class ClientLifecycleTests
         var first = harness.AddClient(status: ClientStatus.Pending);
         var full = harness.AddClient(status: ClientStatus.Pending);
         var foreign = harness.AddClient(workspaceId: 99, status: ClientStatus.Pending);
-        harness.Provider
-            .Setup(p => p.UpdateStatusAsync(full.Id, ClientStatus.Registered, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(SqlExceptionNumbered(50020));
+        harness.Full.Add(full.RefId);
 
         var result = await harness.Service.UpdateStatusesAsync(
             WorkspaceId, [first.RefId, full.RefId, foreign.RefId, first.RefId], ClientStatus.Registered);
@@ -137,21 +133,52 @@ public sealed class ClientLifecycleTests
         result.Value.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal(
             (full.RefId, "POLICY_LIMIT_REACHED"),
             (foreign.RefId, "CLIENT_UNAUTHORIZED"));
-        harness.Provider.Verify(p => p.UpdateStatusAsync(first.Id, ClientStatus.Registered, It.IsAny<CancellationToken>()), Times.Once);
-        harness.Provider.Verify(p => p.UpdateStatusAsync(foreign.Id, It.IsAny<ClientStatus>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Bus.Verify(b => b.PublishAsync(It.Is<ClientStatusChangedEvent>(e => e.ClientRefId == first.RefId), It.IsAny<CancellationToken>()), Times.Once);
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // SqlException has no public constructor; this builds one carrying just an error number.
-    private static SqlException SqlExceptionNumbered(int number)
+    [Fact]
+    public async Task A_batch_is_one_database_call_with_each_client_once_in_the_order_given()
     {
-        var error = (SqlError)RuntimeHelpers.GetUninitializedObject(typeof(SqlError));
-        typeof(SqlError).GetField("_number", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(error, number);
-        var errors = (SqlErrorCollection)RuntimeHelpers.GetUninitializedObject(typeof(SqlErrorCollection));
-        typeof(SqlErrorCollection).GetField("_errors", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .SetValue(errors, new List<object> { error });
-        var exception = (SqlException)RuntimeHelpers.GetUninitializedObject(typeof(SqlException));
-        typeof(SqlException).GetField("_errors", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(exception, errors);
-        return exception;
+        var harness = new Harness();
+        var a = harness.AddClient(status: ClientStatus.Pending);
+        var b = harness.AddClient(status: ClientStatus.Pending);
+
+        await harness.Service.UpdateStatusesAsync(WorkspaceId, [b.RefId, a.RefId, b.RefId], ClientStatus.Registered);
+
+        harness.Provider.Verify(p => p.UpdateStatusesAsync(
+            WorkspaceId,
+            It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { b.RefId, a.RefId })),
+            ClientStatus.Registered,
+            It.IsAny<CancellationToken>()), Times.Once);
+        harness.Provider.Verify(p => p.GetDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task One_client_tells_a_missing_client_from_another_workspaces_as_before()
+    {
+        var harness = new Harness();
+        var foreign = harness.AddClient(workspaceId: 99);
+
+        var missing = await harness.Service.UpdateStatusAsync(WorkspaceId, Guid.NewGuid(), ClientStatus.Revoked);
+        var other = await harness.Service.UpdateStatusAsync(WorkspaceId, foreign.RefId, ClientStatus.Revoked);
+
+        missing.Error.Code.Should().Be("CLIENT_NOT_FOUND");
+        other.Error.Code.Should().Be("CLIENT_UNAUTHORIZED");
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_client_already_at_the_status_changes_nothing_and_announces_nothing()
+    {
+        var harness = new Harness();
+        var client = harness.AddClient(status: ClientStatus.Registered);
+
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.RefId, ClientStatus.Registered);
+
+        result.IsSuccess.Should().BeTrue();
+        harness.Cutoffs.VerifyNoOtherCalls();
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private sealed class Harness
@@ -163,15 +190,20 @@ public sealed class ClientLifecycleTests
             Provider
                 .Setup(p => p.GetDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new NotFoundException("Client not found."));
-            Policies
-                .Setup(p => p.GetByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new RegistrationPolicy { Id = 5, RefId = Guid.NewGuid(), WorkspaceId = WorkspaceId });
-            Service = new ClientService(Provider.Object, Policies.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientService>.Instance);
+            // A stand-in for dbo.Client_UpdateStatuses, answering from the clients added below.
+            Provider
+                .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, CancellationToken _) =>
+                    refIds.Select(refId => Change(workspaceId, refId, status)).ToList());
+            Service = new ClientService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientService>.Instance);
         }
 
         public Mock<IClientProvider> Provider { get; } = new();
 
-        public Mock<IRegistrationPolicyProvider> Policies { get; } = new();
+        /// <summary>Clients whose policy has no places left.</summary>
+        public HashSet<Guid> Full { get; } = [];
+
+        private Dictionary<Guid, ClientDetail> Clients { get; } = [];
 
         public Mock<IEventBus> Bus { get; } = new();
 
@@ -192,8 +224,22 @@ public sealed class ClientLifecycleTests
                 Status = status
             };
             Provider.Setup(p => p.GetDetailByRefIdAsync(client.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
-            Provider.Setup(p => p.GetByIdAsync(client.Id, It.IsAny<CancellationToken>())).ReturnsAsync(client);
+            Clients[client.RefId] = client;
             return client;
+        }
+
+        private ClientStatusChange Change(int workspaceId, Guid refId, ClientStatus status)
+        {
+            if (!Clients.TryGetValue(refId, out var client))
+            {
+                return new ClientStatusChange(refId, 0, 0, Guid.Empty, default, ClientStatusOutcome.NotFound);
+            }
+
+            var outcome = client.WorkspaceId != workspaceId ? ClientStatusOutcome.OtherWorkspace
+                : client.Status == status ? ClientStatusOutcome.AlreadyAtStatus
+                : status == ClientStatus.Registered && Full.Contains(refId) ? ClientStatusOutcome.PolicyLimitReached
+                : ClientStatusOutcome.Updated;
+            return new ClientStatusChange(refId, client.Id, client.PolicyId, client.PolicyRefId, client.Status, outcome);
         }
     }
 }

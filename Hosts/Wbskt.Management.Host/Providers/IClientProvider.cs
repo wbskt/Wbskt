@@ -23,7 +23,12 @@ public interface IClientProvider : IReferenceProvider
     /// Approving (<see cref="ClientStatus.Registered"/>) throws a <c>SqlException</c> numbered 50020
     /// when the policy is already at its client limit; the procedure checks under a lock on the policy.
     /// </summary>
-    Task UpdateStatusAsync(int id, ClientStatus status, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Sets <paramref name="status"/> on each client in <paramref name="clientRefIds"/> that belongs to
+    /// the workspace, in one call, and returns one result per reference in the same order. When
+    /// approvals compete for a policy's last places, the earlier references get them.
+    /// </summary>
+    Task<IReadOnlyList<ClientStatusChange>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds, ClientStatus status, CancellationToken cancellationToken = default);
     /// <summary>Deletes a client in <paramref name="workspaceId"/>; false when there was none to delete.</summary>
     Task<bool> DeleteAsync(int id, int workspaceId, CancellationToken cancellationToken = default);
     /// <summary>Replaces a client's secret hash; false when the client is not in <paramref name="workspaceId"/>.</summary>
