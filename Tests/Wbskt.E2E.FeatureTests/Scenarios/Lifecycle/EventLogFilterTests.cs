@@ -59,8 +59,13 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
         found.Select(Event).Should().Contain("ClientRenamedEvent");
         found.Should().OnlyContain(e => e.GetProperty("eventData").GetString()!.Contains(name + "-renamed", StringComparison.OrdinalIgnoreCase));
 
-        var future = DateTimeOffset.UtcNow.AddDays(1).ToString("O");
-        (await ItemsAsync(workspace, $"event-logs?from={Uri.EscapeDataString(future)}", token)).Should().BeEmpty();
+        // A window that has not happened yet holds nothing; a from after the default to (now) is refused.
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
+        var to = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(2).ToString("O"));
+        (await ItemsAsync(workspace, $"event-logs?from={from}&to={to}", token)).Should().BeEmpty();
+        var inverted = await Send(workspace, $"event-logs?from={from}", token);
+        inverted.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(inverted)).Should().Be("TIME_RANGE_INVALID");
 
         var unknown = await Send(workspace, "event-logs?group=billing", token);
         unknown.StatusCode.Should().Be(HttpStatusCode.BadRequest);
