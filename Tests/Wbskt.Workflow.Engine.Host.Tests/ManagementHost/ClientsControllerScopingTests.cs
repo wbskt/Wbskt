@@ -36,12 +36,7 @@ public sealed class ClientsControllerScopingTests
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(
-            clientService.Object,
-            bus.Object,
-            Mock.Of<IRegistrationPolicyService>(),
-            eventLogService.Object,
-            NullLogger<ClientsController>.Instance);
+        var controller = new ClientsController(clientService.Object, new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -71,7 +66,7 @@ public sealed class ClientsControllerScopingTests
         var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Foreign));
 
-        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
         Assert.IsType<NotFoundObjectResult>(result);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -83,7 +78,7 @@ public sealed class ClientsControllerScopingTests
         var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
 
-        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
         Assert.IsType<AcceptedResult>(result);
         bus.Verify(x => x.PublishAsync(
@@ -98,7 +93,7 @@ public sealed class ClientsControllerScopingTests
         var (controller, clientService, bus, _) = CreateController();
         SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Error.Conflict("DEVICE_OFFLINE", "offline")));
 
-        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
         var objectResult = Assert.IsType<ConflictObjectResult>(result);
         objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("DEVICE_OFFLINE");
@@ -112,7 +107,7 @@ public sealed class ClientsControllerScopingTests
         SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(2);
 
-        var result = await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}", expiresAt), CancellationToken.None);
+        var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}", expiresAt), CancellationToken.None)).Result;
 
         Assert.IsType<AcceptedResult>(result);
         bus.Verify(x => x.PublishAsync(
@@ -129,7 +124,7 @@ public sealed class ClientsControllerScopingTests
         SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
 
         var request = new ClientCommandRequest("reboot", "{}", DateTimeOffset.UtcNow.AddMinutes(minutesAhead));
-        var result = await controller.SendCommand(WorkspaceId, ClientRefId, request, CancellationToken.None);
+        var result = (await controller.SendCommand(WorkspaceId, ClientRefId, request, CancellationToken.None)).Result;
 
         var objectResult = Assert.IsType<BadRequestObjectResult>(result);
         objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("COMMAND_EXPIRY_INVALID");

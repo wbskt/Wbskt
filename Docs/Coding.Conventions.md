@@ -7,9 +7,11 @@
     *   Never hand-roll `MapResult`/`MapError`/`GetCurrentUserId` in a controller — they live on `ApiControllerBase`.
     *   **Outcomes vs faults:** a `Result` is for business outcomes only: not found, forbidden, conflict, validation. A fault (a SQL error, a timeout, a bug) is not caught to become `Error.Failure(..., ex.Message)`; it propagates to `GlobalExceptionMiddleware`, which logs it once with the stack and returns the safe 500. Catch only where something must happen on failure: per-item results in a bulk call, compensation after a partial write, or a specific exception that *is* an outcome (`SqlException` for a known constraint number).
     *   **Lookups that may miss:** providers return `T?` from a `Find...` method for anything that may not exist (`ExecuteFindAsync` in `BaseSqlProvider`), and never throw for "not found". The caller turns `null` into its `<RESOURCE>_NOT_FOUND`.
-    *   Pick the `Error` factory by the status you want: `Validation` → 400, `Unauthorized` → 401, `Forbidden` → 403, `NotFound` → 404, `Conflict` → 409, `Failure` → 500.
+    *   Pick the `Error` factory by the status you want: `Validation` → 400, `Unauthorized` → 401, `Forbidden` → 403, `NotFound` → 404, `Conflict` → 409, `Unavailable` → 503 with `Retry-After`, `Failure` → 500.
+    *   `Unavailable` is for a dependency that is down when nothing was done, so the caller can simply retry (a command whose publish *is* the action, with the broker down). Never hand-build a 503 in a controller.
     *   `Unauthorized` means "we cannot identify the caller". A caller who is known but lacks a permission is `Forbidden`. Using 401 there makes clients that redirect to login on 401 sign the user out over a missing permission.
     *   A `Failure` message is assumed to be internal detail (exception text). It is logged and replaced with a generic message before it reaches the client, so never rely on it being visible.
+*   **Thin controllers:** A controller binds the request, calls one service and maps its `Result`. Validation, ownership, publishing events and talking to the engine belong to services, where they can be unit-tested and reused. A controller never injects `IEventBus`, a provider or `IReferenceMapper`; `ControllerLayeringTests` enforces it. The only status a controller picks itself is between two successes (`200` vs `202`).
 
 ---
 
@@ -38,7 +40,7 @@
 
 ### The ID Boundary
 *   **RefId vs. Id:** Public APIs must only expose **`RefId` (GUID)**. The **`Id` (Int)** is strictly for internal database relations.
-*   **Mapping Responsibility:** The **Controller** is responsible for mapping a public `RefId` to an internal `Id`. This is achieved using the **Reference Mapping Pattern**.
+*   **Mapping Responsibility:** Controllers pass the public `RefId` to the service, and the **service** resolves it (through a provider's `Find...` method or `WorkspaceOwnership.LoadAsync`), because resolving it is also where ownership is checked.
 *   **Workspace first, 403:** A workspace reference the caller is not a member of, or that does not exist, is `Error.Forbidden` (403) and the two cases are not told apart. This is the auth host's `resolve` answer, and it is what stops the API from confirming that a workspace exists.
 *   **Resources inside a workspace, 404:** Once the caller has been resolved as a member of the workspace in the route, a resource reference (client, policy, template, workflow, run, ...) that does not exist **or** belongs to another workspace is `Error.NotFound` (404) with the resource's `<RESOURCE>_NOT_FOUND` code and the same message in both cases. The caller learns nothing beyond "not in this workspace", which is all a member needs to know. The same holds for a reference used as a filter (`?clientRefId=`): it is a 404, never an empty page.
 *   **403 inside a workspace means a missing permission** (`PERMISSION_UNAUTHORIZED`), never an unknown or foreign reference.
@@ -47,7 +49,7 @@
 To decouple public GUIDs from internal integer IDs without polluting every service with lookup logic:
 
 1.  **`IReferenceProvider`**: An interface implemented by any Provider that can look up an ID by a GUID (`Task<int> FindByReferenceIdAsync(Guid referenceId)`).
-2.  **`IReferenceMapper`**: A high-level interface used by Controllers.
+2.  **`IReferenceMapper`**: A high-level interface used by services and adapters (never by a controller).
 3.  **`ReferenceMapper<T>`**: A generic implementation that delegates lookups to a specific `IReferenceProvider`.
 4.  **Registration**: Mappers are registered as **Keyed Services** (e.g., `builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IProjectProvider>>("Project")`).
 
@@ -86,35 +88,24 @@ To decouple public GUIDs from internal integer IDs without polluting every servi
 
 ## 5. Implementation Examples
 
-### C# Controller (Using Reference Mapper)
+### C# Controller
 ```csharp
-public class TemplateController : ControllerBase
+public class TemplatesController : ApiControllerBase
 {
-    private readonly IReferenceMapper _templateMapper;
     private readonly ITemplateService _templateService;
 
-    public TemplateController(
-        [FromKeyedServices("Template")] IReferenceMapper templateMapper,
-        ITemplateService templateService)
+    public TemplatesController(ITemplateService templateService)
     {
-        _templateMapper = templateMapper;
         _templateService = templateService;
     }
 
     [HttpGet("{templateRef:guid}")]
-    public async Task<TemplateResponse> Get(Guid templateRef)
+    [RequiresPermission(PermissionNames.TemplatesRead)]
+    public async Task<ActionResult<TemplateResponse>> Get([FromWorkspace] int workspaceId, Guid templateRef, CancellationToken ct)
     {
-        // 1. Translate Guid to internal Int ID
-        int internalId = await _templateMapper.FindByReferenceIdAsync(templateRef);
-        
-        if (internalId <= 0) 
-        {
-            // Unknown and foreign references read the same: 404, see "The ID Boundary".
-            throw new NotFoundException("Template not found.");
-        }
-
-        // 2. Use the internal ID for service layer calls
-        return await _templateService.GetByIdAsync(internalId);
+        // The service resolves the RefId and checks the workspace owns it; unknown and foreign
+        // references both come back as TEMPLATE_NOT_FOUND (404), see "The ID Boundary".
+        return MapResult(await _templateService.GetAsync(workspaceId, templateRef, ct));
     }
 }
 ```

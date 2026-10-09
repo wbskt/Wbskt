@@ -69,9 +69,9 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return Result<RegistrationPolicyResponse>.Success(MapToResponse(policy));
     }
 
-    public async Task<Result> UpdateAsync(int workspaceId, int policyId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> UpdateAsync(int workspaceId, Guid policyRefId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating registration policy ID {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+        _logger.LogInformation("Updating registration policy '{PolicyRefId}' in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -79,14 +79,15 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             return Result.Failure(Error.Validation("POLICY_NAME_REQUIRED", "Policy name is required."));
         }
 
-        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByIdAsync(policyId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByRefIdAsync(policyRefId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
         if (lookup.IsFailure)
         {
-            _logger.LogWarning("Policy update rejected: Policy ID {PolicyId} not found in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+            _logger.LogWarning("Policy update rejected: Policy '{PolicyRefId}' not found in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
             return Result.Failure(lookup.Error);
         }
 
         var policy = lookup.Value;
+        var policyId = policy.Id;
 
         if (request.MaxClients.HasValue)
         {
@@ -119,18 +120,19 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return Result.Success();
     }
 
-    public async Task<Result<RegistrationPolicyResponse>> RotatePinAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default)
+    public async Task<Result<RegistrationPolicyResponse>> RotatePinAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Rotating PIN of registration policy ID {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+        _logger.LogInformation("Rotating PIN of registration policy '{PolicyRefId}' in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
 
-        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByIdAsync(policyId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByRefIdAsync(policyRefId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
         if (lookup.IsFailure)
         {
-            _logger.LogWarning("PIN rotation rejected: Policy ID {PolicyId} not found in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+            _logger.LogWarning("PIN rotation rejected: Policy '{PolicyRefId}' not found in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
             return Result<RegistrationPolicyResponse>.Failure(lookup.Error);
         }
 
         var policy = lookup.Value;
+        var policyId = policy.Id;
 
         var rotated = await _provider.RotatePinAsync(workspaceId, policyId, cancellationToken);
         _logger.LogInformation("Registration policy ID {PolicyId} has a new PIN", policyId);
@@ -140,18 +142,19 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return Result<RegistrationPolicyResponse>.Success(MapToResponse(rotated));
     }
 
-    public async Task<Result> DisableAsync(int workspaceId, int policyId, CancellationToken cancellationToken = default)
+    public async Task<Result> DisableAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Disabling registration policy ID {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+        _logger.LogInformation("Disabling registration policy '{PolicyRefId}' in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
 
-        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByIdAsync(policyId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
+        var lookup = await WorkspaceOwnership.LoadAsync(workspaceId, () => _provider.FindByRefIdAsync(policyRefId, cancellationToken), WorkspaceOwnership.PolicyNotFound);
         if (lookup.IsFailure)
         {
-            _logger.LogWarning("Policy disable rejected: Policy ID {PolicyId} not found in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
+            _logger.LogWarning("Policy disable rejected: Policy '{PolicyRefId}' not found in WorkspaceId: {WorkspaceId}", policyRefId, workspaceId);
             return Result.Failure(lookup.Error);
         }
 
         var policy = lookup.Value;
+        var policyId = policy.Id;
 
         await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
         _logger.LogInformation("Registration policy ID {PolicyId} disabled successfully", policyId);

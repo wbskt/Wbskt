@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Routing;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +32,7 @@ public sealed class WorkflowRunsControllerTests
         var workflowRefId = Guid.NewGuid();
         var expected = new RunListResponse([], null);
         service.Setup(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", 25, 12, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunListResponse>.Success(expected));
-        var controller = new WorkflowRunsController(service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunsController>>());
+        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowDefinitionService>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.List(WorkspaceId, workflowRefId, "Running", 25, 12, CancellationToken.None);
 
@@ -47,7 +49,7 @@ public sealed class WorkflowRunsControllerTests
         var runRefId = Guid.NewGuid();
         var detail = new RunDetailDto(new RunSummaryDto(runRefId, Guid.NewGuid(), 3, "Running", "corr", DateTime.UtcNow, null), []);
         service.Setup(x => x.GetDetailAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunDetailDto>.Success(detail));
-        var controller = new WorkflowRunsController(service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunsController>>());
+        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowDefinitionService>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
         var actual = await controller.Get(WorkspaceId, runRefId, CancellationToken.None);
 
@@ -140,9 +142,10 @@ public sealed class WorkflowRunsControllerTests
 
         var response = await harness.Controller.Cancel(WorkspaceId, runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(response);
+        var objectResult = Assert.IsType<ApiErrorResults.RetryLaterResult>(response);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
         Assert.Equal("EVENT_BUS_UNAVAILABLE", Assert.IsType<Error>(objectResult.Value).Code);
+        objectResult.OnFormatting(new ActionContext(harness.Controller.HttpContext, new RouteData(), new ActionDescriptor()));
         Assert.Equal("5", harness.Controller.Response.Headers.RetryAfter.ToString());
         harness.QueuedBus.VerifyNoOtherCalls();
     }
@@ -158,7 +161,7 @@ public sealed class WorkflowRunsControllerTests
         engineClient.Setup(x => x.SignalAsync(runRefId, "wake", It.IsAny<SignalRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
         var bus = new Mock<IEventBus>();
-        var controller = new WorkflowRunsController(service.Object, engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunsController>>());
+        var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowDefinitionService>(), service.Object, engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
 
         var response = await controller.Signal(WorkspaceId, runRefId, "wake", new SignalRequest("wake", JsonSerializer.SerializeToElement(new { ready = true })), CancellationToken.None);
 
@@ -510,7 +513,7 @@ public sealed class WorkflowRunsControllerTests
                 .ReturnsAsync((RunRow?)null);
             var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Bus.Object, Mock.Of<IEventBus>());
             var queryService = new WorkflowRunQueryService(Runs.Object, Mock.Of<IBranchProvider>(), Definitions.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
-            Controller = new WorkflowRunsController(queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunsController>>())
+            Controller = new WorkflowRunsController(queryService, new WorkflowRunService(Mock.Of<IWorkflowDefinitionService>(), queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunService>>()))
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
             };

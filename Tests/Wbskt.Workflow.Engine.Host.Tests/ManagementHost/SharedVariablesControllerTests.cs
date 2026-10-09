@@ -27,7 +27,7 @@ public sealed class SharedVariablesControllerTests
         ISharedVariableProvider provider)
     {
         var workflowService = new Mock<IWorkflowDefinitionService>();
-        var controller = new SharedVariablesController(provider, workflowService.Object, Mock.Of<ILogger<SharedVariablesController>>());
+        var controller = new SharedVariablesController(new SharedVariableService(provider, workflowService.Object));
         return (controller, workflowService);
     }
 
@@ -36,7 +36,7 @@ public sealed class SharedVariablesControllerTests
     {
         var provider = new Mock<ISharedVariableProvider>();
         var workflowRefId = Guid.NewGuid();
-        provider.Setup(x => x.GetByWorkflowRefIdNameAsync(workflowRefId, "counter", It.IsAny<CancellationToken>()))
+        provider.Setup(x => x.FindByWorkflowRefIdNameAsync(workflowRefId, "counter", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SharedVariableRow
             {
                 Id = 1,
@@ -102,16 +102,16 @@ public sealed class SharedVariablesControllerTests
         var result = await controller.Get(WorkspaceId, workflowRefId, "counter", CancellationToken.None);
         
         Assert.IsType<NotFoundObjectResult>(result.Result);
-        provider.Verify(x => x.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        provider.Verify(x => x.FindByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Get_not_found_throws_NotFoundException()
+    public async Task Get_of_a_name_the_workflow_has_no_variable_by_is_not_found()
     {
         var provider = new Mock<ISharedVariableProvider>();
         var workflowRefId = Guid.NewGuid();
-        provider.Setup(x => x.GetByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new KeyNotFoundException("missing"));
+        provider.Setup(x => x.FindByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SharedVariableRow?)null);
         var (controller, workflowService) = CreateController(provider.Object);
         workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());

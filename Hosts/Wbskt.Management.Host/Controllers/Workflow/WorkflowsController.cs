@@ -1,11 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Authorization;
-using Wbskt.Infrastructure.Events;
-using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Constants;
@@ -18,20 +14,12 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 public sealed class WorkflowsController : ApiControllerBase
 {
     private readonly IWorkflowDefinitionService _service;
-    private readonly IWorkflowEngineGateway _engine;
-    private readonly IEventBus _eventBus;
-    private readonly ILogger<WorkflowsController> _logger;
+    private readonly IWorkflowRunService _runService;
 
-    public WorkflowsController(
-        IWorkflowDefinitionService service, 
-        IWorkflowEngineGateway engine, 
-        [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
-        ILogger<WorkflowsController> logger)
+    public WorkflowsController(IWorkflowDefinitionService service, IWorkflowRunService runService)
     {
-        _eventBus = eventBus;
         _service = service;
-        _engine = engine;
-        _logger = logger;
+        _runService = runService;
     }
 
     [HttpPost]
@@ -164,62 +152,13 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
     public async Task<ActionResult<StartRunResponse>> StartManualRun([FromWorkspace] int workspaceId, Guid refId, [FromBody] StartRunRequest request, CancellationToken ct)
     {
-        // Validates the workflow belongs to the workspace before delegating to the engine.
-        var getWorkflowResult = await _service.GetCurrentAsync(workspaceId, refId, ct);
-        if (getWorkflowResult.IsFailure)
+        var result = await _runService.StartManualAsync(workspaceId, refId, request, ct);
+        if (result.IsFailure)
         {
-            return MapResult(Result<StartRunResponse>.Failure(getWorkflowResult.Error));
+            return MapError(result.Error);
         }
 
-        // A deprecated workflow still resolves as "current" (the lookup returns the latest version
-        // regardless of IsEnabled), but its triggers were deregistered - so the engine would find no
-        // registration and the caller would get an opaque failure. Say so plainly instead.
-        if (getWorkflowResult.Value.Status != "Published")
-        {
-            _logger.LogInformation("Rejected manual run for deprecated workflow '{RefId}'", refId);
-            return MapError(Error.Conflict("WORKFLOW_DEPRECATED", $"Workflow '{refId}' is deprecated and cannot be started."));
-        }
-
-        StartRunResponse response;
-        try
-        {
-            response = await _engine.StartManualRunAsync(refId, request, ct);
-        }
-        catch (Exception ex)
-        {
-            // Only a genuine transport/engine fault reaches here now.
-            _logger.LogError("Unexpected error starting manual run for workflow '{RefId}'. Error: {Message}", refId, ex.Message);
-            _logger.LogTrace(ex, "StartManualRun exception stack trace for RefId '{RefId}'", refId);
-            return MapError(Error.Failure("ENGINE_START_ERROR", ex.Message));
-        }
-
-        _logger.LogInformation("Manual run request for workflow '{RefId}' resulted in {Outcome}", refId, response.Outcome);
-        if (response.Outcome is StartRunOutcome.Started or StartRunOutcome.Queued or StartRunOutcome.Duplicate)
-        {
-            await _eventBus.PublishAsync(new WorkflowRunRequestedEvent(refId, workspaceId, response.RunRefId, response.Outcome.ToString()), ct);
-        }
-
-        return response.Outcome switch
-        {
-            // A deduplicated retry is a success from the caller's point of view - it returns the run
-            // the original call started rather than a second one.
-            StartRunOutcome.Started or StartRunOutcome.Duplicate => Ok(response),
-
-            // Accepted but not yet running: the concurrency policy is holding it behind an active run.
-            StartRunOutcome.Queued => Accepted(response),
-
-            StartRunOutcome.Dropped => MapError(Error.Conflict(
-                "RUN_DROPPED_BY_CONCURRENCY_POLICY",
-                $"Workflow '{refId}' already has an active run and its concurrency policy discarded this request.")),
-
-            StartRunOutcome.NoManualTrigger => MapError(Error.Conflict(
-                "WORKFLOW_HAS_NO_MANUAL_TRIGGER",
-                $"Workflow '{refId}' has no manual trigger, so it cannot be started this way.")),
-
-            _ => MapError(Error.Failure("ENGINE_START_ERROR", $"Unrecognised engine outcome '{response.Outcome}'."))
-        };
+        // Accepted but not yet running: the concurrency policy is holding it behind an active run.
+        return result.Value.Outcome == StartRunOutcome.Queued ? Accepted(result.Value) : Ok(result.Value);
     }
-
-
-
 }
