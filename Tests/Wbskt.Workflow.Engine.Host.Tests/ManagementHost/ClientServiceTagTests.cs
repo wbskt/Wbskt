@@ -19,7 +19,8 @@ public sealed class ClientServiceTagTests
     private static readonly Guid ClientRefId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
     private readonly Mock<IClientProvider> _provider = new();
-    private readonly ClientService _service;
+    private readonly ClientLifecycleService _service;
+    private readonly ClientQueryService _queries;
 
     public ClientServiceTagTests()
     {
@@ -27,7 +28,8 @@ public sealed class ClientServiceTagTests
             .ReturnsAsync(new ClientDetail { Id = ClientId, RefId = ClientRefId, WorkspaceId = WorkspaceId, Name = "client" });
         _provider.Setup(x => x.SetTagsAsync(ClientId, WorkspaceId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        _service = new ClientService(_provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientService>.Instance);
+        _service = new ClientLifecycleService(_provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientLifecycleService>.Instance);
+        _queries = new ClientQueryService(_provider.Object, NullLogger<ClientQueryService>.Instance);
     }
 
     [Theory]
@@ -125,7 +127,7 @@ public sealed class ClientServiceTagTests
         _provider.Setup(x => x.GetAllAsync(WorkspaceId, null, null, "garage", 0, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PagedList<Wbskt.Management.Host.Models.Client>([client], 1));
 
-        var result = await _service.GetAllAsync(WorkspaceId, null, null, " Garage", 0, 100);
+        var result = await _queries.GetAllAsync(WorkspaceId, null, null, " Garage", 0, 100);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Single().Tags.Should().Equal("garage", "greenhouse");
@@ -134,8 +136,8 @@ public sealed class ClientServiceTagTests
     [Fact]
     public async Task An_invalid_tag_filter_is_refused_without_querying()
     {
-        var all = await _service.GetAllAsync(WorkspaceId, null, null, "a,b", 0, 100);
-        var byPolicy = await _service.GetByPolicyIdAsync(WorkspaceId, 1, null, null, "", 0, 100);
+        var all = await _queries.GetAllAsync(WorkspaceId, null, null, "a,b", 0, 100);
+        var byPolicy = await _queries.GetByPolicyIdAsync(WorkspaceId, 1, null, null, "", 0, 100);
 
         all.Error.Code.Should().Be("CLIENT_TAG_INVALID");
         byPolicy.Error.Code.Should().Be("CLIENT_TAG_INVALID");
@@ -148,7 +150,7 @@ public sealed class ClientServiceTagTests
         _provider.Setup(x => x.GetTagsAsync(WorkspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ClientTagCount("garage", 2), new ClientTagCount("greenhouse", 1)]);
 
-        var result = await _service.GetTagsAsync(WorkspaceId);
+        var result = await _queries.GetTagsAsync(WorkspaceId);
 
         result.Value.Should().Equal(new ClientTagCountResponse("garage", 2), new ClientTagCountResponse("greenhouse", 1));
     }

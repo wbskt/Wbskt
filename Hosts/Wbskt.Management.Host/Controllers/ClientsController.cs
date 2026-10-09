@@ -16,18 +16,21 @@ namespace Wbskt.Management.Host.Controllers;
 [Authorize]
 public class ClientsController : ApiControllerBase
 {
-    private readonly IClientService _clientService;
+    private readonly IClientQueryService _queryService;
+    private readonly IClientLifecycleService _lifecycleService;
     private readonly IClientCommandService _commandService;
     private readonly IRegistrationPolicyService _policyService;
     private readonly IEventLogService _eventLogService;
 
     public ClientsController(
-        IClientService clientService,
+        IClientQueryService queryService,
+        IClientLifecycleService lifecycleService,
         IClientCommandService commandService,
         IRegistrationPolicyService policyService,
         IEventLogService eventLogService)
     {
-        _clientService = clientService;
+        _queryService = queryService;
+        _lifecycleService = lifecycleService;
         _commandService = commandService;
         _policyService = policyService;
         _eventLogService = eventLogService;
@@ -63,7 +66,7 @@ public class ClientsController : ApiControllerBase
 
         if (policyRefId is null)
         {
-            return MapPage(await _clientService.GetAllAsync(workspaceId, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken), offset.Value);
+            return MapPage(await _queryService.GetAllAsync(workspaceId, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken), offset.Value);
         }
 
         var policy = await _policyService.FindInWorkspaceAsync(workspaceId, policyRefId.Value, cancellationToken);
@@ -72,7 +75,7 @@ public class ClientsController : ApiControllerBase
             return MapError(policy.Error);
         }
 
-        return MapPage(await _clientService.GetByPolicyIdAsync(workspaceId, policy.Value.Id, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken), offset.Value);
+        return MapPage(await _queryService.GetByPolicyIdAsync(workspaceId, policy.Value.Id, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken), offset.Value);
     }
 
     /// <summary>
@@ -85,7 +88,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsRead)]
     public async Task<ActionResult<Page<ClientTagCountResponse>>> GetTags([FromWorkspace] int workspaceId, CancellationToken cancellationToken)
     {
-        var result = await _clientService.GetTagsAsync(workspaceId, cancellationToken);
+        var result = await _queryService.GetTagsAsync(workspaceId, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<Page<ClientTagCountResponse>>.Failure(result.Error));
@@ -120,7 +123,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsRead)]
     public async Task<ActionResult<ClientDetailResponse>> GetDetail([FromWorkspace] int workspaceId, Guid clientRef, CancellationToken cancellationToken)
     {
-        var result = await _clientService.GetDetailAsync(workspaceId, clientRef, cancellationToken);
+        var result = await _queryService.GetDetailAsync(workspaceId, clientRef, cancellationToken);
         return MapResult(result);
     }
 
@@ -150,7 +153,7 @@ public class ClientsController : ApiControllerBase
 
         if (request.Status is { } status)
         {
-            var statusResult = await _clientService.UpdateStatusAsync(workspaceId, clientRef, status, cancellationToken);
+            var statusResult = await _lifecycleService.UpdateStatusAsync(workspaceId, clientRef, status, cancellationToken);
             if (statusResult.IsFailure)
             {
                 return MapError(statusResult.Error);
@@ -159,7 +162,7 @@ public class ClientsController : ApiControllerBase
 
         if (request.Name is not null)
         {
-            return MapResult(await _clientService.RenameAsync(workspaceId, clientRef, request.Name.Trim(), cancellationToken));
+            return MapResult(await _lifecycleService.RenameAsync(workspaceId, clientRef, request.Name.Trim(), cancellationToken));
         }
 
         return NoContent();
@@ -190,7 +193,7 @@ public class ClientsController : ApiControllerBase
             return BadRequest(Error.Validation("CLIENT_REFS_INVALID", $"Name between 1 and {BulkClientStatusRequest.MaxClients} clients."));
         }
 
-        var result = await _clientService.UpdateStatusesAsync(workspaceId, request.ClientRefIds, request.Status, cancellationToken);
+        var result = await _lifecycleService.UpdateStatusesAsync(workspaceId, request.ClientRefIds, request.Status, cancellationToken);
         return MapResult(result);
     }
 
@@ -206,7 +209,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsManage)]
     public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid clientRef, CancellationToken cancellationToken)
     {
-        var result = await _clientService.DeleteAsync(workspaceId, clientRef, cancellationToken);
+        var result = await _lifecycleService.DeleteAsync(workspaceId, clientRef, cancellationToken);
         return result.IsSuccess ? NoContent() : MapError(result.Error);
     }
 
@@ -222,7 +225,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsManage)]
     public async Task<ActionResult<ClientSecretResponse>> RotateSecret([FromWorkspace] int workspaceId, Guid clientRef, CancellationToken cancellationToken)
     {
-        var result = await _clientService.RotateSecretAsync(workspaceId, clientRef, cancellationToken);
+        var result = await _lifecycleService.RotateSecretAsync(workspaceId, clientRef, cancellationToken);
         return MapResult(result);
     }
 
@@ -237,7 +240,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsRead)]
     public async Task<ActionResult<Page<ClientStateVariableResponse>>> GetState([FromWorkspace] int workspaceId, Guid clientRef, CancellationToken cancellationToken)
     {
-        var result = await _clientService.GetStateAsync(workspaceId, clientRef, cancellationToken);
+        var result = await _queryService.GetStateAsync(workspaceId, clientRef, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<Page<ClientStateVariableResponse>>.Failure(result.Error));
@@ -266,7 +269,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsUpdate)]
     public async Task<ActionResult<ClientTagsResponse>> SetTags([FromWorkspace] int workspaceId, Guid clientRef, SetClientTagsRequest request, CancellationToken cancellationToken)
     {
-        var result = await _clientService.SetTagsAsync(workspaceId, clientRef, request.Tags, cancellationToken);
+        var result = await _lifecycleService.SetTagsAsync(workspaceId, clientRef, request.Tags, cancellationToken);
         return MapResult(result);
     }
 
@@ -326,7 +329,7 @@ public class ClientsController : ApiControllerBase
         // The query is workspace-filtered in SQL, so a foreign client would come back as an empty
         // page. Resolving ownership up front reports it as the 403 the sibling endpoints return,
         // rather than as a client that exists but has never said anything.
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
+        var clientResult = await _queryService.EnsureClientInWorkspaceAsync(workspaceId, clientRef, cancellationToken);
         if (clientResult.IsFailure)
         {
             return MapResult(Result<Page<EventLogResponse>>.Failure(clientResult.Error));

@@ -195,7 +195,7 @@ public sealed class ClientLifecycleTests
                 .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, CancellationToken _) =>
                     refIds.Select(refId => Change(workspaceId, refId, status)).ToList());
-            Service = new ClientService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientService>.Instance);
+            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance);
         }
 
         public Mock<IClientProvider> Provider { get; } = new();
@@ -209,7 +209,7 @@ public sealed class ClientLifecycleTests
 
         public Mock<IClientTokenCutoffs> Cutoffs { get; } = new();
 
-        public ClientService Service { get; }
+        public ClientLifecycleService Service { get; }
 
         public ClientDetail AddClient(int workspaceId = WorkspaceId, ClientStatus status = ClientStatus.Registered)
         {

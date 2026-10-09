@@ -62,23 +62,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [RequiresPermission(PermissionNames.PoliciesRead)]
     public async Task<ActionResult<RegistrationPolicyResponse>> Get([FromWorkspace] int workspaceId, Guid policyRef, CancellationToken cancellationToken)
     {
-        var result = await _policyService.FindInWorkspaceAsync(workspaceId, policyRef, cancellationToken);
-        if (result.IsFailure)
-        {
-            return MapResult(Result<RegistrationPolicyResponse>.Failure(result.Error));
-        }
-
-        return Ok(new RegistrationPolicyResponse(
-            result.Value.RefId,
-            result.Value.Pin,
-            result.Value.Name,
-            result.Value.MaxClients,
-            result.Value.AutoApproval,
-            result.Value.IsEnabled,
-            result.Value.CreatedAt,
-            result.Value.RegisteredClientCount,
-            result.Value.ConnectedClientCount
-        ));
+        return MapResult(await _policyService.GetAsync(workspaceId, policyRef, cancellationToken));
     }
 
     /// <summary>

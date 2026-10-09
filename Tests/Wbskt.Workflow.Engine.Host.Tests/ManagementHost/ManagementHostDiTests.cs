@@ -33,14 +33,16 @@ public sealed class ManagementHostDiTests
         services.AddSingleton(Mock.Of<IEventBus>());
         services.AddSingleton(Mock.Of<IWorkflowEngineClient>());
         services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
-        services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
+        services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         services.AddSingleton<WorkflowValidator>();
 
         using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         using IServiceScope scope = provider.CreateScope();
 
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowDefinitionService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowQueryService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowLifecycleService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowRunQueryService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowEngineGateway>());
         Assert.DoesNotContain(services, d => d.ServiceType == typeof(IInboundHub));

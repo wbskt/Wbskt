@@ -37,7 +37,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 11, Version = 1 });
         var bus = new Mock<IEventBus>();
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
@@ -64,7 +64,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow?)null);
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { inserted = row; return row with { Id = 21 }; });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         await service.PublishAsync(42, Guid.NewGuid(), request, CancellationToken.None);
 
@@ -152,9 +152,9 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { inserted = row; return row with { Id = 30, Version = 3 }; });
 
         var bus = new Mock<IEventBus>();
-        var service = new WorkflowDefinitionService(
+        var service = new WorkflowLifecycleService(
             workflowProvider.Object, triggerService.Object,
-            new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+            new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var result = await service.RollbackAsync(WorkspaceId, Guid.NewGuid(), refId, 1, CancellationToken.None);
         bus.Verify(x => x.PublishAsync(
@@ -185,7 +185,7 @@ public sealed class WorkflowDefinitionServiceTests
         Assert.Equal("WORKFLOW_VERSION_NOT_FOUND", result.Error.Code);
     }
 
-    private static WorkflowDefinitionService CreateService(
+    private static WorkflowLifecycleService CreateService(
         Mock<IWorkflowDefinitionProvider> workflowProvider,
         Mock<ITriggerRegistrationService> triggerService,
         Mock<IEventBus>? bus = null)
@@ -193,18 +193,16 @@ public sealed class WorkflowDefinitionServiceTests
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
 
-        return new WorkflowDefinitionService(
+        return new WorkflowLifecycleService(
             workflowProvider.Object, triggerService.Object,
-            new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), (bus ?? new Mock<IEventBus>()).Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+            new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), (bus ?? new Mock<IEventBus>()).Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
     }
 
     [Fact]
     public void Validate_reports_issues_without_publishing_anything()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
-        var service = new WorkflowDefinitionService(
-            workflowProvider.Object, Mock.Of<ITriggerRegistrationService>(),
-            new WorkflowValidator(), Mock.Of<IIdentityService>(), Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowQueryService(workflowProvider.Object, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
 
         // A definition with no nodes at all: no triggers (warning) and nothing to run.
         var empty = CreatePublishRequest().Definition with { Nodes = [], Edges = [] };
@@ -220,9 +218,7 @@ public sealed class WorkflowDefinitionServiceTests
     [Fact]
     public void Validate_returns_errors_with_the_offending_node()
     {
-        var service = new WorkflowDefinitionService(
-            Mock.Of<IWorkflowDefinitionProvider>(), Mock.Of<ITriggerRegistrationService>(),
-            new WorkflowValidator(), Mock.Of<IIdentityService>(), Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowQueryService(Mock.Of<IWorkflowDefinitionProvider>(), new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
 
         var definition = CreatePublishRequest().Definition;
         var duplicateEdge = definition.Edges.First();
@@ -255,7 +251,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => { submitted = row; return row with { Id = 6, Version = 9 }; });
 
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
@@ -279,7 +275,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TimeoutException("connection reset"));
 
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         // The fault propagates to the middleware's 500 rather than reading as a first publish.
         await Assert.ThrowsAsync<TimeoutException>(() => service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None));
@@ -307,7 +303,7 @@ public sealed class WorkflowDefinitionServiceTests
         triggerService.Setup(x => x.OnPublishedAsync(6, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("registration exploded"));
 
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         // The original fault still reaches the caller as a 500, after the compensation below.
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync(WorkspaceId, workspaceRef, request, CancellationToken.None));
@@ -332,7 +328,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 6, Version = 2 });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
@@ -353,7 +349,7 @@ public sealed class WorkflowDefinitionServiceTests
         var request = CreatePublishRequest();
         var existing = CreateWorkflowRow(5, request.RefId, 1, true);
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId + 99, Guid.NewGuid(), request, CancellationToken.None);
         
@@ -373,7 +369,7 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowQueryService(workflowProvider.Object, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
 
         var result = await service.GetCurrentAsync(WorkspaceId, refId, CancellationToken.None);
 
@@ -394,7 +390,7 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(12, refId, 4, true));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowQueryService(workflowProvider.Object, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
 
         var result = await service.GetCurrentAsync(WorkspaceId + 1, refId, CancellationToken.None);
         
@@ -413,7 +409,7 @@ public sealed class WorkflowDefinitionServiceTests
         var refId = Guid.NewGuid();
         workflowProvider.Setup(x => x.FindRowByRefIdVersionAsync(refId, 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(13, refId, 2, false));
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowQueryService(workflowProvider.Object, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
 
         var result = await service.GetVersionAsync(WorkspaceId, refId, 2, CancellationToken.None);
 
@@ -434,7 +430,7 @@ public sealed class WorkflowDefinitionServiceTests
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(14, refId, 6, true));
         var bus = new Mock<IEventBus>();
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var result = await service.DeprecateAsync(WorkspaceId, refId, CancellationToken.None);
 
@@ -458,7 +454,7 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync((WorkflowDefinitionRow?)null);
         workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow row, CancellationToken _) => row with { Id = 17 });
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
 
@@ -474,7 +470,7 @@ public sealed class WorkflowDefinitionServiceTests
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
         var request = new WorkflowPublishRequest(Guid.NewGuid(), "Invalid", null, null!);
-        var service = new WorkflowDefinitionService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
         

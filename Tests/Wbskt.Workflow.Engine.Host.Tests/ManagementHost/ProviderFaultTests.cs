@@ -95,8 +95,8 @@ public sealed class ProviderFaultTests
         return new WorkflowRunQueryService(runs.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), NullLogger<WorkflowRunQueryService>.Instance);
     }
 
-    private static ClientService Service(Mock<IClientProvider> provider)
+    private static ClientQueryService Service(Mock<IClientProvider> provider)
     {
-        return new ClientService(provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientService>.Instance);
+        return new ClientQueryService(provider.Object, NullLogger<ClientQueryService>.Instance);
     }
 }

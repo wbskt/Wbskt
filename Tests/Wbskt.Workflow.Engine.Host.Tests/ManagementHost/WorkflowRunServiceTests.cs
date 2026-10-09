@@ -19,7 +19,7 @@ public sealed class WorkflowRunServiceTests
     private const int WorkspaceId = 7;
     private static readonly Guid WorkflowRef = Guid.NewGuid();
 
-    private readonly Mock<IWorkflowDefinitionService> _definitions = new();
+    private readonly Mock<IWorkflowQueryService> _definitions = new();
     private readonly Mock<IWorkflowRunQueryService> _runs = new();
     private readonly Mock<IWorkflowEngineGateway> _engine = new();
     private readonly Mock<IEventBus> _bus = new();

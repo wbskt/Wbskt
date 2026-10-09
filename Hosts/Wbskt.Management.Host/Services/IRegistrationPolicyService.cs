@@ -13,6 +13,8 @@ public interface IRegistrationPolicyService
     /// Otherwise <c>POLICY_NOT_FOUND</c>, the same for another workspace's policy as for none.
     /// </summary>
     Task<Result<RegistrationPolicy>> FindInWorkspaceAsync(int workspaceId, Guid refId, CancellationToken cancellationToken = default);
+    /// <summary><see cref="FindInWorkspaceAsync"/> as the response the API returns.</summary>
+    Task<Result<RegistrationPolicyResponse>> GetAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default);
     Task<Result<RegistrationPolicyResponse>> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     Task<Result> UpdateAsync(int workspaceId, Guid policyRefId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken = default);
     /// <summary>Replaces the policy's PIN. Devices already registered are unaffected.</summary>

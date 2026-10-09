@@ -4,22 +4,12 @@ using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
-public interface IWorkflowDefinitionService
+/// <summary>Publishes, deprecates, reinstates, rolls back and deletes workflows.</summary>
+public interface IWorkflowLifecycleService
 {
     Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct);
 
-    /// <summary>
-    /// Validates a definition without publishing it. Returns every issue - warnings included - so a
-    /// builder can surface them while editing rather than discovering them by creating a version.
-    /// </summary>
-    WorkflowValidationResponse Validate(WorkflowDefinition? definition);
-    Task<Result<WorkflowDefinitionDto>> GetCurrentAsync(int workspaceId, Guid refId, CancellationToken ct);
-    Task<Result<WorkflowDefinitionDto>> GetVersionAsync(int workspaceId, Guid refId, int version, CancellationToken ct);
-    Task<Result<Wbskt.Models.IPagedList<WorkflowSummaryDto>>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task<Result> DeprecateAsync(int workspaceId, Guid refId, CancellationToken ct);
-
-    /// <summary>Every version of a workflow, newest first, without definitions.</summary>
-    Task<Result<IReadOnlyList<WorkflowVersionDto>>> GetVersionsAsync(int workspaceId, Guid refId, CancellationToken ct);
 
     /// <summary>
     /// Deletes a workflow: it leaves every list and current-version read, its triggers stop, runs
@@ -39,5 +29,4 @@ public interface IWorkflowDefinitionService
     /// alone so the runs of every version keep pointing at the definition they ran.
     /// </summary>
     Task<Result<WorkflowPublishResponse>> RollbackAsync(int workspaceId, Guid workspaceRef, Guid refId, int version, CancellationToken ct);
-    Task<Result> EnsureWorkflowInWorkspaceAsync(int workspaceId, Guid workflowRefId, CancellationToken ct);
 }

@@ -8,9 +8,9 @@ namespace Wbskt.Management.Host.Services.Workflow;
 public sealed class SharedVariableService : ISharedVariableService
 {
     private readonly ISharedVariableProvider _variables;
-    private readonly IWorkflowDefinitionService _workflows;
+    private readonly IWorkflowQueryService _workflows;
 
-    public SharedVariableService(ISharedVariableProvider variables, IWorkflowDefinitionService workflows)
+    public SharedVariableService(ISharedVariableProvider variables, IWorkflowQueryService workflows)
     {
         _variables = variables;
         _workflows = workflows;

@@ -21,10 +21,10 @@ namespace Wbskt.Management.Host.Controllers;
 [RequiresPermission(PermissionNames.ClientsRead)]
 public class ClientReadingsController : ApiControllerBase
 {
-    private readonly IClientService _clientService;
+    private readonly IClientQueryService _clientService;
     private readonly IClientReadingService _readingService;
 
-    public ClientReadingsController(IClientService clientService, IClientReadingService readingService)
+    public ClientReadingsController(IClientQueryService clientService, IClientReadingService readingService)
     {
         _clientService = clientService;
         _readingService = readingService;

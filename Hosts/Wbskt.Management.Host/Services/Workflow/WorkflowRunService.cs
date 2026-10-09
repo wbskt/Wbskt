@@ -10,14 +10,14 @@ public sealed class WorkflowRunService : IWorkflowRunService
 {
     public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The run could not be cancelled right now. Try again shortly.");
 
-    private readonly IWorkflowDefinitionService _definitions;
+    private readonly IWorkflowQueryService _definitions;
     private readonly IWorkflowRunQueryService _runs;
     private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowRunService> _logger;
 
     public WorkflowRunService(
-        IWorkflowDefinitionService definitions,
+        IWorkflowQueryService definitions,
         IWorkflowRunQueryService runs,
         IWorkflowEngineGateway engine,
         IEventBus eventBus,

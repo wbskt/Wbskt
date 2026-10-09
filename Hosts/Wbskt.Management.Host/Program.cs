@@ -85,7 +85,8 @@ public static class Program
         builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
-        builder.Services.AddScopedWithQueuedEvents<IClientService, ClientService>();
+        builder.Services.AddScoped<IClientQueryService, ClientQueryService>();
+        builder.Services.AddScopedWithQueuedEvents<IClientLifecycleService, ClientLifecycleService>();
         builder.Services.AddScoped<IClientAuthService, ClientAuthService>();
         // Numeric state history: written by the state.report ingestion, read for charts and CSV.
         builder.Services.Configure<ReadingsOptions>(builder.Configuration.GetSection(ReadingsOptions.SectionName));
@@ -97,7 +98,8 @@ public static class Program
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
-        builder.Services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        builder.Services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
+        builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();
         builder.Services.AddScoped<IClientCommandService, ClientCommandService>();

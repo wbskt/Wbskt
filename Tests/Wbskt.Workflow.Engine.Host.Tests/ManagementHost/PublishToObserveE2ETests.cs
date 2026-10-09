@@ -27,7 +27,7 @@ public sealed class PublishToObserveE2ETests
         var triggerService = new RecordingTriggerRegistrationService();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, triggerService, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(provider, triggerService, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -49,12 +49,12 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowDefinitionService(provider, new RecordingTriggerRegistrationService(), new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowDefinitionService>>());
+        var service = new WorkflowLifecycleService(provider, new RecordingTriggerRegistrationService(), new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
         var second = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
-        var current = await service.GetCurrentAsync(1, request.RefId, CancellationToken.None);
+        var current = await new WorkflowQueryService(provider, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>()).GetCurrentAsync(1, request.RefId, CancellationToken.None);
 
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);

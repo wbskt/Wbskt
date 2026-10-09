@@ -14,12 +14,14 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 [Authorize]
 public sealed class WorkflowsController : ApiControllerBase
 {
-    private readonly IWorkflowDefinitionService _service;
+    private readonly IWorkflowQueryService _queryService;
+    private readonly IWorkflowLifecycleService _lifecycleService;
     private readonly IWorkflowRunService _runService;
 
-    public WorkflowsController(IWorkflowDefinitionService service, IWorkflowRunService runService)
+    public WorkflowsController(IWorkflowQueryService queryService, IWorkflowLifecycleService lifecycleService, IWorkflowRunService runService)
     {
-        _service = service;
+        _queryService = queryService;
+        _lifecycleService = lifecycleService;
         _runService = runService;
     }
 
@@ -27,7 +29,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsCreate)]
     public async Task<ActionResult<WorkflowPublishResponse>> Publish(Guid workspaceRef, [FromWorkspace] int workspaceId, [FromBody] WorkflowPublishRequest request, CancellationToken ct)
     {
-        var result = await _service.PublishAsync(workspaceId, workspaceRef, request, ct);
+        var result = await _lifecycleService.PublishAsync(workspaceId, workspaceRef, request, ct);
         return MapResult(result);
     }
 
@@ -44,7 +46,7 @@ public sealed class WorkflowsController : ApiControllerBase
     {
         // An invalid definition is a successful answer to "is this valid?" - 200 with IsValid false,
         // not an HTTP error.
-        return Ok(_service.Validate(request.Definition));
+        return Ok(_queryService.Validate(request.Definition));
     }
 
     [HttpGet]
@@ -60,7 +62,7 @@ public sealed class WorkflowsController : ApiControllerBase
             return MapError(offset.Error);
         }
 
-        var result = await _service.GetAllSummariesAsync(workspaceId, offset.Value, page.LimitOr(100), ct);
+        var result = await _queryService.GetAllSummariesAsync(workspaceId, offset.Value, page.LimitOr(100), ct);
         return MapPage(result, offset.Value);
     }
 
@@ -68,7 +70,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkflowDefinitionDto>> GetCurrent([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.GetCurrentAsync(workspaceId, workflowRef, ct);
+        var result = await _queryService.GetCurrentAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -80,7 +82,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<Page<WorkflowVersionDto>>> GetVersions([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.GetVersionsAsync(workspaceId, workflowRef, ct);
+        var result = await _queryService.GetVersionsAsync(workspaceId, workflowRef, ct);
         if (result.IsFailure)
         {
             return MapResult(Result<Page<WorkflowVersionDto>>.Failure(result.Error));
@@ -93,7 +95,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkflowDefinitionDto>> GetVersion([FromWorkspace] int workspaceId, Guid workflowRef, int version, CancellationToken ct)
     {
-        var result = await _service.GetVersionAsync(workspaceId, workflowRef, version, ct);
+        var result = await _queryService.GetVersionAsync(workspaceId, workflowRef, version, ct);
         return MapResult(result);
     }
 
@@ -101,7 +103,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
     public async Task<IActionResult> Deprecate([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.DeprecateAsync(workspaceId, workflowRef, ct);
+        var result = await _lifecycleService.DeprecateAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -114,7 +116,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
     public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.DeleteAsync(workspaceId, workflowRef, ct);
+        var result = await _lifecycleService.DeleteAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -128,7 +130,7 @@ public sealed class WorkflowsController : ApiControllerBase
     {
         // Bringing a workflow back into service is an authoring change, so it takes the same
         // permission as deprecating it.
-        var result = await _service.ReinstateAsync(workspaceId, workspaceRef, workflowRef, ct);
+        var result = await _lifecycleService.ReinstateAsync(workspaceId, workspaceRef, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -140,7 +142,7 @@ public sealed class WorkflowsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsCreate)]
     public async Task<ActionResult<WorkflowPublishResponse>> Rollback(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, int version, CancellationToken ct)
     {
-        var result = await _service.RollbackAsync(workspaceId, workspaceRef, workflowRef, version, ct);
+        var result = await _lifecycleService.RollbackAsync(workspaceId, workspaceRef, workflowRef, version, ct);
         return MapResult(result);
     }
 

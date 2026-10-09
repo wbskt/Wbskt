@@ -10,19 +10,19 @@ using Wbskt.Management.Host.Models;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
-public sealed class ClientServiceRenameTests
+public sealed class ClientLifecycleRenameTests
 {
     private const int WorkspaceId = 7;
     private const int ClientId = 42;
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly IClientTokenCutoffs NoCutoffs = Mock.Of<IClientTokenCutoffs>();
 
-    private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateService(ClientDetail client)
+    private static (ClientLifecycleService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateService(ClientDetail client)
     {
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var bus = new Mock<IEventBus>();
-        var service = new ClientService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
+        var service = new ClientLifecycleService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientLifecycleService>.Instance);
         return (service, provider, bus);
     }
 
@@ -64,7 +64,7 @@ public sealed class ClientServiceRenameTests
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((ClientDetail?)null);
-        var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
+        var service = new ClientLifecycleService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientLifecycleService>.Instance);
 
         var result = await service.RenameAsync(WorkspaceId, ClientRefId, "new-name");
 
@@ -87,7 +87,7 @@ public sealed class ClientServiceRenameTests
     [Fact]
     public async Task EnsureClientInWorkspace_returns_the_internal_id_when_owned()
     {
-        var (service, _, _) = CreateServiceWithDetail(CreateDetail());
+        var service = CreateQueries(CreateDetail());
 
         var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
 
@@ -98,7 +98,7 @@ public sealed class ClientServiceRenameTests
     [Fact]
     public async Task EnsureClientInWorkspace_rejects_a_client_from_another_workspace()
     {
-        var (service, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
+        var service = CreateQueries(CreateDetail(workspaceId: 99));
 
         var result = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
 
@@ -113,11 +113,8 @@ public sealed class ClientServiceRenameTests
     [Fact]
     public async Task EnsureClientInWorkspace_reports_an_unknown_reference_exactly_as_a_foreign_one()
     {
-        var provider = new Mock<IClientProvider>();
-        provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ClientDetail?)null);
-        var service = new ClientService(provider.Object, Mock.Of<IEventBus>(), NoCutoffs, NullLogger<ClientService>.Instance);
-        var (foreignService, _, _) = CreateServiceWithDetail(CreateDetail(workspaceId: 99));
+        var service = CreateQueries(null);
+        var foreignService = CreateQueries(CreateDetail(workspaceId: 99));
 
         var unknown = await service.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
         var foreign = await foreignService.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId);
@@ -126,13 +123,11 @@ public sealed class ClientServiceRenameTests
         unknown.Error.Should().Be(foreign.Error);
     }
 
-    private static (ClientService Service, Mock<IClientProvider> Provider, Mock<IEventBus> Bus) CreateServiceWithDetail(ClientDetail detail)
+    private static ClientQueryService CreateQueries(ClientDetail? detail)
     {
         var provider = new Mock<IClientProvider>();
         provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
-        var bus = new Mock<IEventBus>();
-        var service = new ClientService(provider.Object, bus.Object, NoCutoffs, NullLogger<ClientService>.Instance);
-        return (service, provider, bus);
+        return new ClientQueryService(provider.Object, NullLogger<ClientQueryService>.Instance);
     }
 
     private static ClientDetail CreateDetail(int workspaceId = WorkspaceId)

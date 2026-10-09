@@ -19,15 +19,17 @@ public sealed class ClientUpdateTests
     private const int WorkspaceId = 7;
     private static readonly Guid ClientRef = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    private static (ClientsController Controller, Mock<IClientService> Clients) CreateController()
+    private static (ClientsController Controller, Mock<IClientLifecycleService> Clients) CreateController()
     {
-        var clients = new Mock<IClientService>();
+        var clients = new Mock<IClientLifecycleService>();
+        var queries = new Mock<IClientQueryService>();
         clients.Setup(x => x.UpdateStatusAsync(WorkspaceId, ClientRef, It.IsAny<ClientStatus>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
         clients.Setup(x => x.RenameAsync(WorkspaceId, ClientRef, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
 
         var controller = new ClientsController(
+            queries.Object,
             clients.Object,
-            new ClientCommandService(clients.Object, Mock.Of<IEventBus>(), NullLogger<ClientCommandService>.Instance),
+            new ClientCommandService(queries.Object, Mock.Of<IEventBus>(), NullLogger<ClientCommandService>.Instance),
             Mock.Of<IRegistrationPolicyService>(),
             Mock.Of<IEventLogService>())
         {
