@@ -72,7 +72,9 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
         fromApi.Should().OnlyContain(e => e.GetProperty("source").GetString() == "Api");
 
         var warnings = await ItemsAsync(workspace, "event-logs?minCriticality=Warning&limit=200", token);
-        warnings.Should().OnlyContain(e => e.GetProperty("criticality").GetRawText() != "\"Info\"" && e.GetProperty("criticality").GetRawText() != "0");
+        // This workspace logged only informational entries, so the floor leaves none of them.
+        warnings.Should().NotContain(e => e.GetProperty("criticality").GetRawText() == "\"Info\"" || e.GetProperty("criticality").GetRawText() == "0");
+        warnings.Select(Event).Should().NotContain("ClientRenamedEvent");
 
         // A live view asks for what is newer than the newest entry it shows.
         var since = all[1].GetProperty("id").GetInt64();
