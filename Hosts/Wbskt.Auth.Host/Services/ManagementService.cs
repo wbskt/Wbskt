@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
@@ -33,6 +34,7 @@ internal sealed class ManagementService : IManagementService
     private readonly IAuthMailer _mailer;
     private readonly ILogger<ManagementService> _logger;
     private readonly IAccessTokenRevocation _accessTokens;
+    private readonly IAuditWorkspaces _audit;
 
     public ManagementService(
         IAuthProvider provider,
@@ -40,8 +42,10 @@ internal sealed class ManagementService : IManagementService
         IEventBus eventBus,
         IAuthMailer mailer,
         ILogger<ManagementService> logger,
-        IAccessTokenRevocation accessTokens)
+        IAccessTokenRevocation accessTokens,
+        IAuditWorkspaces? audit = null)
     {
+        _audit = audit ?? AuditWorkspaces.None;
         _accessTokens = accessTokens;
         _provider = provider;
         _workspaceProvider = workspaceProvider;
@@ -106,6 +110,7 @@ internal sealed class ManagementService : IManagementService
         {
             await _provider.RemoveTenantMemberAsync(resolved.Value.TenantId, resolved.Value.EntityId, callerId, cancellationToken);
             await PublishUserPermissionsChangedAsync(resolved.Value.EntityId, cancellationToken);
+            await PublishToTenantAsync(new MemberRemovedEvent(userRef), resolved.Value.TenantId, cancellationToken);
         });
     }
 
@@ -156,6 +161,7 @@ internal sealed class ManagementService : IManagementService
             // been recorded. The administrator still gets the raw token back below and can deliver it
             // by hand, which is how every invitation worked before this host could send mail at all.
             await _mailer.QueueInvitationAsync(request.Email, created.TenantName, token, expiresAt, cancellationToken);
+            await PublishToTenantAsync(new InvitationSentEvent(created.RefId, request.Email, request.RoleRef, expiresAt), scope.Value, cancellationToken);
 
             // The raw token appears here and nowhere else — not in the store, and not in this log line.
             return new CreatedInvitationResponse(created.RefId, request.Email, expiresAt, token);
@@ -184,7 +190,14 @@ internal sealed class ManagementService : IManagementService
         // Scoped by tenant in the procedure, so an invitation belonging to another tenant simply
         // matches nothing. Revoking an already-spent invitation is a no-op rather than an error:
         // the caller's intent — that this invitation cannot be redeemed — already holds.
-        return await GuardAsync("RevokeInvitation", () => _provider.RevokeInvitationAsync(invitationRef, scope.Value, cancellationToken));
+        return await GuardAsync("RevokeInvitation", async () =>
+        {
+            var email = await _provider.RevokeInvitationAsync(invitationRef, scope.Value, cancellationToken);
+            if (email is not null)
+            {
+                await PublishToTenantAsync(new InvitationRevokedEvent(invitationRef, email), scope.Value, cancellationToken);
+            }
+        });
     }
 
     public async Task<Result<AcceptInvitationResponse>> AcceptInvitationAsync(int callerId, string token, CancellationToken cancellationToken = default)
@@ -206,10 +219,11 @@ internal sealed class ManagementService : IManagementService
         // match under a lock, so this is a nicety, never the gate.
         return await GuardAsync("AcceptInvitation", async () =>
         {
-            await _provider.AcceptInvitationAsync(tokenHash, callerId, cancellationToken);
+            var tenantId = await _provider.AcceptInvitationAsync(tokenHash, callerId, cancellationToken);
             _logger.LogInformation("User ID {CallerId} joined tenant {TenantRef} by invitation", callerId, invitation.TenantRef);
 
-            await PublishUserPermissionsChangedAsync(callerId, cancellationToken);
+            var joiner = await PublishUserPermissionsChangedAsync(callerId, cancellationToken);
+            await PublishToTenantAsync(new InvitationAcceptedEvent(invitation.RefId, invitation.Email, callerId, joiner.RefId), tenantId, cancellationToken);
             return new AcceptInvitationResponse(invitation.TenantRef, invitation.TenantName);
         });
     }
@@ -419,6 +433,7 @@ internal sealed class ManagementService : IManagementService
             // Access is resolved per request, so the suspension takes effect on the member's next
             // call without touching their tokens - which also still work in their other tenants.
             await PublishUserPermissionsChangedAsync(userId, cancellationToken);
+            await PublishToTenantAsync(isSuspended ? new MemberSuspendedEvent(userRef) : new MemberUnsuspendedEvent(userRef), tenantId, cancellationToken);
 
             if (isSuspended)
             {
@@ -442,11 +457,8 @@ internal sealed class ManagementService : IManagementService
             return Result.Failure(resolved.Error);
         }
 
-        return await GuardAsync("GrantRolePermission", async () =>
-        {
-            await _provider.GrantRolePermissionAsync(resolved.Value.EntityId, request.Slug, request.IsDeny, resolved.Value.TenantId, cancellationToken);
-            await _eventBus.PublishAsync(new RolePermissionsChangedEvent(resolved.Value.EntityId), cancellationToken);
-        });
+        return await GuardAsync("GrantRolePermission", () => ChangeRolePermissionsAsync(roleRef, resolved.Value, () =>
+            _provider.GrantRolePermissionAsync(resolved.Value.EntityId, request.Slug, request.IsDeny, resolved.Value.TenantId, cancellationToken), cancellationToken));
     }
 
     public async Task<Result> RemoveRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, string slug, CancellationToken cancellationToken = default)
@@ -457,11 +469,8 @@ internal sealed class ManagementService : IManagementService
             return Result.Failure(resolved.Error);
         }
 
-        return await GuardAsync("RemoveRolePermission", async () =>
-        {
-            await _provider.RemoveRolePermissionAsync(resolved.Value.EntityId, slug, resolved.Value.TenantId, cancellationToken);
-            await _eventBus.PublishAsync(new RolePermissionsChangedEvent(resolved.Value.EntityId), cancellationToken);
-        });
+        return await GuardAsync("RemoveRolePermission", () => ChangeRolePermissionsAsync(roleRef, resolved.Value, () =>
+            _provider.RemoveRolePermissionAsync(resolved.Value.EntityId, slug, resolved.Value.TenantId, cancellationToken), cancellationToken));
     }
 
     public async Task<Result> GrantUserPermissionAsync(int callerId, Guid tenantRef, Guid userRef, GrantPermissionRequest request, CancellationToken cancellationToken = default)
@@ -558,6 +567,9 @@ internal sealed class ManagementService : IManagementService
             }
 
             await PublishUserPermissionsChangedAsync(userId, cancellationToken);
+            await PublishToTenantAsync(
+                assign ? new MemberRoleAssignedEvent(userRef, roleRef, workspaceRef) : new MemberRoleRemovedEvent(userRef, roleRef, workspaceRef),
+                scope.Value, cancellationToken);
         });
     }
 
@@ -803,10 +815,50 @@ internal sealed class ManagementService : IManagementService
         return Result<int?>.Success(workspaceId);
     }
 
-    private async Task PublishUserPermissionsChangedAsync(int userId, CancellationToken cancellationToken)
+    private async Task<User> PublishUserPermissionsChangedAsync(int userId, CancellationToken cancellationToken)
     {
         var user = await _provider.GetByIdAsync(userId, cancellationToken);
         await _eventBus.PublishAsync(new UserPermissionsChangedEvent(userId, user.RefId), cancellationToken);
+        return user;
+    }
+
+    /// <summary>Publishes an action on the tenant's people, to be logged in each of its workspaces.</summary>
+    /// <remarks>
+    /// The action has already happened, so a failure to publish is logged rather than returned:
+    /// reporting it as failed would only invite a retry of something that succeeded.
+    /// </remarks>
+    private async Task PublishToTenantAsync(TenantActorEvent @event, int tenantId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _eventBus.PublishAsync(@event with { WorkspaceIds = await _audit.OfTenantAsync(tenantId, cancellationToken) }, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Could not publish {EventType} for the audit log.", @event.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Applies a change to a role's permissions, then announces it twice: to the hosts that cache
+    /// effective permissions, and to the audit log with the role's permissions before and after.
+    /// </summary>
+    private async Task ChangeRolePermissionsAsync(Guid roleRef, ResolvedEntity role, Func<Task> change, CancellationToken cancellationToken)
+    {
+        var before = await _provider.GetRolePermissionsAsync(role.EntityId, cancellationToken);
+        await change();
+        var after = await _provider.GetRolePermissionsAsync(role.EntityId, cancellationToken);
+
+        await _eventBus.PublishAsync(new RolePermissionsChangedEvent(role.EntityId), cancellationToken);
+
+        var (was, now) = (Describe(before), Describe(after));
+        if (was != now)
+        {
+            await PublishToTenantAsync(new RolePermissionsUpdatedEvent(roleRef) { Changes = [new FieldChange("permissions", was, now)] }, role.TenantId, cancellationToken);
+        }
+
+        static string Describe(IEnumerable<RolePermissionAssignmentResponse> permissions) =>
+            string.Join(",", permissions.Select(p => p.IsDeny ? "!" + p.Slug : p.Slug).Order(StringComparer.Ordinal));
     }
 
     // These wrap the provider call so that each operation does not repeat the same try/catch and

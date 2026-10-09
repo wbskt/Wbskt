@@ -17,6 +17,8 @@ CREATE TABLE dbo.TenantInvitations (
     RevokedAt DATETIME2(3) NULL,
     InvitedByUserId INT NOT NULL,
     CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    -- When the audit log was told this invitation expired unused; see TenantInvitation_AnnounceExpired.
+    ExpiryAnnouncedAt DATETIME2(3) NULL,
     CONSTRAINT PK_TenantInvitations PRIMARY KEY CLUSTERED (Id ASC),
     CONSTRAINT UQ_TenantInvitations_RefId UNIQUE (RefId),
     CONSTRAINT UQ_TenantInvitations_TokenHash UNIQUE (TokenHash),

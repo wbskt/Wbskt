@@ -106,7 +106,8 @@ internal interface IAuthProvider : IReferenceProvider
     /// <summary>Throws <see cref="Wbskt.Primitives.Exceptions.SecurityException"/> when no invitation carries that hash.</summary>
     Task<InvitationLookup> GetInvitationByTokenHashAsync(byte[] tokenHash, CancellationToken cancellationToken = default);
     Task<int> AcceptInvitationAsync(byte[] tokenHash, int userId, CancellationToken cancellationToken = default);
-    Task RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default);
+    /// <summary>The invitation's address, or null when it was not outstanding (already used, revoked or unknown).</summary>
+    Task<string?> RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default);
     Task<IPagedList<InvitationResponse>> GetInvitationsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default);
 
     Task<IPagedList<PermissionResponse>> GetPermissionsAsync(int skip, int take, CancellationToken cancellationToken = default);

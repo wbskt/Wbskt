@@ -1,11 +1,14 @@
 using Wbskt.Auth.Host.Providers;
+using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Auth;
 
 namespace Wbskt.Auth.Host.Services;
 
 /// <summary>
 /// Hourly sweep of spent credentials: refresh, reset and verification tokens and unaccepted
 /// invitations, deleted <see cref="Grace"/> after they expired. Nothing deleted them before, so the
-/// tables grew with every sign-in for the life of the deployment.
+/// tables grew with every sign-in for the life of the deployment. Each sweep first logs the invitations
+/// that ran out unused since the last one, in the tenant's workspaces' audit logs.
 /// </summary>
 public sealed class CredentialRetentionService : BackgroundService
 {
@@ -40,7 +43,12 @@ public sealed class CredentialRetentionService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var provider = scope.ServiceProvider.GetRequiredService<ICredentialRetentionProvider>();
-        var cutoffUtc = _timeProvider.GetUtcNow().UtcDateTime - Grace;
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var cutoffUtc = nowUtc - Grace;
+
+        // Before the deletes, so an invitation that expired longer ago than the grace period (one from
+        // before this sweep logged expiries) is logged before it is gone.
+        await AnnounceExpiredInvitationsAsync(scope.ServiceProvider, provider, nowUtc, cancellationToken);
 
         long total = 0;
         int deleted;
@@ -57,6 +65,32 @@ public sealed class CredentialRetentionService : BackgroundService
         }
 
         return total;
+    }
+
+    private static async Task AnnounceExpiredInvitationsAsync(IServiceProvider services, ICredentialRetentionProvider provider, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var eventBus = services.GetRequiredService<IEventBus>();
+        var audit = services.GetService<IAuditWorkspaces>() ?? AuditWorkspaces.None;
+
+        IReadOnlyCollection<ExpiredInvitation> expired;
+        do
+        {
+            // Each row comes back once: the procedure marks it as announced as it returns it.
+            expired = await provider.AnnounceExpiredInvitationsAsync(nowUtc, BatchSize, cancellationToken);
+            var workspacesByTenant = new Dictionary<int, IReadOnlyList<int>>();
+            foreach (var invitation in expired)
+            {
+                if (!workspacesByTenant.TryGetValue(invitation.TenantId, out var workspaceIds))
+                {
+                    workspacesByTenant[invitation.TenantId] = workspaceIds = await audit.OfTenantAsync(invitation.TenantId, cancellationToken);
+                }
+
+                await eventBus.PublishAsync(
+                    new InvitationExpiredEvent(invitation.RefId, invitation.Email) { WorkspaceIds = workspaceIds, CreatedAtUtc = invitation.ExpiresAt },
+                    cancellationToken);
+            }
+        }
+        while (expired.Count == BatchSize);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

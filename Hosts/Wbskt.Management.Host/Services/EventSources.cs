@@ -20,8 +20,8 @@ public static class EventSources
     /// <summary>
     /// The source of an entry of <paramref name="eventName"/>: <paramref name="stamped"/> when the
     /// publisher named one; else, for an action event, the API when a user is named and the system
-    /// when not; else from the event's kind. Null for a sign-in or permission event, which the auth
-    /// host does not stamp yet, and for an event this build does not know.
+    /// when not; else from the event's kind. Null for a sign-in, a change a person made to their own
+    /// account, or a permission-cache event, and for an event this build does not know.
     /// </summary>
     public static EventSource? Derive(string eventName, EventSource? stamped, bool hasUser)
     {
