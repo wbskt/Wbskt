@@ -19,7 +19,7 @@ public sealed class ClientServiceCommandTargetTests
     private const int ClientId = 42;
     private static readonly Guid ClientRefId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    private static ClientService CreateService(ClientDetail? client)
+    private static ClientQueryService CreateService(ClientDetail? client)
     {
         var provider = new Mock<IClientProvider>();
         var lookup = provider.Setup(x => x.FindDetailByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()));
@@ -32,7 +32,7 @@ public sealed class ClientServiceCommandTargetTests
             lookup.ReturnsAsync(client);
         }
 
-        return new ClientService(provider.Object, Mock.Of<IEventBus>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<ClientService>.Instance);
+        return new ClientQueryService(provider.Object, NullLogger<ClientQueryService>.Instance);
     }
 
     private static ClientDetail Client(bool connected, string? hostId, int workspaceId = WorkspaceId)

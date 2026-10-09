@@ -264,8 +264,8 @@ Two structural notes on scoping, since neither is enforced by the resolve call:
 - **A reference is not a scope.** Resolving `workspaceRef` establishes *which* workspace the caller
   is acting in; it says nothing about whether the `clientRefId` or `runRefId` in the same route
   belongs to it. Every endpoint that acts on a nested resource has to check ownership separately —
-  `IClientService.EnsureClientInWorkspaceAsync`, `IWorkflowRunQueryService.EnsureRunInWorkspaceAsync`,
-  `IWorkflowDefinitionService.EnsureWorkflowInWorkspaceAsync`, or a `WorkspaceId` comparison inside
+  `IClientQueryService.EnsureClientInWorkspaceAsync`, `IWorkflowRunQueryService.EnsureRunInWorkspaceAsync`,
+  `IWorkflowQueryService.EnsureWorkflowInWorkspaceAsync`, or a `WorkspaceId` comparison inside
   the service. This matters most where the endpoint publishes to the bus: the socket host dispatches
   `ClientCommandEvent`/`ClientPingEvent` on `ClientRefId` alone and has no workspace to check against,
   so the controller's check is the only one there is. Per "The ID Boundary" in

@@ -19,7 +19,7 @@ public sealed class ClientCommandServiceTests
     private const int WorkspaceId = 7;
     private static readonly Guid ClientRef = Guid.NewGuid();
 
-    private readonly Mock<IClientService> _clients = new();
+    private readonly Mock<IClientQueryService> _clients = new();
     private readonly Mock<IEventBus> _bus = new();
 
     private ClientCommandService Service => new(_clients.Object, _bus.Object, NullLogger<ClientCommandService>.Instance);

@@ -23,10 +23,10 @@ public sealed class SharedVariablesControllerTests
 {
     private const int WorkspaceId = 7;
 
-    private static (SharedVariablesController Controller, Mock<IWorkflowDefinitionService> WorkflowService) CreateController(
+    private static (SharedVariablesController Controller, Mock<IWorkflowQueryService> WorkflowService) CreateController(
         ISharedVariableProvider provider)
     {
-        var workflowService = new Mock<IWorkflowDefinitionService>();
+        var workflowService = new Mock<IWorkflowQueryService>();
         var controller = new SharedVariablesController(new SharedVariableService(provider, workflowService.Object));
         return (controller, workflowService);
     }

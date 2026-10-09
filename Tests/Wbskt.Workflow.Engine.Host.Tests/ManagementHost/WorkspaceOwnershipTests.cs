@@ -111,7 +111,7 @@ public sealed class WorkspaceOwnershipTests
         var policies = new Mock<IRegistrationPolicyService>();
         policies.Setup(s => s.FindInWorkspaceAsync(WorkspaceId, policyRef, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<RegistrationPolicy>.Failure(WorkspaceOwnership.PolicyNotFound));
-        var clients = new Mock<IClientService>();
+        var clients = new Mock<IClientQueryService>();
         clients.Setup(s => s.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<int>.Failure(WorkspaceOwnership.ClientNotFound));
         var logs = new Mock<IEventLogService>();

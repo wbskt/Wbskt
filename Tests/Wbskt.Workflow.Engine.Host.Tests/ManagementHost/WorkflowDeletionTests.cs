@@ -67,7 +67,7 @@ public sealed class WorkflowDeletionTests
             .Setup(p => p.GetVersionsAsync(RefId, WorkspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version(3, enabled: false), Version(2, enabled: false), Version(1, enabled: true)]);
 
-        var result = await harness.Service.GetVersionsAsync(WorkspaceId, RefId, CancellationToken.None);
+        var result = await harness.Queries.GetVersionsAsync(WorkspaceId, RefId, CancellationToken.None);
 
         Assert.Equal([(3, "Deprecated"), (2, "Superseded"), (1, "Superseded")], result.Value.Select(v => (v.Version, v.Status)));
     }
@@ -80,7 +80,7 @@ public sealed class WorkflowDeletionTests
             .Setup(p => p.GetVersionsAsync(RefId, WorkspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var result = await harness.Service.GetVersionsAsync(WorkspaceId, RefId, CancellationToken.None);
+        var result = await harness.Queries.GetVersionsAsync(WorkspaceId, RefId, CancellationToken.None);
 
         Assert.Equal("WORKFLOW_NOT_FOUND", result.Error.Code);
     }
@@ -101,9 +101,9 @@ public sealed class WorkflowDeletionTests
         {
             var identity = new Mock<IIdentityService>();
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-            Service = new WorkflowDefinitionService(
+            Service = new WorkflowLifecycleService(
                 Provider.Object, Mock.Of<ITriggerRegistrationService>(),
-                new WorkflowValidator(), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowDefinitionService>>());
+                new WorkflowValidator(), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
         }
 
         public Mock<IWorkflowDefinitionProvider> Provider { get; } = new();
@@ -112,6 +112,8 @@ public sealed class WorkflowDeletionTests
 
         public Mock<IEventBus> Bus { get; } = new();
 
-        public WorkflowDefinitionService Service { get; }
+        public WorkflowLifecycleService Service { get; }
+
+        public WorkflowQueryService Queries => new WorkflowQueryService(Provider.Object, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
     }
 }

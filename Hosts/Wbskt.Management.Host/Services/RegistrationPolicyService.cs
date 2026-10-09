@@ -51,6 +51,14 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return lookup;
     }
 
+    public async Task<Result<RegistrationPolicyResponse>> GetAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default)
+    {
+        var policy = await FindInWorkspaceAsync(workspaceId, policyRefId, cancellationToken);
+        return policy.IsSuccess
+            ? Result<RegistrationPolicyResponse>.Success(MapToResponse(policy.Value))
+            : Result<RegistrationPolicyResponse>.Failure(policy.Error);
+    }
+
     public async Task<Result<RegistrationPolicyResponse>> CreateAsync(int workspaceId, RegistrationPolicyRequest request, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Creating registration policy '{PolicyName}' in WorkspaceId: {WorkspaceId}", request.Name, workspaceId);

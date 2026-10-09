@@ -1,66 +1,33 @@
-using System.Text.Json;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
-using Wbskt.Models;
-using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Services;
 
-internal sealed class ClientService : IClientService
+/// <summary>
+/// Changes to a client: its status, name and tags, its secret, and deleting it. Each change that
+/// affects a connected device also tells the socket host, through <see cref="ClientAccessRevoker"/>.
+/// </summary>
+internal sealed class ClientLifecycleService : IClientLifecycleService
 {
     private readonly IClientProvider _clientProvider;
     private readonly IEventBus _eventBus;
     private readonly ClientAccessRevoker _access;
-    private readonly ILogger<ClientService> _logger;
+    private readonly ILogger<ClientLifecycleService> _logger;
 
-    public ClientService(
+    public ClientLifecycleService(
         IClientProvider clientProvider,
         IEventBus eventBus,
         IClientTokenCutoffs cutoffs,
-        ILogger<ClientService> logger)
+        ILogger<ClientLifecycleService> logger)
     {
         _clientProvider = clientProvider;
         _eventBus = eventBus;
         _access = new ClientAccessRevoker(eventBus, cutoffs);
         _logger = logger;
-    }
-
-    public async Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, ClientStatus? status, string? name,
-        string? tag, int skip, int take, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Querying clients for WorkspaceId: {WorkspaceId}", workspaceId);
-
-        if (!TryNormalizeFilter(tag, out var normalizedTag))
-        {
-            return Result<IPagedList<ClientResponse>>.Failure(TagInvalid);
-        }
-
-        var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, normalizedTag, skip, take, cancellationToken);
-        _logger.LogTrace("Retrieved {Count} clients for WorkspaceId: {WorkspaceId}", pagedClients.TotalCount, workspaceId);
-        
-        var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
-        return Result<IPagedList<ClientResponse>>.Success(result);
-    }
-
-    public async Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId,
-        ClientStatus? status, string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Querying clients by PolicyId: {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
-
-        if (!TryNormalizeFilter(tag, out var normalizedTag))
-        {
-            return Result<IPagedList<ClientResponse>>.Failure(TagInvalid);
-        }
-
-        var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, normalizedTag, skip, take, cancellationToken);
-        _logger.LogTrace("Retrieved {Count} clients by PolicyId: {PolicyId}", pagedClients.TotalCount, policyId);
-        
-        var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
-        return Result<IPagedList<ClientResponse>>.Success(result);
     }
 
     public async Task<Result> UpdateStatusAsync(int workspaceId, Guid clientRefId, ClientStatus status, CancellationToken cancellationToken = default)
@@ -192,16 +159,6 @@ internal sealed class ClientService : IClientService
         return WorkspaceOwnership.LoadAsync(workspaceId, () => _clientProvider.FindDetailByRefIdAsync(clientRefId, cancellationToken), WorkspaceOwnership.ClientNotFound);
     }
 
-    public async Task<Result<ClientDetailResponse>> GetDetailAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Querying client detail for RefId: {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-
-        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        return lookup.IsSuccess
-            ? Result<ClientDetailResponse>.Success(MapToDetailResponse(lookup.Value))
-            : Result<ClientDetailResponse>.Failure(lookup.Error);
-    }
-
     public async Task<Result> RenameAsync(int workspaceId, Guid clientRefId, string name, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Renaming client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
@@ -236,7 +193,7 @@ internal sealed class ClientService : IClientService
 
         if (tags is null)
         {
-            return Result<ClientTagsResponse>.Failure(TagInvalid);
+            return Result<ClientTagsResponse>.Failure(ClientTags.Invalid);
         }
 
         var normalized = new SortedSet<string>(StringComparer.Ordinal);
@@ -244,7 +201,7 @@ internal sealed class ClientService : IClientService
         {
             if (!ClientTags.TryNormalize(raw, out var tag))
             {
-                return Result<ClientTagsResponse>.Failure(TagInvalid);
+                return Result<ClientTagsResponse>.Failure(ClientTags.Invalid);
             }
 
             normalized.Add(tag);
@@ -272,135 +229,5 @@ internal sealed class ClientService : IClientService
         return Result<ClientTagsResponse>.Success(new ClientTagsResponse(client.RefId, normalized.ToList()));
     }
 
-    public async Task<Result<IReadOnlyList<ClientTagCountResponse>>> GetTagsAsync(int workspaceId, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Querying client tags for WorkspaceId: {WorkspaceId}", workspaceId);
-
-        var tags = await _clientProvider.GetTagsAsync(workspaceId, cancellationToken);
-        IReadOnlyList<ClientTagCountResponse> response = tags.Select(t => new ClientTagCountResponse(t.Tag, t.ClientCount)).ToList();
-        return Result<IReadOnlyList<ClientTagCountResponse>>.Success(response);
-    }
-
-    private static readonly Error TagInvalid = Error.Validation("CLIENT_TAG_INVALID",
-        $"A tag is 1-{ClientTags.MaxLength} letters, digits, spaces, '-', '_' or '.', starting and ending with a letter or digit.");
-
-    // No filter stays no filter; a filter that could never match a stored tag is refused.
-    private static bool TryNormalizeFilter(string? tag, out string? normalized)
-    {
-        normalized = null;
-        if (tag is null)
-        {
-            return true;
-        }
-
-        if (!ClientTags.TryNormalize(tag, out var value))
-        {
-            return false;
-        }
-
-        normalized = value;
-        return true;
-    }
-
-    public async Task<Result<IReadOnlyCollection<ClientStateVariableResponse>>> GetStateAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Querying state variables for client RefId {ClientRefId} in WorkspaceId: {WorkspaceId}", clientRefId, workspaceId);
-
-        var lookup = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        if (lookup.IsFailure)
-        {
-            return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Failure(lookup.Error);
-        }
-
-        var variables = await _clientProvider.GetStateVariablesAsync(lookup.Value.Id, cancellationToken);
-        IReadOnlyCollection<ClientStateVariableResponse> response = variables
-            .Select(v => new ClientStateVariableResponse(v.Name, v.DataType, v.ValueJson, v.UpdatedAt))
-            .ToList()
-            .AsReadOnly();
-
-        return Result<IReadOnlyCollection<ClientStateVariableResponse>>.Success(response);
-    }
-
-    public async Task<Result<int>> EnsureClientInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
-    {
-        var clientResult = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        return clientResult.IsSuccess
-            ? Result<int>.Success(clientResult.Value.Id)
-            : Result<int>.Failure(clientResult.Error);
-    }
-
-    public async Task<Result<ClientCommandTarget>> ResolveCommandTargetAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
-    {
-        var clientResult = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        if (clientResult.IsFailure)
-        {
-            return Result<ClientCommandTarget>.Failure(clientResult.Error);
-        }
-
-        var client = clientResult.Value;
-        if (!client.IsConnected || string.IsNullOrEmpty(client.ConnectedHostId))
-        {
-            _logger.LogInformation("Command refused: client RefId {ClientRefId} is offline", clientRefId);
-            return Result<ClientCommandTarget>.Failure(DeviceOffline);
-        }
-
-        return Result<ClientCommandTarget>.Success(new ClientCommandTarget(client.Id, client.ConnectedHostId));
-    }
-
     private static readonly Error PolicyFull = Error.Validation("POLICY_LIMIT_REACHED", "Policy registration limit reached. Cannot approve more clients.");
-
-    private static readonly Error DeviceOffline = Error.Conflict("DEVICE_OFFLINE", "The device is offline. Commands are only delivered to connected devices.");
-
-    private static ClientResponse MapToResponse(Client c)
-    {
-        return new ClientResponse(
-            c.RefId,
-            c.PolicyRefId,
-            c.Name,
-            c.Status,
-            c.IsConnected,
-            c.ConnectedAt,
-            c.LastActivityAt,
-            c.LastRttMs,
-            c.CreatedAt,
-            c.Tags
-        );
-    }
-
-    private static ClientDetailResponse MapToDetailResponse(ClientDetail d)
-    {
-        IReadOnlyList<CommandCapability>? capabilities = null;
-        if (!string.IsNullOrEmpty(d.CapabilitiesJson))
-        {
-            try
-            {
-                capabilities = JsonSerializer.Deserialize<List<CommandCapability>>(
-                    d.CapabilitiesJson,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch (JsonException)
-            {
-                // Stored blob is unreadable; surface the client without capabilities rather than failing the page.
-            }
-        }
-
-        return new ClientDetailResponse(
-            d.RefId,
-            d.PolicyRefId,
-            d.PolicyName,
-            d.Name,
-            d.Status,
-            d.IsConnected,
-            d.ConnectedAt,
-            d.LastActivityAt,
-            d.LastRttMs,
-            d.RttMeasuredAt,
-            d.AgentName,
-            d.AgentVersion,
-            d.Platform,
-            capabilities,
-            d.CreatedAt,
-            d.Tags
-        );
-    }
 }

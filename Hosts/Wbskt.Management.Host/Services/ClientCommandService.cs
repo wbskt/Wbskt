@@ -17,11 +17,11 @@ public sealed class ClientCommandService : IClientCommandService
 
     public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The device could not be reached right now. Try again shortly.");
 
-    private readonly IClientService _clientService;
+    private readonly IClientQueryService _clientService;
     private readonly IEventBus _eventBus;
     private readonly ILogger<ClientCommandService> _logger;
 
-    public ClientCommandService(IClientService clientService, IEventBus eventBus, ILogger<ClientCommandService> logger)
+    public ClientCommandService(IClientQueryService clientService, IEventBus eventBus, ILogger<ClientCommandService> logger)
     {
         _clientService = clientService;
         _eventBus = eventBus;

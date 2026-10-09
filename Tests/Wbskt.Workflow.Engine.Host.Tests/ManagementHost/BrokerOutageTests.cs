@@ -44,7 +44,7 @@ public sealed class BrokerOutageTests
             .ReturnsAsync(true);
         var announced = harness.Expect<ClientSecretRotatedEvent>();
 
-        var result = await harness.Resolve<IClientService>().RotateSecretAsync(WorkspaceId, client.RefId);
+        var result = await harness.Resolve<IClientLifecycleService>().RotateSecretAsync(WorkspaceId, client.RefId);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Secret.Should().NotBeNullOrEmpty();
@@ -78,13 +78,13 @@ public sealed class BrokerOutageTests
     public async Task A_command_reports_an_unavailable_broker_as_503()
     {
         var clientRef = Guid.NewGuid();
-        var clientService = new Mock<IClientService>();
+        var clientService = new Mock<IClientQueryService>();
         clientService.Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<Wbskt.Management.Host.Models.ClientCommandTarget>.Success(new Wbskt.Management.Host.Models.ClientCommandTarget(42, "socket-a")));
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var controller = new ClientsController(clientService.Object, new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -123,7 +123,7 @@ public sealed class BrokerOutageTests
             services.AddSingleton(_bus.Object);
             services.AddSingleton(Mock.Of<IClientTokenCutoffs>());
             services.AddQueuedEventBus();
-            services.AddScopedWithQueuedEvents<IClientService, ClientService>();
+            services.AddScopedWithQueuedEvents<IClientLifecycleService, ClientLifecycleService>();
             services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
             _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 

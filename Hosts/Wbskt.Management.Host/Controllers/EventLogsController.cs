@@ -19,12 +19,12 @@ public sealed class EventLogsController : ApiControllerBase
 {
     private readonly IEventLogService _eventLogService;
     private readonly IRegistrationPolicyService _policyService;
-    private readonly IClientService _clientService;
+    private readonly IClientQueryService _clientService;
 
     public EventLogsController(
         IEventLogService eventLogService,
         IRegistrationPolicyService policyService,
-        IClientService clientService)
+        IClientQueryService clientService)
     {
         _eventLogService = eventLogService;
         _policyService = policyService;

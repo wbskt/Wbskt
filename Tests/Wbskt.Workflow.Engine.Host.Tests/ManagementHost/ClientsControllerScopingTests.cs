@@ -30,13 +30,13 @@ public sealed class ClientsControllerScopingTests
 
     // The workspace and the caller's permission are settled by WorkspacePermissionFilter before the
     // action runs (see WorkspacePermissionFilterTests), so the actions are handed the resolved ID.
-    private static (ClientsController Controller, Mock<IClientService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController()
+    private static (ClientsController Controller, Mock<IClientQueryService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController()
     {
-        var clientService = new Mock<IClientService>();
+        var clientService = new Mock<IClientQueryService>();
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(clientService.Object, new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -46,14 +46,14 @@ public sealed class ClientsControllerScopingTests
         return (controller, clientService, bus, eventLogService);
     }
 
-    private static void SetupTarget(Mock<IClientService> clientService, Result<ClientCommandTarget> outcome)
+    private static void SetupTarget(Mock<IClientQueryService> clientService, Result<ClientCommandTarget> outcome)
     {
         clientService
             .Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
     }
 
-    private static void SetupOwnership(Mock<IClientService> clientService, Result<int> outcome)
+    private static void SetupOwnership(Mock<IClientQueryService> clientService, Result<int> outcome)
     {
         clientService
             .Setup(x => x.EnsureClientInWorkspaceAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
