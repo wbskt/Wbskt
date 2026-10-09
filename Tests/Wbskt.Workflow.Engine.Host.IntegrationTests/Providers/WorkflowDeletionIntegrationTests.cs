@@ -54,9 +54,9 @@ public sealed class WorkflowDeletionIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM dbo.WorkflowDefinitions WHERE RefId = @p0 AND IsEnabled = 1", refId));
 
         // Gone from current reads and the version list, but the version a run points at still reads.
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => provider.GetCurrentByRefIdAsync(refId, CancellationToken.None));
+        Assert.Null(await provider.FindCurrentByRefIdAsync(refId, CancellationToken.None));
         Assert.Empty(await provider.GetVersionsAsync(refId, workspaceId, CancellationToken.None));
-        Assert.Equal(refId, (await provider.GetByRefIdVersionAsync(refId, 1, CancellationToken.None)).RefId);
+        Assert.Equal(refId, (await provider.FindRowByRefIdVersionAsync(refId, 1, CancellationToken.None))!.RefId);
         Assert.DoesNotContain(
             (await provider.GetAllSummariesAsync(workspaceId, 0, 100, CancellationToken.None)).Select(r => r.RefId),
             r => r == refId);

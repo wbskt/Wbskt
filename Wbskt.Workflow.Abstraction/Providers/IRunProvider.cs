@@ -7,7 +7,7 @@ public interface IRunProvider
     Task<RunRow> CreateAsync(RunRow row, CancellationToken ct);
     Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct);
     Task<RunRow> GetByIdAsync(long runId, CancellationToken ct);
-    Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct);
+    Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct);
 
     /// <summary>

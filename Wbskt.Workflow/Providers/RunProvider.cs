@@ -54,13 +54,12 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
-    public async Task<RunRow> GetByRefIdAsync(Guid refId, CancellationToken ct)
+    public async Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.Run_GetBy_RefId",
             p => p.AddWithValue("@RefId", refId),
             Map,
-            new KeyNotFoundException($"Run with RefId={refId} not found."),
             ct
         );
     }

@@ -9,6 +9,9 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Management.Host.Services.Workflow;
+using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -63,6 +66,33 @@ public sealed class ProviderFaultTests
         await middleware.InvokeAsync(context, bus.Object);
 
         context.Response.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+    }
+
+    [Fact]
+    public async Task A_missing_run_is_a_404_result()
+    {
+        var runs = new Mock<IRunProvider>();
+        runs.Setup(p => p.FindRowByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((RunRow?)null);
+
+        var result = await RunQueries(runs).GetDetailAsync(WorkspaceId, Guid.NewGuid(), CancellationToken.None);
+
+        result.Error.Should().Be(WorkspaceOwnership.RunNotFound);
+    }
+
+    [Fact]
+    public async Task A_database_fault_reading_a_run_propagates_instead_of_reading_as_not_found()
+    {
+        var runs = new Mock<IRunProvider>();
+        runs.Setup(p => p.FindRowByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(new TimeoutException("db"));
+
+        var read = () => RunQueries(runs).GetDetailAsync(WorkspaceId, Guid.NewGuid(), CancellationToken.None);
+
+        await read.Should().ThrowAsync<TimeoutException>();
+    }
+
+    private static WorkflowRunQueryService RunQueries(Mock<IRunProvider> runs)
+    {
+        return new WorkflowRunQueryService(runs.Object, Mock.Of<IBranchProvider>(), Mock.Of<IWorkflowDefinitionProvider>(), NullLogger<WorkflowRunQueryService>.Instance);
     }
 
     private static ClientService Service(Mock<IClientProvider> provider)

@@ -36,7 +36,7 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         inserted.Version.Should().BeGreaterThan(0);
         inserted.Name.Should().StartWith("IT-Workflow-");
 
-        WorkflowDefinitionRow retrieved = await provider.GetByRefIdVersionAsync(refId, inserted.Version, CancellationToken.None);
+        WorkflowDefinitionRow retrieved = (await provider.FindRowByRefIdVersionAsync(refId, inserted.Version, CancellationToken.None))!;
 
         retrieved.Id.Should().Be(inserted.Id);
         retrieved.RefId.Should().Be(refId);
@@ -66,7 +66,7 @@ public sealed class WorkflowDefinitionProviderIntegrationTests(SqlEdgeFixture fi
         WorkflowDefinitionRow v1 = await provider.InsertAsync(BuildRow(refId), CancellationToken.None);
         WorkflowDefinitionRow v2 = await provider.InsertAsync(BuildRow(refId), CancellationToken.None);
 
-        WorkflowDefinitionRow current = await provider.GetCurrentByRefIdAsync(refId, CancellationToken.None);
+        WorkflowDefinitionRow current = (await provider.FindCurrentByRefIdAsync(refId, CancellationToken.None))!;
 
         current.Version.Should().Be(v2.Version).And.BeGreaterThan(v1.Version);
         current.RefId.Should().Be(refId);

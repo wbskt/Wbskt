@@ -38,9 +38,9 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
         );
     }
 
-    public async Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
+    public async Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.WorkflowDefinition_GetBy_RefId_Version",
             p =>
             {
@@ -48,18 +48,16 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 p.AddWithValue("@Version", version);
             },
             Map,
-            new KeyNotFoundException($"WorkflowDefinition with RefId={refId} Version={version} not found."),
             ct
         );
     }
 
-    public async Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct)
+    public async Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct)
     {
-        return await ExecuteSingleAsync(
+        return await ExecuteFindAsync(
             "dbo.WorkflowDefinition_GetLatestVersion_By_RefId",
             p => p.AddWithValue("@RefId", refId),
             Map,
-            new KeyNotFoundException($"WorkflowDefinition with RefId={refId} not found."),
             ct
         );
     }
