@@ -123,3 +123,12 @@ public record MessageTemplateResponse(
 public record ClientLoginRequest(Guid ClientRefId, string Secret);
 
 public record ClientLoginResponse(string AccessToken, int ExpiresIn);
+
+/// <summary>A client's fields to change; a field left null stays as it is.</summary>
+public record UpdateClientRequest(string? Name, ClientStatus? Status);
+
+public record UpdateClientStatusRequest(ClientStatus Status);
+
+public record UpdateClientNameRequest(string Name);
+
+public record SetClientTagsRequest(IReadOnlyList<string>? Tags);

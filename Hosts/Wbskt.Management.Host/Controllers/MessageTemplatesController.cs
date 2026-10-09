@@ -68,15 +68,15 @@ public sealed class MessageTemplatesController : ApiControllerBase
     /// Updates an existing message template.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="refId">The unique reference ID of the template.</param>
+    /// <param name="templateRef">The unique reference ID of the template.</param>
     /// <param name="request">The new template details.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPut("{refId:guid}")]
+    [HttpPut("{templateRef:guid}")]
     [RequiresPermission(PermissionNames.TemplatesManage)]
-    public async Task<IActionResult> Update([FromWorkspace] int workspaceId, Guid refId, MessageTemplateRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update([FromWorkspace] int workspaceId, Guid templateRef, MessageTemplateRequest request, CancellationToken cancellationToken)
     {
-        var result = await _templateService.UpdateAsync(workspaceId, refId, request, cancellationToken);
+        var result = await _templateService.UpdateAsync(workspaceId, templateRef, request, cancellationToken);
         return MapResult(result);
     }
 
@@ -84,14 +84,14 @@ public sealed class MessageTemplatesController : ApiControllerBase
     /// Deletes a message template.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="refId">The unique reference ID of the template.</param>
+    /// <param name="templateRef">The unique reference ID of the template.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpDelete("{refId:guid}")]
+    [HttpDelete("{templateRef:guid}")]
     [RequiresPermission(PermissionNames.TemplatesManage)]
-    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid templateRef, CancellationToken cancellationToken)
     {
-        var result = await _templateService.DeleteAsync(workspaceId, refId, cancellationToken);
+        var result = await _templateService.DeleteAsync(workspaceId, templateRef, cancellationToken);
         return MapResult(result);
     }
 

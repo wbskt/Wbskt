@@ -8,7 +8,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
 
-[Route("api/workspaces/{workspaceRef:guid}/runs/{runRefId:guid}/history")]
+[Route("api/workspaces/{workspaceRef:guid}/runs/{runRef:guid}/history")]
 [ApiController]
 [Authorize]
 public sealed class WorkflowHistoryController : ApiControllerBase
@@ -23,7 +23,7 @@ public sealed class WorkflowHistoryController : ApiControllerBase
     /// <summary>A page of the run's history, oldest first: <c>cursor</c> and <c>limit</c> (default 200).</summary>
     [HttpGet]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<HistoryListResponse>> List([FromWorkspace] int workspaceId, Guid runRefId, [FromQuery] PageRequest page, CancellationToken ct = default)
+    public async Task<ActionResult<HistoryListResponse>> List([FromWorkspace] int workspaceId, Guid runRef, [FromQuery] PageRequest page, CancellationToken ct = default)
     {
         var after = page.AfterKey();
         if (after.IsFailure)
@@ -31,6 +31,6 @@ public sealed class WorkflowHistoryController : ApiControllerBase
             return MapError(after.Error);
         }
 
-        return MapResult(await _historyService.ListAsync(workspaceId, runRefId, after.Value ?? 0, page.LimitOr(200), ct));
+        return MapResult(await _historyService.ListAsync(workspaceId, runRef, after.Value ?? 0, page.LimitOr(200), ct));
     }
 }

@@ -124,7 +124,7 @@ public sealed class DeviceRevocationTests(ServicesFixture fixture)
     }
 
     private Task<HttpResponseMessage> RevokeAsync(Guid workspace, Guid clientRef, string token) =>
-        Send(HttpMethod.Patch, workspace, $"clients/{clientRef}/status", token, new { Status = 2 });
+        Send(HttpMethod.Patch, workspace, $"clients/{clientRef}", token, new { Status = 2 });
 
     private Task<HttpResponseMessage> Send(HttpMethod method, Guid workspace, string path, string token, object? body = null) =>
         fixture.SendAsync(method, ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/{path}"), token, body);

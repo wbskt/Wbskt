@@ -81,7 +81,7 @@ public sealed class ListPagingTests(ServicesFixture fixture)
 
         (await WalkAsync(token, workspace, "registration-policies", "refId")).Should().BeEquivalentTo(policies.Append(clientPolicy).Select(p => p.ToString()));
         (await WalkAsync(token, workspace, "clients", "clientRefId")).Should().BeEquivalentTo(Keys(clients));
-        (await WalkAsync(token, workspace, $"clients/policy/{clientPolicy}", "clientRefId")).Should().BeEquivalentTo(Keys(clients));
+        (await WalkAsync(token, workspace, $"clients?policyRefId={clientPolicy}", "clientRefId")).Should().BeEquivalentTo(Keys(clients));
         (await WalkAsync(token, workspace, "message-templates", "refId")).Should().BeEquivalentTo(Keys(templates));
         (await WalkAsync(token, workspace, "workflows", "refId")).Should().BeEquivalentTo(Keys(workflows));
         (await WalkAsync(token, workspace, $"workflows/{workflows[0]}/runs", "refId")).Should().BeEquivalentTo(Keys(runs));

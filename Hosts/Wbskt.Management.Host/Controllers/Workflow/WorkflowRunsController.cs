@@ -22,9 +22,9 @@ public sealed class WorkflowRunsController : ApiControllerBase
         _runService = runService;
     }
 
-    [HttpGet("workflows/{workflowRefId:guid}/runs")]
+    [HttpGet("workflows/{workflowRef:guid}/runs")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRefId, [FromQuery] string? status, [FromQuery] PageRequest page, CancellationToken ct = default)
+    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRef, [FromQuery] string? status, [FromQuery] PageRequest page, CancellationToken ct = default)
     {
         var cursor = page.AfterKey();
         if (cursor.IsFailure)
@@ -32,7 +32,7 @@ public sealed class WorkflowRunsController : ApiControllerBase
             return MapError(cursor.Error);
         }
 
-        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRefId, status, page.LimitOr(50), cursor.Value, ct);
+        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRef, status, page.LimitOr(50), cursor.Value, ct);
         return MapResult(result);
     }
 
@@ -75,24 +75,24 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// How a workflow is doing: outcome counts, duration percentiles, success rate, the error codes
     /// that actually occur, and which nodes are slowest. Defaults to the last 30 days.
     /// </summary>
-    [HttpGet("workflows/{workflowRefId:guid}/stats")]
+    [HttpGet("workflows/{workflowRef:guid}/stats")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkflowStatsResponse>> GetStats(
         [FromWorkspace] int workspaceId,
-        Guid workflowRefId,
+        Guid workflowRef,
         [FromQuery] DateTimeOffset? from = null,
         [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
-        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRefId, from, to, ct);
+        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRef, from, to, ct);
         return MapResult(result);
     }
 
-    [HttpGet("runs/{runRefId:guid}")]
+    [HttpGet("runs/{runRef:guid}")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<RunDetailDto>> Get([FromWorkspace] int workspaceId, Guid runRefId, CancellationToken ct)
+    public async Task<ActionResult<RunDetailDto>> Get([FromWorkspace] int workspaceId, Guid runRef, CancellationToken ct)
     {
-        var result = await _runQueryService.GetDetailAsync(workspaceId, runRefId, ct);
+        var result = await _runQueryService.GetDetailAsync(workspaceId, runRef, ct);
         return MapResult(result);
     }
 
@@ -103,18 +103,18 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// that has already finished, 503 when the broker is unavailable - nothing was sent, so the caller
     /// should retry.
     /// </summary>
-    [HttpPost("runs/{runRefId:guid}/cancel")]
+    [HttpPost("runs/{runRef:guid}/cancel")]
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
-    public async Task<IActionResult> Cancel([FromWorkspace] int workspaceId, Guid runRefId, [FromBody] CancelRunRequest req, CancellationToken ct)
+    public async Task<IActionResult> Cancel([FromWorkspace] int workspaceId, Guid runRef, [FromBody] CancelRunRequest req, CancellationToken ct)
     {
-        var result = await _runService.CancelAsync(workspaceId, runRefId, req.Reason, ct);
+        var result = await _runService.CancelAsync(workspaceId, runRef, req.Reason, ct);
         return result.IsSuccess ? Accepted() : MapError(result.Error);
     }
 
-    [HttpPost("runs/{runRefId:guid}/signals/{signalName}")]
+    [HttpPost("runs/{runRef:guid}/signals/{signalName}")]
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
-    public async Task<ActionResult<SignalResponse>> Signal([FromWorkspace] int workspaceId, Guid runRefId, string signalName, [FromBody] SignalRequest req, CancellationToken ct)
+    public async Task<ActionResult<SignalResponse>> Signal([FromWorkspace] int workspaceId, Guid runRef, string signalName, [FromBody] SignalRequest req, CancellationToken ct)
     {
-        return MapResult(await _runService.SignalAsync(workspaceId, runRefId, signalName, req, ct));
+        return MapResult(await _runService.SignalAsync(workspaceId, runRef, signalName, req, ct));
     }
 }

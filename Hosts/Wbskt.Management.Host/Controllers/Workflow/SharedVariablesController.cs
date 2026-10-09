@@ -8,7 +8,7 @@ using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
 
-[Route("api/workspaces/{workspaceRef:guid}/workflows/{workflowRefId:guid}/variables")]
+[Route("api/workspaces/{workspaceRef:guid}/workflows/{workflowRef:guid}/variables")]
 [ApiController]
 [Authorize]
 public sealed class SharedVariablesController : ApiControllerBase
@@ -20,17 +20,17 @@ public sealed class SharedVariablesController : ApiControllerBase
         _variableService = variableService;
     }
 
-    [HttpGet("{name}")]
+    [HttpGet("{variableName}")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<SharedVariableDto>> Get([FromWorkspace] int workspaceId, Guid workflowRefId, string name, CancellationToken ct)
+    public async Task<ActionResult<SharedVariableDto>> Get([FromWorkspace] int workspaceId, Guid workflowRef, string variableName, CancellationToken ct)
     {
-        return MapResult(await _variableService.GetAsync(workspaceId, workflowRefId, name, ct));
+        return MapResult(await _variableService.GetAsync(workspaceId, workflowRef, variableName, ct));
     }
 
-    [HttpPut("{name}")]
+    [HttpPut("{variableName}")]
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
-    public async Task<ActionResult<SharedVariableDto>> Set([FromWorkspace] int workspaceId, Guid workflowRefId, string name, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
+    public async Task<ActionResult<SharedVariableDto>> Set([FromWorkspace] int workspaceId, Guid workflowRef, string variableName, [FromBody] SharedVariableSetRequest request, CancellationToken ct)
     {
-        return MapResult(await _variableService.SetAsync(workspaceId, workflowRefId, name, request.ValueJson, ct));
+        return MapResult(await _variableService.SetAsync(workspaceId, workflowRef, variableName, request.ValueJson, ct));
     }
 }

@@ -241,27 +241,30 @@ that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 
 `TIME_RANGE_TOO_LONG`.
 
 > **A reference is not a scope.** Resolving `workspaceRef` establishes which workspace the caller is
-> acting in. It says nothing about whether the `clientRefId` or `runRefId` in the same route belongs
+> acting in. It says nothing about whether the `clientRef` or `runRef` in the same route belongs
 > to it — each endpoint checks that separately.
 
 ### 2.1 Clients — `…/clients`
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name` and `tag` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). Each client carries its `tags`. Paged, with `totalCount`. |
+| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name`, `tag` and `policyRefId` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). Each client carries its `tags`. Paged, with `totalCount`. |
 | `GET tags` | `clients.read` | Every tag in use in the workspace with its client count (`{ tag, clientCount }`), sorted, for a tag filter. |
-| `GET policy/{policyRefId}` | `clients.read` | The same list narrowed to one registration policy, after verifying the policy belongs to the workspace. |
-| `GET {clientRefId}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities. |
-| `GET {clientRefId}/state` | `clients.read` | The client's last-known self-reported state variables. |
-| `PATCH {clientRefId}/status` | `clients.update` | Approves or revokes a client. Approving enforces the policy's `MaxClients` ceiling. |
+| `GET {clientRef}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities. |
+| `GET {clientRef}/state` | `clients.read` | The client's last-known self-reported state variables. |
+| `PATCH {clientRef}` | `clients.update` | Changes a client's `name` (1–100 characters), its `status` (approving or revoking it; approving enforces the policy's `MaxClients` ceiling), or both. A field left out stays as it is; naming neither is 400 `CLIENT_UPDATE_EMPTY`. The status changes first, so a refused status leaves the name unchanged too. |
 | `PATCH status` | `clients.update` | Gives up to 100 clients one status (`{ clientRefIds, status }`), each handled as the single-client endpoint would. Answers 200 with `updated` and `failed` (ref, code, message), so one client that cannot change (the policy is full, or it is not in this workspace) does not stop the rest. Approvals are taken in the order given. |
-| `DELETE {clientRefId}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
-| `POST {clientRefId}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
-| `PATCH {clientRefId}/name` | `clients.update` | Renames a client (1–100 characters). |
-| `PUT {clientRefId}/tags` | `clients.update` | Replaces the client's tags (`{ tags }`; an empty list clears them) and returns them as stored. Tags are trimmed and lower-cased, and repeats collapse. Each is 1–32 letters, digits, spaces, `-`, `_` or `.`, starting and ending with a letter or digit (else 400 `CLIENT_TAG_INVALID`); at most 10 per client (else 400 `CLIENT_TAGS_TOO_MANY`). |
-| `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Commands are delivered live or not at all: an offline client is answered 409 `DEVICE_OFFLINE`, and a client that drops before delivery raises `ClientCommandFailedEvent` ("not connected"). Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`): past it the socket host does not send the command and the SDK refuses it, both reported as `ClientCommandFailedEvent`. |
-| `POST {clientRefId}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
-| `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged like the event log. |
+| `DELETE {clientRef}` | `clients.manage` | Deletes a client with its capabilities and state, closes its connection and refuses its still-valid token. Its event-log history stays. The device must register again to come back. |
+| `POST {clientRef}/rotate-secret` | `clients.manage` | Replaces the client's secret and returns the new one once (`{ clientRefId, secret }`). The old secret stops working, tokens issued before the rotation are refused, and the live connection is closed. |
+| `PUT {clientRef}/tags` | `clients.update` | Replaces the client's tags (`{ tags }`; an empty list clears them) and returns them as stored. Tags are trimmed and lower-cased, and repeats collapse. Each is 1–32 letters, digits, spaces, `-`, `_` or `.`, starting and ending with a letter or digit (else 400 `CLIENT_TAG_INVALID`); at most 10 per client (else 400 `CLIENT_TAGS_TOO_MANY`). |
+| `POST {clientRef}/commands` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Commands are delivered live or not at all: an offline client is answered 409 `DEVICE_OFFLINE`, and a client that drops before delivery raises `ClientCommandFailedEvent` ("not connected"). Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`): past it the socket host does not send the command and the SDK refuses it, both reported as `ClientCommandFailedEvent`. |
+| `POST {clientRef}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
+| `GET {clientRef}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged like the event log. |
+
+Routes replaced by the API style guide still answer for one release, hidden from the OpenAPI
+document: `GET policy/{policyRef}` (now `GET ?policyRefId=`), `PATCH {clientRef}/status` and
+`PATCH {clientRef}/name` (now `PATCH {clientRef}`), and `POST {clientRef}/command` (now
+`/commands`).
 
 Command and ping publish onto the event bus, and the socket host dispatches on `ClientRefId` alone —
 it has no workspace of its own to check against. The controller's ownership check is therefore the
@@ -275,11 +278,11 @@ approval is automatic or manual.
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET /` | `policies.read` | Lists policies, filterable by `autoApproval` and `name`, each enriched with its registered and connected client counts. |
-| `GET {refId}` | `policies.read` | One policy, after verifying it belongs to the workspace. |
+| `GET {policyRef}` | `policies.read` | One policy, after verifying it belongs to the workspace. |
 | `POST /` | `policies.manage` | Creates a policy. The enrolment PIN is generated server-side, not supplied by the caller. |
-| `PATCH {refId}` | `policies.manage` | Updates name, auto-approval or enabled state. |
-| `POST {refId}/disable` | `policies.manage` | Stops the policy accepting new registrations. Already-registered clients are unaffected. |
-| `POST {refId}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering devices; already-registered clients are unaffected. |
+| `PATCH {policyRef}` | `policies.manage` | Updates name, auto-approval or enabled state. |
+| `POST {policyRef}/disable` | `policies.manage` | Stops the policy accepting new registrations. Already-registered clients are unaffected. |
+| `POST {policyRef}/rotate-pin` | `policies.manage` | Replaces the PIN and returns the policy with the new one. The old PIN stops registering devices; already-registered clients are unaffected. |
 
 ### 2.3 Message templates — `…/message-templates`
 
@@ -289,8 +292,8 @@ Saved send-panel payloads, optionally pinned to a policy.
 |---|---|---|
 | `GET /` | `templates.read` | Lists templates, optionally filtered by `policyRefId`. |
 | `POST /` | `templates.manage` | Creates one. Validates that the payload is JSON under 32 KiB and that the message type is not reserved for the platform protocol. |
-| `PUT {refId}` | `templates.manage` | Replaces a template. |
-| `DELETE {refId}` | `templates.manage` | Deletes one. |
+| `PUT {templateRef}` | `templates.manage` | Replaces a template. |
+| `DELETE {templateRef}` | `templates.manage` | Deletes one. |
 
 ### 2.4 Event logs — `…/event-logs`
 
@@ -308,35 +311,35 @@ in-place edit, which is why there is no update verb.
 | `POST /` | `workflows.create` | Publishes a definition — new workflow or a new version of one — after validation. The version is assigned by the database under lock, not by the caller. A failure after the row is inserted rolls the publish back and restores the superseded version. |
 | `POST validate` | `workflows.create` | Validates a definition **without publishing**. Returns `IsValid` plus every issue (warnings included) with code, message and `nodeId`. An invalid definition is a 200 with `IsValid: false`, not an error. |
 | `GET /` | `workflows.read` | Lists workflow summaries. Paged. |
-| `GET {refId}` | `workflows.read` | The current published version. |
-| `GET {refId}/versions` | `workflows.read` | Every version, newest first, without definitions: number, status (`Published` or `Deprecated` for the newest, `Superseded` for the rest), name, run count and publish time. **404** for a deleted workflow. |
-| `GET {refId}/versions/{version}` | `workflows.read` | A specific historical version. Still readable after the workflow is deleted, so a past run's definition can be shown. |
-| `POST {refId}/deprecate` | `workflows.delete` | Marks the definition deprecated and deregisters its triggers, so nothing new fires it. Not a delete — the version history and its runs stay queryable. |
-| `DELETE {refId}` | `workflows.delete` | Deletes the workflow, which cannot be undone: it leaves the list and every current-version read (**404**), its triggers and schedules are removed, runs still going are cancelled by the engine shortly after, and its RefId cannot be published again (**409** `WORKFLOW_DELETED`). Past runs stay readable by run. **404** for a workflow that is not in this workspace or is already deleted. |
-| `POST {refId}/reinstate` | `workflows.delete` | The inverse of deprecate: re-enables the current version **and re-registers its triggers**, re-seeding schedules from their cron. Rejects a workflow that is already enabled. |
-| `POST {refId}/rollback/{version}` | `workflows.create` | Republishes an earlier version's definition as a **new** version — history stays append-only. Validated like any other publish, so rolling back to a definition that predates a validation rule fails rather than reinstating a broken workflow. |
-| `POST {refId}/runs` | `workflows.execute` | Starts a manual run. Verifies the workflow belongs to the workspace, then relays to the engine. Not every non-start is an error: **200** started (or an idempotent retry, returning the original run), **202** queued behind an active run, **409** dropped by the concurrency policy / no manual trigger / workflow deprecated. A 5xx means the engine itself failed. |
+| `GET {workflowRef}` | `workflows.read` | The current published version. |
+| `GET {workflowRef}/versions` | `workflows.read` | Every version, newest first, without definitions: number, status (`Published` or `Deprecated` for the newest, `Superseded` for the rest), name, run count and publish time. **404** for a deleted workflow. |
+| `GET {workflowRef}/versions/{version}` | `workflows.read` | A specific historical version. Still readable after the workflow is deleted, so a past run's definition can be shown. |
+| `POST {workflowRef}/deprecate` | `workflows.delete` | Marks the definition deprecated and deregisters its triggers, so nothing new fires it. Not a delete — the version history and its runs stay queryable. |
+| `DELETE {workflowRef}` | `workflows.delete` | Deletes the workflow, which cannot be undone: it leaves the list and every current-version read (**404**), its triggers and schedules are removed, runs still going are cancelled by the engine shortly after, and its RefId cannot be published again (**409** `WORKFLOW_DELETED`). Past runs stay readable by run. **404** for a workflow that is not in this workspace or is already deleted. |
+| `POST {workflowRef}/reinstate` | `workflows.delete` | The inverse of deprecate: re-enables the current version **and re-registers its triggers**, re-seeding schedules from their cron. Rejects a workflow that is already enabled. |
+| `POST {workflowRef}/rollback/{version}` | `workflows.create` | Republishes an earlier version's definition as a **new** version — history stays append-only. Validated like any other publish, so rolling back to a definition that predates a validation rule fails rather than reinstating a broken workflow. |
+| `POST {workflowRef}/runs` | `workflows.execute` | Starts a manual run. Verifies the workflow belongs to the workspace, then relays to the engine. Not every non-start is an error: **200** started (or an idempotent retry, returning the original run), **202** queued behind an active run, **409** dropped by the concurrency policy / no manual trigger / workflow deprecated. A 5xx means the engine itself failed. |
 
-### 2.6 Runs — `…/runs` and `…/workflows/{workflowRefId}/runs`
+### 2.6 Runs — `…/runs` and `…/workflows/{workflowRef}/runs`
 
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `GET runs` | `workflows.read` | Lists every run in the workspace, newest first — the "recent activity" view. Filterable by `status`, cursor-paged. |
-| `GET workflows/{workflowRefId}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
-| `GET workflows/{workflowRefId}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. |
-| `GET runs/{runRefId}` | `workflows.read` | Run detail with its branches. |
-| `GET runs/{runRefId}/history` | `workflows.read` | The run's history event stream, oldest first, cursor-paged (`limit` default 200) — the execution trace. |
-| `POST runs/{runRefId}/cancel` | `workflows.execute` | Requests cancellation with a reason. The engine carries it out, so this answers **202** once the request is on its way and the run reads `Cancelling`, then `Cancelled`, shortly after; poll the run to see it. Cooperative, not immediate. **409** `RUN_NOT_CANCELLABLE` for a run that has already finished, **404** `RUN_NOT_FOUND` for a run that is unknown or another workspace's, **503** `EVENT_BUS_UNAVAILABLE` (with `Retry-After`) when the message broker is unavailable — nothing was sent, so retry. |
-| `POST runs/{runRefId}/signals/{signalName}` | `workflows.execute` | Delivers a named signal to a parked run. Verifies the run belongs to the workspace, then relays to the engine. |
+| `GET workflows/{workflowRef}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
+| `GET workflows/{workflowRef}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. |
+| `GET runs/{runRef}` | `workflows.read` | Run detail with its branches. |
+| `GET runs/{runRef}/history` | `workflows.read` | The run's history event stream, oldest first, cursor-paged (`limit` default 200) — the execution trace. |
+| `POST runs/{runRef}/cancel` | `workflows.execute` | Requests cancellation with a reason. The engine carries it out, so this answers **202** once the request is on its way and the run reads `Cancelling`, then `Cancelled`, shortly after; poll the run to see it. Cooperative, not immediate. **409** `RUN_NOT_CANCELLABLE` for a run that has already finished, **404** `RUN_NOT_FOUND` for a run that is unknown or another workspace's, **503** `EVENT_BUS_UNAVAILABLE` (with `Retry-After`) when the message broker is unavailable — nothing was sent, so retry. |
+| `POST runs/{runRef}/signals/{signalName}` | `workflows.execute` | Delivers a named signal to a parked run. Verifies the run belongs to the workspace, then relays to the engine. |
 
-### 2.7 Shared variables — `…/workflows/{workflowRefId}/variables`
+### 2.7 Shared variables — `…/workflows/{workflowRef}/variables`
 
 Workflow-scoped state that outlives any single run, used to coordinate between them.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET {name}` | `workflows.read` | Reads one variable. |
-| `PUT {name}` | `workflows.execute` | Writes one. Operating state, not definition — hence `execute` rather than an authoring permission. |
+| `GET {variableName}` | `workflows.read` | Reads one variable. |
+| `PUT {variableName}` | `workflows.execute` | Writes one. Operating state, not definition — hence `execute` rather than an authoring permission. |
 
 ### 2.8 Realtime — `/hubs/notifications` (SignalR)
 
