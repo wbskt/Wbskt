@@ -43,24 +43,55 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(int workspaceId, string? eventName, EventCriticality? criticality, int? policyId, int? clientId, int? workflowId, long? cursorId, int take, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<EventLogRow>> GetLogsAsync(int workspaceId, EventLogFilter filter, long? cursorId, int take, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.EventLog_GetBy_Workspace",
             p =>
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
-                p.AddWithValue("@PolicyId", (object?)policyId ?? DBNull.Value);
-                p.AddWithValue("@ClientId", (object?)clientId ?? DBNull.Value);
-                p.AddWithValue("@WorkflowId", (object?)workflowId ?? DBNull.Value);
-                p.AddWithValue("@EventName", (object?)eventName ?? DBNull.Value);
-                p.AddWithValue("@Criticality", (object?)criticality ?? DBNull.Value);
+                p.AddWithValue("@EventName", (object?)filter.EventName ?? DBNull.Value);
+                p.Add("@EventNames", SqlDbType.NVarChar, -1).Value = Names(filter.EventNames);
+                p.Add("@ExcludeEventNames", SqlDbType.NVarChar, -1).Value = Names(filter.ExcludeEventNames);
+                p.AddWithValue("@Criticality", (object?)filter.Criticality ?? DBNull.Value);
+                p.AddWithValue("@PolicyId", (object?)filter.PolicyId ?? DBNull.Value);
+                p.AddWithValue("@ClientId", (object?)filter.ClientId ?? DBNull.Value);
+                p.AddWithValue("@WorkflowRefId", (object?)filter.WorkflowRefId ?? DBNull.Value);
+                p.AddWithValue("@UserRefId", (object?)filter.UserRefId ?? DBNull.Value);
+                p.Add("@FromUtc", SqlDbType.DateTime2).Value = (object?)filter.FromUtc ?? DBNull.Value;
+                p.Add("@ToUtc", SqlDbType.DateTime2).Value = (object?)filter.ToUtc ?? DBNull.Value;
+                p.Add("@Search", SqlDbType.NVarChar, 200).Value = filter.Search is null ? DBNull.Value : EscapeLike(filter.Search);
                 p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
                 p.AddWithValue("@Take", take);
             },
             MapEventLogRow,
             cancellationToken);
     }
+
+    public async Task<IReadOnlyDictionary<string, long>> CountByEventAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
+    {
+        var rows = await ExecuteCollectionAsync(
+            "dbo.EventLog_CountBy_Workspace",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.Add("@FromUtc", SqlDbType.DateTime2).Value = fromUtc;
+                p.Add("@ToUtc", SqlDbType.DateTime2).Value = toUtc;
+            },
+            reader => (Name: reader.GetString(reader.GetOrdinal("EventName")), Count: reader.GetInt64(reader.GetOrdinal("EntryCount"))),
+            cancellationToken);
+
+        return rows.ToDictionary(r => r.Name, r => r.Count, StringComparer.Ordinal);
+    }
+
+    private static object Names(IReadOnlyCollection<string>? names) => names is null ? DBNull.Value : string.Join(',', names);
+
+    /// <summary>Makes the search text match itself literally in a LIKE with '\' as the escape character.</summary>
+    internal static string EscapeLike(string text) => text
+        .Replace(@"\", @"\\")
+        .Replace("%", @"\%")
+        .Replace("_", @"\_")
+        .Replace("[", @"\[");
 
     public async Task<IReadOnlyCollection<EventLogRow>> GetClientCommsAsync(int workspaceId, int clientId, string? direction, long? cursorId, int take, CancellationToken cancellationToken = default)
     {
@@ -91,7 +122,8 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             reader.IsDBNull(reader.GetOrdinal("ClientRefId")) ? null : reader.GetGuid(reader.GetOrdinal("ClientRefId")),
             reader.IsDBNull(reader.GetOrdinal("WorkflowRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
             reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId"))
+            reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId")),
+            reader.GetInt64(reader.GetOrdinal("Id"))
         );
     }
 }
