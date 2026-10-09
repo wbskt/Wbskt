@@ -17,14 +17,10 @@ namespace Wbskt.Management.Host.Controllers;
 public class RegistrationPoliciesController : ApiControllerBase
 {
     private readonly IRegistrationPolicyService _policyService;
-    private readonly IReferenceMapper _policyMapper;
 
-    public RegistrationPoliciesController(
-        IRegistrationPolicyService policyService,
-        [FromKeyedServices(ReferenceType.RegistrationPolicy)] IReferenceMapper policyMapper)
+    public RegistrationPoliciesController(IRegistrationPolicyService policyService)
     {
         _policyService = policyService;
-        _policyMapper = policyMapper;
     }
 
     /// <summary>
@@ -118,13 +114,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [RequiresPermission(PermissionNames.PoliciesManage)]
     public async Task<IActionResult> Update([FromWorkspace] int workspaceId, Guid refId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
-        if (policyId <= 0)
-        {
-            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
-        }
-
-        var result = await _policyService.UpdateAsync(workspaceId, policyId, request, cancellationToken);
+        var result = await _policyService.UpdateAsync(workspaceId, refId, request, cancellationToken);
         return MapResult(result);
     }
 
@@ -140,13 +130,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [RequiresPermission(PermissionNames.PoliciesManage)]
     public async Task<ActionResult<RegistrationPolicyResponse>> RotatePin([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
     {
-        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
-        if (policyId <= 0)
-        {
-            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
-        }
-
-        var result = await _policyService.RotatePinAsync(workspaceId, policyId, cancellationToken);
+        var result = await _policyService.RotatePinAsync(workspaceId, refId, cancellationToken);
         return MapResult(result);
     }
 
@@ -161,13 +145,7 @@ public class RegistrationPoliciesController : ApiControllerBase
     [RequiresPermission(PermissionNames.PoliciesManage)]
     public async Task<IActionResult> Disable([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
     {
-        var policyId = await _policyMapper.FindIdByRefIdAsync(refId, cancellationToken);
-        if (policyId <= 0)
-        {
-            return NotFound(Error.NotFound("POLICY_NOT_FOUND", "Registration policy not found."));
-        }
-
-        var result = await _policyService.DisableAsync(workspaceId, policyId, cancellationToken);
+        var result = await _policyService.DisableAsync(workspaceId, refId, cancellationToken);
         return MapResult(result);
     }
 

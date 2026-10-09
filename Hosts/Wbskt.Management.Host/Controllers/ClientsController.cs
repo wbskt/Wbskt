@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Models;
@@ -19,23 +17,20 @@ namespace Wbskt.Management.Host.Controllers;
 public class ClientsController : ApiControllerBase
 {
     private readonly IClientService _clientService;
-    private readonly IEventBus _eventBus;
+    private readonly IClientCommandService _commandService;
     private readonly IRegistrationPolicyService _policyService;
     private readonly IEventLogService _eventLogService;
-    private readonly ILogger<ClientsController> _logger;
 
     public ClientsController(
         IClientService clientService,
-        IEventBus eventBus,
+        IClientCommandService commandService,
         IRegistrationPolicyService policyService,
-        IEventLogService eventLogService,
-        ILogger<ClientsController> logger)
+        IEventLogService eventLogService)
     {
         _clientService = clientService;
-        _eventBus = eventBus;
+        _commandService = commandService;
         _policyService = policyService;
         _eventLogService = eventLogService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -288,50 +283,10 @@ public class ClientsController : ApiControllerBase
     /// <returns>The command id, for correlating the delivery/ack events that follow.</returns>
     [HttpPost("{clientRefId:guid}/command")]
     [RequiresPermission(PermissionNames.ClientsCommand)]
-    public async Task<IActionResult> SendCommand([FromWorkspace] int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ClientCommandResponse>> SendCommand([FromWorkspace] int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Type) || request.Type.Length > 100)
-        {
-            return BadRequest(Error.Validation("COMMAND_TYPE_INVALID", "Command type must be 1-100 characters."));
-        }
-
-        if (ReservedMessageTypes.IsReserved(request.Type))
-        {
-            return BadRequest(Error.Validation("COMMAND_TYPE_RESERVED", "Command type is reserved for the platform protocol."));
-        }
-
-        if (request.Payload is { Length: > 32 * 1024 })
-        {
-            return BadRequest(Error.Validation("COMMAND_PAYLOAD_TOO_LARGE", "Command payload is limited to 32768 characters."));
-        }
-
-        if (request.ExpiresAt is { } expiresAt
-            && (expiresAt <= DateTimeOffset.UtcNow || expiresAt > DateTimeOffset.UtcNow.Add(MaxCommandLifetime)))
-        {
-            return BadRequest(Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away."));
-        }
-
-        // Ownership has to be settled here: the command goes out over the bus and the socket host
-        // routes it by ClientRefId alone, so nothing downstream would notice a client from another
-        // workspace. Presence too: commands are delivered live or not at all, so an offline device
-        // is a 409 DEVICE_OFFLINE now rather than a 202 for a command that goes nowhere.
-        var targetResult = await _clientService.ResolveCommandTargetAsync(workspaceId, clientRefId, cancellationToken);
-        if (targetResult.IsFailure)
-        {
-            return MapError(targetResult.Error);
-        }
-
-        var target = targetResult.Value;
-        var commandId = Guid.NewGuid();
-        var command = new ClientCommandEvent(clientRefId, target.ClientId, workspaceId, request.Type, request.Payload, commandId,
-            TargetHostId: target.HostId, ExpiresAtUtc: request.ExpiresAt?.UtcDateTime);
-        if (!await TryPublishActionAsync(command, cancellationToken))
-        {
-            return BrokerUnavailable();
-        }
-
-        _logger.LogDebug("Successfully published client command event '{CommandId}' for ClientRefId: '{ClientRefId}'", commandId, clientRefId);
-        return Accepted(new ClientCommandResponse(commandId));
+        var result = await _commandService.SendAsync(workspaceId, clientRefId, request, cancellationToken);
+        return result.IsSuccess ? Accepted(result.Value) : MapError(result.Error);
     }
 
     /// <summary>
@@ -383,56 +338,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsPing)]
     public async Task<IActionResult> Ping([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
-        // Same reasoning as SendCommand: the ping is dispatched by ClientRefId, so the workspace it
-        // belongs to is only ever checked here.
-        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        if (clientResult.IsFailure)
-        {
-            return MapError(clientResult.Error);
-        }
-
-        if (!await TryPublishActionAsync(new ClientPingEvent(clientRefId, clientResult.Value, workspaceId, DateTime.UtcNow), cancellationToken))
-        {
-            return BrokerUnavailable();
-        }
-
-        _logger.LogDebug("Successfully published client ping event for ClientRefId: '{ClientRefId}'", clientRefId);
-        return NoContent();
-    }
-
-    /// <summary>The furthest ahead a command's expiresAt may be.</summary>
-    private static readonly TimeSpan MaxCommandLifetime = TimeSpan.FromHours(24);
-
-    /// <summary>How long a command or ping waits for the broker before the caller is told to retry.</summary>
-    internal static readonly TimeSpan ActionPublishTimeout = TimeSpan.FromSeconds(5);
-
-    /// <summary>
-    /// Publishes an event that is itself the action - a command or a ping - on the real bus. Unlike the
-    /// services' post-commit events these are not queued: a queued command would be reported as sent
-    /// when it might never go out. So a broker that fails or does not answer in time is reported as
-    /// such, rather than as a 500 or a hung request.
-    /// </summary>
-    private async Task<bool> TryPublishActionAsync<TEvent>(TEvent @event, CancellationToken cancellationToken) where TEvent : IEvent
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(ActionPublishTimeout);
-
-        try
-        {
-            await _eventBus.PublishAsync(@event, timeout.Token);
-            return true;
-        }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogWarning("Publishing {EventType} failed; the event bus is unavailable. {Message}", typeof(TEvent).Name, ex.Message);
-            return false;
-        }
-    }
-
-    private ObjectResult BrokerUnavailable()
-    {
-        Response.Headers.RetryAfter = "5";
-        return StatusCode(StatusCodes.Status503ServiceUnavailable, Error.Failure("EVENT_BUS_UNAVAILABLE", "The device could not be reached right now. Try again shortly."));
+        return MapResult(await _commandService.PingAsync(workspaceId, clientRefId, cancellationToken));
     }
 }
 
@@ -441,9 +347,3 @@ public record UpdateClientStatusRequest(ClientStatus Status);
 public record UpdateClientNameRequest(string Name);
 
 public record SetClientTagsRequest(IReadOnlyList<string>? Tags);
-
-// ExpiresAt is optional: past it the command is refused instead of delivered, by the socket host
-// and by the SDK. At most 24 hours ahead.
-public record ClientCommandRequest(string Type, string Payload, DateTimeOffset? ExpiresAt = null);
-
-public record ClientCommandResponse(Guid CommandId);

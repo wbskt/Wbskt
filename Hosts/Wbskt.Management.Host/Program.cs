@@ -77,7 +77,7 @@ public static class Program
         builder.Services.AddScoped<IRegistrationPolicyProvider, RegistrationPolicyProvider>();
         // These services publish after their change is committed, so they publish through the queued
         // bus: a broker outage must not turn a rotated secret or a registration into a 500 (see
-        // QueuedEventBus). Commands and pings in ClientsController, and a run cancel sent to the engine
+        // QueuedEventBus). Commands and pings (ClientCommandService), and a run cancel sent to the engine
         // (IWorkflowEngineGateway), keep the real bus, because there the publish is the action.
         builder.Services.AddQueuedEventBus();
         builder.Services.AddScopedWithQueuedEvents<IRegistrationPolicyService, RegistrationPolicyService>();
@@ -99,6 +99,10 @@ public static class Program
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowDefinitionService, WorkflowDefinitionService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
+        builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();
+        builder.Services.AddScoped<IClientCommandService, ClientCommandService>();
+        builder.Services.AddScoped<IWorkflowHistoryService, WorkflowHistoryService>();
+        builder.Services.AddScoped<ISharedVariableService, SharedVariableService>();
         builder.Services.AddSingleton<WorkflowValidator>();
         
         builder.Services.AddTransient<AuthenticationForwardingHandler>();
@@ -157,10 +161,6 @@ public static class Program
 
         // Registered after the bus so it stops first, and can still send what is queued while stopping.
         builder.Services.AddHostedService<QueuedEventDispatcher>();
-
-        // Register Keyed ReferenceMappers
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IRegistrationPolicyProvider>>(ReferenceType.RegistrationPolicy);
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientProvider>>(ReferenceType.Client);
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

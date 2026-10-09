@@ -55,14 +55,15 @@ public sealed class WorkspaceOwnershipTests
     [Fact]
     public async Task Updating_another_workspaces_policy_is_not_found_and_changes_nothing()
     {
+        var foreign = Policy(OtherWorkspaceId);
         var provider = new Mock<IRegistrationPolicyProvider>();
-        provider.Setup(p => p.FindByIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(Policy(OtherWorkspaceId));
+        provider.Setup(p => p.FindByRefIdAsync(foreign.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(foreign);
         var bus = new Mock<IEventBus>();
         var service = new RegistrationPolicyService(provider.Object, Mock.Of<IClientProvider>(), bus.Object, NullLogger<RegistrationPolicyService>.Instance);
 
-        var update = await service.UpdateAsync(WorkspaceId, 5, new UpdateRegistrationPolicyRequest("lab", null, false, true));
-        var rotate = await service.RotatePinAsync(WorkspaceId, 5);
-        var disable = await service.DisableAsync(WorkspaceId, 5);
+        var update = await service.UpdateAsync(WorkspaceId, foreign.RefId, new UpdateRegistrationPolicyRequest("lab", null, false, true));
+        var rotate = await service.RotatePinAsync(WorkspaceId, foreign.RefId);
+        var disable = await service.DisableAsync(WorkspaceId, foreign.RefId);
 
         update.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
         rotate.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);

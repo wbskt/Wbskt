@@ -29,7 +29,7 @@ public sealed class WorkflowHistoryControllerTests
             CreateEvent(101, 12, "Started"),
             CreateEvent(102, 12, "Completed")
         ]);
-        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
+        var controller = new WorkflowHistoryController(new WorkflowHistoryService(runQueryService.Object, historyProvider.Object));
 
         var response = await controller.List(WorkspaceId, runRefId, 100, 2, CancellationToken.None);
 
@@ -52,7 +52,7 @@ public sealed class WorkflowHistoryControllerTests
             CreateEvent(202, 18, "B"),
             CreateEvent(203, 18, "C")
         ]);
-        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
+        var controller = new WorkflowHistoryController(new WorkflowHistoryService(runQueryService.Object, historyProvider.Object));
 
         var response = await controller.List(WorkspaceId, runRefId, 0, 2, CancellationToken.None);
 
@@ -70,7 +70,7 @@ public sealed class WorkflowHistoryControllerTests
         var runRefId = Guid.NewGuid();
         runQueryService.Setup(x => x.EnsureRunInWorkspaceAsync(WorkspaceId, runRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found.")));
-        var controller = new WorkflowHistoryController(runQueryService.Object, historyProvider.Object, Mock.Of<ILogger<WorkflowHistoryController>>());
+        var controller = new WorkflowHistoryController(new WorkflowHistoryService(runQueryService.Object, historyProvider.Object));
 
         var response = await controller.List(WorkspaceId, runRefId, 0, 200, CancellationToken.None);
         

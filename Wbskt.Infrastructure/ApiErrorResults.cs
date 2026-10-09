@@ -35,8 +35,30 @@ public static class ApiErrorResults
             // Not Forbid(): that defers to the auth handler's challenge machinery. These are
             // bearer-token APIs, so a plain 403 carrying the error body is what callers expect.
             ErrorType.Forbidden => new ObjectResult(error) { StatusCode = StatusCodes.Status403Forbidden },
+            ErrorType.Unavailable => new RetryLaterResult(error),
             _ => ServerError(error, logger)
         };
+    }
+
+    /// <summary>How long a caller told 503 should wait before retrying.</summary>
+    public const string RetryAfterSeconds = "5";
+
+    /// <summary>
+    /// A 503 carrying the error and a <c>Retry-After</c> header. The header is set as the result is
+    /// written, so it works the same from a controller and from a filter that has no response to hand.
+    /// </summary>
+    public sealed class RetryLaterResult : ObjectResult
+    {
+        public RetryLaterResult(Error error) : base(error)
+        {
+            StatusCode = StatusCodes.Status503ServiceUnavailable;
+        }
+
+        public override void OnFormatting(ActionContext context)
+        {
+            base.OnFormatting(context);
+            context.HttpContext.Response.Headers.RetryAfter = RetryAfterSeconds;
+        }
     }
 
     /// <summary>

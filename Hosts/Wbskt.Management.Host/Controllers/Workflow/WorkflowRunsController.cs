@@ -1,11 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.EventBus.Abstractions;
-using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Authorization;
-using Wbskt.Infrastructure.Events;
-using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Primitives.Constants;
@@ -18,20 +14,12 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 public sealed class WorkflowRunsController : ApiControllerBase
 {
     private readonly IWorkflowRunQueryService _runQueryService;
-    private readonly IWorkflowEngineGateway _engine;
-    private readonly IEventBus _eventBus;
-    private readonly ILogger<WorkflowRunsController> _logger;
+    private readonly IWorkflowRunService _runService;
 
-    public WorkflowRunsController(
-        IWorkflowRunQueryService runQueryService, 
-        IWorkflowEngineGateway engine, 
-        [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus eventBus,
-        ILogger<WorkflowRunsController> logger)
+    public WorkflowRunsController(IWorkflowRunQueryService runQueryService, IWorkflowRunService runService)
     {
-        _eventBus = eventBus;
         _runQueryService = runQueryService;
-        _engine = engine;
-        _logger = logger;
+        _runService = runService;
     }
 
     [HttpGet("workflows/{workflowRefId:guid}/runs")]
@@ -113,50 +101,14 @@ public sealed class WorkflowRunsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
     public async Task<IActionResult> Cancel([FromWorkspace] int workspaceId, Guid runRefId, [FromBody] CancelRunRequest req, CancellationToken ct)
     {
-        var runResult = await _runQueryService.ResolveCancellableRunAsync(workspaceId, runRefId, ct);
-        if (runResult.IsFailure)
-        {
-            return MapError(runResult.Error);
-        }
-
-        try
-        {
-            await _engine.CancelRunAsync(runResult.Value, req.Reason, ct);
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogWarning("Sending the cancel for run '{RunRefId}' failed; the event bus is unavailable. {Message}", runRefId, ex.Message);
-            Response.Headers.RetryAfter = "5";
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, Error.Failure("EVENT_BUS_UNAVAILABLE", "The run could not be cancelled right now. Try again shortly."));
-        }
-
-        _logger.LogInformation("Cancel requested for RunRefId: '{RunRefId}' in WorkspaceId: {WorkspaceId} (Reason: '{Reason}')", runRefId, workspaceId, req.Reason);
-        await _eventBus.PublishAsync(new WorkflowRunCancelRequestedEvent(runRefId, workspaceId, req.Reason), ct);
-        return Accepted();
+        var result = await _runService.CancelAsync(workspaceId, runRefId, req.Reason, ct);
+        return result.IsSuccess ? Accepted() : MapError(result.Error);
     }
 
     [HttpPost("runs/{runRefId:guid}/signals/{signalName}")]
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
     public async Task<ActionResult<SignalResponse>> Signal([FromWorkspace] int workspaceId, Guid runRefId, string signalName, [FromBody] SignalRequest req, CancellationToken ct)
     {
-        var ensureRunResult = await _runQueryService.EnsureRunInWorkspaceAsync(workspaceId, runRefId, ct);
-        if (ensureRunResult.IsFailure)
-        {
-            return MapResult(Result<SignalResponse>.Failure(ensureRunResult.Error));
-        }
-
-        try
-        {
-            var response = await _engine.SignalAsync(runRefId, signalName, req, ct);
-            _logger.LogDebug("Successfully sent signal '{SignalName}' to RunRefId: '{RunRefId}'", signalName, runRefId);
-            await _eventBus.PublishAsync(new WorkflowRunSignalSentEvent(runRefId, workspaceId, signalName), ct);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error signalling run RunRefId: '{RunRefId}'. Error: {Message}", runRefId, ex.Message);
-            _logger.LogTrace(ex, "Signal exception stack trace for RunRefId '{RunRefId}', SignalName '{SignalName}'", runRefId, signalName);
-            return MapError(Error.Failure("ENGINE_SIGNAL_ERROR", ex.Message));
-        }
+        return MapResult(await _runService.SignalAsync(workspaceId, runRefId, signalName, req, ct));
     }
 }

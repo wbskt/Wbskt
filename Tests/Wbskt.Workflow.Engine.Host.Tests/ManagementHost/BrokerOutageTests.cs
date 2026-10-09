@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Routing;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -82,17 +84,17 @@ public sealed class BrokerOutageTests
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var controller = new ClientsController(
-            clientService.Object, bus.Object,
-            Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>(), NullLogger<ClientsController>.Instance)
+        var controller = new ClientsController(clientService.Object, new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
 
-        var result = await controller.SendCommand(WorkspaceId, clientRef, new ClientCommandRequest("reboot", "{}"), CancellationToken.None);
+        var result = (await controller.SendCommand(WorkspaceId, clientRef, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsType<ApiErrorResults.RetryLaterResult>(result);
         objectResult.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("EVENT_BUS_UNAVAILABLE");
+        objectResult.OnFormatting(new ActionContext(controller.HttpContext, new RouteData(), new ActionDescriptor()));
         controller.Response.Headers.RetryAfter.ToString().Should().Be("5");
     }
 

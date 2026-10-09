@@ -31,6 +31,20 @@ internal sealed class SharedVariableProvider : BaseSqlProvider, ISharedVariableP
         );
     }
 
+    public async Task<SharedVariableRow?> FindByWorkflowRefIdNameAsync(Guid workflowRefId, string varName, CancellationToken ct)
+    {
+        return await ExecuteFindAsync(
+            "dbo.SharedVariable_GetBy_WorkflowRefId_Name",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@VarName", varName);
+            },
+            Map,
+            ct
+        );
+    }
+
     public async Task<SharedVariableRow> InitializeAsync(Guid workflowRefId, string varName, string varType, string valueJson, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
