@@ -29,32 +29,26 @@ public class RegistrationPoliciesController : ApiControllerBase
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="autoApproval">Optional filter for auto-approval status.</param>
     /// <param name="name">Optional filter for policy name (partial match).</param>
-    /// <param name="skip">Number of records to skip for pagination.</param>
-    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="page">The page to read: <c>cursor</c> and <c>limit</c> (default 100).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A paginated list of registration policies.</returns>
     [HttpGet]
     [RequiresPermission(PermissionNames.PoliciesRead)]
-    public async Task<ActionResult<ListResponse<RegistrationPolicyResponse>>> GetAll(
+    public async Task<ActionResult<Page<RegistrationPolicyResponse>>> GetAll(
         [FromWorkspace] int workspaceId,
         [FromQuery] bool? autoApproval,
         [FromQuery] string? name,
-        [FromQuery] int skip = 0,
-        [FromQuery] int take = 100,
+        [FromQuery] PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var result = await _policyService.GetAllAsync(workspaceId, autoApproval, name, Paging.Skip(skip), Paging.Take(take), cancellationToken);
-        if (result.IsFailure)
+        var offset = page.Offset();
+        if (offset.IsFailure)
         {
-            return MapResult(Result<ListResponse<RegistrationPolicyResponse>>.Failure(result.Error));
+            return MapError(offset.Error);
         }
 
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-
-        return Ok(new ListResponse<RegistrationPolicyResponse>
-        {
-            Items = result.Value
-        });
+        var result = await _policyService.GetAllAsync(workspaceId, autoApproval, name, offset.Value, page.LimitOr(100), cancellationToken);
+        return MapPage(result, offset.Value);
     }
 
     /// <summary>

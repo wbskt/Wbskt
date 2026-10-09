@@ -30,11 +30,11 @@ public sealed class WorkflowRunsControllerTests
         var service = new Mock<IWorkflowRunQueryService>();
         var engineClient = new Mock<IWorkflowEngineGateway>();
         var workflowRefId = Guid.NewGuid();
-        var expected = new RunListResponse([], null);
+        var expected = new RunListResponse { Items = [] };
         service.Setup(x => x.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", 25, 12, It.IsAny<CancellationToken>())).ReturnsAsync(Result<RunListResponse>.Success(expected));
         var controller = new WorkflowRunsController(service.Object, new WorkflowRunService(Mock.Of<IWorkflowDefinitionService>(), service.Object, engineClient.Object, Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowRunService>>()));
 
-        var actual = await controller.List(WorkspaceId, workflowRefId, "Running", 25, 12, CancellationToken.None);
+        var actual = await controller.List(WorkspaceId, workflowRefId, "Running", new PageRequest { Cursor = "12", Limit = 25 }, CancellationToken.None);
 
         var okResult = Assert.IsType<OkObjectResult>(actual.Result);
         Assert.Equal(expected, okResult.Value);
@@ -199,9 +199,9 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, "Running", 2, null, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
-        Assert.Equal(2, response.Value.Runs.Count);
-        Assert.Equal(42, response.Value.NextCursor);
-        Assert.Equal(workflowRefId, response.Value.Runs[0].WorkflowDefinitionRefId);
+        Assert.Equal(2, response.Value.Items.Count());
+        Assert.Equal("42", response.Value.NextCursor);
+        Assert.Equal(workflowRefId, response.Value.Items.First().WorkflowDefinitionRefId);
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.ListByWorkflowAsync(WorkspaceId, workflowRefId, null, 2, null, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
-        Assert.Equal(2, response.Value.Runs.Count);
+        Assert.Equal(2, response.Value.Items.Count());
         Assert.Null(response.Value.NextCursor);
     }
 
@@ -307,7 +307,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.GetWorkspaceStatsAsync(WorkspaceId, DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
 
         Assert.True(response.IsFailure);
-        Assert.Equal("INVALID_WINDOW", response.Error.Code);
+        Assert.Equal("TIME_RANGE_INVALID", response.Error.Code);
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.GetStatsAsync(WorkspaceId, Guid.NewGuid(), DateTime.UtcNow, DateTime.UtcNow.AddDays(-1), CancellationToken.None);
 
         Assert.True(response.IsFailure);
-        Assert.Equal("INVALID_WINDOW", response.Error.Code);
+        Assert.Equal("TIME_RANGE_INVALID", response.Error.Code);
     }
 
     [Fact]
@@ -395,9 +395,9 @@ public sealed class WorkflowRunsControllerTests
         var response = await service.ListByWorkspaceAsync(WorkspaceId, null, 10, null, CancellationToken.None);
 
         Assert.True(response.IsSuccess);
-        Assert.Equal(2, response.Value.Runs.Count);
+        Assert.Equal(2, response.Value.Items.Count());
         Assert.Null(response.Value.NextCursor);
-        Assert.Equal([workflowA, workflowB], response.Value.Runs.Select(r => r.WorkflowDefinitionRefId));
+        Assert.Equal([workflowA, workflowB], response.Value.Items.Select(r => r.WorkflowDefinitionRefId));
         definitionProvider.VerifyNoOtherCalls();
     }
 

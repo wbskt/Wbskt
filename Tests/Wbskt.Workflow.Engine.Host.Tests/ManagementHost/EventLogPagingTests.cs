@@ -27,7 +27,7 @@ public sealed class EventLogPagingTests
         var page = EventLogService.ToPage([Row(9), Row(8), Row(7)], take: 2);
 
         Assert.Equal(["e9", "e8"], page.Items.Select(i => i.EventName));
-        Assert.Equal(8, page.NextCursor);
+        Assert.Equal("8", page.NextCursor);
     }
 
     [Fact]

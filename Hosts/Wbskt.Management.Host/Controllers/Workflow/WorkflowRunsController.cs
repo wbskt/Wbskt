@@ -24,9 +24,15 @@ public sealed class WorkflowRunsController : ApiControllerBase
 
     [HttpGet("workflows/{workflowRefId:guid}/runs")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRefId, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
+    public async Task<ActionResult<RunListResponse>> List([FromWorkspace] int workspaceId, Guid workflowRefId, [FromQuery] string? status, [FromQuery] PageRequest page, CancellationToken ct = default)
     {
-        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRefId, status, Paging.Take(top), cursor, ct);
+        var cursor = page.AfterKey();
+        if (cursor.IsFailure)
+        {
+            return MapError(cursor.Error);
+        }
+
+        var result = await _runQueryService.ListByWorkflowAsync(workspaceId, workflowRefId, status, page.LimitOr(50), cursor.Value, ct);
         return MapResult(result);
     }
 
@@ -36,9 +42,15 @@ public sealed class WorkflowRunsController : ApiControllerBase
     /// </summary>
     [HttpGet("runs")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<RunListResponse>> ListForWorkspace([FromWorkspace] int workspaceId, [FromQuery] string? status, [FromQuery] int top = 50, [FromQuery] long? cursor = null, CancellationToken ct = default)
+    public async Task<ActionResult<RunListResponse>> ListForWorkspace([FromWorkspace] int workspaceId, [FromQuery] string? status, [FromQuery] PageRequest page, CancellationToken ct = default)
     {
-        var result = await _runQueryService.ListByWorkspaceAsync(workspaceId, status, Paging.Take(top), cursor, ct);
+        var cursor = page.AfterKey();
+        if (cursor.IsFailure)
+        {
+            return MapError(cursor.Error);
+        }
+
+        var result = await _runQueryService.ListByWorkspaceAsync(workspaceId, status, page.LimitOr(50), cursor.Value, ct);
         return MapResult(result);
     }
 
@@ -51,14 +63,11 @@ public sealed class WorkflowRunsController : ApiControllerBase
     [RequiresPermission(PermissionNames.WorkflowsRead)]
     public async Task<ActionResult<WorkspaceStatsResponse>> GetWorkspaceStats(
         [FromWorkspace] int workspaceId,
-        [FromQuery] DateTime? from = null,
-        [FromQuery] DateTime? to = null,
+        [FromQuery] DateTimeOffset? from = null,
+        [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
-        DateTime toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
-        DateTime fromUtc = (from ?? toUtc.AddDays(-30)).ToUniversalTime();
-
-        var result = await _runQueryService.GetWorkspaceStatsAsync(workspaceId, fromUtc, toUtc, ct);
+        var result = await _runQueryService.GetWorkspaceStatsAsync(workspaceId, from, to, ct);
         return MapResult(result);
     }
 
@@ -71,14 +80,11 @@ public sealed class WorkflowRunsController : ApiControllerBase
     public async Task<ActionResult<WorkflowStatsResponse>> GetStats(
         [FromWorkspace] int workspaceId,
         Guid workflowRefId,
-        [FromQuery] DateTime? from = null,
-        [FromQuery] DateTime? to = null,
+        [FromQuery] DateTimeOffset? from = null,
+        [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
-        DateTime toUtc = (to ?? DateTime.UtcNow).ToUniversalTime();
-        DateTime fromUtc = (from ?? toUtc.AddDays(-30)).ToUniversalTime();
-
-        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRefId, fromUtc, toUtc, ct);
+        var result = await _runQueryService.GetStatsAsync(workspaceId, workflowRefId, from, to, ct);
         return MapResult(result);
     }
 

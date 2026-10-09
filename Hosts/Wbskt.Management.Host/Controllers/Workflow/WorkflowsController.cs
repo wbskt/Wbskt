@@ -4,6 +4,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
@@ -48,24 +49,19 @@ public sealed class WorkflowsController : ApiControllerBase
 
     [HttpGet]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<Wbskt.Models.ListResponse<WorkflowSummaryDto>>> GetAll(
+    public async Task<ActionResult<Page<WorkflowSummaryDto>>> GetAll(
         [FromWorkspace] int workspaceId,
-        [FromQuery] int skip = 0,
-        [FromQuery] int take = 100,
+        [FromQuery] PageRequest page,
         CancellationToken ct = default)
     {
-        var result = await _service.GetAllSummariesAsync(workspaceId, Paging.Skip(skip), Paging.Take(take), ct);
-        if (result.IsFailure)
+        var offset = page.Offset();
+        if (offset.IsFailure)
         {
-            return MapResult(Result<Wbskt.Models.ListResponse<WorkflowSummaryDto>>.Failure(result.Error));
+            return MapError(offset.Error);
         }
 
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-
-        return Ok(new Wbskt.Models.ListResponse<WorkflowSummaryDto>
-        {
-            Items = result.Value
-        });
+        var result = await _service.GetAllSummariesAsync(workspaceId, offset.Value, page.LimitOr(100), ct);
+        return MapPage(result, offset.Value);
     }
 
     [HttpGet("{refId:guid}")]
@@ -82,15 +78,15 @@ public sealed class WorkflowsController : ApiControllerBase
     /// </summary>
     [HttpGet("{refId:guid}/versions")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<Wbskt.Models.ListResponse<WorkflowVersionDto>>> GetVersions([FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<ActionResult<Page<WorkflowVersionDto>>> GetVersions([FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
     {
         var result = await _service.GetVersionsAsync(workspaceId, refId, ct);
         if (result.IsFailure)
         {
-            return MapResult(Result<Wbskt.Models.ListResponse<WorkflowVersionDto>>.Failure(result.Error));
+            return MapResult(Result<Page<WorkflowVersionDto>>.Failure(result.Error));
         }
 
-        return Ok(new Wbskt.Models.ListResponse<WorkflowVersionDto> { Items = result.Value });
+        return Ok(new Page<WorkflowVersionDto> { Items = result.Value });
     }
 
     [HttpGet("{refId:guid}/versions/{version:int}")]

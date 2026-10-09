@@ -817,11 +817,11 @@ public sealed class ServicesFixture : IDisposable
     {
         // The endpoint serves at most 200 runs a page, so follow nextCursor until `top` are read.
         var runs = new List<RunSummaryDto>();
-        long? cursor = null;
+        string? cursor = null;
         while (runs.Count < top)
         {
-            var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs?top={top - runs.Count}"
-                + (cursor is { } c ? $"&cursor={c}" : "");
+            var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs?limit={top - runs.Count}"
+                + (cursor is { } c ? $"&cursor={Uri.EscapeDataString(c)}" : "");
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -834,7 +834,7 @@ public sealed class ServicesFixture : IDisposable
             resp.EnsureSuccessStatusCode();
 
             var result = await resp.Content.ReadFromJsonAsync<RunListResponse>(JsonOptions);
-            runs.AddRange(result?.Runs ?? []);
+            runs.AddRange(result?.Items ?? []);
             if (result?.NextCursor is not { } next)
             {
                 break;
@@ -943,25 +943,26 @@ public sealed class ServicesFixture : IDisposable
     {
         // The endpoint serves at most 200 events a page, so follow nextCursor until `top` are read.
         var events = new List<HistoryEventDto>();
-        long fromEventId = 0;
+        string? cursor = null;
         while (events.Count < top)
         {
             using var req = new HttpRequestMessage(
                 HttpMethod.Get,
-                $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/history?top={top - events.Count}&fromEventId={fromEventId}");
+                $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/history?limit={top - events.Count}"
+                + (cursor is { } c ? $"&cursor={Uri.EscapeDataString(c)}" : ""));
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             var resp = await _http.SendAsync(req);
             resp.EnsureSuccessStatusCode();
 
             var result = await resp.Content.ReadFromJsonAsync<HistoryListResponse>(JsonOptions);
-            events.AddRange(result?.Events ?? []);
+            events.AddRange(result?.Items ?? []);
             if (result?.NextCursor is not { } next)
             {
                 break;
             }
 
-            fromEventId = next;
+            cursor = next;
         }
 
         return events;
@@ -1026,7 +1027,7 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Reads the central event-log feed for a workspace, optionally filtered by event name.</summary>
     public async Task<IReadOnlyList<EventLogItemDto>> GetEventLogsAsync(string token, Guid workspaceRef, string? eventName = null, int take = 200)
     {
-        var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/event-logs?take={take}";
+        var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/event-logs?limit={take}";
         if (!string.IsNullOrWhiteSpace(eventName))
         {
             url += $"&eventName={Uri.EscapeDataString(eventName)}";

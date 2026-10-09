@@ -117,8 +117,8 @@ public sealed class WorkspaceOwnershipTests
         var logs = new Mock<IEventLogService>();
         var controller = new EventLogsController(logs.Object, policies.Object, clients.Object);
 
-        var byPolicy = await controller.GetLogs(WorkspaceId, null, null, policyRef, null);
-        var byClient = await controller.GetLogs(WorkspaceId, null, null, null, clientRef);
+        var byPolicy = await controller.GetLogs(WorkspaceId, null, null, policyRef, null, new PageRequest());
+        var byClient = await controller.GetLogs(WorkspaceId, null, null, null, clientRef, new PageRequest());
 
         Assert.IsType<NotFoundObjectResult>(byPolicy.Result);
         Assert.IsType<NotFoundObjectResult>(byClient.Result);
