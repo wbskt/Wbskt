@@ -66,6 +66,7 @@ public static class Program
         builder.Services.AddScoped<ClientHoldRecorder>();
         builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         builder.Services.AddScoped<IToastPublisher, ToastPublisher>();
+        builder.Services.AddScoped<IVariableWritePublisher, VariableWritePublisher>();
         builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
         builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
         builder.Services.AddSingleton<RunRecoveryService>();

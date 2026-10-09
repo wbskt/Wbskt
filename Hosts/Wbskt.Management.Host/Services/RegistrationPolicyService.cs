@@ -138,6 +138,10 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         {
             events.Add(Disabled(policy, workspaceId));
         }
+        else if (!policy.IsEnabled && updatedPolicy.IsEnabled)
+        {
+            events.Add(new PolicyEnabledEvent(updatedPolicy.RefId, updatedPolicy.Id, workspaceId) { Changes = [new FieldChange("enabled", "false", "true")] });
+        }
 
         await Parallel.ForEachAsync(events, cancellationToken, async (@event, token) => await _eventBus.PublishAsync(@event, token));
 

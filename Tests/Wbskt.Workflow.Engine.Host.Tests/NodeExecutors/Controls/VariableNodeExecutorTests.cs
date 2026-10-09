@@ -302,6 +302,59 @@ public sealed class VariableNodeExecutorTests
         Assert.DoesNotContain("mode", continuation.LocalStatePatch.Keys);
     }
 
+    [Fact]
+    public async Task A_shared_write_names_the_run_that_wrote_it()
+    {
+        var writes = new RecordingWrites();
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator(), writes);
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "set-shared", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("cool") } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        var write = Assert.Single(writes.Writes);
+        Assert.Equal(context.Branch.WorkflowDefinitionRefId, write.WorkflowRefId);
+        Assert.Equal(context.Branch.RunRefId, write.RunRefId);
+        Assert.Equal(context.Branch.WorkspaceId, write.WorkspaceId);
+        Assert.Equal(("mode", "Set", "\"cool\""), (write.Name, write.Operation, write.ValueJson));
+    }
+
+    [Fact]
+    public async Task A_counter_write_announces_the_value_it_reached()
+    {
+        var writes = new RecordingWrites();
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator(), writes);
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.Increment, Var = "hits", Value = JsonSerializer.SerializeToElement(3) } });
+
+        await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(("hits", "Increment", "3"), (Assert.Single(writes.Writes).Name, writes.Writes[0].Operation, writes.Writes[0].ValueJson));
+    }
+
+    [Fact]
+    public async Task A_lost_compare_and_set_and_a_local_write_announce_nothing()
+    {
+        var writes = new RecordingWrites();
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider { CompareAndSetRowsAffected = 0 }, new MockExpressionEvaluator(), writes);
+        var cas = new VariableConfig { Scope = VariableScope.Shared, Op = VariableOperation.CompareAndSet, Var = "mode", Value = JsonSerializer.SerializeToElement("on"), Expected = JsonSerializer.SerializeToElement("off") };
+        var local = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Set, Var = "mode", Value = JsonSerializer.SerializeToElement("on") };
+
+        await executor.ExecuteAsync(CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "cas", Ports = CreatePorts(), Config = cas }), CancellationToken.None);
+        await executor.ExecuteAsync(CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "local", Ports = CreatePorts(), Config = local }), CancellationToken.None);
+
+        Assert.Empty(writes.Writes);
+    }
+
+    private sealed class RecordingWrites : IVariableWritePublisher
+    {
+        public List<VariableWrite> Writes { get; } = [];
+
+        public Task PublishAsync(VariableWrite write, CancellationToken ct)
+        {
+            Writes.Add(write);
+            return Task.CompletedTask;
+        }
+    }
+
     private static NodeContext CreateContext(VariableNode node, IReadOnlyDictionary<string, JsonElement>? localState = null)
     {
         return new NodeContext

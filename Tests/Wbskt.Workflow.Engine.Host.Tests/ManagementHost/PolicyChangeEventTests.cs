@@ -51,6 +51,17 @@ public sealed class PolicyChangeEventTests
     }
 
     [Fact]
+    public async Task Turning_a_disabled_policy_back_on_is_announced()
+    {
+        var service = CreateService(Policy("lab", 10, enabled: false), Policy("lab", 10, enabled: true));
+
+        await service.UpdateAsync(WorkspaceId, PolicyRef, new UpdateRegistrationPolicyRequest("lab", 10, false, true));
+
+        _published.Should().ContainSingle().Which.Should().BeOfType<PolicyEnabledEvent>()
+            .Which.Changes.Should().Equal(new FieldChange("enabled", "false", "true"));
+    }
+
+    [Fact]
     public async Task An_edit_that_changes_nothing_announces_nothing()
     {
         var service = CreateService(Policy("lab", 10, enabled: true), Policy("lab", 10, enabled: true));

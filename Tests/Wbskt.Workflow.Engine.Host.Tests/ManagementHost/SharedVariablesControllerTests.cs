@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.System;
+using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Management.Host.Controllers.Workflow;
@@ -23,11 +25,13 @@ public sealed class SharedVariablesControllerTests
 {
     private const int WorkspaceId = 7;
 
-    private static (SharedVariablesController Controller, Mock<IWorkflowQueryService> WorkflowService) CreateController(
+    private readonly Mock<IEventBus> _bus = new();
+
+    private (SharedVariablesController Controller, Mock<IWorkflowQueryService> WorkflowService) CreateController(
         ISharedVariableProvider provider)
     {
         var workflowService = new Mock<IWorkflowQueryService>();
-        var controller = new SharedVariablesController(new SharedVariableService(provider, workflowService.Object));
+        var controller = new SharedVariablesController(new SharedVariableService(provider, workflowService.Object, _bus.Object));
         return (controller, workflowService);
     }
 
@@ -88,6 +92,30 @@ public sealed class SharedVariablesControllerTests
         Assert.Equal("2", dto.ValueJson);
         provider.Verify(x => x.SetAsync(workflowRefId, "counter", "2", It.IsAny<CancellationToken>()), Times.Once);
         workflowService.Verify(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Setting_a_variable_by_hand_logs_its_value_before_and_after()
+    {
+        var provider = new Mock<ISharedVariableProvider>();
+        var workflowRefId = Guid.NewGuid();
+        SharedVariableRow Row(string value) => new()
+        {
+            Id = 1, WorkflowRefId = workflowRefId, VarName = "mode", VarType = "Json", ValueJson = value,
+            UpdatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow
+        };
+        provider.Setup(x => x.FindByWorkflowRefIdNameAsync(workflowRefId, "mode", It.IsAny<CancellationToken>())).ReturnsAsync(Row("\"eco\""));
+        provider.Setup(x => x.SetAsync(workflowRefId, "mode", "\"boost\"", It.IsAny<CancellationToken>())).ReturnsAsync(Row("\"boost\""));
+        var (controller, workflowService) = CreateController(provider.Object);
+        workflowService.Setup(x => x.EnsureWorkflowInWorkspaceAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        await controller.Set(WorkspaceId, workflowRefId, "mode", new SharedVariableSetRequest("\"boost\""), CancellationToken.None);
+
+        _bus.Verify(x => x.PublishAsync(
+            It.Is<SharedVariableSetEvent>(e => e.WorkflowRefId == workflowRefId && e.WorkspaceId == WorkspaceId && e.Name == "mode"
+                && e.Changes!.Single() == new FieldChange("value", "\"eco\"", "\"boost\"")),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

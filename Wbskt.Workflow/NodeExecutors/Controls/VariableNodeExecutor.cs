@@ -25,11 +25,13 @@ internal sealed class VariableNodeExecutor : INodeExecutor
 
     private readonly ISharedVariableProvider _sharedVariableProvider;
     private readonly IExpressionEvaluator _expressionEvaluator;
+    private readonly IVariableWritePublisher? _writes;
 
-    public VariableNodeExecutor(ISharedVariableProvider sharedVariableProvider, IExpressionEvaluator expressionEvaluator)
+    public VariableNodeExecutor(ISharedVariableProvider sharedVariableProvider, IExpressionEvaluator expressionEvaluator, IVariableWritePublisher? writes = null)
     {
         _sharedVariableProvider = sharedVariableProvider;
         _expressionEvaluator = expressionEvaluator;
+        _writes = writes;
     }
 
     public string Kind => NodeKind.ControlVariable;
@@ -81,6 +83,7 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             await _sharedVariableProvider.InitializeAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, JsonVarType, valueJson, ct);
         }
 
+        await AnnounceAsync(ctx, config, valueJson, ct);
         return Continue();
     }
 
@@ -146,6 +149,11 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             succeeded = await _sharedVariableProvider.CompareAndSetAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, legacyExpectedJson, newValueJson, ct) > 0;
         }
 
+        if (succeeded)
+        {
+            await AnnounceAsync(ctx, config, newValueJson, ct);
+        }
+
         return Continue(new Dictionary<string, JsonElement>
         {
             [CompareAndSetResultKey] = JsonSerializer.SerializeToElement(succeeded)
@@ -188,16 +196,22 @@ internal sealed class VariableNodeExecutor : INodeExecutor
         // Atomic in the procedure, which also creates a missing counter at the step - no read-modify-write
         // race and no retry loop. A variable that is not a counter throws SharedVariableNotACounterException,
         // which fails the node as VARIABLE_NOT_A_COUNTER.
-        if (delta >= 0)
-        {
-            await _sharedVariableProvider.IncrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, delta, ct);
-        }
-        else
-        {
-            await _sharedVariableProvider.DecrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, -delta, ct);
-        }
+        string counted = delta >= 0
+            ? await _sharedVariableProvider.IncrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, delta, ct)
+            : await _sharedVariableProvider.DecrementAsync(ctx.Branch.WorkflowDefinitionRefId, config.Var, -delta, ct);
 
+        await AnnounceAsync(ctx, config, counted, ct);
         return Continue();
+    }
+
+    /// <summary>Names this run as the writer of a shared variable, for the audit log.</summary>
+    private Task AnnounceAsync(NodeContext ctx, VariableConfig config, string valueJson, CancellationToken ct)
+    {
+        return _writes is null
+            ? Task.CompletedTask
+            : _writes.PublishAsync(new VariableWrite(
+                ctx.Branch.WorkflowDefinitionRefId, ctx.Branch.WorkflowDefinitionId, ctx.Branch.RunRefId, ctx.Branch.WorkspaceId,
+                config.Var, config.Op.ToString(), valueJson), ct);
     }
 
     private Task<JsonElement> ResolveValueAsync(NodeContext ctx, VariableConfig config, CancellationToken ct)
