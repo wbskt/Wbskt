@@ -76,6 +76,7 @@ internal sealed class AuthService : IAuthService
     private readonly TimeSpan _refreshTokenLifetime;
     private readonly TimeSpan _sessionLifetime;
     private readonly bool _requireVerifiedEmail;
+    private readonly IAuditWorkspaces _audit;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     /// <summary>
@@ -97,8 +98,10 @@ internal sealed class AuthService : IAuthService
         AuthMetrics metrics,
         IAccessTokenRevocation accessTokens,
         IOptions<AccessTokenOptions> accessTokenOptions,
-        MailCooldown mailCooldown)
+        MailCooldown mailCooldown,
+        IAuditWorkspaces? audit = null)
     {
+        _audit = audit ?? AuditWorkspaces.None;
         _accessTokens = accessTokens;
         _accessTokenLifetime = accessTokenOptions.Value.AccessTokenLifetime;
         _refreshTokenLifetime = accessTokenOptions.Value.RefreshTokenLifetime;
@@ -131,6 +134,9 @@ internal sealed class AuthService : IAuthService
                 _logger.LogWarning("Login failed: User with email {Email} not found. IP: {IpAddress}. Error: {Message}", email, ipAddress, ex.Message);
                 _logger.LogTrace(ex, "Login user lookup failed stack trace for {Email}", email);
                 _metrics.RecordLogin("invalid_credentials");
+                // The same lookup the known-account answers make for their audit entry, so an unknown
+                // address is not told apart by answering sooner. No account, so no workspace.
+                await _audit.OfUserAsync(0, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(-1, Guid.Empty, ipAddress, "Invalid credentials"), cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
@@ -144,7 +150,7 @@ internal sealed class AuthService : IAuthService
                 SpendPasswordCheck(password);
                 _logger.LogWarning("Login refused: account {UserId} is locked until {LockedUntil}. IP: {IpAddress}", user.Id, user.LockedUntil, ipAddress);
                 _metrics.RecordLogin("locked_out");
-                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Account locked"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Account locked") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
@@ -158,7 +164,7 @@ internal sealed class AuthService : IAuthService
                 _logger.LogWarning("Login failed: Invalid password for email {Email}. IP: {IpAddress}", email, ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
                 await RecordFailedPasswordAsync(user, ipAddress, cancellationToken);
-                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_INVALID_CREDENTIALS", "Invalid credentials."));
             }
 
@@ -166,7 +172,7 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Login failed: Account is inactive for user {Username} ({Email}). IP: {IpAddress}", user.Username, email, ipAddress);
                 _metrics.RecordLogin("user_inactive");
-                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
             }
 
@@ -182,7 +188,7 @@ internal sealed class AuthService : IAuthService
             {
                 _logger.LogWarning("Login refused: address not yet verified for user {Username} ({Email}). IP: {IpAddress}", user.Username, email, ipAddress);
                 _metrics.RecordLogin("email_unverified");
-                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Email not verified"), cancellationToken);
+                await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Email not verified") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized(
                     "AUTH_EMAIL_UNVERIFIED",
                     "Confirm your email address before signing in. Check your inbox, or ask for a new confirmation link."));
@@ -202,7 +208,7 @@ internal sealed class AuthService : IAuthService
             await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
             _logger.LogDebug("Refresh token inserted for user ID: {UserId}", user.Id);
 
-            await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, user.RefId, ipAddress), cancellationToken);
+            await _eventBus.PublishAsync(new UserLoginSuccessEvent(user.Id, user.RefId, ipAddress) { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
             _logger.LogInformation("User {Username} logged in successfully. IP: {IpAddress}", user.Username, ipAddress);
 
             _metrics.RecordLogin("success");
@@ -350,6 +356,7 @@ internal sealed class AuthService : IAuthService
             var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
             await _accessTokens.RevokeUserAsync(userId, cancellationToken);
             _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
+            await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "all"), ipAddress, cancellationToken);
             return Result.Success();
         }
         catch (Exception ex)
@@ -393,6 +400,7 @@ internal sealed class AuthService : IAuthService
             await _provider.InsertRefreshTokenAsync(refreshToken, ipAddress, cancellationToken);
 
             _logger.LogInformation("Password changed for user {UserId}; all other sessions revoked. IP: {IpAddress}", userId, ipAddress);
+            await AnnounceAsync(new PasswordChangedEvent(userId, user.RefId, "changed"), ipAddress, cancellationToken);
             return Result<LoginResponse>.Success(new LoginResponse(GenerateAccessToken(user, refreshToken.SessionId), refreshToken.Token));
         }
         catch (SecurityException)
@@ -436,6 +444,7 @@ internal sealed class AuthService : IAuthService
             await _accessTokens.RevokeSessionAsync(sessionId, cancellationToken);
 
             _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
+            await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "one"), ipAddress, cancellationToken);
             return Result.Success();
         }
         catch (Exception ex)
@@ -452,14 +461,17 @@ internal sealed class AuthService : IAuthService
         // Checked before the account is created, not after. Redeeming an invitation is the last step
         // of registration, so a token that turns out to be unusable would otherwise leave behind an
         // account the user cannot register again — their email is taken — and did not want on its own.
+        InvitationLookup? invitation = null;
         if (invitationToken is not null)
         {
-            var invitation = await ValidateInvitationAsync(invitationToken, email, cancellationToken);
-            if (invitation.IsFailure)
+            var validated = await ValidateInvitationAsync(invitationToken, email, cancellationToken);
+            if (validated.IsFailure)
             {
                 _metrics.RecordRegistration("invalid_invitation");
-                return invitation;
+                return Result.Failure(validated.Error);
             }
+
+            invitation = validated.Value;
         }
 
         try
@@ -482,6 +494,7 @@ internal sealed class AuthService : IAuthService
             var tenantRefId = await _provider.CreateTenantAsync($"{username}'s Tenant", null, userId, DefaultWorkspaceName, cancellationToken);
             _logger.LogInformation("Created tenant {TenantRefId} for new user ID {UserId}", tenantRefId, userId);
 
+            int? joinedTenantId = null;
             if (invitationToken is not null)
             {
                 // Re-validated authoritatively inside the procedure. Between the check above and here
@@ -490,6 +503,7 @@ internal sealed class AuthService : IAuthService
                 // and ask for a fresh invitation rather than being stranded.
                 var tenantId = await _provider.AcceptInvitationAsync(SecurityTokens.Hash(invitationToken), userId, cancellationToken);
                 _logger.LogInformation("New user ID {UserId} joined tenant ID {TenantId} by invitation", userId, tenantId);
+                joinedTenantId = tenantId;
             }
 
             user = await _provider.GetByIdAsync(userId, cancellationToken);
@@ -506,6 +520,12 @@ internal sealed class AuthService : IAuthService
             await IssueEmailVerificationAsync(user, cancellationToken);
 
             await _eventBus.PublishAsync(new UserRegisteredEvent(userId, user.RefId, username, email), cancellationToken);
+            if (joinedTenantId is { } joined && invitation is not null)
+            {
+                await _eventBus.PublishAsync(
+                    new InvitationAcceptedEvent(invitation.RefId, invitation.Email, userId, user.RefId) { WorkspaceIds = await _audit.OfTenantAsync(joined, cancellationToken) },
+                    cancellationToken);
+            }
             _logger.LogInformation("User {Username} registered successfully. RefId: {RefId}", username, user.RefId);
             
             _metrics.RecordRegistration("success");
@@ -624,6 +644,7 @@ internal sealed class AuthService : IAuthService
         // that were already issued.
         await _accessTokens.RevokeUserAsync(userId, cancellationToken);
         _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", userId, ipAddress);
+        await AnnounceAsync(new PasswordChangedEvent(userId, await RefOfAsync(userId, cancellationToken), "reset"), ipAddress, cancellationToken);
         return Result.Success();
     }
 
@@ -633,6 +654,7 @@ internal sealed class AuthService : IAuthService
         {
             var userId = await _provider.ConsumeEmailVerificationTokenAsync(SecurityTokens.Hash(token), cancellationToken);
             _logger.LogInformation("Email address confirmed for user {UserId}", userId);
+            await AnnounceAsync(new EmailVerifiedEvent(userId, await RefOfAsync(userId, cancellationToken)), null, cancellationToken);
             return Result.Success();
         }
         catch (SecurityException)
@@ -823,7 +845,7 @@ internal sealed class AuthService : IAuthService
     /// account exists. Every rejection is reported identically, so an unauthenticated caller cannot
     /// use registration to discover whether a token is real or which address it was issued to.
     /// </summary>
-    private async Task<Result> ValidateInvitationAsync(string invitationToken, string email, CancellationToken cancellationToken)
+    private async Task<Result<InvitationLookup>> ValidateInvitationAsync(string invitationToken, string email, CancellationToken cancellationToken)
     {
         InvitationLookup invitation;
         try
@@ -833,7 +855,7 @@ internal sealed class AuthService : IAuthService
         catch (SecurityException)
         {
             _logger.LogWarning("Registration rejected: no invitation matches the presented token");
-            return Result.Failure(InvalidInvitation);
+            return Result<InvitationLookup>.Failure(InvalidInvitation);
         }
 
         // Ordinal-ignore-case, matching how SQL Server compares under the database's default
@@ -841,10 +863,10 @@ internal sealed class AuthService : IAuthService
         if (!invitation.IsLive || !string.Equals(invitation.Email, email, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogWarning("Registration rejected: invitation {RefId} is not live, or was issued to a different address", invitation.RefId);
-            return Result.Failure(InvalidInvitation);
+            return Result<InvitationLookup>.Failure(InvalidInvitation);
         }
 
-        return Result.Success();
+        return Result<InvitationLookup>.Success(invitation);
     }
 
     private string GenerateAccessToken(User user, Guid sessionId)
@@ -877,5 +899,37 @@ internal sealed class AuthService : IAuthService
             Token = Convert.ToBase64String(randomBytes),
             Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
         };
+    }
+
+    /// <summary>
+    /// Publishes a change the person made to their own account, logged in each of their workspaces.
+    /// Best effort: the change is made, and a failure here must not report it as failed.
+    /// </summary>
+    private async Task AnnounceAsync(AccountEvent @event, string? ipAddress, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _eventBus.PublishAsync(
+                @event with { WorkspaceIds = await _audit.OfUserAsync(@event.UserId, cancellationToken), ClientAddress = ipAddress },
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Could not publish {EventType} for user {UserId} for the audit log.", @event.GetType().Name, @event.UserId);
+        }
+    }
+
+    /// <summary>The user's reference, or <see cref="Guid.Empty"/> when it cannot be read; only the audit log uses it.</summary>
+    private async Task<Guid> RefOfAsync(int userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await _provider.GetByIdAsync(userId, cancellationToken)).RefId;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read user {UserId}'s reference for the audit log.", userId);
+            return Guid.Empty;
+        }
     }
 }

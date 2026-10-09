@@ -22,14 +22,19 @@ public static class EventLogGroups
     public const string Security = "security";
 
     /// <summary>
-    /// The warnings and errors about sign-ins, keys, PINs, deletions and blocked joins: what an owner
-    /// should look at first. Listed by hand because criticality alone also takes in failed runs and
-    /// commands, which are not security.
+    /// The warnings and errors about sign-ins, passwords, who has access, keys, PINs, deletions and
+    /// blocked joins: what an owner should look at first. Listed by hand because criticality alone
+    /// also takes in failed runs and commands, which are not security.
     /// </summary>
     private static readonly string[] SecurityEvents =
     [
         nameof(UserLoginFailedEvent),
         nameof(SecurityAlertEvent),
+        nameof(PasswordChangedEvent),
+        nameof(MemberRemovedEvent),
+        nameof(MemberSuspendedEvent),
+        nameof(RolePermissionsUpdatedEvent),
+        nameof(WorkspaceOwnershipTransferredEvent),
         nameof(WorkspaceDeletedEvent),
         nameof(ClientSecretRotatedEvent),
         nameof(ClientDeletedEvent),

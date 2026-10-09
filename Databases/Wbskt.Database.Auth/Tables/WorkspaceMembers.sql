@@ -6,3 +6,7 @@ CREATE TABLE dbo.WorkspaceMembers (
     CONSTRAINT FK_WorkspaceMembers_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(Id) ON DELETE CASCADE
 );
 GO
+
+-- A user's workspaces: their workspace list, and the audit log's fan-out of their sign-ins.
+CREATE INDEX IX_WorkspaceMembers_UserId ON dbo.WorkspaceMembers (UserId);
+GO

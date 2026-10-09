@@ -65,6 +65,7 @@ public static class Program
         builder.Services.AddScoped<IManagementService, ManagementService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+        builder.Services.AddScoped<IAuditWorkspaces, AuditWorkspaces>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();
         builder.Services.AddHttpContextAccessor();
@@ -95,6 +96,11 @@ public static class Program
 
         // Event Bus
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
+
+        // Invitations, member and workspace changes record who made them and from where, as the
+        // management host's actions do; the queued bus stamps the same way (see ActorStampingEventBus).
+        builder.Services.AddSingleton<IRequestOriginAccessor, HttpRequestOriginAccessor>();
+        builder.Services.AddActorStampingEventBus();
 
         // Registered after the bus so it stops first, and can still send what is queued while stopping.
         builder.Services.AddHostedService<QueuedEventDispatcher>();

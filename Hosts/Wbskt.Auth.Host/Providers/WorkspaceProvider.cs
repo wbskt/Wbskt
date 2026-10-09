@@ -143,6 +143,23 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         return new WorkspaceAccessResolution(first.WorkspaceId, first.IsMember, permissions);
     }
 
+    public async Task<Workspace?> FindByIdAsync(int workspaceId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteFindAsync("dbo.Workspace_GetBy_Id", p => p.AddWithValue("@Id", workspaceId), MapWorkspace, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<int>> GetIdsByTenantAsync(int tenantId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync("dbo.Workspace_GetIdsBy_TenantId", p => p.AddWithValue("@TenantId", tenantId), MapId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<int>> GetIdsByUserAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync("dbo.Workspace_GetIdsBy_UserId", p => p.AddWithValue("@UserId", userId), MapId, cancellationToken);
+    }
+
+    private static int MapId(SqlDataReader reader) => reader.GetInt32(reader.GetOrdinal("Id"));
+
     private static Workspace MapWorkspace(SqlDataReader reader)
     {
         return new Workspace

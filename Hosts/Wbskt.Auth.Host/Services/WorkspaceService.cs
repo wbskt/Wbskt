@@ -4,6 +4,7 @@ using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
@@ -52,6 +53,9 @@ internal sealed class WorkspaceService : IWorkspaceService
 
             var refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, cancellationToken);
             _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);
+
+            var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);
+            await AnnounceAsync(new WorkspaceCreatedEvent(workspaceId, refId, request.Name), cancellationToken);
             return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow));
         }
         catch (Exception ex)
@@ -115,6 +119,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
             await _workspaceProvider.AddUserToWorkspaceAsync(workspaceId, user.Id, cancellationToken);
             _logger.LogInformation("Successfully added user ID {UserId} ({UserEmail}) to workspace ID: {WorkspaceId}", user.Id, request.Email, workspaceId);
+            await AnnounceAsync(new WorkspaceMemberAddedEvent(workspaceId, user.RefId), cancellationToken);
             return Result.Success();
         }
         catch (SqlException ex) when (ex.Number == 50009)
@@ -149,6 +154,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             var user = await _authProvider.GetByIdAsync(await ResolveUserIdAsync(userRef, cancellationToken), cancellationToken);
             await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, user.Id, cancellationToken);
             _logger.LogInformation("Removed user ID {UserId} from workspace ID: {WorkspaceId}", user.Id, workspaceId);
+            await AnnounceAsync(new WorkspaceMemberRemovedEvent(workspaceId, user.RefId), cancellationToken);
             return Result.Success();
         }
         catch (SecurityException ex)
@@ -202,8 +208,25 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         try
         {
+            var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
             await _workspaceProvider.UpdateWorkspaceAsync(workspaceId, request.Name, request.Description, cancellationToken);
             _logger.LogInformation("Updated workspace ID: {WorkspaceId}", workspaceId);
+
+            var changes = new List<FieldChange>(2);
+            if (!string.Equals(before?.Name, request.Name, StringComparison.Ordinal))
+            {
+                changes.Add(new FieldChange("name", before?.Name, request.Name));
+            }
+
+            if (!string.Equals(before?.Description ?? string.Empty, request.Description ?? string.Empty, StringComparison.Ordinal))
+            {
+                changes.Add(new FieldChange("description", before?.Description, request.Description));
+            }
+
+            if (changes.Count > 0)
+            {
+                await AnnounceAsync(new WorkspaceUpdatedEvent(workspaceId) { Changes = changes }, cancellationToken);
+            }
             return Result.Success();
         }
         catch (Exception ex)
@@ -225,8 +248,14 @@ internal sealed class WorkspaceService : IWorkspaceService
         try
         {
             var newOwnerId = await ResolveUserIdAsync(newOwnerRef, cancellationToken);
+            var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
             await _workspaceProvider.SetOwnerAsync(workspaceId, newOwnerId, cancellationToken);
             _logger.LogInformation("Workspace ID {WorkspaceId} transferred to user ID {UserId} by user ID {CallerId}", workspaceId, newOwnerId, callerId);
+
+            var previousOwnerRef = before is null ? (Guid?)null : (await _authProvider.GetByIdAsync(before.OwnerUserId, cancellationToken)).RefId;
+            await AnnounceAsync(
+                new WorkspaceOwnershipTransferredEvent(workspaceId, newOwnerRef) { Changes = [new FieldChange("owner", previousOwnerRef?.ToString(), newOwnerRef.ToString())] },
+                cancellationToken);
             return Result.Success();
         }
         catch (Exception ex) when (ex is SecurityException or SqlException { Number: 50009 })
@@ -372,6 +401,22 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogTrace(ex, "ResolveAccess failure stack trace for user ID {UserId} in workspace {WorkspaceRef}", userId, workspaceRef);
             _metrics.RecordPermissionCheck("effective-set", "error");
             return Result<WorkspaceAccessResolution>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Publishes an audit event for a change that has already been made. A failure is logged, not
+    /// returned: reporting the change as failed would only invite a retry of something that happened.
+    /// </summary>
+    private async Task AnnounceAsync<TEvent>(TEvent @event, CancellationToken cancellationToken) where TEvent : IEvent
+    {
+        try
+        {
+            await _eventBus.PublishAsync(@event, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Could not publish {EventType} for the audit log.", typeof(TEvent).Name);
         }
     }
 }

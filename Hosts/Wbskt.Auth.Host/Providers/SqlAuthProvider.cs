@@ -393,9 +393,9 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
         return (int)parameters["@TenantId"].Value;
     }
 
-    public async Task RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default)
+    public async Task<string?> RevokeInvitationAsync(Guid invitationRef, int tenantId, CancellationToken cancellationToken = default)
     {
-        await ExecuteNonQueryAsync("dbo.TenantInvitation_Revoke", p =>
+        return await ExecuteScalarAsync<string>("dbo.TenantInvitation_Revoke", p =>
         {
             p.AddWithValue("@RefId", invitationRef);
             p.AddWithValue("@TenantId", tenantId);

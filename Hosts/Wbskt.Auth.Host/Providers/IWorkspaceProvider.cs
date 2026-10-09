@@ -26,4 +26,13 @@ internal interface IWorkspaceProvider : IReferenceProvider
     /// they are not in the workspace's tenant.
     /// </summary>
     Task SetOwnerAsync(int workspaceId, int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>The workspace, or null when there is none with that id.</summary>
+    Task<Workspace?> FindByIdAsync(int workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>Every workspace in the tenant, for the audit log.</summary>
+    Task<IReadOnlyCollection<int>> GetIdsByTenantAsync(int tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>Every workspace the user is a member of, suspended or not, for the audit log.</summary>
+    Task<IReadOnlyCollection<int>> GetIdsByUserAsync(int userId, CancellationToken cancellationToken = default);
 }

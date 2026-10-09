@@ -21,8 +21,8 @@ CREATE TABLE dbo.EventLogs (
     -- MessageId that is already here. Last, so adding it to an existing table needs no rebuild.
     MessageId   UNIQUEIDENTIFIER NULL,
     -- Where it came from (Wbskt.Events.Abstractions.EventSource): 1 console, 2 API, 3 device,
-    -- 4 workflow, 5 system. NULL for rows from before the column, and for sign-in events until the
-    -- auth host stamps them.
+    -- 4 workflow, 5 system. NULL for rows from before the column, and for sign-ins and other changes a
+    -- person makes to their own account.
     Source      TINYINT       NULL,
     -- The caller's address and user agent, for an action taken through the API. On the row rather
     -- than in EventData so they go with the row at the audit retention, and nowhere else.
@@ -68,8 +68,10 @@ CREATE INDEX IX_EventLogs_PolicyId
 GO
 -- Backs the duplicate check in dbo.EventLogs_InsertBatch, and stops two consumers that receive the
 -- same redelivered message at once from both inserting it. Rows from before the column are NULL.
+-- Per workspace: a sign-in or a change to a tenant's people is one message logged in each of its
+-- workspaces.
 CREATE UNIQUE INDEX UX_EventLogs_MessageId
-    ON dbo.EventLogs (MessageId) WHERE MessageId IS NOT NULL;
+    ON dbo.EventLogs (MessageId, WorkspaceId) WHERE MessageId IS NOT NULL;
 GO
 CREATE INDEX IX_EventLogs_WorkflowId
     ON dbo.EventLogs (WorkflowId) WHERE WorkflowId IS NOT NULL;

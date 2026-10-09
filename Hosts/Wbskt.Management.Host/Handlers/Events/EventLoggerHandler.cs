@@ -38,10 +38,7 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
         var entries = new List<EventLogEntry>(context.Message.Length);
         foreach (ConsumeContext<IEvent> message in context.Message)
         {
-            if (await BuildEntryAsync(message) is { } entry)
-            {
-                entries.Add(entry);
-            }
+            entries.AddRange(await BuildEntriesAsync(message));
         }
 
         if (entries.Count > 0)
@@ -52,7 +49,11 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
         }
     }
 
-    private async Task<EventLogEntry?> BuildEntryAsync(ConsumeContext<IEvent> context)
+    /// <summary>
+    /// The event's rows: one, or one per workspace for an event about a tenant's people or a person's
+    /// own account (<see cref="IWorkspacesContext"/>), which belongs in several workspaces' logs.
+    /// </summary>
+    private async Task<IReadOnlyList<EventLogEntry>> BuildEntriesAsync(ConsumeContext<IEvent> context)
     {
         var @event = context.Message;
         var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
@@ -74,7 +75,7 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
         if (eventId <= 0)
         {
             _logger.LogWarning("Event {EventName} is not registered in the EventRegistry. Skipping DB log.", eventName);
-            return null;
+            return [];
         }
 
         try
@@ -105,19 +106,23 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
 
             // Where it came from, and the caller's address and user agent: the last two move to their
             // own columns and out of the stored event, so retention and privacy rules apply in one place.
+            // A sign-in names its address ipAddress. The workspace list is how the row got here, and
+            // would show one workspace's readers the ids of the tenant's others.
             var source = EventSources.Derive(eventName, GetSourceProperty(targetNode), userId is not null);
-            var clientAddress = GetStringProperty(targetNode, "clientAddress");
+            var clientAddress = GetStringProperty(targetNode, "clientAddress") ?? GetStringProperty(targetNode, "ipAddress");
             var userAgent = GetStringProperty(targetNode, "userAgent");
-            if (clientAddress is not null || userAgent is not null)
+            var workspaceIds = workspaceId is null ? GetIntArrayProperty(targetNode, "workspaceIds") : [];
+            var moved = new[] { "clientAddress", "ipAddress", "userAgent", "workspaceIds" }.Where(n => TryGetProperty(targetNode, n, out _)).ToArray();
+            if (moved.Length > 0)
             {
-                eventData = Without(eventData, "clientAddress", "userAgent");
+                eventData = Without(eventData, moved);
             }
 
-            var entry = new EventLogEntry(
+            EventLogEntry Entry(int? workspace) => new(
                 eventId, 
                 eventData, 
                 @event.CreatedAtUtc, 
-                WorkspaceId: workspaceId,
+                WorkspaceId: workspace,
                 PolicyId: policyId,
                 PolicyRefId: policyRefId,
                 ClientId: clientId,
@@ -132,13 +137,13 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
                 UserAgent: Truncate(userAgent, 256)
             );
 
-            return entry;
+            return workspaceIds.Count > 0 ? workspaceIds.Select(id => Entry(id)).ToList() : [Entry(workspaceId)];
         }
         catch (Exception ex)
         {
             // A body that can't be read now never will be, so it is skipped rather than retried.
             _logger.LogWarning(ex, "Could not read event {EventName} (message {MessageId}) for the event log; skipping it.", eventName, context.MessageId);
-            return null;
+            return [];
         }
     }
 
@@ -172,6 +177,20 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
             }
         }
         return null;
+    }
+
+    private static IReadOnlyList<int> GetIntArrayProperty(JsonElement element, string name)
+    {
+        if (!TryGetProperty(element, name, out var prop) || prop.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return prop.EnumerateArray()
+            .Where(e => e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out _))
+            .Select(e => e.GetInt32())
+            .Distinct()
+            .ToList();
     }
 
     private static string? GetStringProperty(JsonElement element, string name)
