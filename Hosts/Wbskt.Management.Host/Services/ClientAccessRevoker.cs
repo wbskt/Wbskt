@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
@@ -45,7 +46,10 @@ internal sealed class ClientAccessRevoker
         }
 
         await _eventBus.PublishAsync(
-            new ClientStatusChangedEvent(change.RefId, change.Id, change.PolicyRefId, change.PolicyId, workspaceId, (byte)status),
+            new ClientStatusChangedEvent(change.RefId, change.Id, change.PolicyRefId, change.PolicyId, workspaceId, (byte)status)
+            {
+                Changes = [new FieldChange("status", change.OldStatus.ToString(), status.ToString())]
+            },
             cancellationToken);
     }
 

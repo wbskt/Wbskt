@@ -59,6 +59,7 @@ internal sealed class NoopDeviceCommandPublisher : IDeviceCommandPublisher
         int workspaceId,
         string command,
         string payload,
+        CommandSender? sentBy,
         CancellationToken ct) => Task.CompletedTask;
 }
 

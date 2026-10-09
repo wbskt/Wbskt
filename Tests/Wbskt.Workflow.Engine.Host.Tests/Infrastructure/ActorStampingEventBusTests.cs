@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure.Events;
@@ -74,6 +76,51 @@ public sealed class ActorStampingEventBusTests
         }
 
         _inner.Published.Should().ContainSingle().Which.Should().BeSameAs(@event);
+    }
+
+    [Theory]
+    [InlineData("https://console.wbskt.dev", EventSource.Console)]
+    [InlineData("https://elsewhere.example", EventSource.Api)]
+    [InlineData(null, EventSource.Api)]
+    public async Task An_action_records_where_it_came_from_and_the_callers_address(string? origin, EventSource expected)
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("81.2.69.160");
+        context.Request.Headers.UserAgent = "Mozilla/5.0 (Macintosh) Firefox/131.0";
+        if (origin is not null)
+        {
+            context.Request.Headers.Origin = origin;
+        }
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Cors:AllowedOrigins:0"] = "https://console.wbskt.dev" })
+            .Build();
+        var accessor = new HttpRequestOriginAccessor(new HttpContextAccessor { HttpContext = context }, configuration);
+        var @event = Renamed();
+
+        using (_identity.BeginScope(new UserIdentity(5)))
+        {
+            await new ActorStampingEventBus(_inner, _identity, accessor).PublishAsync(@event);
+        }
+
+        @event.ActorSource.Should().Be(expected);
+        @event.ClientAddress.Should().Be("81.2.69.160");
+        @event.UserAgent.Should().Be("Mozilla/5.0 (Macintosh) Firefox/131.0");
+    }
+
+    [Fact]
+    public async Task An_action_a_workflow_run_took_keeps_the_run_as_its_actor()
+    {
+        var @event = Renamed();
+        @event.ActorSource = EventSource.Workflow;
+
+        using (_identity.BeginScope(new UserIdentity(5)))
+        {
+            await CreateBus().PublishAsync(@event);
+        }
+
+        @event.ActorSource.Should().Be(EventSource.Workflow);
+        @event.ActorUserId.Should().BeNull("a run is never attributed to whoever happens to be signed in");
     }
 
     [Fact]

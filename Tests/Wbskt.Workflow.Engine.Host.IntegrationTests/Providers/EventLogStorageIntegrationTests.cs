@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Wbskt.Events.Abstractions;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
@@ -31,7 +32,8 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         var userRefId = Guid.NewGuid();
         var workflowRefId = Guid.NewGuid();
         var entry = new EventLogEntry(eventId, "{}", DateTime.UtcNow, workspaceId,
-            WorkflowId: 77, WorkflowRefId: workflowRefId, UserId: 42, UserRefId: userRefId);
+            WorkflowId: 77, WorkflowRefId: workflowRefId, UserId: 42, UserRefId: userRefId,
+            Source: EventSource.Console, ClientAddress: "81.2.69.160", UserAgent: "Firefox on macOS");
 
         await Provider().InsertBatchAsync(EventLogTable.Build([entry]));
 
@@ -39,6 +41,9 @@ public sealed class EventLogStorageIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(userRefId, await ScalarAsync<Guid>("SELECT UserRefId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
         Assert.Equal(77, await ScalarAsync<int>("SELECT WorkflowId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
         Assert.Equal(workflowRefId, await ScalarAsync<Guid>("SELECT WorkflowRefId FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
+        Assert.Equal((byte)EventSource.Console, await ScalarAsync<byte>("SELECT Source FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
+        Assert.Equal("81.2.69.160", await ScalarAsync<string>("SELECT ClientAddress FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
+        Assert.Equal("Firefox on macOS", await ScalarAsync<string>("SELECT UserAgent FROM dbo.EventLogs WHERE WorkspaceId = @p0", workspaceId));
     }
 
     [SkippableFact]

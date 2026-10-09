@@ -20,6 +20,14 @@ CREATE TABLE dbo.EventLogs (
     -- acknowledges it, so a crash in between redelivers messages already saved; the insert skips a
     -- MessageId that is already here. Last, so adding it to an existing table needs no rebuild.
     MessageId   UNIQUEIDENTIFIER NULL,
+    -- Where it came from (Wbskt.Events.Abstractions.EventSource): 1 console, 2 API, 3 device,
+    -- 4 workflow, 5 system. NULL for rows from before the column, and for sign-in events until the
+    -- auth host stamps them.
+    Source      TINYINT       NULL,
+    -- The caller's address and user agent, for an action taken through the API. On the row rather
+    -- than in EventData so they go with the row at the audit retention, and nowhere else.
+    ClientAddress NVARCHAR(45) NULL,
+    UserAgent   NVARCHAR(256) NULL,
 
     -- Constraints
     CONSTRAINT PK_EventLogs        PRIMARY KEY (Id),

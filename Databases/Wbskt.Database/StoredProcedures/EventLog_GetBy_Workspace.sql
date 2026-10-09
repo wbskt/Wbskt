@@ -46,7 +46,10 @@ BEGIN
         el.ClientRefId,
         el.WorkflowRefId,
         el.UserRefId,
-        el.CreatedAt
+        el.CreatedAt,
+        el.Source,
+        el.ClientAddress,
+        el.UserAgent
     FROM dbo.EventLogs el
     JOIN dbo.Events e ON el.EventId = e.Id
     WHERE el.WorkspaceId = @WorkspaceId

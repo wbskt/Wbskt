@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Primitives;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -10,7 +11,7 @@ public sealed class DeviceCommandPublisher(
     [FromKeyedServices(ReferenceType.Client)] IReferenceMapper clientMapper,
     ILogger<DeviceCommandPublisher> logger) : IDeviceCommandPublisher
 {
-    public async Task PublishCommandAsync(Guid clientRefId, int workspaceId, string command, string payload, CancellationToken ct)
+    public async Task PublishCommandAsync(Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct)
     {
         // EventLogs attributes comms rows to the internal client id; resolve it here so
         // workflow-sent commands show up in the client's comms history.
@@ -20,6 +21,14 @@ public sealed class DeviceCommandPublisher(
             logger.LogWarning("No client found for ref id '{ClientRefId}'; command '{Command}' will be logged without a client id.", clientRefId, command);
         }
 
-        await eventBus.PublishAsync(new ClientCommandEvent(clientRefId, clientId, workspaceId, command, payload, Guid.NewGuid()), ct);
+        var @event = new ClientCommandEvent(clientRefId, clientId, workspaceId, command, payload, Guid.NewGuid());
+        if (sentBy is not null)
+        {
+            @event.ActorSource = EventSource.Workflow;
+            @event.ActorWorkflowRefId = sentBy.WorkflowRefId;
+            @event.ActorRunRefId = sentBy.RunRefId;
+        }
+
+        await eventBus.PublishAsync(@event, ct);
     }
 }

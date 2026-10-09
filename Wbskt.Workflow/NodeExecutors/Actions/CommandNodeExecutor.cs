@@ -31,7 +31,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
 
         try
         {
-            await publisher.PublishCommandAsync(clientRefId, workspaceId, command, payload, ct);
+            await publisher.PublishCommandAsync(clientRefId, workspaceId, command, payload, new CommandSender(ctx.Branch.WorkflowDefinitionRefId, ctx.Branch.RunRefId), ct);
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());
         }
         catch (Exception ex)

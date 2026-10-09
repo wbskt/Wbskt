@@ -13,7 +13,12 @@ public record EventLogResponse(
     // Who caused it, for an action taken through the API (or the user a sign-in event is about).
     Guid? UserRefId = null,
     // The entry's own id, so a detail view can name one entry. Page cursors are made from it.
-    long Id = 0
+    long Id = 0,
+    // Where it came from: Console, Api, Device, Workflow or System; null when not known.
+    string? Source = null,
+    // The caller's address and user agent, for an action taken through the API.
+    string? ClientAddress = null,
+    string? UserAgent = null
 );
 
 /// <summary>A row of the event log with the Id its page cursor is made from.</summary>

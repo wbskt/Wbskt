@@ -176,7 +176,7 @@ public static class QueuedEventBusExtensions
     {
         // Hosts without signed-in users (no IIdentityService) publish as they always did.
         var identity = sp.GetService<IIdentityService>();
-        return identity is null ? bus : new ActorStampingEventBus(bus, identity);
+        return identity is null ? bus : new ActorStampingEventBus(bus, identity, sp.GetService<IRequestOriginAccessor>());
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 ﻿using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Models;
@@ -123,7 +124,10 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             reader.IsDBNull(reader.GetOrdinal("WorkflowRefId")) ? null : reader.GetGuid(reader.GetOrdinal("WorkflowRefId")),
             reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId")),
-            reader.GetInt64(reader.GetOrdinal("Id"))
+            reader.GetInt64(reader.GetOrdinal("Id")),
+            reader.IsDBNull(reader.GetOrdinal("Source")) ? null : ((EventSource)reader.GetByte(reader.GetOrdinal("Source"))).ToString(),
+            reader.IsDBNull(reader.GetOrdinal("ClientAddress")) ? null : reader.GetString(reader.GetOrdinal("ClientAddress")),
+            reader.IsDBNull(reader.GetOrdinal("UserAgent")) ? null : reader.GetString(reader.GetOrdinal("UserAgent"))
         );
     }
 }
