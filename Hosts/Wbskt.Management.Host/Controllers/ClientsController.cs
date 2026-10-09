@@ -40,33 +40,27 @@ public class ClientsController : ApiControllerBase
     /// <param name="status">Optional filter by client status (Pending, Registered, etc.).</param>
     /// <param name="name">Optional filter by client name (partial match).</param>
     /// <param name="tag">Optional filter: only clients carrying this tag (case-insensitive).</param>
-    /// <param name="skip">Number of records to skip for pagination.</param>
-    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="page">The page to read: <c>cursor</c> and <c>limit</c> (default 100).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A paginated list of clients.</returns>
+    /// <returns>A page of clients, with the total count.</returns>
     [HttpGet]
     [RequiresPermission(PermissionNames.ClientsRead)]
-    public async Task<ActionResult<ListResponse<ClientResponse>>> GetAll(
+    public async Task<ActionResult<Page<ClientResponse>>> GetAll(
         [FromWorkspace] int workspaceId,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
         [FromQuery] string? tag,
-        [FromQuery] int skip = 0,
-        [FromQuery] int take = 100,
+        [FromQuery] PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var result = await _clientService.GetAllAsync(workspaceId, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
-        if (result.IsFailure)
+        var offset = page.Offset();
+        if (offset.IsFailure)
         {
-            return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
+            return MapError(offset.Error);
         }
 
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-
-        return Ok(new ListResponse<ClientResponse>
-        {
-            Items = result.Value
-        });
+        var result = await _clientService.GetAllAsync(workspaceId, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken);
+        return MapPage(result, offset.Value);
     }
 
     /// <summary>
@@ -77,15 +71,15 @@ public class ClientsController : ApiControllerBase
     /// <returns>The tags, sorted.</returns>
     [HttpGet("tags")]
     [RequiresPermission(PermissionNames.ClientsRead)]
-    public async Task<ActionResult<ListResponse<ClientTagCountResponse>>> GetTags([FromWorkspace] int workspaceId, CancellationToken cancellationToken)
+    public async Task<ActionResult<Page<ClientTagCountResponse>>> GetTags([FromWorkspace] int workspaceId, CancellationToken cancellationToken)
     {
         var result = await _clientService.GetTagsAsync(workspaceId, cancellationToken);
         if (result.IsFailure)
         {
-            return MapResult(Result<ListResponse<ClientTagCountResponse>>.Failure(result.Error));
+            return MapResult(Result<Page<ClientTagCountResponse>>.Failure(result.Error));
         }
 
-        return Ok(new ListResponse<ClientTagCountResponse> { Items = result.Value });
+        return Ok(new Page<ClientTagCountResponse> { Items = result.Value });
     }
 
     /// <summary>
@@ -96,37 +90,35 @@ public class ClientsController : ApiControllerBase
     /// <param name="status">Optional filter by client status.</param>
     /// <param name="name">Optional filter by client name.</param>
     /// <param name="tag">Optional filter: only clients carrying this tag (case-insensitive).</param>
-    /// <param name="skip">Number of records to skip for pagination.</param>
-    /// <param name="take">Number of records to take for pagination.</param>
+    /// <param name="page">The page to read: <c>cursor</c> and <c>limit</c> (default 100).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A paginated list of clients linked to the specified policy.</returns>
+    /// <returns>A page of the clients linked to the policy, with the total count.</returns>
     [HttpGet("policy/{policyRefId:guid}")]
     [RequiresPermission(PermissionNames.ClientsRead)]
-    public async Task<ActionResult<ListResponse<ClientResponse>>> GetByPolicy(
+    public async Task<ActionResult<Page<ClientResponse>>> GetByPolicy(
         [FromWorkspace] int workspaceId,
         Guid policyRefId,
         [FromQuery] ClientStatus? status,
         [FromQuery] string? name,
         [FromQuery] string? tag,
-        [FromQuery] int skip = 0,
-        [FromQuery] int take = 100,
+        [FromQuery] PageRequest page,
         CancellationToken cancellationToken = default)
     {
+        var offset = page.Offset();
+        if (offset.IsFailure)
+        {
+            return MapError(offset.Error);
+        }
+
         // Another workspace's policy is as unknown here as one that does not exist, not an empty page.
         var policy = await _policyService.FindInWorkspaceAsync(workspaceId, policyRefId, cancellationToken);
         if (policy.IsFailure)
         {
-            return MapResult(Result<ListResponse<ClientResponse>>.Failure(policy.Error));
+            return MapError(policy.Error);
         }
 
-        var result = await _clientService.GetByPolicyIdAsync(workspaceId, policy.Value.Id, status, name, tag, Paging.Skip(skip), Paging.Take(take), cancellationToken);
-        if (result.IsFailure)
-        {
-            return MapResult(Result<ListResponse<ClientResponse>>.Failure(result.Error));
-        }
-
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-        return Ok(new ListResponse<ClientResponse> { Items = result.Value });
+        var result = await _clientService.GetByPolicyIdAsync(workspaceId, policy.Value.Id, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken);
+        return MapPage(result, offset.Value);
     }
 
     /// <summary>
@@ -224,15 +216,15 @@ public class ClientsController : ApiControllerBase
     /// <returns>The client's state variables.</returns>
     [HttpGet("{clientRefId:guid}/state")]
     [RequiresPermission(PermissionNames.ClientsRead)]
-    public async Task<ActionResult<ListResponse<ClientStateVariableResponse>>> GetState([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
+    public async Task<ActionResult<Page<ClientStateVariableResponse>>> GetState([FromWorkspace] int workspaceId, Guid clientRefId, CancellationToken cancellationToken)
     {
         var result = await _clientService.GetStateAsync(workspaceId, clientRefId, cancellationToken);
         if (result.IsFailure)
         {
-            return MapResult(Result<ListResponse<ClientStateVariableResponse>>.Failure(result.Error));
+            return MapResult(Result<Page<ClientStateVariableResponse>>.Failure(result.Error));
         }
 
-        return Ok(new ListResponse<ClientStateVariableResponse> { Items = result.Value });
+        return Ok(new Page<ClientStateVariableResponse> { Items = result.Value });
     }
 
     /// <summary>
@@ -296,23 +288,27 @@ public class ClientsController : ApiControllerBase
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="clientRefId">The unique reference ID of the client.</param>
     /// <param name="direction">Optional direction filter: "in" or "out". Omit for both (plus connect/disconnect rows).</param>
-    /// <param name="cursor">The <c>nextCursor</c> of the previous page; omit for the newest entries.</param>
-    /// <param name="take">Page size, 1 to 200.</param>
+    /// <param name="page">The page to read: <c>cursor</c> (left out for the newest entries) and <c>limit</c> (default 50).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A page of comms event-log entries, newest first, with the cursor for the next page.</returns>
     [HttpGet("{clientRefId:guid}/comms")]
     [RequiresPermission(PermissionNames.LogsRead)]
-    public async Task<ActionResult<EventLogListResponse>> GetComms(
+    public async Task<ActionResult<Page<EventLogResponse>>> GetComms(
         [FromWorkspace] int workspaceId,
         Guid clientRefId,
         [FromQuery] string? direction,
-        [FromQuery] long? cursor = null,
-        [FromQuery] int take = 50,
+        [FromQuery] PageRequest page,
         CancellationToken cancellationToken = default)
     {
         if (direction is not (null or "in" or "out"))
         {
             return BadRequest(Error.Validation("DIRECTION_INVALID", "Direction must be 'in', 'out', or omitted."));
+        }
+
+        var cursor = page.AfterKey();
+        if (cursor.IsFailure)
+        {
+            return MapError(cursor.Error);
         }
 
         // The query is workspace-filtered in SQL, so a foreign client would come back as an empty
@@ -321,10 +317,10 @@ public class ClientsController : ApiControllerBase
         var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
         if (clientResult.IsFailure)
         {
-            return MapResult(Result<EventLogListResponse>.Failure(clientResult.Error));
+            return MapResult(Result<Page<EventLogResponse>>.Failure(clientResult.Error));
         }
 
-        return MapResult(await _eventLogService.GetClientCommsAsync(workspaceId, clientResult.Value, direction, cursor, take, cancellationToken));
+        return MapResult(await _eventLogService.GetClientCommsAsync(workspaceId, clientResult.Value, direction, cursor.Value, page.LimitOr(50), cancellationToken));
     }
 
     /// <summary>

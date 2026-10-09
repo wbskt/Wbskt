@@ -96,7 +96,7 @@ public sealed class ClientReadingService : IClientReadingService
         }
 
         // One more than is returned, to tell a range that fits from one that was cut off.
-        var readings = await _provider.GetRangeAsync(clientId, name, range.Value.From, range.Value.To, MaxExportRows + 1, cancellationToken);
+        var readings = await _provider.GetRangeAsync(clientId, name, range.Value.FromUtc, range.Value.ToUtc, MaxExportRows + 1, cancellationToken);
         if (readings.Count > MaxExportRows)
         {
             return Result<IReadOnlyCollection<ClientReading>>.Failure(Error.Validation("READINGS_RANGE_TOO_LARGE", $"That range holds more than {MaxExportRows} readings; export a shorter range or a single variable."));
@@ -154,26 +154,6 @@ public sealed class ClientReadingService : IClientReadingService
         return new DateTime(DateTime.UnixEpoch.Ticks + sinceEpoch / size * size, DateTimeKind.Utc);
     }
 
-    private Result<(DateTime From, DateTime To)> ResolveRange(DateTimeOffset? from, DateTimeOffset? to)
-    {
-        var toUtc = (to ?? _timeProvider.GetUtcNow()).UtcDateTime;
-        var fromUtc = from?.UtcDateTime ?? toUtc - DefaultRange;
-
-        if (fromUtc < DateTime.UnixEpoch)
-        {
-            return Result<(DateTime, DateTime)>.Failure(Error.Validation("READINGS_RANGE_INVALID", "'from' must be after 1970."));
-        }
-
-        if (fromUtc >= toUtc)
-        {
-            return Result<(DateTime, DateTime)>.Failure(Error.Validation("READINGS_RANGE_INVALID", "'from' must be before 'to'."));
-        }
-
-        if (toUtc - fromUtc > MaxRange)
-        {
-            return Result<(DateTime, DateTime)>.Failure(Error.Validation("READINGS_RANGE_TOO_LONG", $"A range can span at most {MaxRange.TotalDays:0} days."));
-        }
-
-        return Result<(DateTime, DateTime)>.Success((fromUtc, toUtc));
-    }
+    private Result<TimeRange> ResolveRange(DateTimeOffset? from, DateTimeOffset? to)
+        => TimeRange.Resolve(from, to, _timeProvider.GetUtcNow(), DefaultRange, MaxRange);
 }

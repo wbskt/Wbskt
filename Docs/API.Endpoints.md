@@ -222,8 +222,23 @@ Every workspace-scoped route is `api/workspaces/{workspaceRef:guid}/…` and res
 `POST /api/workspaces/resolve` on the auth host before doing anything else. That call is the
 membership gate; the permission slug is the second gate.
 
-List endpoints clamp their page size (`take`, or `top` for runs and history) to 1–200 and a negative
-`skip` to 0, rather than rejecting them.
+**Paging.** Every list endpoint takes `cursor` and `limit` and answers with one shape,
+`{ items, nextCursor, totalCount? }`. Leave `cursor` out for the first page; pass the previous
+page's `nextCursor` back for the next one, until it is null. The cursor is opaque: store it and send
+it back, never build or parse it. A cursor no page handed out is 400 `PAGE_CURSOR_INVALID`. `limit`
+is clamped to 1–200 rather than rejected, and each list has its own default. Lists that count
+cheaply (clients, policies, templates, workflows) also return `totalCount`, and still send it as
+`X-Total-Count` for one release. Lists that are never long (a client's tags and state, a workflow's
+versions) use the same shape and return everything on one page.
+
+The parameters lists took before (`skip`, `take`, `top`, `fromEventId`) are still accepted for one
+release so the console can move first; when both are sent, `cursor` and `limit` win. Run and
+history pages also still carry their items as `runs` and `events` for that release.
+
+**Time ranges.** `from` and `to` are ISO 8601 instants with an offset (`DateTimeOffset`) on every
+endpoint that takes them. `to` defaults to now and `from` to a per-endpoint span before it; a range
+that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 days is 400
+`TIME_RANGE_TOO_LONG`.
 
 > **A reference is not a scope.** Resolving `workspaceRef` establishes which workspace the caller is
 > acting in. It says nothing about whether the `clientRefId` or `runRefId` in the same route belongs
@@ -233,7 +248,7 @@ List endpoints clamp their page size (`take`, or `top` for runs and history) to 
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name` and `tag` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). Each client carries its `tags`. Paged; total in `X-Total-Count`. |
+| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name` and `tag` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). Each client carries its `tags`. Paged, with `totalCount`. |
 | `GET tags` | `clients.read` | Every tag in use in the workspace with its client count (`{ tag, clientCount }`), sorted, for a tag filter. |
 | `GET policy/{policyRefId}` | `clients.read` | The same list narrowed to one registration policy, after verifying the policy belongs to the workspace. |
 | `GET {clientRefId}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities. |
@@ -246,7 +261,7 @@ List endpoints clamp their page size (`take`, or `top` for runs and history) to 
 | `PUT {clientRefId}/tags` | `clients.update` | Replaces the client's tags (`{ tags }`; an empty list clears them) and returns them as stored. Tags are trimmed and lower-cased, and repeats collapse. Each is 1–32 letters, digits, spaces, `-`, `_` or `.`, starting and ending with a letter or digit (else 400 `CLIENT_TAG_INVALID`); at most 10 per client (else 400 `CLIENT_TAGS_TOO_MANY`). |
 | `POST {clientRefId}/command` | `clients.command` | Sends a command to a connected client and returns a `commandId` for correlating the delivery/ack events that follow. Rejects reserved protocol message types and payloads over 32 KiB. Commands are delivered live or not at all: an offline client is answered 409 `DEVICE_OFFLINE`, and a client that drops before delivery raises `ClientCommandFailedEvent` ("not connected"). Optional `expiresAt` (at most 24 h ahead, else 400 `COMMAND_EXPIRY_INVALID`): past it the socket host does not send the command and the SDK refuses it, both reported as `ClientCommandFailedEvent`. |
 | `POST {clientRefId}/ping` | `clients.ping` | Triggers a round-trip latency measurement. |
-| `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged by `cursor`/`take` like the event log. |
+| `GET {clientRefId}/comms` | `logs.read` | Recent in/out message history, filterable by `direction=in\|out`. Backfills the Live Comms panel before the realtime stream attaches. Uses `logs.read` rather than `clients.read` because it is a projection of the event log — so the client detail page needs both grants to render fully. Paged like the event log. |
 
 Command and ping publish onto the event bus, and the socket host dispatches on `ClientRefId` alone —
 it has no workspace of its own to check against. The controller's ownership check is therefore the
@@ -281,7 +296,7 @@ Saved send-panel payloads, optionally pinned to a policy.
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `logs.read` | The workspace's event log, filterable by `eventName`, `criticality`, `policyRefId` and `clientRefId`. Newest first, `take` per page (1–200, default 50). The body carries `nextCursor`: pass it back as `cursor` for the next page; it is null on the last one. No total count. Each entry carries `userRefId`: who took the action, for one taken through the API (device and policy changes, commands and pings, workflow publish, deprecate, reinstate, delete, manual run, cancel and signal); null for events with no signed-in user behind them. |
+| `GET /` | `logs.read` | The workspace's event log, filterable by `eventName`, `criticality`, `policyRefId` and `clientRefId`. Newest first, `limit` per page (default 50). No total count. Each entry carries `userRefId`: who took the action, for one taken through the API (device and policy changes, commands and pings, workflow publish, deprecate, reinstate, delete, manual run, cancel and signal); null for events with no signed-in user behind them. |
 
 ### 2.5 Workflows — `…/workflows`
 
@@ -310,7 +325,7 @@ in-place edit, which is why there is no update verb.
 | `GET workflows/{workflowRefId}/runs` | `workflows.read` | Lists runs of one workflow, filterable by `status`, cursor-paged. |
 | `GET workflows/{workflowRefId}/stats` | `workflows.read` | How a workflow is doing over a window (`from`/`to`, default last 30 days): outcome counts, duration p50/p95/max/avg over completed runs, success rate over *finished* runs (null when nothing has finished), the error codes that actually occur, and the slowest nodes. |
 | `GET runs/{runRefId}` | `workflows.read` | Run detail with its branches. |
-| `GET runs/{runRefId}/history` | `workflows.read` | The run's history event stream from `fromEventId`, cursor-paged — the execution trace. |
+| `GET runs/{runRefId}/history` | `workflows.read` | The run's history event stream, oldest first, cursor-paged (`limit` default 200) — the execution trace. |
 | `POST runs/{runRefId}/cancel` | `workflows.execute` | Requests cancellation with a reason. The engine carries it out, so this answers **202** once the request is on its way and the run reads `Cancelling`, then `Cancelled`, shortly after; poll the run to see it. Cooperative, not immediate. **409** `RUN_NOT_CANCELLABLE` for a run that has already finished, **404** `RUN_NOT_FOUND` for a run that is unknown or another workspace's, **503** `EVENT_BUS_UNAVAILABLE` (with `Retry-After`) when the message broker is unavailable — nothing was sent, so retry. |
 | `POST runs/{runRefId}/signals/{signalName}` | `workflows.execute` | Delivers a named signal to a parked run. Verifies the run belongs to the workspace, then relays to the engine. |
 

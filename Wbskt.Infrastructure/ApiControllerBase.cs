@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Models;
 
 namespace Wbskt.Infrastructure;
 
@@ -61,6 +62,22 @@ public abstract class ApiControllerBase : ControllerBase
         }
 
         return MapError(result.Error);
+    }
+
+    /// <summary>
+    /// An offset list's <see cref="Page{T}"/>, starting at <paramref name="offset"/>. The whole list's
+    /// count also goes out as the <c>X-Total-Count</c> header for one release, for callers that read
+    /// it from there.
+    /// </summary>
+    protected ActionResult<Page<T>> MapPage<T>(Result<IPagedList<T>> result, int offset)
+    {
+        if (result.IsFailure)
+        {
+            return MapError(result.Error);
+        }
+
+        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return Ok(PageRequest.OffsetPage(result.Value, offset));
     }
 
     protected ActionResult MapError(Error error)

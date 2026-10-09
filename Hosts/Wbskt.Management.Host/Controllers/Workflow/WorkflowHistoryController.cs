@@ -20,10 +20,17 @@ public sealed class WorkflowHistoryController : ApiControllerBase
         _historyService = historyService;
     }
 
+    /// <summary>A page of the run's history, oldest first: <c>cursor</c> and <c>limit</c> (default 200).</summary>
     [HttpGet]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<HistoryListResponse>> List([FromWorkspace] int workspaceId, Guid runRefId, [FromQuery] long fromEventId = 0, [FromQuery] int top = 200, CancellationToken ct = default)
+    public async Task<ActionResult<HistoryListResponse>> List([FromWorkspace] int workspaceId, Guid runRefId, [FromQuery] PageRequest page, CancellationToken ct = default)
     {
-        return MapResult(await _historyService.ListAsync(workspaceId, runRefId, fromEventId, Paging.Take(top), ct));
+        var after = page.AfterKey();
+        if (after.IsFailure)
+        {
+            return MapError(after.Error);
+        }
+
+        return MapResult(await _historyService.ListAsync(workspaceId, runRefId, after.Value ?? 0, page.LimitOr(200), ct));
     }
 }

@@ -28,10 +28,11 @@ public sealed class WorkflowHistoryService : IWorkflowHistoryService
         IReadOnlyCollection<HistoryEventRow> rows = await _history.GetByRunIdAsync(ensureRunResult.Value, fromEventId, top + 1, ct);
         bool hasMore = rows.Count > top;
         IReadOnlyList<HistoryEventRow> page = rows.Take(top).ToList();
-        long? nextCursor = hasMore ? page.Last().HistoryEventId : null;
+        long? nextKey = hasMore ? page.Last().HistoryEventId : null;
 
-        return Result<HistoryListResponse>.Success(new HistoryListResponse(
-            page.Select(row => new HistoryEventDto(
+        return Result<HistoryListResponse>.Success(new HistoryListResponse
+        {
+            Items = page.Select(row => new HistoryEventDto(
                 row.HistoryEventId,
                 row.Timestamp,
                 row.EventKind,
@@ -39,6 +40,7 @@ public sealed class WorkflowHistoryService : IWorkflowHistoryService
                 row.BranchRefId,
                 row.NodeId,
                 row.PayloadJson)).ToList(),
-            nextCursor));
+            NextCursor = PageRequest.KeyCursor(nextKey)
+        });
     }
 }

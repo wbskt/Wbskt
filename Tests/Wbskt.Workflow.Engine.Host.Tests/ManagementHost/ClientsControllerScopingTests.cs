@@ -163,7 +163,7 @@ public sealed class ClientsControllerScopingTests
         var (controller, clientService, _, eventLogService) = CreateController();
         SetupOwnership(clientService, Result<int>.Failure(Foreign));
 
-        var result = await controller.GetComms(WorkspaceId, ClientRefId, direction: null, cancellationToken: CancellationToken.None);
+        var result = await controller.GetComms(WorkspaceId, ClientRefId, direction: null, new PageRequest(), cancellationToken: CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
         eventLogService.Verify(x => x.GetClientCommsAsync(

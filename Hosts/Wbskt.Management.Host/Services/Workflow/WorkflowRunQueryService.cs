@@ -13,6 +13,12 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// <summary>Enough rows for a dashboard to show the workspace's real shape without paging.</summary>
     private const int TopWorkflows = 50;
 
+    /// <summary>The window stats cover when the caller names no 'from'.</summary>
+    private static readonly TimeSpan DefaultStatsRange = TimeSpan.FromDays(30);
+
+    /// <summary>The longest window stats cover: the same cap as a client's readings.</summary>
+    private static readonly TimeSpan MaxStatsRange = TimeSpan.FromDays(400);
+
     /// <summary>
     /// The statuses the engine's cancellation acts on (<c>RunCancellationService</c>). A 'Failing' run
     /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
@@ -66,6 +72,9 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         return Result<RunListResponse>.Success(BuildPage(rows, top));
     }
 
+    private static Result<TimeRange> ResolveStatsRange(DateTimeOffset? from, DateTimeOffset? to)
+        => TimeRange.Resolve(from, to, TimeProvider.System.GetUtcNow(), DefaultStatsRange, MaxStatsRange);
+
     /// <summary>
     /// Trims the extra row fetched to probe for a next page, and derives the cursor from whether that
     /// row was actually there.
@@ -74,19 +83,22 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     {
         bool hasMore = rows.Count > top;
         IReadOnlyList<RunRow> page = rows.Take(top).ToList();
-        long? nextCursor = hasMore && page.Count > 0 ? page[^1].Id : null;
+        long? nextKey = hasMore && page.Count > 0 ? page[^1].Id : null;
 
-        return new RunListResponse(page.Select(MapRun).ToList(), nextCursor);
+        return new RunListResponse { Items = page.Select(MapRun).ToList(), NextCursor = PageRequest.KeyCursor(nextKey) };
     }
 
-    public async Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    public async Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct)
     {
         _logger.LogDebug("Querying stats for workflow RefId: '{WorkflowRefId}'", workflowRefId);
 
-        if (toUtc <= fromUtc)
+        var range = ResolveStatsRange(from, to);
+        if (range.IsFailure)
         {
-            return Result<WorkflowStatsResponse>.Failure(Error.Validation("INVALID_WINDOW", "'to' must be later than 'from'."));
+            return Result<WorkflowStatsResponse>.Failure(range.Error);
         }
+
+        var (fromUtc, toUtc) = range.Value;
 
         var ensureWorkflowResult = await EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
@@ -123,14 +135,17 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
             timings.Select(t => new NodeTimingDto(t.NodeId, t.Executions, t.FailureCount, t.AvgDurationMs, t.MaxDurationMs)).ToList()));
     }
 
-    public async Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    public async Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct)
     {
         _logger.LogDebug("Querying stats for WorkspaceId: {WorkspaceId}", workspaceId);
 
-        if (toUtc <= fromUtc)
+        var range = ResolveStatsRange(from, to);
+        if (range.IsFailure)
         {
-            return Result<WorkspaceStatsResponse>.Failure(Error.Validation("INVALID_WINDOW", "'to' must be later than 'from'."));
+            return Result<WorkspaceStatsResponse>.Failure(range.Error);
         }
+
+        var (fromUtc, toUtc) = range.Value;
 
         // No per-workflow ownership check to repeat: both procedures scope by workspace themselves,
         // so a workflow from another workspace cannot appear in the result at all.

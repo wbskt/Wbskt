@@ -14,11 +14,11 @@ public interface IWorkflowRunQueryService
     /// How a workflow is doing over a window: outcome counts, duration percentiles, success rate, the
     /// error codes that actually occur, and which nodes are slowest.
     /// </summary>
-    Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+    Task<Result<WorkflowStatsResponse>> GetStatsAsync(int workspaceId, Guid workflowRefId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct);
 
     /// <summary>The same question across a whole workspace, plus the per-workflow rows that keep the
     /// run-weighted rate honest.</summary>
-    Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+    Task<Result<WorkspaceStatsResponse>> GetWorkspaceStatsAsync(int workspaceId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken ct);
     Task<Result<RunDetailDto>> GetDetailAsync(int workspaceId, Guid runRefId, CancellationToken ct);
 
     /// <summary>

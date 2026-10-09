@@ -33,6 +33,8 @@
 *   **Controller Implementation:** Always use `async Task<T>` as the return type for controller actions. Use `async Task` (no generic) for actions that perform an operation without returning data. Success responses return the data directly.
 *   **No Anonymous Returns:** Controller actions must never return `object` or anonymous types. Always define a named record or class for the response.
 *   **DTO Preference:** For `POST` or `PUT` actions, prefer using DTOs/Records for input parameters instead of long lists of primitive arguments.
+*   **Lists:** A list action binds `[FromQuery] PageRequest page` and returns `Page<T>` (`items`, `nextCursor`, and `totalCount` only where counting is cheap). A list ordered by an id pages by key (`page.AfterKey()`, cursor from `PageRequest.KeyCursor`); one that needs a total pages by offset (`page.Offset()`, then `MapPage`). Never take `skip`/`take`/`top` parameters of your own, and never return a bare array or a list type named for its items.
+*   **Time Ranges:** `from`/`to` are `DateTimeOffset?` and are resolved with `TimeRange.Resolve`, which owns the defaults, the 1970 floor and the longest span. Each endpoint passes only its own default and cap.
 
 ---
 

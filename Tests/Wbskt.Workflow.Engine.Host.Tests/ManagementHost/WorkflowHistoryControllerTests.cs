@@ -31,12 +31,12 @@ public sealed class WorkflowHistoryControllerTests
         ]);
         var controller = new WorkflowHistoryController(new WorkflowHistoryService(runQueryService.Object, historyProvider.Object));
 
-        var response = await controller.List(WorkspaceId, runRefId, 100, 2, CancellationToken.None);
+        var response = await controller.List(WorkspaceId, runRefId, new PageRequest { Cursor = "100", Limit = 2 }, CancellationToken.None);
 
         var okResult = Assert.IsType<OkObjectResult>(response.Result);
         var historyListResponse = Assert.IsType<HistoryListResponse>(okResult.Value);
-        Assert.Equal(2, historyListResponse.Events.Count);
-        Assert.Equal(101, historyListResponse.Events[0].HistoryEventId);
+        Assert.Equal(2, historyListResponse.Items.Count());
+        Assert.Equal(101, historyListResponse.Items.First().HistoryEventId);
         Assert.Null(historyListResponse.NextCursor);
     }
 
@@ -54,12 +54,12 @@ public sealed class WorkflowHistoryControllerTests
         ]);
         var controller = new WorkflowHistoryController(new WorkflowHistoryService(runQueryService.Object, historyProvider.Object));
 
-        var response = await controller.List(WorkspaceId, runRefId, 0, 2, CancellationToken.None);
+        var response = await controller.List(WorkspaceId, runRefId, new PageRequest { Limit = 2 }, CancellationToken.None);
 
         var okResult = Assert.IsType<OkObjectResult>(response.Result);
         var historyListResponse = Assert.IsType<HistoryListResponse>(okResult.Value);
-        Assert.Equal(2, historyListResponse.Events.Count);
-        Assert.Equal(202, historyListResponse.NextCursor);
+        Assert.Equal(2, historyListResponse.Items.Count());
+        Assert.Equal("202", historyListResponse.NextCursor);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class WorkflowHistoryControllerTests
             .ReturnsAsync(Result<int>.Failure(Error.NotFound("RUN_NOT_FOUND", "Run not found.")));
         var controller = new WorkflowHistoryController(new WorkflowHistoryService(runQueryService.Object, historyProvider.Object));
 
-        var response = await controller.List(WorkspaceId, runRefId, 0, 200, CancellationToken.None);
+        var response = await controller.List(WorkspaceId, runRefId, new PageRequest(), CancellationToken.None);
         
         Assert.IsType<NotFoundObjectResult>(response.Result);
     }

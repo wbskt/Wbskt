@@ -37,7 +37,7 @@ public sealed class EventLogPagingTests(ServicesFixture fixture)
 
         // Walk it two at a time.
         var walked = new List<string>();
-        long? cursor = null;
+        string? cursor = null;
         for (var pages = 0; pages < 50; pages++)
         {
             var page = await PageAsync(token, workspace, take: 2, cursor);
@@ -57,6 +57,7 @@ public sealed class EventLogPagingTests(ServicesFixture fixture)
         walked.Should().EndWith(all[^1], "the walk reaches the oldest entry");
     }
 
+    // The parameters lists took before the paging contract still work for one release.
     [SkippableFact]
     public async Task EVL_PAGE_02_PageSizes_AreClampedNotPassedThrough()
     {
@@ -64,16 +65,16 @@ public sealed class EventLogPagingTests(ServicesFixture fixture)
 
         var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
 
-        foreach (var query in new[] { "clients?skip=-5&take=2147483647", "registration-policies?take=-1", "event-logs?take=2147483647", "runs?top=2147483647" })
+        foreach (var query in new[] { "clients?skip=-5&take=2147483647", "registration-policies?take=-1", "event-logs?take=2147483647", "runs?top=2147483647", "clients?limit=2147483647", "runs?limit=-1" })
         {
             var response = await fixture.SendAsync(HttpMethod.Get, ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/{query}"), token);
             response.StatusCode.Should().Be(HttpStatusCode.OK, query);
         }
     }
 
-    private async Task<(string[] Entries, long? NextCursor)> PageAsync(string token, Guid workspace, int take, long? cursor)
+    private async Task<(string[] Entries, string? NextCursor)> PageAsync(string token, Guid workspace, int take, string? cursor)
     {
-        var url = ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/event-logs?take={take}{(cursor is null ? "" : $"&cursor={cursor}")}");
+        var url = ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/event-logs?limit={take}{(cursor is null ? "" : $"&cursor={Uri.EscapeDataString(cursor)}")}");
         var response = await fixture.SendAsync(HttpMethod.Get, url, token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.Contains("X-Total-Count").Should().BeFalse("the log no longer counts every row per page");
@@ -83,6 +84,6 @@ public sealed class EventLogPagingTests(ServicesFixture fixture)
             .Select(e => $"{e.GetProperty("eventName").GetString()}|{e.GetProperty("eventData").GetString()}|{e.GetProperty("createdAtUtc").GetString()}")
             .ToArray();
         var next = body.RootElement.GetProperty("nextCursor");
-        return (entries, next.ValueKind == JsonValueKind.Null ? null : next.GetInt64());
+        return (entries, next.ValueKind == JsonValueKind.Null ? null : next.GetString());
     }
 }
