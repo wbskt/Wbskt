@@ -104,7 +104,7 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();
         builder.Services.AddScoped<IClientCommandService, ClientCommandService>();
         builder.Services.AddScoped<IWorkflowHistoryService, WorkflowHistoryService>();
-        builder.Services.AddScoped<ISharedVariableService, SharedVariableService>();
+        builder.Services.AddScopedWithQueuedEvents<ISharedVariableService, SharedVariableService>();
         builder.Services.AddSingleton<WorkflowValidator>();
         
         builder.Services.AddTransient<AuthenticationForwardingHandler>();
