@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 
 namespace Wbskt.Management.Host.Models;
 
@@ -47,7 +48,17 @@ public sealed class EventLogQuery
     /// <summary>Named groups of events, repeated or comma-separated: people, clients, policies, workflows, security.</summary>
     public string[]? Group { get; set; }
 
+    /// <summary>Only entries of exactly this criticality.</summary>
     public EventCriticality? Criticality { get; set; }
+
+    /// <summary>Only entries of this criticality or worse: <c>Warning</c> is warnings and errors.</summary>
+    public EventCriticality? MinCriticality { get; set; }
+
+    /// <summary>Where entries came from, repeated or comma-separated: Console, Api, Device, Workflow, System.</summary>
+    public string[]? Source { get; set; }
+
+    /// <summary>Only entries newer than this id: the newest one a live view already shows.</summary>
+    public long? SinceId { get; set; }
 
     /// <summary>Only this policy's entries. A policy this workspace does not own is a 404.</summary>
     public Guid? PolicyRefId { get; set; }
@@ -80,6 +91,9 @@ public sealed record EventLogFilter(
     IReadOnlyCollection<string>? EventNames = null,
     IReadOnlyCollection<string>? ExcludeEventNames = null,
     EventCriticality? Criticality = null,
+    EventCriticality? MinCriticality = null,
+    IReadOnlyCollection<EventSource>? Sources = null,
+    long? SinceId = null,
     int? PolicyId = null,
     int? ClientId = null,
     Guid? WorkflowRefId = null,
@@ -88,9 +102,19 @@ public sealed record EventLogFilter(
     DateTime? ToUtc = null,
     string? Search = null);
 
-/// <summary>How many entries each group of events has in a window, for the audit log's view counts.</summary>
+/// <summary>
+/// How many entries a window holds, for the audit log's view counts: each group, each event, each
+/// person who caused one (by user reference), and each source. All but the groups leave device
+/// traffic out when the summary is asked to.
+/// </summary>
 public sealed record EventLogSummaryResponse(
     DateTime FromUtc,
     DateTime ToUtc,
     long Total,
-    IReadOnlyDictionary<string, long> Groups);
+    IReadOnlyDictionary<string, long> Groups,
+    IReadOnlyDictionary<string, long>? Events = null,
+    IReadOnlyDictionary<Guid, long>? People = null,
+    IReadOnlyDictionary<string, long>? Sources = null);
+
+/// <summary>How many entries of one event one user caused from one source, as the database counts them.</summary>
+public sealed record EventLogCount(string EventName, Guid? UserRefId, EventSource? Source, long Count);

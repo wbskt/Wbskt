@@ -55,6 +55,9 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 p.Add("@EventNames", SqlDbType.NVarChar, -1).Value = Names(filter.EventNames);
                 p.Add("@ExcludeEventNames", SqlDbType.NVarChar, -1).Value = Names(filter.ExcludeEventNames);
                 p.AddWithValue("@Criticality", (object?)filter.Criticality ?? DBNull.Value);
+                p.AddWithValue("@MinCriticality", (object?)filter.MinCriticality ?? DBNull.Value);
+                p.Add("@Sources", SqlDbType.NVarChar, 100).Value = filter.Sources is null ? DBNull.Value : string.Join(',', filter.Sources.Select(s => (byte)s));
+                p.AddWithValue("@SinceId", (object?)filter.SinceId ?? DBNull.Value);
                 p.AddWithValue("@PolicyId", (object?)filter.PolicyId ?? DBNull.Value);
                 p.AddWithValue("@ClientId", (object?)filter.ClientId ?? DBNull.Value);
                 p.AddWithValue("@WorkflowRefId", (object?)filter.WorkflowRefId ?? DBNull.Value);
@@ -69,9 +72,9 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             cancellationToken);
     }
 
-    public async Task<IReadOnlyDictionary<string, long>> CountByEventAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<EventLogCount>> CountAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
     {
-        var rows = await ExecuteCollectionAsync(
+        return await ExecuteCollectionAsync(
             "dbo.EventLog_CountBy_Workspace",
             p =>
             {
@@ -79,10 +82,12 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 p.Add("@FromUtc", SqlDbType.DateTime2).Value = fromUtc;
                 p.Add("@ToUtc", SqlDbType.DateTime2).Value = toUtc;
             },
-            reader => (Name: reader.GetString(reader.GetOrdinal("EventName")), Count: reader.GetInt64(reader.GetOrdinal("EntryCount"))),
+            reader => new EventLogCount(
+                reader.GetString(reader.GetOrdinal("EventName")),
+                reader.IsDBNull(reader.GetOrdinal("UserRefId")) ? null : reader.GetGuid(reader.GetOrdinal("UserRefId")),
+                reader.IsDBNull(reader.GetOrdinal("Source")) ? null : (EventSource)reader.GetByte(reader.GetOrdinal("Source")),
+                reader.GetInt64(reader.GetOrdinal("EntryCount"))),
             cancellationToken);
-
-        return rows.ToDictionary(r => r.Name, r => r.Count, StringComparer.Ordinal);
     }
 
     private static object Names(IReadOnlyCollection<string>? names) => names is null ? DBNull.Value : string.Join(',', names);

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
+using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
@@ -175,14 +176,14 @@ public sealed class EventLogQueryTests
     public async Task The_summary_folds_events_into_groups_and_leaves_traffic_out_of_the_total_when_asked()
     {
         var traffic = DeviceTrafficAttribute.EventNames[0];
-        _provider.Setup(p => p.CountByEventAsync(WorkspaceId, Now.UtcDateTime.AddDays(-7), Now.UtcDateTime, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<string, long>
-            {
-                ["PolicyCreatedEvent"] = 2,
-                ["ClientDeletedEvent"] = 3,
-                ["UserLoginFailedEvent"] = 4,
-                [traffic] = 100
-            });
+        _provider.Setup(p => p.CountAsync(WorkspaceId, Now.UtcDateTime.AddDays(-7), Now.UtcDateTime, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new EventLogCount("PolicyCreatedEvent", null, null, 2),
+                new EventLogCount("ClientDeletedEvent", null, null, 3),
+                new EventLogCount("UserLoginFailedEvent", null, null, 4),
+                new EventLogCount(traffic, null, null, 100)
+            ]);
         var service = CreateService();
 
         var withTraffic = await service.GetSummaryAsync(WorkspaceId, null, null, EventLogTraffic.Include);
@@ -198,6 +199,58 @@ public sealed class EventLogQueryTests
             ["workflows"] = 0,
             ["security"] = 7
         });
+    }
+
+    [Fact]
+    public async Task The_summary_counts_each_event_person_and_source_without_traffic_when_asked()
+    {
+        var pika = Guid.NewGuid();
+        var amal = Guid.NewGuid();
+        var traffic = DeviceTrafficAttribute.EventNames[0];
+        _provider.Setup(p => p.CountAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new EventLogCount("ClientRenamedEvent", pika, EventSource.Console, 5),
+                new EventLogCount("ClientRenamedEvent", amal, EventSource.Api, 2),
+                new EventLogCount("UserLoginFailedEvent", null, null, 3),
+                new EventLogCount("PolicyRegistrationAttemptedOnDisabledEvent", null, EventSource.System, 1),
+                new EventLogCount(traffic, pika, EventSource.Console, 40)
+            ]);
+
+        var summary = (await CreateService().GetSummaryAsync(WorkspaceId, null, null, EventLogTraffic.Exclude)).Value;
+
+        summary.Events.Should().Equal(new Dictionary<string, long>
+        {
+            ["ClientRenamedEvent"] = 7,
+            ["UserLoginFailedEvent"] = 3,
+            ["PolicyRegistrationAttemptedOnDisabledEvent"] = 1
+        });
+        summary.People.Should().Equal(new Dictionary<Guid, long> { [pika] = 5, [amal] = 2 });
+        summary.Sources.Should().Equal(new Dictionary<string, long> { ["Console"] = 5, ["Api"] = 2, ["System"] = 1 });
+    }
+
+    [Fact]
+    public async Task Sources_severity_floor_and_a_live_cursor_reach_the_database()
+    {
+        var service = CreateService();
+
+        await service.GetLogsAsync(WorkspaceId,
+            new EventLogQuery { Source = ["console,system", " Workflow "], MinCriticality = EventCriticality.Warning, SinceId = 884213 }, null, 50);
+
+        _asked!.Sources.Should().BeEquivalentTo([EventSource.Console, EventSource.System, EventSource.Workflow]);
+        _asked.MinCriticality.Should().Be(EventCriticality.Warning);
+        _asked.SinceId.Should().Be(884213);
+    }
+
+    [Theory]
+    [InlineData("billing")]
+    [InlineData("3")]
+    public async Task An_unknown_source_is_a_bad_request(string source)
+    {
+        var result = await CreateService().GetLogsAsync(WorkspaceId, new EventLogQuery { Source = [source] }, null, 50);
+
+        result.Error.Code.Should().Be("EVENT_LOG_SOURCE_UNKNOWN");
+        result.Error.Type.Should().Be(ErrorType.Validation);
     }
 }
 

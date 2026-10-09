@@ -67,6 +67,22 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
         inverted.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(inverted)).Should().Be("TIME_RANGE_INVALID");
 
+        var fromApi = await ItemsAsync(workspace, "event-logs?source=Api&limit=200", token);
+        fromApi.Select(Event).Should().Contain("ClientRenamedEvent");
+        fromApi.Should().OnlyContain(e => e.GetProperty("source").GetString() == "Api");
+
+        var warnings = await ItemsAsync(workspace, "event-logs?minCriticality=Warning&limit=200", token);
+        warnings.Should().OnlyContain(e => e.GetProperty("criticality").GetRawText() != "\"Info\"" && e.GetProperty("criticality").GetRawText() != "0");
+
+        // A live view asks for what is newer than the newest entry it shows.
+        var since = all[1].GetProperty("id").GetInt64();
+        var newer = await ItemsAsync(workspace, $"event-logs?sinceId={since}&limit=200", token);
+        newer.Select(e => e.GetProperty("id").GetInt64()).Should().Contain(all[0].GetProperty("id").GetInt64()).And.OnlyContain(id => id > since);
+
+        var badSource = await Send(workspace, "event-logs?source=Robot", token);
+        badSource.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(badSource)).Should().Be("EVENT_LOG_SOURCE_UNKNOWN");
+
         var unknown = await Send(workspace, "event-logs?group=billing", token);
         unknown.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(unknown)).Should().Be("EVENT_LOG_GROUP_UNKNOWN");
@@ -78,6 +94,9 @@ public sealed class EventLogFilterTests(ServicesFixture fixture)
             var groups = summary.RootElement.GetProperty("groups");
             groups.GetProperty("policies").GetInt64().Should().BeGreaterThanOrEqualTo(1);
             groups.GetProperty("clients").GetInt64().Should().BeGreaterThanOrEqualTo(1);
+            summary.RootElement.GetProperty("events").GetProperty("ClientRenamedEvent").GetInt64().Should().BeGreaterThanOrEqualTo(1);
+            summary.RootElement.GetProperty("sources").GetProperty("Api").GetInt64().Should().BeGreaterThanOrEqualTo(1);
+            summary.RootElement.GetProperty("people").EnumerateObject().Should().NotBeEmpty("the rename was made by a signed-in user");
             // At least: the device's disconnect can land after the list above was read.
             summary.RootElement.GetProperty("total").GetInt64().Should().BeGreaterThanOrEqualTo(withoutTraffic.Count, "the window holds every entry this new workspace has");
         }
