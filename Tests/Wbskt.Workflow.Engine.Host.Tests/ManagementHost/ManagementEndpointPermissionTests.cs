@@ -38,6 +38,8 @@ public sealed class ManagementEndpointPermissionTests
         ["ClientsController.GetComms"] = PermissionNames.LogsRead,
         ["ClientsController.Ping"] = PermissionNames.ClientsPing,
         ["EventLogsController.GetLogs"] = PermissionNames.LogsRead,
+        ["EventLogsController.GetSummary"] = PermissionNames.LogsRead,
+        ["EventLogsController.GetCsv"] = PermissionNames.LogsRead,
         ["MessageTemplatesController.GetAll"] = PermissionNames.TemplatesRead,
         ["MessageTemplatesController.Create"] = PermissionNames.TemplatesManage,
         ["MessageTemplatesController.Update"] = PermissionNames.TemplatesManage,

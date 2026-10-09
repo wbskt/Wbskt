@@ -114,15 +114,15 @@ public sealed class WorkspaceOwnershipTests
         var clients = new Mock<IClientQueryService>();
         clients.Setup(s => s.EnsureClientInWorkspaceAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<int>.Failure(WorkspaceOwnership.ClientNotFound));
-        var logs = new Mock<IEventLogService>();
-        var controller = new EventLogsController(logs.Object, policies.Object, clients.Object);
+        var provider = new Mock<IEventProvider>();
+        var service = new EventLogService(provider.Object, policies.Object, clients.Object, NullLogger<EventLogService>.Instance);
 
-        var byPolicy = await controller.GetLogs(WorkspaceId, null, null, policyRef, null, new PageRequest());
-        var byClient = await controller.GetLogs(WorkspaceId, null, null, null, clientRef, new PageRequest());
+        var byPolicy = await service.GetLogsAsync(WorkspaceId, new EventLogQuery { PolicyRefId = policyRef }, null, 50);
+        var byClient = await service.GetLogsAsync(WorkspaceId, new EventLogQuery { ClientRefId = clientRef }, null, 50);
 
-        Assert.IsType<NotFoundObjectResult>(byPolicy.Result);
-        Assert.IsType<NotFoundObjectResult>(byClient.Result);
-        logs.VerifyNoOtherCalls();
+        byPolicy.Error.Should().Be(WorkspaceOwnership.PolicyNotFound);
+        byClient.Error.Should().Be(WorkspaceOwnership.ClientNotFound);
+        provider.VerifyNoOtherCalls();
     }
 
     private static RegistrationPolicy Policy(int workspaceId)
