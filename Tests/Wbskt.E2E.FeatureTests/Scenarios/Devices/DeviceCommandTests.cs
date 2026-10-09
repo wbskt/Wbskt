@@ -77,5 +77,5 @@ public sealed class DeviceCommandTests(ServicesFixture fixture)
     }
 
     private static string Command(Guid workspace, Guid clientRef) =>
-        ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/clients/{clientRef}/command");
+        ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/clients/{clientRef}/commands");
 }

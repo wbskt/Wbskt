@@ -64,7 +64,7 @@ public sealed class DeviceHostTests(ServicesFixture fixture)
         (await DevicesLoginAsync(device.ClientRefId, device.Secret)).IsSuccessStatusCode.Should().BeFalse("a pending device cannot sign in");
         (await DetailAsync(workspace, device.ClientRefId, token)).GetProperty("status").GetInt32().Should().Be(Pending);
 
-        (await ManagementAsync(HttpMethod.Patch, workspace, $"clients/{device.ClientRefId}/status", token, new { Status = Registered }))
+        (await ManagementAsync(HttpMethod.Patch, workspace, $"clients/{device.ClientRefId}", token, new { Status = Registered }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var login = await DevicesLoginAsync(device.ClientRefId, device.Secret);
@@ -82,7 +82,7 @@ public sealed class DeviceHostTests(ServicesFixture fixture)
         var (clientRef, secret) = await fixture.RegisterClientAsync(pin, "to-revoke");
         (await DevicesLoginAsync(clientRef, secret)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await ManagementAsync(HttpMethod.Patch, workspace, $"clients/{clientRef}/status", token, new { Status = Revoked }))
+        (await ManagementAsync(HttpMethod.Patch, workspace, $"clients/{clientRef}", token, new { Status = Revoked }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var login = await DevicesLoginAsync(clientRef, secret);
@@ -123,7 +123,7 @@ public sealed class DeviceHostTests(ServicesFixture fixture)
         {
             (HttpMethod.Get, $"/api/workspaces/{workspace}/clients"),
             (HttpMethod.Get, $"/api/workspaces/{workspace}/clients/{clientRef}"),
-            (HttpMethod.Patch, $"/api/workspaces/{workspace}/clients/{clientRef}/status"),
+            (HttpMethod.Patch, $"/api/workspaces/{workspace}/clients/{clientRef}"),
             (HttpMethod.Get, $"/api/workspaces/{workspace}/registration-policies/{policyRef}"),
             (HttpMethod.Get, $"/api/workspaces/{workspace}/workflows"),
             (HttpMethod.Post, "/hubs/notifications/negotiate?negotiateVersion=1")

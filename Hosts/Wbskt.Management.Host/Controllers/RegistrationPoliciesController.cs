@@ -55,14 +55,14 @@ public class RegistrationPoliciesController : ApiControllerBase
     /// Retrieves a specific registration policy by its reference ID.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="refId">The unique reference ID of the policy.</param>
+    /// <param name="policyRef">The unique reference ID of the policy.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The registration policy details.</returns>
-    [HttpGet("{refId:guid}")]
+    [HttpGet("{policyRef:guid}")]
     [RequiresPermission(PermissionNames.PoliciesRead)]
-    public async Task<ActionResult<RegistrationPolicyResponse>> Get([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegistrationPolicyResponse>> Get([FromWorkspace] int workspaceId, Guid policyRef, CancellationToken cancellationToken)
     {
-        var result = await _policyService.FindInWorkspaceAsync(workspaceId, refId, cancellationToken);
+        var result = await _policyService.FindInWorkspaceAsync(workspaceId, policyRef, cancellationToken);
         if (result.IsFailure)
         {
             return MapResult(Result<RegistrationPolicyResponse>.Failure(result.Error));
@@ -100,15 +100,15 @@ public class RegistrationPoliciesController : ApiControllerBase
     /// Updates an existing registration policy's details.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="refId">The unique reference ID of the policy to update.</param>
+    /// <param name="policyRef">The unique reference ID of the policy to update.</param>
     /// <param name="request">The updated policy details (Name, AutoApproval, IsEnabled).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPatch("{refId:guid}")]
+    [HttpPatch("{policyRef:guid}")]
     [RequiresPermission(PermissionNames.PoliciesManage)]
-    public async Task<IActionResult> Update([FromWorkspace] int workspaceId, Guid refId, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update([FromWorkspace] int workspaceId, Guid policyRef, UpdateRegistrationPolicyRequest request, CancellationToken cancellationToken)
     {
-        var result = await _policyService.UpdateAsync(workspaceId, refId, request, cancellationToken);
+        var result = await _policyService.UpdateAsync(workspaceId, policyRef, request, cancellationToken);
         return MapResult(result);
     }
 
@@ -117,14 +117,14 @@ public class RegistrationPoliciesController : ApiControllerBase
     /// keep working; the PIN is only used to register.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="refId">The unique reference ID of the policy.</param>
+    /// <param name="policyRef">The unique reference ID of the policy.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The policy with its new PIN.</returns>
-    [HttpPost("{refId:guid}/rotate-pin")]
+    [HttpPost("{policyRef:guid}/rotate-pin")]
     [RequiresPermission(PermissionNames.PoliciesManage)]
-    public async Task<ActionResult<RegistrationPolicyResponse>> RotatePin([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegistrationPolicyResponse>> RotatePin([FromWorkspace] int workspaceId, Guid policyRef, CancellationToken cancellationToken)
     {
-        var result = await _policyService.RotatePinAsync(workspaceId, refId, cancellationToken);
+        var result = await _policyService.RotatePinAsync(workspaceId, policyRef, cancellationToken);
         return MapResult(result);
     }
 
@@ -132,14 +132,14 @@ public class RegistrationPoliciesController : ApiControllerBase
     /// Disables a specific registration policy.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="refId">The unique reference ID of the policy to disable.</param>
+    /// <param name="policyRef">The unique reference ID of the policy to disable.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    [HttpPost("{refId:guid}/disable")]
+    [HttpPost("{policyRef:guid}/disable")]
     [RequiresPermission(PermissionNames.PoliciesManage)]
-    public async Task<IActionResult> Disable([FromWorkspace] int workspaceId, Guid refId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Disable([FromWorkspace] int workspaceId, Guid policyRef, CancellationToken cancellationToken)
     {
-        var result = await _policyService.DisableAsync(workspaceId, refId, cancellationToken);
+        var result = await _policyService.DisableAsync(workspaceId, policyRef, cancellationToken);
         return MapResult(result);
     }
 

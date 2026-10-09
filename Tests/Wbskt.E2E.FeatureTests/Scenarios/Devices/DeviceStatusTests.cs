@@ -138,7 +138,7 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspace);
         var (clientRef, _) = await fixture.RegisterClientAsync(pin, "old-name");
 
-        (await Send(HttpMethod.Patch, workspace, $"clients/{clientRef}/name", token, new { Name = "  greenhouse  " }))
+        (await Send(HttpMethod.Patch, workspace, $"clients/{clientRef}", token, new { Name = "  greenhouse  " }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         (await DetailAsync(workspace, clientRef, token)).GetProperty("name").GetString().Should().Be("greenhouse");
@@ -154,8 +154,8 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         var (clientRef, _) = await fixture.RegisterClientAsync(pin, "keeps-its-name");
         var (strangerToken, strangerWorkspace) = await fixture.RegisterAndLoginUserAsync();
 
-        var missing = await Send(HttpMethod.Patch, strangerWorkspace, $"clients/{Guid.NewGuid()}/name", strangerToken, new { Name = "x" });
-        var foreign = await Send(HttpMethod.Patch, strangerWorkspace, $"clients/{clientRef}/name", strangerToken, new { Name = "x" });
+        var missing = await Send(HttpMethod.Patch, strangerWorkspace, $"clients/{Guid.NewGuid()}", strangerToken, new { Name = "x" });
+        var foreign = await Send(HttpMethod.Patch, strangerWorkspace, $"clients/{clientRef}", strangerToken, new { Name = "x" });
 
         missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ServicesFixture.ReadErrorCodeAsync(missing)).Should().Be("CLIENT_NOT_FOUND");
@@ -267,7 +267,7 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
     }
 
     private Task<HttpResponseMessage> SetStatusAsync(Guid workspace, Guid clientRef, string token, int status) =>
-        Send(HttpMethod.Patch, workspace, $"clients/{clientRef}/status", token, new { Status = status });
+        Send(HttpMethod.Patch, workspace, $"clients/{clientRef}", token, new { Status = status });
 
     private async Task<BulkDto> BulkAsync(Guid workspace, string token, Guid[] clientRefs, int status)
     {

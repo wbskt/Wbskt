@@ -36,6 +36,18 @@
 *   **Lists:** A list action binds `[FromQuery] PageRequest page` and returns `Page<T>` (`items`, `nextCursor`, and `totalCount` only where counting is cheap). A list ordered by an id pages by key (`page.AfterKey()`, cursor from `PageRequest.KeyCursor`); one that needs a total pages by offset (`page.Offset()`, then `MapPage`). Never take `skip`/`take`/`top` parameters of your own, and never return a bare array or a list type named for its items.
 *   **Time Ranges:** `from`/`to` are `DateTimeOffset?` and are resolved with `TimeRange.Resolve`, which owns the defaults, the 1970 floor and the longest span. Each endpoint passes only its own default and cap.
 
+### API Style (routes and models)
+Every new or changed endpoint follows these rules; `Docs/API.Endpoints.md` is the catalogue.
+
+*   **Collections are plural nouns**, scoped under the workspace: `/api/workspaces/{workspaceRef}/clients`, `/registration-policies`, `/workflows/{workflowRef}/runs`. A sub-collection is plural too (`/commands`, `/signals/{signalName}`, `/versions`).
+*   **Field changes PATCH the resource.** `PATCH /clients/{clientRef}` with `{ name?, status? }`: a field left out stays as it is, and a request naming no field is a 400. Do not add one route per field (`/name`, `/status`). `PUT` replaces a whole thing (a template, a client's tag set).
+*   **Operations POST to a verb.** Something that is not a field write, that has side effects of its own or that cannot be undone by writing a field back is `POST /{resource}/{action}`: `/disable`, `/deprecate`, `/reinstate`, `/rotate-pin`, `/rotate-secret`, `/ping`, `/cancel`. Creating something in a collection is `POST` to the collection (`/commands`, `/runs`).
+*   **Filters are query parameters, not nested routes.** `GET /clients?policyRefId=` rather than `/clients/policy/{policyRef}`. A filter is named after the field it matches in the response (`policyRefId`, `clientRefId`, `status`, `tag`). A filter naming another workspace's resource is a 404, never an empty page.
+*   **Route parameters name the resource they identify:** `{clientRef}`, `{policyRef}`, `{templateRef}`, `{workflowRef}`, `{runRef}`, and `{signalName}` / `{variableName}` for names. Never a bare `{refId}`, `{id}` or `{name}`. The C# parameter has the same name.
+*   **Lists** take `PageRequest` and return `Page<T>` (see Method Signatures above). Time ranges are `from`/`to` through `TimeRange`.
+*   **Models live in model files, never at the bottom of a controller.** Request and response records go in the host's `Models/`; a contract that another project needs (the E2E tests, an SDK, the engine) goes in `Wbskt.Management.Models`. A response never exposes an internal `Id`.
+*   **Renaming a route keeps the old one for one release** as a second action marked `[ApiExplorerSettings(IgnoreApi = true)]` that calls the new one, with a `Deprecated:` summary naming its replacement and an E2E test that it still answers. Note it in `Docs/API.Endpoints.md` and in the console issue, and remove it in the release after.
+
 ---
 
 ## 3. Data Access & Persistence

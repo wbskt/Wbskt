@@ -152,7 +152,7 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
         (await ListAsync(workspace, token, "?tag=attic")).Should().BeEmpty();
         (await ListAsync(workspace, token, "")).Should().HaveCount(3);
 
-        var inPolicy = await ListAsync(workspace, token, "", $"clients/policy/{policyRef}?tag=garage");
+        var inPolicy = await ListAsync(workspace, token, "", $"clients?policyRefId={policyRef}&tag=garage");
         inPolicy.Select(c => c.ClientRefId).Should().Equal(garage);
     }
 
@@ -164,7 +164,7 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
         var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
         var (policyRef, _) = await fixture.CreatePolicyAsync(token, workspace);
 
-        foreach (var path in new[] { "clients?tag=a,b", $"clients/policy/{policyRef}?tag=a,b" })
+        foreach (var path in new[] { "clients?tag=a,b", $"clients?policyRefId={policyRef}&tag=a,b" })
         {
             var response = await Send(HttpMethod.Get, workspace, path, token);
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest, path);

@@ -64,11 +64,11 @@ public sealed class WorkflowsController : ApiControllerBase
         return MapPage(result, offset.Value);
     }
 
-    [HttpGet("{refId:guid}")]
+    [HttpGet("{workflowRef:guid}")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<WorkflowDefinitionDto>> GetCurrent([FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<ActionResult<WorkflowDefinitionDto>> GetCurrent([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.GetCurrentAsync(workspaceId, refId, ct);
+        var result = await _service.GetCurrentAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -76,11 +76,11 @@ public sealed class WorkflowsController : ApiControllerBase
     /// Every published version of a workflow, newest first, with how many runs each has had. Fetch a
     /// version's definition with <c>GET versions/{version}</c>.
     /// </summary>
-    [HttpGet("{refId:guid}/versions")]
+    [HttpGet("{workflowRef:guid}/versions")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<Page<WorkflowVersionDto>>> GetVersions([FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<ActionResult<Page<WorkflowVersionDto>>> GetVersions([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.GetVersionsAsync(workspaceId, refId, ct);
+        var result = await _service.GetVersionsAsync(workspaceId, workflowRef, ct);
         if (result.IsFailure)
         {
             return MapResult(Result<Page<WorkflowVersionDto>>.Failure(result.Error));
@@ -89,19 +89,19 @@ public sealed class WorkflowsController : ApiControllerBase
         return Ok(new Page<WorkflowVersionDto> { Items = result.Value });
     }
 
-    [HttpGet("{refId:guid}/versions/{version:int}")]
+    [HttpGet("{workflowRef:guid}/versions/{version:int}")]
     [RequiresPermission(PermissionNames.WorkflowsRead)]
-    public async Task<ActionResult<WorkflowDefinitionDto>> GetVersion([FromWorkspace] int workspaceId, Guid refId, int version, CancellationToken ct)
+    public async Task<ActionResult<WorkflowDefinitionDto>> GetVersion([FromWorkspace] int workspaceId, Guid workflowRef, int version, CancellationToken ct)
     {
-        var result = await _service.GetVersionAsync(workspaceId, refId, version, ct);
+        var result = await _service.GetVersionAsync(workspaceId, workflowRef, version, ct);
         return MapResult(result);
     }
 
-    [HttpPost("{refId:guid}/deprecate")]
+    [HttpPost("{workflowRef:guid}/deprecate")]
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
-    public async Task<IActionResult> Deprecate([FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<IActionResult> Deprecate([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.DeprecateAsync(workspaceId, refId, ct);
+        var result = await _service.DeprecateAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -110,11 +110,11 @@ public sealed class WorkflowsController : ApiControllerBase
     /// triggers stop, runs still going are cancelled, and its RefId cannot be published again. Past
     /// runs and the versions they ran stay readable by run.
     /// </summary>
-    [HttpDelete("{refId:guid}")]
+    [HttpDelete("{workflowRef:guid}")]
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
-    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
-        var result = await _service.DeleteAsync(workspaceId, refId, ct);
+        var result = await _service.DeleteAsync(workspaceId, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -122,13 +122,13 @@ public sealed class WorkflowsController : ApiControllerBase
     /// Undoes a deprecate. Deprecating deregisters the workflow's triggers, so this re-registers them
     /// (schedules are re-seeded from their cron) as well as flipping the flag back.
     /// </summary>
-    [HttpPost("{refId:guid}/reinstate")]
+    [HttpPost("{workflowRef:guid}/reinstate")]
     [RequiresPermission(PermissionNames.WorkflowsDelete)]
-    public async Task<IActionResult> Reinstate(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid refId, CancellationToken ct)
+    public async Task<IActionResult> Reinstate(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, CancellationToken ct)
     {
         // Bringing a workflow back into service is an authoring change, so it takes the same
         // permission as deprecating it.
-        var result = await _service.ReinstateAsync(workspaceId, workspaceRef, refId, ct);
+        var result = await _service.ReinstateAsync(workspaceId, workspaceRef, workflowRef, ct);
         return MapResult(result);
     }
 
@@ -136,19 +136,19 @@ public sealed class WorkflowsController : ApiControllerBase
     /// Republishes an earlier version as a new version. The history stays append-only, so the runs of
     /// every version keep pointing at the definition they actually ran.
     /// </summary>
-    [HttpPost("{refId:guid}/rollback/{version:int}")]
+    [HttpPost("{workflowRef:guid}/rollback/{version:int}")]
     [RequiresPermission(PermissionNames.WorkflowsCreate)]
-    public async Task<ActionResult<WorkflowPublishResponse>> Rollback(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid refId, int version, CancellationToken ct)
+    public async Task<ActionResult<WorkflowPublishResponse>> Rollback(Guid workspaceRef, [FromWorkspace] int workspaceId, Guid workflowRef, int version, CancellationToken ct)
     {
-        var result = await _service.RollbackAsync(workspaceId, workspaceRef, refId, version, ct);
+        var result = await _service.RollbackAsync(workspaceId, workspaceRef, workflowRef, version, ct);
         return MapResult(result);
     }
 
-    [HttpPost("{refId:guid}/runs")]
+    [HttpPost("{workflowRef:guid}/runs")]
     [RequiresPermission(PermissionNames.WorkflowsExecute)]
-    public async Task<ActionResult<StartRunResponse>> StartManualRun([FromWorkspace] int workspaceId, Guid refId, [FromBody] StartRunRequest request, CancellationToken ct)
+    public async Task<ActionResult<StartRunResponse>> StartManualRun([FromWorkspace] int workspaceId, Guid workflowRef, [FromBody] StartRunRequest request, CancellationToken ct)
     {
-        var result = await _runService.StartManualAsync(workspaceId, refId, request, ct);
+        var result = await _runService.StartManualAsync(workspaceId, workflowRef, request, ct);
         if (result.IsFailure)
         {
             return MapError(result.Error);
