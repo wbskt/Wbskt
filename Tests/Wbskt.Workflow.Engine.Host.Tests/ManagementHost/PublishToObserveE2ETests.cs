@@ -94,20 +94,16 @@ public sealed class PublishToObserveE2ETests
             return Task.FromResult(row);
         }
 
-        public Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
+        public Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
         {
             WorkflowDefinitionRow? row = _rows.GetValueOrDefault(refId)?.SingleOrDefault(candidate => candidate.Version == version);
-            return row is null
-                ? Task.FromException<WorkflowDefinitionRow>(new NotFoundException("missing"))
-                : Task.FromResult(row);
+            return Task.FromResult(row);
         }
 
-        public Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct)
+        public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct)
         {
             WorkflowDefinitionRow? row = _rows.GetValueOrDefault(refId)?.SingleOrDefault(candidate => candidate.IsEnabled);
-            return row is null
-                ? Task.FromException<WorkflowDefinitionRow>(new NotFoundException("missing"))
-                : Task.FromResult(row);
+            return Task.FromResult(row);
         }
 
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)

@@ -208,7 +208,7 @@ public sealed class InboundEventToRunStartE2ETests
 
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult<int?>(Runs.Values.Single(run => run.RefId == refId).Id);
         Task<RunRow> IRunProvider.GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(Runs[runId]);
-        Task<RunRow> IRunProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Runs.Values.Single(run => run.RefId == refId));
+        Task<RunRow?> IRunProvider.FindRowByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Runs.Values.Single(run => run.RefId == refId));
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct) => throw new NotSupportedException();
@@ -356,8 +356,8 @@ public sealed class InboundEventToRunStartE2ETests
 
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult<int?>(_definition.WorkflowRefId == refId && _definition.Version == version ? 42 : null);
         public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct) => Task.FromResult(ToRow(id));
-        public Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult(ToRow(42));
-        public Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(ToRow(42));
+        public Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => Task.FromResult(ToRow(42));
+        public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(ToRow(42));
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);

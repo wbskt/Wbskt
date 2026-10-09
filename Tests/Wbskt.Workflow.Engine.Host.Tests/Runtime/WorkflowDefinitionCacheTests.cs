@@ -125,12 +125,12 @@ public sealed class WorkflowDefinitionCacheTests
             return Task.FromResult(_rows.Dequeue());
         }
 
-        public Task<WorkflowDefinitionRow> GetByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
+        public Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct)
         {
             throw new NotSupportedException();
         }
 
-        public Task<WorkflowDefinitionRow> GetCurrentByRefIdAsync(Guid refId, CancellationToken ct)
+        public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct)
         {
             throw new NotSupportedException();
         }
