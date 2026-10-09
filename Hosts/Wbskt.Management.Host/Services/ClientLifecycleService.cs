@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
@@ -182,7 +183,10 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         await _clientProvider.UpdateNameAsync(id, name, cancellationToken);
         _logger.LogInformation("Successfully renamed client ID {ClientId} from '{OldName}' to '{NewName}'", id, oldName, name);
 
-        await _eventBus.PublishAsync(new ClientRenamedEvent(client.RefId, client.Id, client.WorkspaceId, oldName, name), cancellationToken);
+        await _eventBus.PublishAsync(new ClientRenamedEvent(client.RefId, client.Id, client.WorkspaceId, oldName, name)
+        {
+            Changes = [new FieldChange("name", oldName, name)]
+        }, cancellationToken);
 
         return Result.Success();
     }

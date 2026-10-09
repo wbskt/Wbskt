@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Primitives;
+using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.InboundAdapters;
@@ -24,7 +26,7 @@ public sealed class DeviceCommandPublisherTests
 
         var publisher = new DeviceCommandPublisher(bus.Object, CreateMapper(ClientId), NullLogger<DeviceCommandPublisher>.Instance);
 
-        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", CancellationToken.None);
+        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
         Assert.NotNull(captured);
         Assert.Equal(ClientRefId, captured!.ClientRefId);
@@ -46,11 +48,30 @@ public sealed class DeviceCommandPublisherTests
 
         var publisher = new DeviceCommandPublisher(bus.Object, CreateMapper(0), NullLogger<DeviceCommandPublisher>.Instance);
 
-        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", CancellationToken.None);
+        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
         Assert.NotNull(captured);
         Assert.Equal(ClientRefId, captured!.ClientRefId);
         Assert.Equal(0, captured.ClientId);
+    }
+
+    [Fact]
+    public async Task A_command_a_run_sends_names_the_workflow_and_run_as_its_actor()
+    {
+        var bus = new Mock<IEventBus>();
+        ClientCommandEvent? captured = null;
+        bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<ClientCommandEvent, CancellationToken>((e, _) => captured = e)
+            .Returns(Task.CompletedTask);
+        var publisher = new DeviceCommandPublisher(bus.Object, CreateMapper(ClientId), NullLogger<DeviceCommandPublisher>.Instance);
+        var sender = new CommandSender(Guid.NewGuid(), Guid.NewGuid());
+
+        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", sender, CancellationToken.None);
+
+        Assert.Equal(EventSource.Workflow, captured!.ActorSource);
+        Assert.Equal(sender.WorkflowRefId, captured.ActorWorkflowRefId);
+        Assert.Equal(sender.RunRefId, captured.ActorRunRefId);
+        Assert.Null(captured.ActorUserId);
     }
 
     private static IReferenceMapper CreateMapper(int clientId)

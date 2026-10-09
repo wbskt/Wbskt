@@ -25,6 +25,9 @@ public static class EventLogTable
         dt.Columns.Add("UserId",        typeof(int));
         dt.Columns.Add("UserRefId",     typeof(Guid));
         dt.Columns.Add("MessageId",     typeof(Guid));
+        dt.Columns.Add("Source",        typeof(byte));
+        dt.Columns.Add("ClientAddress", typeof(string));
+        dt.Columns.Add("UserAgent",     typeof(string));
 
         foreach (var item in batch)
         {
@@ -41,7 +44,10 @@ public static class EventLogTable
                 (object?)item.WorkflowRefId ?? DBNull.Value,
                 (object?)item.UserId       ?? DBNull.Value,
                 (object?)item.UserRefId    ?? DBNull.Value,
-                (object?)item.MessageId    ?? DBNull.Value);
+                (object?)item.MessageId    ?? DBNull.Value,
+                item.Source is { } source ? (byte)source : DBNull.Value,
+                (object?)item.ClientAddress ?? DBNull.Value,
+                (object?)item.UserAgent    ?? DBNull.Value);
         }
 
         return dt;

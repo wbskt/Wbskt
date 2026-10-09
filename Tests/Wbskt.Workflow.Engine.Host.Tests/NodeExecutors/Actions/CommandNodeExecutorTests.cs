@@ -16,7 +16,7 @@ public sealed class CommandNodeExecutorTests
     public async Task ExecuteAsync_publishes_command_and_returns_Continue()
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var executor = new CommandNodeExecutor(publisher.Object);
@@ -32,6 +32,7 @@ public sealed class CommandNodeExecutorTests
             WorkspaceId,
             "OpenVent",
             payload.GetRawText(),
+            It.Is<CommandSender?>(sender => sender == new CommandSender(ctx.Branch.WorkflowDefinitionRefId, ctx.Branch.RunRefId)),
             CancellationToken.None), Times.Once);
     }
 
@@ -39,7 +40,7 @@ public sealed class CommandNodeExecutorTests
     public async Task ExecuteAsync_returns_Continue_with_empty_patch()
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var executor = new CommandNodeExecutor(publisher.Object);
@@ -51,7 +52,7 @@ public sealed class CommandNodeExecutorTests
         Assert.Empty(cont.LocalStatePatch);
         publisher.Verify(p => p.PublishCommandAsync(
             It.IsAny<Guid>(), It.IsAny<int>(),
-            "CloseVent", "{}", CancellationToken.None), Times.Once);
+            "CloseVent", "{}", It.IsAny<CommandSender?>(), CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -66,7 +67,7 @@ public sealed class CommandNodeExecutorTests
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal("CLIENT_MESSAGE_NO_TARGET", fail.ErrorCode);
         Assert.False(fail.Retryable);
-        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -74,7 +75,7 @@ public sealed class CommandNodeExecutorTests
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
         var exception = new InvalidOperationException("broker down");
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(exception);
 
         var executor = new CommandNodeExecutor(publisher.Object);

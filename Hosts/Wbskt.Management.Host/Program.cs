@@ -159,6 +159,7 @@ public static class Program
 
         // Commands and pings go straight to the bus, so they are attributed to their sender there; the
         // queued bus does the same for everything else (see ActorStampingEventBus).
+        builder.Services.AddSingleton<IRequestOriginAccessor, HttpRequestOriginAccessor>();
         builder.Services.AddActorStampingEventBus();
 
         // Registered after the bus so it stops first, and can still send what is queued while stopping.

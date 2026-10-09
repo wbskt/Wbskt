@@ -1,4 +1,6 @@
+using System.Globalization;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
@@ -112,15 +114,29 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
 
         var updatedPolicy = await _provider.FindByIdAsync(policyId, cancellationToken)
             ?? throw new InvalidOperationException($"Policy {policyId} vanished during its own update.");
-        var events = new List<BaseEvent>(2);
-        if (!updatedPolicy.Name.Equals(request.Name))
+
+        // Compared against the policy as it was before the update. Comparing the re-read row with the
+        // request (as this once did) found them equal every time, so no change was ever announced.
+        var events = new List<BaseEvent>(3);
+        if (!string.Equals(policy.Name, updatedPolicy.Name, StringComparison.Ordinal))
         {
-            events.Add(new PolicyNameUpdatedEvent(updatedPolicy.RefId, updatedPolicy.Id, workspaceId, request.Name, updatedPolicy.Name));
+            events.Add(new PolicyNameUpdatedEvent(updatedPolicy.RefId, updatedPolicy.Id, workspaceId, updatedPolicy.Name, policy.Name)
+            {
+                Changes = [new FieldChange("name", policy.Name, updatedPolicy.Name)]
+            });
         }
 
-        if (updatedPolicy.MaxClients != request.MaxClients)
+        if (policy.MaxClients != updatedPolicy.MaxClients)
         {
-            events.Add(new PolicyClientLimitUpdatedEvent(updatedPolicy.RefId, updatedPolicy.Id, workspaceId, request.MaxClients, updatedPolicy.MaxClients));
+            events.Add(new PolicyClientLimitUpdatedEvent(updatedPolicy.RefId, updatedPolicy.Id, workspaceId, updatedPolicy.MaxClients, policy.MaxClients)
+            {
+                Changes = [new FieldChange("clientLimit", policy.MaxClients?.ToString(CultureInfo.InvariantCulture), updatedPolicy.MaxClients?.ToString(CultureInfo.InvariantCulture))]
+            });
+        }
+
+        if (policy.IsEnabled && !updatedPolicy.IsEnabled)
+        {
+            events.Add(Disabled(policy, workspaceId));
         }
 
         await Parallel.ForEachAsync(events, cancellationToken, async (@event, token) => await _eventBus.PublishAsync(@event, token));
@@ -167,7 +183,7 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         await _provider.DisableAsync(workspaceId, policyId, cancellationToken);
         _logger.LogInformation("Registration policy ID {PolicyId} disabled successfully", policyId);
 
-        await _eventBus.PublishAsync(new PolicyDisabledEvent(policy.RefId, policy.Id, workspaceId), cancellationToken);
+        await _eventBus.PublishAsync(Disabled(policy, workspaceId), cancellationToken);
 
         return Result.Success();
     }
@@ -186,4 +202,8 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
             p.ConnectedClientCount
         );
     }
+
+    /// <summary>The event for disabling <paramref name="before"/>, the policy as it was until now.</summary>
+    private static PolicyDisabledEvent Disabled(RegistrationPolicy before, int workspaceId) =>
+        new(before.RefId, before.Id, workspaceId) { Changes = [new FieldChange("enabled", before.IsEnabled ? "true" : "false", "false")] };
 }

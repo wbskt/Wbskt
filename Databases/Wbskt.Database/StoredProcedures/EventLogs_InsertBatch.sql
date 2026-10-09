@@ -10,8 +10,8 @@ BEGIN
         SELECT *, ROW_NUMBER() OVER (PARTITION BY MessageId ORDER BY (SELECT NULL)) AS Copy
         FROM @Logs
     )
-    INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId, MessageId)
-    SELECT i.EventId, i.EventData, i.CreatedAtUtc, i.WorkspaceId, i.PolicyRefId, i.ClientRefId, i.WorkflowRefId, i.PolicyId, i.ClientId, i.WorkflowId, i.UserId, i.UserRefId, i.MessageId
+    INSERT INTO dbo.EventLogs (EventId, EventData, CreatedAt, WorkspaceId, PolicyRefId, ClientRefId, WorkflowRefId, PolicyId, ClientId, WorkflowId, UserId, UserRefId, MessageId, Source, ClientAddress, UserAgent)
+    SELECT i.EventId, i.EventData, i.CreatedAtUtc, i.WorkspaceId, i.PolicyRefId, i.ClientRefId, i.WorkflowRefId, i.PolicyId, i.ClientId, i.WorkflowId, i.UserId, i.UserRefId, i.MessageId, i.Source, i.ClientAddress, i.UserAgent
     FROM Incoming i
     WHERE i.MessageId IS NULL
        OR (i.Copy = 1 AND NOT EXISTS (SELECT 1 FROM dbo.EventLogs e WHERE e.MessageId = i.MessageId));

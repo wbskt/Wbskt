@@ -1,3 +1,5 @@
+using Wbskt.Events.Abstractions;
+
 namespace Wbskt.Management.Host.Models;
 
 public sealed record EventLogEntry(
@@ -14,5 +16,10 @@ public sealed record EventLogEntry(
     int? UserId = null,
     Guid? UserRefId = null,
     // The bus message it came from; the insert skips one already logged, so a redelivery is harmless.
-    Guid? MessageId = null
+    Guid? MessageId = null,
+    EventSource? Source = null,
+    // The caller's address and user agent, for an action taken through the API. Kept on the row, not
+    // in EventData, so retention and privacy rules for them apply in one place.
+    string? ClientAddress = null,
+    string? UserAgent = null
 );

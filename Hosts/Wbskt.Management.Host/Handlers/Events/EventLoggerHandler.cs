@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
@@ -81,13 +82,9 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
             var bodyBytes = context.ReceiveContext.GetBody();
             using var doc = JsonDocument.Parse(bodyBytes);
             
-            var eventData = doc.RootElement.TryGetProperty("message", out var messageNode) 
-                ? messageNode.GetRawText() 
-                : (doc.RootElement.TryGetProperty("Message", out messageNode) ? messageNode.GetRawText() : Encoding.UTF8.GetString(bodyBytes));
-
-            JsonElement targetNode = doc.RootElement.TryGetProperty("message", out var msgNode) 
-                ? msgNode 
-                : (doc.RootElement.TryGetProperty("Message", out msgNode) ? msgNode : doc.RootElement);
+            bool enveloped = doc.RootElement.TryGetProperty("message", out var messageNode) || doc.RootElement.TryGetProperty("Message", out messageNode);
+            JsonElement targetNode = enveloped ? messageNode : doc.RootElement;
+            var eventData = enveloped ? messageNode.GetRawText() : Encoding.UTF8.GetString(bodyBytes);
 
             int? workspaceId = (@event as IWorkspaceContext)?.WorkspaceId ?? GetIntProperty(targetNode, "workspaceId");
             int? policyId = (@event as IPolicyContext)?.PolicyId ?? GetIntProperty(targetNode, "policyId");
@@ -95,7 +92,9 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
             int? clientId = (@event as IClientContext)?.ClientId ?? GetIntProperty(targetNode, "clientId");
             Guid? clientRefId = (@event as IClientContext)?.ClientRefId ?? GetGuidProperty(targetNode, "clientRefId");
             int? workflowId = (@event as IWorkflowContext)?.WorkflowId ?? GetIntProperty(targetNode, "workflowId");
-            Guid? workflowRefId = (@event as IWorkflowContext)?.WorkflowRefId ?? GetGuidProperty(targetNode, "workflowRefId");
+            // A command a run sent is about the client, but the workflow is who sent it: log it under both.
+            Guid? workflowRefId = (@event as IWorkflowContext)?.WorkflowRefId ?? GetGuidProperty(targetNode, "workflowRefId")
+                ?? GetGuidProperty(targetNode, "actorWorkflowRefId");
             // The user an event is about (a login) or, for an action taken through the API, who took it.
             // The message is consumed as IEvent, so on the bus these casts miss and the values come from
             // the JSON body, where an actor event names its user actorUserId/actorUserRefId.
@@ -103,6 +102,16 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
                 ?? GetIntProperty(targetNode, "userId") ?? GetIntProperty(targetNode, "actorUserId");
             Guid? userRefId = (@event as IUserContext)?.UserRefId ?? (@event as IActorContext)?.ActorUserRefId
                 ?? GetGuidProperty(targetNode, "userRefId") ?? GetGuidProperty(targetNode, "actorUserRefId");
+
+            // Where it came from, and the caller's address and user agent: the last two move to their
+            // own columns and out of the stored event, so retention and privacy rules apply in one place.
+            var source = EventSources.Derive(eventName, GetSourceProperty(targetNode), userId is not null);
+            var clientAddress = GetStringProperty(targetNode, "clientAddress");
+            var userAgent = GetStringProperty(targetNode, "userAgent");
+            if (clientAddress is not null || userAgent is not null)
+            {
+                eventData = Without(eventData, "clientAddress", "userAgent");
+            }
 
             var entry = new EventLogEntry(
                 eventId, 
@@ -117,7 +126,10 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
                 WorkflowRefId: workflowRefId,
                 UserId: userId,
                 UserRefId: userRefId,
-                MessageId: context.MessageId
+                MessageId: context.MessageId,
+                Source: source,
+                ClientAddress: Truncate(clientAddress, 45),
+                UserAgent: Truncate(userAgent, 256)
             );
 
             return entry;
@@ -161,4 +173,50 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
         }
         return null;
     }
+
+    private static string? GetStringProperty(JsonElement element, string name)
+    {
+        return TryGetProperty(element, name, out var prop) && prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
+    }
+
+    /// <summary>The stamped source, written as its number or its name depending on the serializer.</summary>
+    private static EventSource? GetSourceProperty(JsonElement element)
+    {
+        if (!TryGetProperty(element, "actorSource", out var prop))
+        {
+            return null;
+        }
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetByte(out var number) && Enum.IsDefined((EventSource)number) => (EventSource)number,
+            JsonValueKind.String when Enum.TryParse<EventSource>(prop.GetString(), ignoreCase: true, out var named) => named,
+            _ => null
+        };
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement prop)
+    {
+        prop = default;
+        return element.ValueKind == JsonValueKind.Object
+            && (element.TryGetProperty(name, out prop) || element.TryGetProperty(char.ToUpperInvariant(name[0]) + name[1..], out prop));
+    }
+
+    /// <summary>The event's JSON without the named properties, matched in either casing.</summary>
+    internal static string Without(string json, params string[] names)
+    {
+        if (JsonNode.Parse(json) is not JsonObject body)
+        {
+            return json;
+        }
+
+        foreach (var key in body.Select(p => p.Key).Where(k => names.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList())
+        {
+            body.Remove(key);
+        }
+
+        return body.ToJsonString();
+    }
+
+    private static string? Truncate(string? value, int length) => value is { Length: var n } && n > length ? value[..length] : value;
 }

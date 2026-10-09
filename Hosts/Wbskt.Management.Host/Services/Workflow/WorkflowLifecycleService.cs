@@ -1,6 +1,8 @@
+using System.Globalization;
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
@@ -138,7 +140,10 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         }
 
         _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, inserted.Version);
-        await _eventBus.PublishAsync(new WorkflowPublishedEvent(inserted.RefId, inserted.Id, workspaceId, inserted.Version, request.Name, restoredFromVersion), ct);
+        await _eventBus.PublishAsync(new WorkflowPublishedEvent(inserted.RefId, inserted.Id, workspaceId, inserted.Version, request.Name, restoredFromVersion)
+        {
+            Changes = [new FieldChange("version", existing?.Version.ToString(CultureInfo.InvariantCulture), inserted.Version.ToString(CultureInfo.InvariantCulture))]
+        }, ct);
         return Result<WorkflowPublishResponse>.Success(new WorkflowPublishResponse(inserted.RefId, inserted.Version, "Published"));
     }
 
@@ -176,7 +181,10 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         }
 
         _logger.LogInformation("Workflow '{RefId}' version {Version} reinstated", refId, row.Version);
-        await _eventBus.PublishAsync(new WorkflowReinstatedEvent(row.RefId, row.Id, workspaceId, row.Version), ct);
+        await _eventBus.PublishAsync(new WorkflowReinstatedEvent(row.RefId, row.Id, workspaceId, row.Version)
+        {
+            Changes = [new FieldChange("status", "Deprecated", "Published")]
+        }, ct);
         return Result.Success();
     }
 
@@ -327,7 +335,10 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         await _triggerRegistrationService.OnDeprecatedAsync(row.Id, ct);
 
         _logger.LogInformation("Workflow '{RefId}' deprecated successfully", refId);
-        await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(row.RefId, row.Id, workspaceId, row.Version), ct);
+        await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(row.RefId, row.Id, workspaceId, row.Version)
+        {
+            Changes = [new FieldChange("status", row.IsEnabled ? "Published" : "Deprecated", "Deprecated")]
+        }, ct);
         return Result.Success();
     }
 
