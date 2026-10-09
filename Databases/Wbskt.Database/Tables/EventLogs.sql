@@ -55,7 +55,7 @@ CREATE INDEX IX_EventLogs_WorkspaceId_Id
 GO
 -- A time window of one workspace: the audit log's view counts (dbo.EventLog_CountBy_Workspace).
 CREATE INDEX IX_EventLogs_WorkspaceId_CreatedAt
-    ON dbo.EventLogs (WorkspaceId, CreatedAt) INCLUDE (EventId);
+    ON dbo.EventLogs (WorkspaceId, CreatedAt) INCLUDE (EventId, UserRefId, Source);
 GO
 CREATE INDEX IX_EventLogs_ClientId_Id
     ON dbo.EventLogs (ClientId, Id DESC) INCLUDE (EventId, WorkspaceId) WHERE ClientId IS NOT NULL;

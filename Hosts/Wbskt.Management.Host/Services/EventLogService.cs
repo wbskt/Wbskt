@@ -1,4 +1,5 @@
 using Wbskt.Events;
+using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
@@ -110,7 +111,7 @@ internal sealed class EventLogService : IEventLogService
             return Result<EventLogSummaryResponse>.Failure(range.Error);
         }
 
-        var counts = await _eventProvider.CountByEventAsync(workspaceId, range.Value.FromUtc, range.Value.ToUtc, cancellationToken);
+        var counts = await _eventProvider.CountAsync(workspaceId, range.Value.FromUtc, range.Value.ToUtc, cancellationToken);
         return Result<EventLogSummaryResponse>.Success(Summarize(counts, range.Value, traffic));
     }
 
@@ -134,6 +135,12 @@ internal sealed class EventLogService : IEventLogService
         if (search is { Length: > MaxSearchLength })
         {
             return Result<EventLogFilter?>.Failure(Error.Validation("EVENT_LOG_SEARCH_TOO_LONG", $"'q' can be at most {MaxSearchLength} characters."));
+        }
+
+        var sources = ResolveSources(query);
+        if (sources.IsFailure)
+        {
+            return Result<EventLogFilter?>.Failure(sources.Error);
         }
 
         var include = ResolveIncludedEvents(query);
@@ -194,6 +201,9 @@ internal sealed class EventLogService : IEventLogService
             EventNames: included,
             ExcludeEventNames: excluded,
             Criticality: query.Criticality,
+            MinCriticality: query.MinCriticality,
+            Sources: sources.Value,
+            SinceId: query.SinceId,
             PolicyId: policyId,
             ClientId: clientId,
             WorkflowRefId: query.WorkflowRefId,
@@ -223,24 +233,59 @@ internal sealed class EventLogService : IEventLogService
         return Result<IReadOnlyCollection<string>?>.Success(events);
     }
 
+    /// <summary>The sources the query names, or null when it names none; an unknown one is <c>EVENT_LOG_SOURCE_UNKNOWN</c>.</summary>
+    private static Result<IReadOnlyCollection<EventSource>?> ResolveSources(EventLogQuery query)
+    {
+        var names = Split(query.Source);
+        if (names.Count == 0)
+        {
+            return Result<IReadOnlyCollection<EventSource>?>.Success(null);
+        }
+
+        var sources = new List<EventSource>();
+        foreach (var name in names)
+        {
+            // Names only: a number would also parse, and would name a source that does not exist.
+            if (!Enum.TryParse<EventSource>(name, ignoreCase: true, out var source) || !Enum.IsDefined(source) || char.IsDigit(name[0]))
+            {
+                return Result<IReadOnlyCollection<EventSource>?>.Failure(Error.Validation(
+                    "EVENT_LOG_SOURCE_UNKNOWN", $"Unknown source '{name}'. Use one of: {string.Join(", ", Enum.GetNames<EventSource>())}."));
+            }
+
+            sources.Add(source);
+        }
+
+        return Result<IReadOnlyCollection<EventSource>?>.Success(sources.Distinct().ToList());
+    }
+
     /// <summary>Repeated and comma-separated values alike, trimmed, blanks dropped.</summary>
     private static List<string> Split(string[]? values) =>
         values is null
             ? []
             : values.SelectMany(v => v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).Distinct(StringComparer.Ordinal).ToList();
 
-    internal static EventLogSummaryResponse Summarize(IReadOnlyDictionary<string, long> counts, TimeRange range, EventLogTraffic traffic)
+    internal static EventLogSummaryResponse Summarize(IReadOnlyCollection<EventLogCount> counts, TimeRange range, EventLogTraffic traffic)
     {
+        var byEvent = counts
+            .GroupBy(c => c.EventName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Sum(c => c.Count), StringComparer.Ordinal);
         var groups = EventLogGroups.All.ToDictionary(
             g => g.Key,
-            g => g.Value.Sum(name => counts.GetValueOrDefault(name)),
+            g => g.Value.Sum(name => byEvent.GetValueOrDefault(name)),
             StringComparer.Ordinal);
 
-        var total = counts
-            .Where(c => traffic == EventLogTraffic.Include || !DeviceTrafficAttribute.EventNames.Contains(c.Key))
-            .Sum(c => c.Value);
+        var kept = counts
+            .Where(c => traffic == EventLogTraffic.Include || !DeviceTrafficAttribute.EventNames.Contains(c.EventName))
+            .ToList();
 
-        return new EventLogSummaryResponse(range.FromUtc, range.ToUtc, total, groups);
+        return new EventLogSummaryResponse(
+            range.FromUtc,
+            range.ToUtc,
+            kept.Sum(c => c.Count),
+            groups,
+            Events: kept.GroupBy(c => c.EventName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Sum(c => c.Count), StringComparer.Ordinal),
+            People: kept.Where(c => c.UserRefId is not null).GroupBy(c => c.UserRefId!.Value).ToDictionary(g => g.Key, g => g.Sum(c => c.Count)),
+            Sources: kept.Where(c => c.Source is not null).GroupBy(c => c.Source!.Value.ToString()).ToDictionary(g => g.Key, g => g.Sum(c => c.Count), StringComparer.Ordinal));
     }
 
     /// <summary>Trims the probe row; the cursor is the last row shown, and only when the probe found more.</summary>
