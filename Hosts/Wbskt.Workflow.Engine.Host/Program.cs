@@ -59,6 +59,7 @@ public static class Program
         // tests/Management) - last registration wins, so the engine host resolves the real one.
         builder.Services.AddSingleton<ILeaseHolder, SqlLeaseHolder>();
         builder.Services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
+        builder.Services.AddScoped<IClientCommandTargetProvider, ClientCommandTargetProvider>();
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
         builder.Services.AddScoped<IClientPresenceCheckProvider, ClientPresenceCheckProvider>();
         builder.Services.AddScoped<ClientPresenceParker>();
