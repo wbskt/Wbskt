@@ -174,10 +174,6 @@ internal sealed class RunFinalizer : IRunFinalizer
 
     private static string GetSeverity(string terminalStatus)
     {
-        return terminalStatus switch
-        {
-            "Failed" or "PartiallyFailed" or "OutOfCredits" => "Warn",
-            _ => "Info"
-        };
+        return RunStatus.IsFailure(terminalStatus) ? "Warn" : "Info";
     }
 }
