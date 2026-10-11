@@ -3,9 +3,9 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
-using Wbskt.Primitives;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
+using Wbskt.Workflow.Engine.Host.Providers;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.InboundAdapters;
 
@@ -14,71 +14,84 @@ public sealed class DeviceCommandPublisherTests
     private static readonly Guid ClientRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private const int ClientId = 7;
     private const int WorkspaceId = 3;
+    private const string HostId = "socket-a";
 
-    [Fact]
-    public async Task PublishCommandAsync_resolves_client_id_and_publishes_event()
+    private readonly Mock<IEventBus> _bus = new();
+    private ClientCommandEvent? _sent;
+    private ClientCommandFailedEvent? _failed;
+
+    public DeviceCommandPublisherTests()
     {
-        var bus = new Mock<IEventBus>();
-        ClientCommandEvent? captured = null;
-        bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
-            .Callback<ClientCommandEvent, CancellationToken>((e, _) => captured = e)
+        _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<ClientCommandEvent, CancellationToken>((e, _) => _sent = e)
             .Returns(Task.CompletedTask);
+        _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandFailedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<ClientCommandFailedEvent, CancellationToken>((e, _) => _failed = e)
+            .Returns(Task.CompletedTask);
+    }
 
-        var publisher = new DeviceCommandPublisher(bus.Object, CreateMapper(ClientId), NullLogger<DeviceCommandPublisher>.Instance);
-
-        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
-
-        Assert.NotNull(captured);
-        Assert.Equal(ClientRefId, captured!.ClientRefId);
-        Assert.Equal(ClientId, captured.ClientId);
-        Assert.Equal(WorkspaceId, captured.WorkspaceId);
-        Assert.Equal("OpenVent", captured.Type);
-        Assert.Equal("{}", captured.Payload);
-        Assert.NotNull(captured.CommandId);
+    private DeviceCommandPublisher Publisher(ClientCommandTarget? target)
+    {
+        var targets = new Mock<IClientCommandTargetProvider>();
+        targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(target);
+        return new DeviceCommandPublisher(_bus.Object, targets.Object, NullLogger<DeviceCommandPublisher>.Instance);
     }
 
     [Fact]
-    public async Task PublishCommandAsync_still_publishes_when_client_ref_is_unknown()
+    public async Task A_command_to_a_connected_device_is_addressed_to_the_host_holding_it()
     {
-        var bus = new Mock<IEventBus>();
-        ClientCommandEvent? captured = null;
-        bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
-            .Callback<ClientCommandEvent, CancellationToken>((e, _) => captured = e)
-            .Returns(Task.CompletedTask);
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
+            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
-        var publisher = new DeviceCommandPublisher(bus.Object, CreateMapper(0), NullLogger<DeviceCommandPublisher>.Instance);
+        Assert.NotNull(_sent);
+        Assert.Equal(ClientRefId, _sent!.ClientRefId);
+        Assert.Equal(ClientId, _sent.ClientId);
+        Assert.Equal(WorkspaceId, _sent.WorkspaceId);
+        Assert.Equal("OpenVent", _sent.Type);
+        Assert.Equal("{}", _sent.Payload);
+        Assert.Equal(HostId, _sent.TargetHostId);
+        Assert.NotNull(_sent.CommandId);
+        Assert.Null(_failed);
+    }
 
-        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+    [Fact]
+    public async Task A_command_to_an_offline_device_is_reported_as_failed_at_once()
+    {
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
+            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
-        Assert.NotNull(captured);
-        Assert.Equal(ClientRefId, captured!.ClientRefId);
-        Assert.Equal(0, captured.ClientId);
+        Assert.Null(_sent);
+        Assert.NotNull(_failed);
+        Assert.Equal(ClientCommandFailedEvent.NotConnectedReason, _failed!.Reason);
+        Assert.Equal(ClientId, _failed.ClientId);
+        Assert.Equal("OpenVent", _failed.Type);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_command_to_a_device_that_is_missing_or_in_another_workspace_is_refused(bool otherWorkspace)
+    {
+        var target = otherWorkspace ? new ClientCommandTarget(ClientId, WorkspaceId + 1, true, HostId) : null;
+
+        await Publisher(target).PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+
+        Assert.Null(_sent);
+        Assert.Equal(DeviceCommandPublisher.UnknownClientReason, _failed!.Reason);
+        Assert.Equal(0, _failed.ClientId);
     }
 
     [Fact]
     public async Task A_command_a_run_sends_names_the_workflow_and_run_as_its_actor()
     {
-        var bus = new Mock<IEventBus>();
-        ClientCommandEvent? captured = null;
-        bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
-            .Callback<ClientCommandEvent, CancellationToken>((e, _) => captured = e)
-            .Returns(Task.CompletedTask);
-        var publisher = new DeviceCommandPublisher(bus.Object, CreateMapper(ClientId), NullLogger<DeviceCommandPublisher>.Instance);
         var sender = new CommandSender(Guid.NewGuid(), Guid.NewGuid());
 
-        await publisher.PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", sender, CancellationToken.None);
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
+            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", sender, CancellationToken.None);
 
-        Assert.Equal(EventSource.Workflow, captured!.ActorSource);
-        Assert.Equal(sender.WorkflowRefId, captured.ActorWorkflowRefId);
-        Assert.Equal(sender.RunRefId, captured.ActorRunRefId);
-        Assert.Null(captured.ActorUserId);
-    }
-
-    private static IReferenceMapper CreateMapper(int clientId)
-    {
-        var mapper = new Mock<IReferenceMapper>();
-        mapper.Setup(m => m.FindIdByRefIdAsync(ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(clientId);
-        return mapper.Object;
+        Assert.Equal(EventSource.Workflow, _sent!.ActorSource);
+        Assert.Equal(sender.WorkflowRefId, _sent.ActorWorkflowRefId);
+        Assert.Equal(sender.RunRefId, _sent.ActorRunRefId);
+        Assert.Null(_sent.ActorUserId);
     }
 }

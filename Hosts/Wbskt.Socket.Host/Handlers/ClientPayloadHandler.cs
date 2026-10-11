@@ -10,7 +10,6 @@ namespace Wbskt.Socket.Host.Handlers;
 
 public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
 {
-    internal const string NotConnectedReason = "The device is not connected.";
     internal const string ExpiredReason = "The command expired before it could be delivered.";
 
     private readonly IConnectionManager _connectionManager;
@@ -31,15 +30,22 @@ public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
     public async Task Consume(ConsumeContext<ClientCommandEvent> context)
     {
         var command = context.Message;
+
+        // Every socket host receives every command, but only the one the sender saw holding the
+        // device acts on it. A device that moved in between gets one answer, "not connected", rather
+        // than a delivery from its new host and a failure from its old one.
+        if (command.TargetHostId != null && command.TargetHostId != _hostId.Value)
+        {
+            return;
+        }
+
         var connection = _connectionManager.GetConnection(command.ClientRefId);
         if (connection?.Socket.State != WebSocketState.Open)
         {
-            // Every socket host receives every command, so a missing connection is only news on the
-            // host the sender saw holding it: that one answers, the rest stay quiet.
-            if (command.TargetHostId == _hostId.Value)
+            if (command.TargetHostId != null)
             {
                 _logger.LogInformation("Command {CommandId} for {ClientRefId} not delivered: the connection has gone.", command.CommandId, command.ClientRefId);
-                await PublishFailedAsync(command, NotConnectedReason, context.CancellationToken);
+                await PublishFailedAsync(command, ClientCommandFailedEvent.NotConnectedReason, context.CancellationToken);
             }
             else
             {

@@ -58,7 +58,7 @@ public sealed class ClientPayloadHandlerTests
         await CreateHandler().Consume(Context(targetHostId: ThisHost));
 
         _bus.Verify(x => x.PublishAsync(
-            It.Is<ClientCommandFailedEvent>(e => e.CommandId == CommandId && e.Reason == ClientPayloadHandler.NotConnectedReason && e.Type == "pump.start"),
+            It.Is<ClientCommandFailedEvent>(e => e.CommandId == CommandId && e.Reason == ClientCommandFailedEvent.NotConnectedReason && e.Type == "pump.start"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -70,6 +70,28 @@ public sealed class ClientPayloadHandlerTests
         await CreateHandler().Consume(Context(targetHostId));
 
         _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_host_the_sender_did_not_address_leaves_the_command_alone_even_holding_the_device()
+    {
+        // The device moved here after the sender looked; its old host answers "not connected".
+        Connected();
+
+        await CreateHandler().Consume(Context(targetHostId: "socket-b"));
+
+        _sentFrames.Should().BeEmpty();
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_command_from_a_sender_that_names_no_host_is_delivered_by_whichever_holds_the_device()
+    {
+        Connected();
+
+        await CreateHandler().Consume(Context(targetHostId: null));
+
+        _sentFrames.Should().ContainSingle();
     }
 
     [Fact]
