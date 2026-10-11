@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Providers;
 
@@ -109,12 +110,12 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
 
     public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
     {
-        return UpdateBranchAsync(branchId, null, "Completed", null, null, ct);
+        return UpdateBranchAsync(branchId, null, BranchStatus.Completed, null, null, ct);
     }
 
     public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct)
     {
-        return UpdateBranchAsync(branchId, null, "Failed", null, lastOutputJson, ct);
+        return UpdateBranchAsync(branchId, null, BranchStatus.Failed, null, lastOutputJson, ct);
     }
 
     private async Task<BranchRow> UpdateBranchAsync(long branchId, Guid? currentNodeId, string status, string? localJson, string? lastOutputJson, CancellationToken ct)

@@ -56,7 +56,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {
-            if (string.Equals(claim.Status, "Failed", StringComparison.Ordinal))
+            if (string.Equals(claim.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
             {
                 // The previous claimant crashed or threw mid-resume without ever delivering the
                 // event (see the catch below), leaving a wedged 'Failed' claim. Reclaim it instead
@@ -122,7 +122,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
             _logger?.LogError(ex, "Failed to resume bookmark for event {EventId}", evt.InboundEventId);
             // Release the claim so a redelivery of this event (or the next PendingTriggerEventDrainer
             // pass) isn't permanently dropped as a duplicate of a resume that never actually happened.
-            string errorJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            string errorJson = JsonSerializer.Serialize(new { ex.Message }, EngineJson.Options);
             await _idempotencyKeyProvider.MarkFailedAsync(claim.KeyValue, errorJson, ct);
             throw;
         }
@@ -130,7 +130,7 @@ internal sealed class BookmarkResumer : IBookmarkResumer
 
     private static string MergeWakePayload(string localJson, IReadOnlyDictionary<string, JsonElement> wakePayload)
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var options = EngineJson.Options;
         Dictionary<string, JsonElement> local = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localJson, options)
             ?? new Dictionary<string, JsonElement>();
         local["__wake"] = JsonSerializer.SerializeToElement(wakePayload, options);

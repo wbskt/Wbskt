@@ -135,7 +135,9 @@ public static class WorkflowServiceCollectionExtensions
         // The token registry is process-wide - the service that reads it is per-scope.
         services.AddSingleton<RunCancellationTokenRegistry>();
         services.AddScoped<IRunCancellationService, RunCancellationService>();
-        // For the cancellation service, which finalizes a run left idle (see RunCancellationService).
+        services.AddScoped<IRunJournal, RunJournal>();
+        services.AddScoped<IBranchTerminator, BranchTerminator>();
+        // For the branch terminator, whose finalizer leads back to it (see BranchTerminator).
         services.AddScoped(sp => new Lazy<IRunFinalizer>(sp.GetRequiredService<IRunFinalizer>));
         services.AddScoped<ICompensationOrchestrator, CompensationOrchestrator>();
         services.AddScoped<IRunCompletedPublisher, NullRunCompletedPublisher>();

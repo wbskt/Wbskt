@@ -9,8 +9,6 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 internal sealed class BranchExecutionPump : BackgroundService
 {
-    private const string ActiveStatus = "Active";
-
     private readonly ChannelRunDispatcher _dispatcher;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BranchExecutionPump> _logger;
@@ -80,10 +78,8 @@ internal sealed class BranchExecutionPump : BackgroundService
     /// Active branches so the reaper won't collect it, and RunRecoveryService re-dispatches it into
     /// the same failure on every restart.
     ///
-    /// Idempotent by design - it only acts when the branch is still Active. Paths that already
-    /// drained their own slot before rethrowing (the EngineFaultException path in BranchLoop marks
-    /// the branch Failed and decrements the counter itself) leave a non-Active row here, so this
-    /// correctly does nothing and cannot double-decrement.
+    /// Idempotent by design - it only acts when the branch is still Active, so a branch that ended
+    /// itself before the exception escaped is left alone and its slot is not released twice.
     ///
     /// Every step is individually guarded: if remediation itself fails the run is left to the
     /// RunReaper rather than taking down the pump's worker.
@@ -96,7 +92,7 @@ internal sealed class BranchExecutionPump : BackgroundService
             var branchProvider = scope.ServiceProvider.GetRequiredService<IBranchProvider>();
 
             BranchRow branch = await branchProvider.GetByIdAsync(request.BranchId, ct);
-            if (!string.Equals(branch.Status, ActiveStatus, StringComparison.Ordinal))
+            if (!string.Equals(branch.Status, BranchStatus.Active, StringComparison.Ordinal))
             {
                 _logger.LogDebug(
                     "Branch {BranchId} is already {Status}; no containment needed.",
@@ -116,14 +112,8 @@ internal sealed class BranchExecutionPump : BackgroundService
 
             await branchProvider.SetFailedAsync(request.BranchId, errorJson, ct);
 
-            var runCountersProvider = scope.ServiceProvider.GetRequiredService<IRunCountersProvider>();
-            int remainingBranches = await runCountersProvider.DecrementActiveBranchesAsync(checked((int)request.RunId), 1, ct);
-
-            if (remainingBranches == 0)
-            {
-                var finalizer = scope.ServiceProvider.GetRequiredService<IRunFinalizer>();
-                await finalizer.FinalizeAsync(request.RunId, ct);
-            }
+            var branchTerminator = scope.ServiceProvider.GetRequiredService<IBranchTerminator>();
+            await branchTerminator.ReleaseAsync(checked((int)request.RunId), 1, ct);
         }
         catch (Exception containmentFailure)
         {

@@ -27,7 +27,7 @@ internal sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
             return;
         }
 
-        InboundEvent? evt = JsonSerializer.Deserialize<InboundEvent>(row.InboundEventJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        InboundEvent? evt = JsonSerializer.Deserialize<InboundEvent>(row.InboundEventJson, EngineJson.Options);
         if (evt is null)
         {
             throw new InvalidOperationException("Pending trigger event payload could not be deserialized.");

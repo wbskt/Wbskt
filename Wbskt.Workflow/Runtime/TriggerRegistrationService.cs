@@ -33,7 +33,7 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
     public async Task OnPublishedAsync(int workflowDefinitionId, Guid workspaceRef, CancellationToken ct)
     {
         WorkflowDefinitionRow definitionRow = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
-        WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(definitionRow.DefinitionJson, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        WorkflowDefinition definition = JsonSerializer.Deserialize<WorkflowDefinition>(definitionRow.DefinitionJson, EngineJson.Options)
             ?? throw new InvalidOperationException($"Workflow definition {workflowDefinitionId} could not be deserialized.");
 
         // Registering replaces whatever this version already had, so a retried or repeated

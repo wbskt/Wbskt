@@ -174,7 +174,7 @@ public sealed class RunFinalizerTests
             Publisher = new RecordingRunCompletedPublisher();
             BookmarkProvider = new RecordingBookmarkProvider();
             CompletionHook = new NoOpCompletionHook();
-            Finalizer = new RunFinalizer(RunProvider, BranchProvider, HistoryProvider, Drainer, Publisher, BookmarkProvider, CompletionHook, new FixedClock(), new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), Mock.Of<IWorkflowDefinitionCache>());
+            Finalizer = new RunFinalizer(RunProvider, BranchProvider, new RunJournal(HistoryProvider, new FixedClock()), Drainer, Publisher, BookmarkProvider, CompletionHook, new FixedClock(), new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), Mock.Of<IWorkflowDefinitionCache>());
         }
 
         public RecordingRunProvider RunProvider { get; }

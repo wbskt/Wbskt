@@ -42,17 +42,6 @@ public class ExpressionEvaluationException : PermanentNodeException
     public override string ErrorCode => "EXPRESSION_EVALUATION_ERROR";
 }
 
-public class EngineFaultException : Exception
-{
-    public EngineFaultException(string message) : base(message)
-    {
-    }
-
-    public EngineFaultException(string message, Exception innerException) : base(message, innerException)
-    {
-    }
-}
-
 /// <summary>
 /// A node's <see cref="Models.Nodes.BaseNode.Kind"/> has no registered executor. Permanent by
 /// definition - retrying cannot register one - so the branch fails immediately rather than looping.

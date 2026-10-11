@@ -14,7 +14,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IRunProvider _runProvider;
     private readonly IRunCountersProvider _runCountersProvider;
     private readonly IBranchProvider _branchProvider;
-    private readonly IHistoryEventProvider _historyEventProvider;
+    private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IRunStartedPublisher _runStartedPublisher;
@@ -28,7 +28,7 @@ internal sealed class RunStarter : IRunStarter
         IRunProvider runProvider,
         IRunCountersProvider runCountersProvider,
         IBranchProvider branchProvider,
-        IHistoryEventProvider historyEventProvider,
+        IRunJournal journal,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ICorrelationKeyResolver correlationKeyResolver,
         IRunStartedPublisher runStartedPublisher,
@@ -41,7 +41,7 @@ internal sealed class RunStarter : IRunStarter
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
         _branchProvider = branchProvider;
-        _historyEventProvider = historyEventProvider;
+        _journal = journal;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _correlationKeyResolver = correlationKeyResolver;
         _runStartedPublisher = runStartedPublisher;
@@ -75,7 +75,7 @@ internal sealed class RunStarter : IRunStarter
             WorkflowVersion = definition.Version,
             TriggerNodeId = Guid.Parse(triggerNodeId),
             CorrelationKey = correlationKey,
-            Status = "Running",
+            Status = RunStatus.Running,
             StartedAt = nowUtc,
             CompletedAt = null,
             CancellationRequestedAt = null,
@@ -97,7 +97,7 @@ internal sealed class RunStarter : IRunStarter
             {
                 ["trigger"] = JsonSerializer.SerializeToElement(triggerEvent.Payload)
             },
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            EngineJson.Options);
 
         BranchRow createdBranch = await _branchProvider.CreateAsync(new BranchRow
         {
@@ -107,7 +107,7 @@ internal sealed class RunStarter : IRunStarter
             ParentBranchId = null,
             ForkCohortId = null,
             NodeId = Guid.Parse(triggerNodeId),
-            Status = "Active",
+            Status = BranchStatus.Active,
             PendingTakePort = null,
             LocalJson = localJson,
             LastOutputJson = null,
@@ -122,15 +122,11 @@ internal sealed class RunStarter : IRunStarter
             RowVersion = Array.Empty<byte>()
         }, ct);
 
-        await _historyEventProvider.InsertBatchAsync([
-            new HistoryEventRow
+        await _journal.AppendAsync(
+            new RunJournalEntry(createdRun.Id, HistoryEventKind.RunStarted)
             {
-                HistoryEventId = 0,
-                RunId = createdRun.Id,
                 BranchRefId = createdBranch.RefId,
                 NodeId = Guid.Parse(triggerNodeId),
-                EventKind = HistoryEventKind.RunStarted,
-                Severity = HistoryEventKind.SeverityFor(HistoryEventKind.RunStarted),
                 // Describes the arrival that caused this run: which channel it came in on, which key it
                 // matched and when it was received. That is the inbound record the trace was missing;
                 // a separate InboundEventReceived row would say the same thing one line earlier.
@@ -139,19 +135,16 @@ internal sealed class RunStarter : IRunStarter
                 // unbounded - the public callback caps a request body, not the history table - and it can
                 // carry anything the caller sends, including credentials. The run's trigger payload is
                 // already persisted on the run and is where to read it from.
-                PayloadJson = JsonSerializer.Serialize(
-                    new
-                    {
-                        triggerEvent.InboundEventId,
-                        CorrelationKey = correlationKey,
-                        triggerEvent.ChannelKind,
-                        MatchKeys = triggerEvent.MatchKeys,
-                        triggerEvent.ReceivedAt
-                    },
-                    new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                Timestamp = nowUtc
-            }
-        ], ct);
+                Payload = new
+                {
+                    triggerEvent.InboundEventId,
+                    CorrelationKey = correlationKey,
+                    triggerEvent.ChannelKind,
+                    MatchKeys = triggerEvent.MatchKeys,
+                    triggerEvent.ReceivedAt
+                }
+            },
+            ct);
 
             // Wrapped rather than calling the bus directly so Wbskt.Workflow carries no event-bus
             // dependency: the engine host supplies a publisher that forwards to MassTransit, and the

@@ -13,7 +13,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
 {
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
-    private readonly IHistoryEventProvider _historyEventProvider;
+    private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
     private readonly IClock _clock;
@@ -22,7 +22,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     public CompensationOrchestrator(
         IRunProvider runProvider,
         IBranchProvider branchProvider,
-        IHistoryEventProvider historyEventProvider,
+        IRunJournal journal,
         IWorkflowDefinitionCache workflowDefinitionCache,
         INodeExecutorRegistry nodeExecutorRegistry,
         IClock clock,
@@ -30,7 +30,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
-        _historyEventProvider = historyEventProvider;
+        _journal = journal;
         _workflowDefinitionCache = workflowDefinitionCache;
         _nodeExecutorRegistry = nodeExecutorRegistry;
         _clock = clock;
@@ -45,19 +45,9 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     {
         try
         {
-            await _historyEventProvider.InsertBatchAsync([
-                new HistoryEventRow
-                {
-                    HistoryEventId = 0,
-                    RunId = runId,
-                    BranchRefId = branchRefId,
-                    NodeId = nodeId,
-                    EventKind = HistoryEventKind.CompensationFailed,
-                    Severity = HistoryEventKind.SeverityFor(HistoryEventKind.CompensationFailed),
-                    PayloadJson = JsonSerializer.Serialize(new { cause.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    Timestamp = _clock.UtcNow
-                }
-            ], ct);
+            await _journal.AppendAsync(
+                new RunJournalEntry(runId, HistoryEventKind.CompensationFailed) { BranchRefId = branchRefId, NodeId = nodeId, Payload = new { cause.Message } },
+                ct);
         }
         catch (Exception ex)
         {
@@ -70,11 +60,11 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         RunRow run = await _runProvider.GetByIdAsync(runId, ct);
         BranchRow branch = await _branchProvider.GetByIdAsync(branchId, ct);
         WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(run.WorkflowDefinitionId, ct);
-        IReadOnlyCollection<HistoryEventRow> history = await _historyEventProvider.GetByRunIdAsync(run.Id, 0, int.MaxValue, ct);
+        IReadOnlyCollection<HistoryEventRow> history = await _journal.ReadAllAsync(run.Id, ct);
         var compensationTargets = history
             .Where(evt => evt.RunId == run.Id
                 && evt.BranchRefId == branch.RefId
-                && string.Equals(evt.EventKind, "NodeCompleted", StringComparison.Ordinal)
+                && string.Equals(evt.EventKind, HistoryEventKind.NodeCompleted, StringComparison.Ordinal)
                 && evt.NodeId is not null)
             .Select(evt => new { Event = evt, Node = definition.Nodes.OfType<BaseActionNode>().SingleOrDefault(node => node.NodeId == evt.NodeId && node.Compensation is not null) })
             .Where(item => item.Node is not null)
@@ -111,15 +101,15 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
             ports = Array.Empty<PortDefinition>(),
             kind = compensation.Kind,
             config = compensation.Config
-        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }, EngineJson.Options);
         
-        BaseNode compensationNode = JsonSerializer.Deserialize<BaseNode>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        BaseNode compensationNode = JsonSerializer.Deserialize<BaseNode>(json, EngineJson.Options)!;
 
         INodeExecutor executor = _nodeExecutorRegistry.For(compensation.Kind);
         IReadOnlyDictionary<string, JsonElement> triggerPayload;
         IReadOnlyDictionary<string, JsonElement> branchLocalState = string.IsNullOrWhiteSpace(branch.LocalJson) 
             ? new Dictionary<string, JsonElement>()
-            : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(branch.LocalJson, new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new Dictionary<string, JsonElement>();
+            : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(branch.LocalJson, EngineJson.Options) ?? new Dictionary<string, JsonElement>();
 
         if (branchLocalState.TryGetValue("trigger", out JsonElement triggerElement)
             && triggerElement.ValueKind == JsonValueKind.Object)
@@ -167,20 +157,9 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
 
     private async Task AppendCompensationEventAsync(int runId, Guid branchRefId, Guid? nodeId, CompensationDeclaration compensation, CancellationToken ct)
     {
-        await _historyEventProvider.InsertBatchAsync(
-        [
-            new HistoryEventRow
-            {
-                HistoryEventId = 0,
-                RunId = runId,
-                BranchRefId = branchRefId,
-                NodeId = nodeId,
-                EventKind = HistoryEventKind.CompensationExecuted,
-                Severity = HistoryEventKind.SeverityFor(HistoryEventKind.CompensationExecuted),
-                PayloadJson = JsonSerializer.Serialize(new { compensation.Kind }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                Timestamp = _clock.UtcNow
-            }
-        ], ct);
+        await _journal.AppendAsync(
+            new RunJournalEntry(runId, HistoryEventKind.CompensationExecuted) { BranchRefId = branchRefId, NodeId = nodeId, Payload = new { compensation.Kind } },
+            ct);
     }
 
     private static IReadOnlyDictionary<string, JsonElement> ParseLocalState(string? payloadJson)
@@ -193,13 +172,13 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         using JsonDocument document = JsonDocument.Parse(payloadJson);
         if (document.RootElement.TryGetProperty("output", out JsonElement output))
         {
-            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(output.GetRawText(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(output.GetRawText(), EngineJson.Options)
                 ?? new Dictionary<string, JsonElement>();
         }
 
         if (document.RootElement.TryGetProperty("localState", out JsonElement localState))
         {
-            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localState.GetRawText(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localState.GetRawText(), EngineJson.Options)
                 ?? new Dictionary<string, JsonElement>();
         }
 

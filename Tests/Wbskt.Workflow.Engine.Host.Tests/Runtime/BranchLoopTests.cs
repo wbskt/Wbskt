@@ -36,14 +36,14 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             countersProvider,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new UnsupportedKindNodeExecutorRegistry(),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(countersProvider, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -81,19 +81,20 @@ public sealed class BranchLoopTests
         var registry = new StubNodeExecutorRegistry(
             new ScriptedExecutor(new NodeExecutionResult.Fail("BOOM", "node blew up", false, null)));
 
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             registry,
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -140,14 +141,14 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             registry,
             dispatcher,
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -229,19 +230,20 @@ public sealed class BranchLoopTests
         RecordingHistoryEventProvider historyProvider,
         StubNodeExecutorRegistry registry)
     {
+        var runCounters = new StubRunCountersProvider();
         return new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             registry,
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -269,19 +271,20 @@ public sealed class BranchLoopTests
                 new NodeExecutionResult.Continue("next", CreatePatch("step", 2)),
                 new NodeExecutionResult.Terminal(BranchTerminalReason.Completed)));
         var historyProvider = new RecordingHistoryEventProvider();
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             runProvider,
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             registry,
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -324,7 +327,7 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -334,7 +337,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -384,7 +387,7 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -400,7 +403,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -436,12 +439,13 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var operationLog = new List<string>();
+        var runCounters = new StubRunCountersProvider(operationLog);
         var loop = new BranchLoop(
             new RecordingBranchProvider(rootNodeId),
             new StubRunProvider(),
-            new StubRunCountersProvider(operationLog),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -456,7 +460,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -490,12 +494,13 @@ public sealed class BranchLoopTests
         var bookmarkProvider = new RecordingBookmarkProvider();
         var branchProvider = new RecordingBranchProvider(nodeId);
         var historyProvider = new RecordingHistoryEventProvider();
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             bookmarkProvider,
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -504,7 +509,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -547,7 +552,7 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -556,7 +561,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -601,7 +606,7 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -610,7 +615,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             cancellationService,
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -649,7 +654,7 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -658,7 +663,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -697,19 +702,20 @@ public sealed class BranchLoopTests
         var executor = new ScriptedExecutor(
             new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
             new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -743,12 +749,13 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var branchProvider = new RecordingBranchProvider(startNodeId);
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -758,7 +765,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -794,12 +801,13 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var branchProvider = new RecordingBranchProvider(startNodeId);
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -809,7 +817,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -848,12 +856,13 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var branchProvider = new RecordingBranchProvider(startNodeId);
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(
                 new ScriptedExecutor(
@@ -863,7 +872,7 @@ public sealed class BranchLoopTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -898,19 +907,20 @@ public sealed class BranchLoopTests
             7,
             RunCompensationOnFailure: true);
         var compensationOrchestrator = new RecordingCompensationOrchestrator();
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId),
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             compensationOrchestrator,
             new DefaultCreditCostCalculator(),
@@ -942,19 +952,20 @@ public sealed class BranchLoopTests
             7,
             FailFast: true);
         var runProvider = new StubRunProvider();
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId),
             runProvider,
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -985,19 +996,20 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var runProvider = new StubRunProvider();
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId),
             runProvider,
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1029,19 +1041,20 @@ public sealed class BranchLoopTests
             7,
             FailFast: true);
         var runProvider = new StubRunProvider("Cancelling");
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId),
             runProvider,
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1073,19 +1086,20 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var branchProvider = new RecordingBranchProvider(nodeId);
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ThrowingExecutor()),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1097,57 +1111,6 @@ public sealed class BranchLoopTests
         // Assert
         Assert.True(branchProvider.SetFailedCalled);
         Assert.Contains("EXECUTOR_CRASH", branchProvider.CurrentBranch.LastOutputJson);
-    }
-
-    [Fact]
-    public async Task EngineFault_transitions_run_to_Faulted_and_drains_the_branch_slot()
-    {
-        // Arrange: an EngineFaultException is a terminal engine-level failure - the run goes
-        // Faulted immediately, and this branch's slot must be drained (SetFailed + decrement)
-        // directly since the finalizer is never invoked for the Faulted path (2.1).
-        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var definition = new WorkflowDefinition(
-            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            1,
-            9,
-            "engine-fault",
-            null,
-            true,
-            [new TestNode { NodeId = nodeId, Name = "fault", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
-            [],
-            [],
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
-            7);
-        var branchProvider = new RecordingBranchProvider(nodeId);
-        var counters = new StubRunCountersProvider();
-        var runProvider = new StubRunProvider();
-        var historyProvider = new RecordingHistoryEventProvider();
-        var loop = new BranchLoop(
-            branchProvider,
-            runProvider,
-            counters,
-            new RecordingBookmarkProvider(),
-            historyProvider,
-            new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(new FaultingExecutor()),
-            new RecordingRunDispatcher(),
-            new InMemoryIdempotencyKeyProvider(),
-            new FixedClock(),
-            new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
-            new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
-            new DefaultCreditCostCalculator(),
-            new NoOpJoinAggregatorProvider());
-
-        // Act
-        await Assert.ThrowsAsync<EngineFaultException>(() => loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None));
-
-        // Assert
-        Assert.Equal("Faulted", runProvider.Status);
-        Assert.True(branchProvider.SetFailedCalled);
-        Assert.Equal([-1], counters.DecrementCalls);
-        Assert.Contains(historyProvider.Events, evt => evt.EventKind == "RunFaulted");
     }
 
     [Fact]
@@ -1177,14 +1140,14 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1230,14 +1193,14 @@ public sealed class BranchLoopTests
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            historyProvider,
+            new RunJournal(historyProvider, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1269,21 +1232,21 @@ public sealed class BranchLoopTests
             [],
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
-        var counters = new StubRunCountersProvider(incrementResults: [1]);
+        var counters = new StubRunCountersProvider(counterResults: [1]);
         var branchProvider = new RecordingBranchProvider(nodeId);
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
             counters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1294,7 +1257,7 @@ public sealed class BranchLoopTests
 
         // Assert
         Assert.True(branchProvider.SetCompletedCalled);
-        Assert.Equal([-1], counters.IncrementCalls);
+        Assert.Equal([-1], counters.DecrementCalls);
     }
 
     [Fact]
@@ -1315,19 +1278,20 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var finalizer = new RecordingRunFinalizer();
+        var runCounters = new StubRunCountersProvider(counterResults: [0]);
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId),
             new StubRunProvider(),
-            new StubRunCountersProvider(incrementResults: [0]),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer,
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1358,19 +1322,20 @@ public sealed class BranchLoopTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7);
         var finalizer = new RecordingRunFinalizer();
+        var runCounters = new StubRunCountersProvider(counterResults: [2]);
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId),
             new StubRunProvider(),
-            new StubRunCountersProvider(incrementResults: [2]),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer,
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1403,19 +1368,20 @@ public sealed class BranchLoopTests
         const string localJson = """{"trigger":{"clientRefId":"cccccccc-cccc-cccc-cccc-cccccccccccc","clientId":7,"workspaceId":3}}""";
         var branchProvider = new RecordingBranchProvider(nodeId, localJson);
         var capturingExecutor = new CapturingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var runCounters = new StubRunCountersProvider(counterResults: [1]);
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(incrementResults: [1]),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(capturingExecutor),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1454,19 +1420,20 @@ public sealed class BranchLoopTests
             7);
         var branchProvider = new RecordingBranchProvider(nodeId, "{}");
         var capturingExecutor = new CapturingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var runCounters = new StubRunCountersProvider(counterResults: [1]);
         var loop = new BranchLoop(
             branchProvider,
             new StubRunProvider(),
-            new StubRunCountersProvider(incrementResults: [1]),
+            runCounters,
             new RecordingBookmarkProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(capturingExecutor),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
@@ -1586,15 +1553,6 @@ public sealed class BranchLoopTests
         }
     }
 
-    private sealed class FaultingExecutor : INodeExecutor
-    {
-        public string Kind => "test";
-
-        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
-        {
-            throw new EngineFaultException("engine fault");
-        }
-    }
 
     /// <summary>
     /// Simulates a host shutdown interrupting a provider call mid-node: RetryExecutor's credit
@@ -1808,9 +1766,9 @@ public sealed class BranchLoopTests
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class StubRunCountersProvider(List<string>? operationLog = null, IReadOnlyCollection<int>? incrementResults = null) : IRunCountersProvider
+    private sealed class StubRunCountersProvider(List<string>? operationLog = null, IReadOnlyCollection<int>? counterResults = null) : IRunCountersProvider
     {
-        private readonly Queue<int> _incrementResults = new(incrementResults ?? [0]);
+        private readonly Queue<int> _counterResults = new(counterResults ?? [0]);
 
         public List<int> IncrementCalls { get; } = [];
 
@@ -1831,14 +1789,14 @@ public sealed class BranchLoopTests
         {
             IncrementCalls.Add(delta);
             operationLog?.Add($"increment:{delta}");
-            return Task.FromResult(_incrementResults.Count > 0 ? _incrementResults.Dequeue() : 0);
+            return Task.FromResult(_counterResults.Count > 0 ? _counterResults.Dequeue() : 0);
         }
 
         public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
         {
             DecrementCalls.Add(-delta);
             operationLog?.Add($"decrement:{delta}");
-            return Task.FromResult(0);
+            return Task.FromResult(_counterResults.Count > 0 ? _counterResults.Dequeue() : 0);
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
