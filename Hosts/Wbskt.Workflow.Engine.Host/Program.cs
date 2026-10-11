@@ -54,41 +54,7 @@ public static class Program
         // shared with arbitrary author-controlled webhook targets.
         builder.Services.AddHttpClient("workflow-telegram", client => client.Timeout = TimeSpan.FromSeconds(30));
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
-        builder.Services.AddWorkflowEngine(builder.Configuration);
-        // Re-registers ILeadershipGate (AddWorkflowEngine defaults to always-active for
-        // tests/Management) - last registration wins, so the engine host resolves the real one.
-        builder.Services.AddSingleton<ILeadershipGate, LeadershipGate>();
-        builder.Services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
-        builder.Services.AddScoped<IClientCommandTargetProvider, ClientCommandTargetProvider>();
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
-        builder.Services.AddScoped<IClientPresenceCheckProvider, ClientPresenceCheckProvider>();
-        builder.Services.AddScoped<ClientPresenceParker>();
-        builder.Services.AddScoped<IClientHoldStateProvider, ClientHoldStateProvider>();
-        builder.Services.AddScoped<ClientHoldRecorder>();
-        builder.Services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
-        builder.Services.AddScoped<IToastPublisher, ToastPublisher>();
-        builder.Services.AddScoped<IVariableWritePublisher, VariableWritePublisher>();
-        builder.Services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
-        builder.Services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
-        builder.Services.AddSingleton<RunRecoveryService>();
-        builder.Services.AddSingleton<IEngineStartupTracker>(sp => sp.GetRequiredService<RunRecoveryService>());
-        // LeaderElectionService is registered first so LeadershipState is meaningful before any
-        // other hosted service starts checking ILeadershipGate.IsActive. RunRecoveryService is
-        // deliberately NOT a hosted service here - EngineLeadershipCoordinator calls its
-        // RecoverAsync directly, only once this instance becomes leader.
-        builder.Services.AddHostedService<LeaderElectionService>();
-        builder.Services.AddHostedService<EngineLeadershipCoordinator>();
-        builder.Services.AddHostedService<BranchExecutionPump>();
-        builder.Services.AddHostedService<BookmarkScheduler>();
-        builder.Services.AddHostedService<BookmarkOrphanGc>();
-        builder.Services.AddHostedService<ScheduledFireTicker>();
-        builder.Services.AddHostedService<ClientPresenceTicker>();
-        builder.Services.AddHostedService<ClientHoldTicker>();
-        builder.Services.AddHostedService<RunReaper>();
-        builder.Services.AddHostedService<HistoryRetentionGc>();
-        builder.Services.AddHostedService<IdempotencyKeyGc>();
-        builder.Services.AddHostedService<PendingTriggerEventBacklogReaper>();
-        builder.Services.AddHostedService<MetricsExporter>();
+        builder.Services.AddEngineHostServices(builder.Configuration);
         builder.Services.AddRabbitMqEventBus(builder.Configuration);
         // The bus is started manually by EngineLeadershipCoordinator once this instance is leader,
         // so a standby never attaches to the shared engine queues.
@@ -119,5 +85,50 @@ public static class Program
         app.MapControllers();
 
         await app.RunAsync();
+    }
+
+    /// <summary>
+    /// The engine's own services: the workflow runtime, the host's adapters and the background workers.
+    /// Separate from Main so a test can build exactly what the host builds and validate it.
+    /// </summary>
+    public static IServiceCollection AddEngineHostServices(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddWorkflowEngine(configuration);
+        // Re-registers ILeadershipGate (AddWorkflowEngine defaults to always-active for
+        // tests/Management) - last registration wins, so the engine host resolves the real one.
+        services.AddSingleton<ILeadershipGate, LeadershipGate>();
+        services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
+        services.AddScoped<IClientCommandTargetProvider, ClientCommandTargetProvider>();
+        services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
+        services.AddScoped<IClientPresenceCheckProvider, ClientPresenceCheckProvider>();
+        services.AddScoped<ClientPresenceParker>();
+        services.AddScoped<IClientHoldStateProvider, ClientHoldStateProvider>();
+        services.AddScoped<ClientHoldRecorder>();
+        services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
+        services.AddScoped<IToastPublisher, ToastPublisher>();
+        services.AddScoped<IVariableWritePublisher, VariableWritePublisher>();
+        services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
+        services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
+        services.AddSingleton<RunRecoveryService>();
+        services.AddSingleton<IEngineStartupTracker>(sp => sp.GetRequiredService<RunRecoveryService>());
+        // LeaderElectionService is registered first so LeadershipState is meaningful before any
+        // other hosted service starts checking ILeadershipGate.IsActive. RunRecoveryService is
+        // deliberately NOT a hosted service here - EngineLeadershipCoordinator calls its
+        // RecoverAsync directly, only once this instance becomes leader.
+        services.AddHostedService<LeaderElectionService>();
+        services.AddHostedService<EngineLeadershipCoordinator>();
+        services.AddHostedService<BranchExecutionPump>();
+        services.AddHostedService<BookmarkScheduler>();
+        services.AddHostedService<BookmarkOrphanGc>();
+        services.AddHostedService<ScheduledFireTicker>();
+        services.AddHostedService<ClientPresenceTicker>();
+        services.AddHostedService<ClientHoldTicker>();
+        services.AddHostedService<RunReaper>();
+        services.AddHostedService<HistoryRetentionGc>();
+        services.AddHostedService<IdempotencyKeyGc>();
+        services.AddHostedService<PendingTriggerEventBacklogReaper>();
+        services.AddHostedService<MetricsExporter>();
+
+        return services;
     }
 }

@@ -17,7 +17,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly IRunStarter _runStarter;
     private readonly IRunDispatcher _runDispatcher;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
-    private readonly IExpressionEvaluator? _expressionEvaluator;
+    private readonly IExpressionEvaluator _expressionEvaluator;
     private readonly ILogger<TriggerDispatcher>? _logger;
 
     public TriggerDispatcher(
@@ -29,7 +29,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         IRunStarter runStarter,
         IRunDispatcher runDispatcher,
         IIdempotencyKeyProvider idempotencyKeyProvider,
-        IExpressionEvaluator? expressionEvaluator = null,
+        IExpressionEvaluator expressionEvaluator,
         ILogger<TriggerDispatcher>? logger = null)
     {
         _correlationKeyResolver = correlationKeyResolver;

@@ -58,7 +58,10 @@ public sealed class SubWorkflowCompletionHookTests
             new RecordingRunCompletedPublisher(),
             bookmarkProvider,
             hook,
-            new FixedClock());
+            new FixedClock(),
+            new RunCancellationTokenRegistry(),
+            new NoOpJoinAggregatorProvider(),
+            Mock.Of<IWorkflowDefinitionCache>());
 
         await finalizer.FinalizeAsync(42, CancellationToken.None);
 

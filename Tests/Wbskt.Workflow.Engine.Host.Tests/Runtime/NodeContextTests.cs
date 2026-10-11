@@ -28,7 +28,6 @@ public sealed class NodeContextTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             9);
         var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
-        var providers = new Mock<IProviderComposite>().Object;
         var cts = new CancellationTokenSource();
 
         // Act
@@ -36,17 +35,15 @@ public sealed class NodeContextTests
         {
             Branch = branch,
             Node = node,
-            Providers = providers,
             Tick = 1,
             ParentResults = null,
             CancellationToken = cts.Token,
-                IdempotencyKey = "test-key"
+            IdempotencyKey = "test-key"
         };
 
         // Assert - verify init-only properties compile and are set
         Assert.Same(branch, context.Branch);
         Assert.Same(node, context.Node);
-        Assert.Same(providers, context.Providers);
         Assert.Equal(1, context.Tick);
         Assert.Null(context.ParentResults);
         Assert.Equal(cts.Token, context.CancellationToken);
@@ -70,7 +67,6 @@ public sealed class NodeContextTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             9);
         var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
-        var providers = new Mock<IProviderComposite>().Object;
         var parentResults = new Dictionary<string, JsonElement>();
 
         // Act
@@ -78,10 +74,10 @@ public sealed class NodeContextTests
         {
             Branch = branch,
             Node = node,
-            Providers = providers,
             Tick = 2,
             ParentResults = parentResults,
-            CancellationToken = CancellationToken.None, IdempotencyKey = "test-key",
+            CancellationToken = CancellationToken.None,
+            IdempotencyKey = "test-key",
         };
 
         // Assert

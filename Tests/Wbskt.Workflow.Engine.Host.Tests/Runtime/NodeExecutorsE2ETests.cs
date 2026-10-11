@@ -72,10 +72,14 @@ public sealed class NodeExecutorsE2ETests
                 new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()))
             ]),
             dispatcher,
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer);
+            finalizer,
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
@@ -303,17 +307,6 @@ public sealed class NodeExecutorsE2ETests
     private sealed class SequentialIdGenerator : IIdGenerator
     {
         public Guid NewId() => Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
-    }
-
-    private sealed class StubProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
     }
 
     private sealed class NoOpSharedVariableProvider : ISharedVariableProvider

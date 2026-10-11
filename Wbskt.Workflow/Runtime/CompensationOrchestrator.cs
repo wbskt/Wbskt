@@ -16,7 +16,6 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     private readonly IHistoryEventProvider _historyEventProvider;
     private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
-    private readonly IProviderComposite _providerComposite;
     private readonly IClock _clock;
     private readonly ILogger<CompensationOrchestrator>? _logger;
 
@@ -26,7 +25,6 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         IHistoryEventProvider historyEventProvider,
         IWorkflowDefinitionCache workflowDefinitionCache,
         INodeExecutorRegistry nodeExecutorRegistry,
-        IProviderComposite providerComposite,
         IClock clock,
         ILogger<CompensationOrchestrator>? logger = null)
     {
@@ -35,7 +33,6 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         _historyEventProvider = historyEventProvider;
         _workflowDefinitionCache = workflowDefinitionCache;
         _nodeExecutorRegistry = nodeExecutorRegistry;
-        _providerComposite = providerComposite;
         _clock = clock;
         _logger = logger;
     }
@@ -155,7 +152,6 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 BranchRefId = branch.RefId
             },
             Node = compensationNode,
-            Providers = _providerComposite,
             Tick = 1,
             ParentResults = null,
             CancellationToken = ct,

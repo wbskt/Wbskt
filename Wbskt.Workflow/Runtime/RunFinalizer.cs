@@ -15,11 +15,13 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly IPendingTriggerEventDrainer _pendingTriggerEventDrainer;
     private readonly IRunCompletedPublisher _runCompletedPublisher;
     private readonly IBookmarkProvider _bookmarkProvider;
-    private readonly IJoinAggregatorProvider? _joinAggregatorProvider;
-    private readonly IWorkflowDefinitionCache? _definitionCache;
+    private readonly IJoinAggregatorProvider _joinAggregatorProvider;
+    private readonly IWorkflowDefinitionCache _definitionCache;
     private readonly ISubWorkflowCompletionHook _completionHook;
     private readonly IClock _clock;
-    private readonly IRunCancellationService? _runCancellationService;
+    // The registry, not IRunCancellationService: the cancellation service finalizes a run left idle by
+    // a cancel, so depending on it here would make the two depend on each other.
+    private readonly RunCancellationTokenRegistry _tokenRegistry;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<RunFinalizer>? _logger;
 
@@ -32,11 +34,11 @@ internal sealed class RunFinalizer : IRunFinalizer
         IBookmarkProvider bookmarkProvider,
         ISubWorkflowCompletionHook completionHook,
         IClock clock,
-        IRunCancellationService? runCancellationService = null,
+        RunCancellationTokenRegistry tokenRegistry,
+        IJoinAggregatorProvider joinAggregatorProvider,
+        IWorkflowDefinitionCache definitionCache,
         WorkflowMetrics? workflowMetrics = null,
-        ILogger<RunFinalizer>? logger = null,
-        IJoinAggregatorProvider? joinAggregatorProvider = null,
-        IWorkflowDefinitionCache? definitionCache = null)
+        ILogger<RunFinalizer>? logger = null)
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
@@ -47,7 +49,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         _completionHook = completionHook;
         _clock = clock;
         _workflowMetrics = workflowMetrics;
-        _runCancellationService = runCancellationService;
+        _tokenRegistry = tokenRegistry;
         _joinAggregatorProvider = joinAggregatorProvider;
         _definitionCache = definitionCache;
         _logger = logger;
@@ -60,11 +62,6 @@ internal sealed class RunFinalizer : IRunFinalizer
     /// </summary>
     private async Task<int> ResolveWorkspaceIdAsync(int workflowDefinitionId, CancellationToken ct)
     {
-        if (_definitionCache is null)
-        {
-            return 0;
-        }
-
         try
         {
             return (await _definitionCache.GetAsync(workflowDefinitionId, ct)).WorkspaceId;
@@ -121,16 +118,10 @@ internal sealed class RunFinalizer : IRunFinalizer
 
         // Join cohorts are kept for the life of the run (they are what you inspect when a cohort
         // looks stuck) and collected here, alongside the bookmarks.
-        if (_joinAggregatorProvider is not null)
-        {
-            await _joinAggregatorProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
-        }
+        await _joinAggregatorProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
 
         await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);
-        if (_runCancellationService is not null)
-        {
-            _runCancellationService.RemoveCts(updatedRun.Id);
-        }
+        _tokenRegistry.Remove(updatedRun.Id);
     }
 
     private static string DetermineTerminalStatus(RunRow run, IReadOnlyCollection<BranchRow> branches)

@@ -1,10 +1,11 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
 public interface INodeExecutionServices
 {
-    IProviderComposite Providers { get; }
+    IIdempotencyKeyProvider IdempotencyKeys { get; }
 
     int Tick { get; }
 

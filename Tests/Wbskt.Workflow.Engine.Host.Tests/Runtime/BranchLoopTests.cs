@@ -40,9 +40,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new UnsupportedKindNodeExecutorRegistry(),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act - must not throw
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -85,10 +90,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             registry,
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            joinAggregatorProvider: aggregator);
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            aggregator);
 
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
@@ -135,10 +144,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             registry,
             dispatcher,
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            joinAggregatorProvider: aggregator);
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            aggregator);
 
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
@@ -225,9 +238,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             registry,
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
     }
 
     [Fact]
@@ -260,9 +278,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             registry,
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -308,9 +331,14 @@ public sealed class BranchLoopTests
                     new NodeExecutionResult.Fork([new ForkSpec(childNodeId.ToString(), CreatePatch("child", 1))], null, CreatePatch("fork", 1)),
                     new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             dispatcher,
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -369,9 +397,14 @@ public sealed class BranchLoopTests
                     null,
                     CreatePatch("fork", 1)))),
             dispatcher,
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -420,9 +453,14 @@ public sealed class BranchLoopTests
                     null,
                     CreatePatch("fork", 1)))),
             new RecordingRunDispatcher(operationLog),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -463,9 +501,14 @@ public sealed class BranchLoopTests
                 new ScriptedExecutor(
                     new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("operator-ack", "corr-42"), CreatePatch("waiting", 1)))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -510,9 +553,14 @@ public sealed class BranchLoopTests
                 new ScriptedExecutor(
                     new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -559,11 +607,14 @@ public sealed class BranchLoopTests
                 new ScriptedExecutor(
                     new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            runFinalizer: null,
-            runCancellationService: cancellationService);
+            new NoOpRunFinalizer(),
+            cancellationService,
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -604,9 +655,14 @@ public sealed class BranchLoopTests
                 new ScriptedExecutor(
                     new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -650,9 +706,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -694,9 +755,14 @@ public sealed class BranchLoopTests
                     NodeExecutionResult.JumpTo(jumpedNodeId, CreatePatch("jump", 1)),
                     new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -740,9 +806,14 @@ public sealed class BranchLoopTests
                     new NodeExecutionResult.Fail("E_FAIL", "boom", false, null),
                     new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -789,9 +860,14 @@ public sealed class BranchLoopTests
                     new NodeExecutionResult.Fail("E_FAIL", "boom", false, null),
                     new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -831,10 +907,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            compensationOrchestrator: compensationOrchestrator);
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            compensationOrchestrator,
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -871,9 +951,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -909,9 +994,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -948,9 +1038,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -987,9 +1082,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ThrowingExecutor()),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -1031,9 +1131,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new FaultingExecutor()),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await Assert.ThrowsAsync<EngineFaultException>(() => loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None));
@@ -1076,9 +1181,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, hostCts.Token);
@@ -1124,9 +1234,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, hostCts.Token);
@@ -1165,9 +1280,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -1204,10 +1324,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer);
+            finalizer,
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -1243,10 +1367,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer);
+            finalizer,
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -1284,9 +1412,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(capturingExecutor),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -1330,9 +1463,14 @@ public sealed class BranchLoopTests
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(capturingExecutor),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -1777,17 +1915,6 @@ public sealed class BranchLoopTests
             Requests.Add(request);
             return ValueTask.CompletedTask;
         }
-    }
-
-    private sealed class StubProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
     }
 
     private sealed class FixedClock : IClock

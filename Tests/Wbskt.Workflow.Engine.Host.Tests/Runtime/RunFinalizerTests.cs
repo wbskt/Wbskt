@@ -1,3 +1,4 @@
+using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -173,7 +174,7 @@ public sealed class RunFinalizerTests
             Publisher = new RecordingRunCompletedPublisher();
             BookmarkProvider = new RecordingBookmarkProvider();
             CompletionHook = new NoOpCompletionHook();
-            Finalizer = new RunFinalizer(RunProvider, BranchProvider, HistoryProvider, Drainer, Publisher, BookmarkProvider, CompletionHook, new FixedClock());
+            Finalizer = new RunFinalizer(RunProvider, BranchProvider, HistoryProvider, Drainer, Publisher, BookmarkProvider, CompletionHook, new FixedClock(), new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), Mock.Of<IWorkflowDefinitionCache>());
         }
 
         public RecordingRunProvider RunProvider { get; }
