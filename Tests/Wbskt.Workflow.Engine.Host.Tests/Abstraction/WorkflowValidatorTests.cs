@@ -116,6 +116,49 @@ public class WorkflowValidatorTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "CLIENT_MESSAGE_INVALID");
     }
 
+    [Fact]
+    public void A_client_message_waiting_for_its_ack_leaves_by_acked_failed_and_timeout_not_default()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        SendClientMessageNode waiting = CreateClientMessage("OpenVent") with
+        {
+            Config = new SendClientMessageConfig { ClientRef = Guid.NewGuid().ToString(), Type = "OpenVent", AwaitAck = true }
+        };
+
+        var withDefaultPort = Validator.Validate(def with { Nodes = [.. def.Nodes, waiting] });
+        var withAckPorts = Validator.Validate(def with { Nodes = [.. def.Nodes, waiting with
+        {
+            Ports =
+            [
+                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+                new PortDefinition { PortId = "acked", Direction = PortDirection.Output, Label = "Acked" },
+                new PortDefinition { PortId = "failed", Direction = PortDirection.Output, Label = "Failed" },
+                new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }
+            ]
+        }] });
+
+        Assert.Contains(withDefaultPort.Issues, i => i.Code == "MISSING_PORT");
+        Assert.Contains(withDefaultPort.Issues, i => i.Code == "EXTRA_PORT");
+        Assert.DoesNotContain(withAckPorts.Issues, i => i.Code is "MISSING_PORT" or "EXTRA_PORT");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(25 * 3600)]
+    public void Validate_refuses_an_ack_timeout_that_is_not_positive_or_over_a_day(int seconds)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        SendClientMessageNode node = CreateClientMessage("OpenVent") with
+        {
+            Config = new SendClientMessageConfig { ClientRef = Guid.NewGuid().ToString(), Type = "OpenVent", AwaitAck = true, AckTimeout = TimeSpan.FromSeconds(seconds) }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, node] });
+
+        Assert.Contains(result.Issues, i => i.Code == "CLIENT_MESSAGE_ACK_TIMEOUT");
+    }
+
     private static SendClientMessageNode CreateClientMessage(string type) => new()
     {
         NodeId = new Guid("aaaaaaaa-0000-0000-0000-00000000009c"),

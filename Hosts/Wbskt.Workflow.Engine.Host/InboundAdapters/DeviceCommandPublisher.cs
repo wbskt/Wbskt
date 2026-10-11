@@ -18,7 +18,7 @@ public sealed class DeviceCommandPublisher(
 {
     internal const string UnknownClientReason = "The device does not exist in this workspace.";
 
-    public async Task PublishCommandAsync(Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct)
+    public async Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct)
     {
         var target = await targets.FindAsync(clientRefId, ct);
 
@@ -26,7 +26,7 @@ public sealed class DeviceCommandPublisher(
         if (target is null || target.WorkspaceId != workspaceId)
         {
             logger.LogWarning("No client '{ClientRefId}' in workspace {WorkspaceId}; command '{Command}' not sent.", clientRefId, workspaceId, command);
-            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, 0, workspaceId, command, UnknownClientReason, Guid.NewGuid()), sentBy), ct);
+            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, 0, workspaceId, command, UnknownClientReason, commandId), sentBy), ct);
             return;
         }
 
@@ -34,18 +34,18 @@ public sealed class DeviceCommandPublisher(
         if (DeviceMessageRules.FindViolation(command, payload) is { } violation)
         {
             logger.LogWarning("Command '{Command}' to client '{ClientRefId}' refused: {Reason}", command, clientRefId, violation);
-            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, violation, Guid.NewGuid()), sentBy), ct);
+            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, violation, commandId), sentBy), ct);
             return;
         }
 
         if (!target.IsConnected || string.IsNullOrEmpty(target.HostId))
         {
             logger.LogInformation("Client '{ClientRefId}' is offline; command '{Command}' reported as failed.", clientRefId, command);
-            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, ClientCommandFailedEvent.NotConnectedReason, Guid.NewGuid()), sentBy), ct);
+            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, ClientCommandFailedEvent.NotConnectedReason, commandId), sentBy), ct);
             return;
         }
 
-        var @event = new ClientCommandEvent(clientRefId, target.ClientId, workspaceId, command, payload, Guid.NewGuid(), TargetHostId: target.HostId);
+        var @event = new ClientCommandEvent(clientRefId, target.ClientId, workspaceId, command, payload, commandId, TargetHostId: target.HostId);
         await eventBus.PublishAsync(Attributed(@event, sentBy), ct);
     }
 

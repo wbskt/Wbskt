@@ -12,6 +12,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.InboundAdapters;
 public sealed class DeviceCommandPublisherTests
 {
     private static readonly Guid ClientRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid CommandId = Guid.Parse("c0000000-0000-4000-8000-00000000000c");
     private const int ClientId = 7;
     private const int WorkspaceId = 3;
     private const string HostId = "socket-a";
@@ -41,7 +42,7 @@ public sealed class DeviceCommandPublisherTests
     public async Task A_command_to_a_connected_device_is_addressed_to_the_host_holding_it()
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
         Assert.NotNull(_sent);
         Assert.Equal(ClientRefId, _sent!.ClientRefId);
@@ -50,7 +51,7 @@ public sealed class DeviceCommandPublisherTests
         Assert.Equal("OpenVent", _sent.Type);
         Assert.Equal("{}", _sent.Payload);
         Assert.Equal(HostId, _sent.TargetHostId);
-        Assert.NotNull(_sent.CommandId);
+        Assert.Equal(CommandId, _sent.CommandId);
         Assert.Null(_failed);
     }
 
@@ -58,11 +59,13 @@ public sealed class DeviceCommandPublisherTests
     public async Task A_command_to_an_offline_device_is_reported_as_failed_at_once()
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
-            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.NotNull(_failed);
         Assert.Equal(ClientCommandFailedEvent.NotConnectedReason, _failed!.Reason);
+        // The step waiting on this command is woken by the failure, so it carries the command's id.
+        Assert.Equal(CommandId, _failed.CommandId);
         Assert.Equal(ClientId, _failed.ClientId);
         Assert.Equal("OpenVent", _failed.Type);
     }
@@ -73,7 +76,7 @@ public sealed class DeviceCommandPublisherTests
     public async Task A_reserved_command_type_is_refused_and_reported(string type)
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(ClientRefId, WorkspaceId, type, "{}", null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, type, "{}", null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.NotNull(_failed);
@@ -87,7 +90,7 @@ public sealed class DeviceCommandPublisherTests
         string payload = new('x', 32 * 1024 + 1);
 
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", payload, null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", payload, null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.NotNull(_failed);
@@ -100,7 +103,7 @@ public sealed class DeviceCommandPublisherTests
     {
         var target = otherWorkspace ? new ClientCommandTarget(ClientId, WorkspaceId + 1, true, HostId) : null;
 
-        await Publisher(target).PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+        await Publisher(target).PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.Equal(DeviceCommandPublisher.UnknownClientReason, _failed!.Reason);
@@ -113,7 +116,7 @@ public sealed class DeviceCommandPublisherTests
         var sender = new CommandSender(Guid.NewGuid(), Guid.NewGuid());
 
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", "{}", sender, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", sender, CancellationToken.None);
 
         Assert.Equal(EventSource.Workflow, _sent!.ActorSource);
         Assert.Equal(sender.WorkflowRefId, _sent.ActorWorkflowRefId);

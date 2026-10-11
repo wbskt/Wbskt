@@ -312,6 +312,16 @@ public sealed class WorkflowValidator
                     node.NodeId));
             }
 
+            if (node is SendClientMessageNode { Config.AckTimeout: { } ackTimeout }
+                && (ackTimeout <= TimeSpan.Zero || ackTimeout > SendClientMessageConfig.MaxAckTimeout))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "CLIENT_MESSAGE_ACK_TIMEOUT",
+                    $"ClientMessage node '{node.NodeId}': the ack timeout must be more than zero and at most {SendClientMessageConfig.MaxAckTimeout.TotalHours:0} hours.",
+                    node.NodeId));
+            }
+
             if (node is WaitForHttpNode waitForHttp)
             {
                 string? token = waitForHttp.Config?.Token?.Trim();
@@ -469,6 +479,15 @@ public sealed class WorkflowValidator
         
         if (node.Kind.StartsWith("action:"))
         {
+            // A send-command step that waits for the device leaves by what became of the command.
+            if (node is SendClientMessageNode { Config.AwaitAck: true })
+            {
+                return [inputIn,
+                    new PortDefinition { PortId = "acked", Direction = PortDirection.Output, Label = "Acked" },
+                    new PortDefinition { PortId = "failed", Direction = PortDirection.Output, Label = "Failed" },
+                    new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }];
+            }
+
             if (node.Kind == "action:webhook")
             {
                 return [inputIn, outputDefault, new PortDefinition { PortId = "error", Direction = PortDirection.Output, Label = "Error" }

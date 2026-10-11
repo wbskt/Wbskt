@@ -15,7 +15,8 @@ public sealed class TriggerChannelRegistry : ITriggerChannelRegistry
         new ManualChannel(),
         new SignalChannel(),
         new HttpWakeChannel(),
-        new ChildCompletedChannel()
+        new ChildCompletedChannel(),
+        new CommandChannel()
     ]);
 
     private readonly Dictionary<string, ITriggerChannel> _byKind;
