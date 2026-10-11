@@ -79,7 +79,9 @@ public sealed class InboundManualControllerTests
 
         Assert.Equal(InboundOutcome.StartedRun, response.Outcome);
         Assert.Equal(runRefId, response.RunRefId);
-        Assert.DoesNotContain("42", JsonSerializer.Serialize(response));
+        // The wire shape names the run by RefId and has no field for its row id.
+        using JsonDocument json = JsonDocument.Parse(JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        Assert.Equal(["outcome", "runRefId", "registrations"], json.RootElement.EnumerateObject().Select(p => p.Name));
     }
 
     [Fact]
