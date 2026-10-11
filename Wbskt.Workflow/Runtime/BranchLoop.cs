@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 using Wbskt.Workflow.Telemetry;
 using Microsoft.Extensions.Logging;
 
@@ -649,16 +650,16 @@ internal sealed class BranchLoop : IBranchLoop
 
     private static string GetWakeConditionMatchKey(WakeCondition condition)
     {
-        // Must equal the channel-namespaced correlation key produced by CorrelationKeyResolver
-        // for the corresponding inbound channel, so an inbound event can find this bookmark.
+        // Built by the same channel that computes an event's correlation key, so an inbound event on
+        // that channel finds this bookmark.
         return condition switch
         {
             // Timers aren't matched by an inbound event key — they're woken by ExpiresAt alone.
             TimerWakeCondition => string.Empty,
-            SignalWakeCondition signal => $"signal:{signal.Name}:{signal.Correlation}",
+            SignalWakeCondition signal => SignalChannel.Key(signal.Name, signal.Correlation),
             InboundWakeCondition inbound => $"{inbound.DeviceRefId}:{inbound.PropertyName}",
-            HttpWakeCondition http => $"http-wake:{http.Token}",
-            ChildRunCompletedWakeCondition child => $"child-completed:{child.ChildRunId}",
+            HttpWakeCondition http => HttpWakeChannel.Key(http.Token),
+            ChildRunCompletedWakeCondition child => ChildCompletedChannel.Key(child.ChildRunId.ToString()),
             AnyOfWakeCondition => "anyOf",
             _ => string.Empty
         };

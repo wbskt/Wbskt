@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.NodeExecutors.Actions;
 using Wbskt.Workflow.NodeExecutors.Controls;
@@ -31,6 +32,7 @@ public static class WorkflowServiceCollectionExtensions
     {
         services.AddWorkflowProviders();
         services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
 
         // No IRunCancellationService, token registry or definition cache: the engine is the only writer
@@ -96,6 +98,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
+        services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
         services.AddSingleton<ICorrelationKeyResolver, CorrelationKeyResolver>();
         // Scoped, not Singleton: the evaluator reads shared variables through the Scoped
         // ISharedVariableProvider. Every consumer (the Logic/Variable/ForEach/ParallelForEach

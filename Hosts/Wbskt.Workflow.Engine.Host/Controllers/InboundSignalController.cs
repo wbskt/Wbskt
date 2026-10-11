@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Middleware;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
@@ -14,19 +15,7 @@ public sealed class InboundSignalController(IInboundHub hub, ILogger<InboundSign
     public async Task<InboundSignalResponse> Post(Guid scopeRunRefId, string signalName, [FromBody] JsonElement payload, CancellationToken ct)
     {
         logger?.LogInformation("Received signal request {SignalName} for scope {ScopeRunRefId}", signalName, scopeRunRefId);
-        // CorrelationKeyResolver maps the "signal" channel to "signal:{signalName}:{scopeRunRefId}",
-        // which must match the bookmark minted by AwaitSignalNodeExecutor for this run.
-        InboundEvent inboundEvent = new(
-            "signal",
-            [$"signal:{signalName}:{scopeRunRefId}"],
-            $"signal:{scopeRunRefId}:{signalName}:{Guid.NewGuid()}",
-            new Dictionary<string, JsonElement>
-            {
-                ["signalName"] = JsonSerializer.SerializeToElement(signalName),
-                ["scopeRunRefId"] = JsonSerializer.SerializeToElement(scopeRunRefId.ToString()),
-                ["body"] = payload
-            },
-            default);
+        InboundEvent inboundEvent = SignalChannel.Event(scopeRunRefId, signalName, payload);
 
         // No per-registration projection here (unlike the webhook/manual endpoints): the signal channel
         // only ever resolves bookmarks - nothing publishes a trigger registration on it - so a signal

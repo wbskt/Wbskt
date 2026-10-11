@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Middleware;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
@@ -16,20 +17,7 @@ public sealed class InboundManualController(IInboundHub hub, IRunProvider runPro
     {
         // A caller-supplied idempotency key makes the inbound event id stable across retries,
         // so re-POSTing the same key dedupes to a single run instead of starting another.
-        string inboundEventId = string.IsNullOrWhiteSpace(idempotencyKey)
-            ? $"manual:{workflowRefId}:{Guid.NewGuid()}"
-            : $"manual:{workflowRefId}:{idempotencyKey}";
-
-        InboundEvent evt = new(
-            "manual",
-            [$"manual:{workflowRefId}"],
-            inboundEventId,
-            new Dictionary<string, JsonElement>
-            {
-                ["workflowDefinitionRefId"] = JsonSerializer.SerializeToElement(workflowRefId.ToString()),
-                ["body"] = payload
-            },
-            default);
+        InboundEvent evt = ManualChannel.Event(workflowRefId, payload, idempotencyKey, default);
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
 

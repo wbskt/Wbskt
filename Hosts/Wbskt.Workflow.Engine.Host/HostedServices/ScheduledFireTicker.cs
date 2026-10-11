@@ -6,6 +6,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
@@ -38,21 +39,7 @@ public sealed class ScheduledFireTicker(
         {
             try
             {
-                var payload = new Dictionary<string, JsonElement>
-                {
-                    ["scheduledFireId"] = JsonSerializer.SerializeToElement(fire.Id),
-                    ["definitionRefId"] = JsonSerializer.SerializeToElement(fire.WorkflowRefId),
-                    ["fireAt"] = JsonSerializer.SerializeToElement(fire.NextFireAt)
-                };
-                var inboundEvent = new InboundEvent(
-                    "schedule",
-                    [$"schedule:{fire.Id}"],
-                    // Derived from the occurrence, not random: if the process dies between this dispatch
-                    // and AdvanceNextAsync below, the lease expires and the same occurrence is leased
-                    // again, and only a stable id lets the dispatcher's idempotency claim drop it.
-                    OccurrenceEventId(fire),
-                    payload,
-                    now);
+                InboundEvent inboundEvent = ScheduleChannel.Event(fire, now);
 
                 Logger.LogInformation("Dispatching scheduled fire {FireId} for workflow {WorkflowRefId}", fire.Id, fire.WorkflowRefId);
                 await inboundHub.HandleAsync(inboundEvent, ct);
@@ -80,9 +67,6 @@ public sealed class ScheduledFireTicker(
             }
         }
     }
-
-    internal static string OccurrenceEventId(ScheduledFireRow fire) =>
-        $"schedule:{fire.Id}:{fire.NextFireAt:yyyyMMddTHHmmssfff}";
 
     /// <summary>
     /// Returns (ParseFailed, Next). ParseFailed means the cron expression itself is unparseable

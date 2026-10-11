@@ -7,8 +7,8 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
 /// Parks a branch until an external system POSTs to the wake callback (the inbound "http-wake"
-/// channel), or until the TTL elapses. The bookmark match key is "http-wake:{token}", matching
-/// CorrelationKeyResolver. The token is author-defined (WaitForHttpConfig.Token) so the callback
+/// channel), or until the TTL elapses. The bookmark match key is
+/// <see cref="Channels.HttpWakeChannel.Key"/> of the token. The token is author-defined (WaitForHttpConfig.Token) so the callback
 /// URL is known at design time and can be handed to the external caller as a shared secret; when
 /// the author leaves it unset it defaults to the run's RefId, which scopes the wake per-run but is
 /// not a secret (it also appears in run-list APIs and logs). See <see cref="AwaitInboundNodeExecutor"/>

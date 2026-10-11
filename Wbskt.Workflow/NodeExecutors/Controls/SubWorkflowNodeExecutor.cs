@@ -6,6 +6,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
@@ -67,16 +68,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                 null);
         }
 
-        InboundEvent evt = new(
-            "manual",
-            [$"manual:{childRefId}"],
-            $"manual:{childRefId}:{Guid.NewGuid()}",
-            new Dictionary<string, JsonElement>
-            {
-                ["workflowDefinitionRefId"] = JsonSerializer.SerializeToElement(childRefId.ToString()),
-                ["body"] = body
-            },
-            clock.UtcNow);
+        InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.UtcNow);
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
         if (!result.RunId.HasValue)

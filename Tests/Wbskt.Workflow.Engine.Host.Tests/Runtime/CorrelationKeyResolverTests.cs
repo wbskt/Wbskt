@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
@@ -23,7 +24,7 @@ public sealed class CorrelationKeyResolverTests
         string? value2)
     {
         // Arrange
-        var resolver = new CorrelationKeyResolver();
+        var resolver = new CorrelationKeyResolver(TriggerChannelRegistry.Default);
         var payload = new Dictionary<string, JsonElement>
         {
             [field1] = JsonSerializer.SerializeToElement(value1)
@@ -47,7 +48,7 @@ public sealed class CorrelationKeyResolverTests
     public void Resolve_throws_when_required_payload_field_is_missing()
     {
         // Arrange
-        var resolver = new CorrelationKeyResolver();
+        var resolver = new CorrelationKeyResolver(TriggerChannelRegistry.Default);
         var evt = new InboundEvent("client", [], "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow);
 
         // Act
@@ -67,7 +68,7 @@ public sealed class CorrelationKeyResolverTests
         string suppliedCorrelationKey)
     {
         // Arrange
-        var resolver = new CorrelationKeyResolver();
+        var resolver = new CorrelationKeyResolver(TriggerChannelRegistry.Default);
         var evt = new InboundEvent(channelKind, [], "evt-1", new Dictionary<string, JsonElement>(), DateTime.UtcNow) { CorrelationKey = suppliedCorrelationKey };
 
         // Act

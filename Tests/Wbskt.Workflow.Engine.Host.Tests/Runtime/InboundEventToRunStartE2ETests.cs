@@ -14,6 +14,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.NodeExecutors.Triggers;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
@@ -28,12 +29,12 @@ public sealed class InboundEventToRunStartE2ETests
         var runDispatcher = new RecordingRunDispatcher();
         var bookmarkResumer = new BookmarkResumer(providers, providers, providers, runDispatcher);
         var triggerDispatcher = new TriggerDispatcher(
-            new CorrelationKeyResolver(),
+            new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             bookmarkResumer,
             providers,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, providers, providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
+            new RunStarter(providers, providers, providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(TriggerChannelRegistry.Default), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
             runDispatcher,
             providers,
             new ExpressionEvaluator(new FixedClock()));
