@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 /// <summary>
 /// Publishes a run-terminal milestone onto the bus when a run finalizes, so it appears in the
-/// central Events Log. A failure terminal status (Failed or PartiallyFailed) is surfaced as a
+/// central Events Log. A failure terminal status (<see cref="RunStatus.IsFailure"/>) is surfaced as a
 /// high-criticality <see cref="WorkflowRunFailedEvent"/>; any other terminal status (Succeeded or
 /// Cancelled) as an informational <see cref="WorkflowRunCompletedEvent"/>. WorkspaceId is resolved
 /// from the (in-memory cached) workflow definition.
@@ -19,7 +19,7 @@ public sealed class EventBusRunCompletedPublisher(IWorkflowDefinitionCache defin
     {
         WorkflowDefinition definition = await definitionCache.GetAsync(run.WorkflowDefinitionId, ct);
 
-        if (IsFailure(terminalStatus))
+        if (RunStatus.IsFailure(terminalStatus))
         {
             await eventBus.PublishAsync(
                 new WorkflowRunFailedEvent(run.WorkflowRefId, run.WorkflowDefinitionId, run.RefId, definition.WorkspaceId, terminalStatus),
@@ -30,10 +30,5 @@ public sealed class EventBusRunCompletedPublisher(IWorkflowDefinitionCache defin
         await eventBus.PublishAsync(
             new WorkflowRunCompletedEvent(run.WorkflowRefId, run.WorkflowDefinitionId, run.RefId, definition.WorkspaceId, terminalStatus),
             ct);
-    }
-
-    private static bool IsFailure(string terminalStatus)
-    {
-        return terminalStatus is "Failed" or "PartiallyFailed";
     }
 }
