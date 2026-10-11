@@ -107,7 +107,7 @@ internal static class RetryExecutor
 
                 if (idempotencyKeyProvider != null && existingRow != null)
                 {
-                    if (string.Equals(existingRow.Status, "Succeeded", StringComparison.Ordinal))
+                    if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
                     {
                         if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
                         {
@@ -118,7 +118,7 @@ internal static class RetryExecutor
                             }
                         }
                     }
-                    else if (string.Equals(existingRow.Status, "Failed", StringComparison.Ordinal))
+                    else if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
                     {
                         if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
                         {
@@ -145,7 +145,7 @@ internal static class RetryExecutor
 
                         if (existingRow.BranchRefId != claimToken)
                         {
-                            if (string.Equals(existingRow.Status, "Succeeded", StringComparison.Ordinal))
+                            if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
                             {
                                 if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
                                 {
@@ -156,7 +156,7 @@ internal static class RetryExecutor
                                     }
                                 }
                             }
-                            else if (string.Equals(existingRow.Status, "Failed", StringComparison.Ordinal))
+                            else if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
                             {
                                 if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
                                 {
@@ -284,10 +284,6 @@ internal static class RetryExecutor
                 await RecordOutcomeAsync(false, errorJson);
 
                 return fail;
-            }
-            catch (EngineFaultException)
-            {
-                throw;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

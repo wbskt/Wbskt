@@ -43,7 +43,7 @@ public sealed class BranchLoopEndToEndTests
             providers,
             providers,
             providers,
-            providers,
+            new RunJournal(providers, new FixedClock()),
             new WorkflowDefinitionCache(new MemoryCache(new MemoryCacheOptions()), providers),
             new NodeExecutorRegistry([
                 new ManualTriggerExecutor(),
@@ -53,7 +53,7 @@ public sealed class BranchLoopEndToEndTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer,
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),

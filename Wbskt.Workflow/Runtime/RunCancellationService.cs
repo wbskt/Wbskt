@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
-using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -10,17 +8,12 @@ internal sealed class RunCancellationService : IRunCancellationService
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
     private readonly IRunProvider _runProvider;
-    private readonly IHistoryEventProvider _historyEventProvider;
+    private readonly IRunJournal _journal;
     private readonly IMemoryCache _memoryCache;
     private readonly IClock _clock;
     private readonly IBranchProvider _branchProvider;
     private readonly IBookmarkProvider _bookmarkProvider;
-    private readonly IRunCountersProvider _runCountersProvider;
-    // Lazy because finishing a run goes back in through the front door: the finalizer drains queued
-    // triggers and wakes a parent run through the inbound hub, the hub's dispatcher can cancel a run
-    // (CancelExisting), and a cancel can finalize. The cycle is real and by design, so it is broken
-    // here, and the finalizer is resolved only when a cancel leaves a run with nothing running.
-    private readonly Lazy<IRunFinalizer> _runFinalizer;
+    private readonly IBranchTerminator _branchTerminator;
 
     // Singleton, not per-instance: this service is Scoped and the pump runs each branch in its own
     // scope, so a per-instance registry meant the branch loop watched one token source while every
@@ -29,24 +22,22 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     public RunCancellationService(
         IRunProvider runProvider,
-        IHistoryEventProvider historyEventProvider,
+        IRunJournal journal,
         IMemoryCache memoryCache,
         IClock clock,
         IBranchProvider branchProvider,
         IBookmarkProvider bookmarkProvider,
-        IRunCountersProvider runCountersProvider,
-        Lazy<IRunFinalizer> runFinalizer,
+        IBranchTerminator branchTerminator,
         RunCancellationTokenRegistry tokenRegistry)
     {
         _tokenRegistry = tokenRegistry;
         _runProvider = runProvider;
-        _historyEventProvider = historyEventProvider;
+        _journal = journal;
         _memoryCache = memoryCache;
         _clock = clock;
         _branchProvider = branchProvider;
         _bookmarkProvider = bookmarkProvider;
-        _runCountersProvider = runCountersProvider;
-        _runFinalizer = runFinalizer;
+        _branchTerminator = branchTerminator;
     }
 
     public CancellationToken GetToken(long runId)
@@ -81,8 +72,8 @@ internal sealed class RunCancellationService : IRunCancellationService
         // silent and inexplicable from the outside. (A parked run is still 'Running'; only its branch is
         // 'Waiting'.) Single status write (2.3): the reason/timestamp ride along with the transition
         // itself, so there's no follow-up UpdateStatusAsync call.
-        bool transitioned = await _runProvider.TransitionStatusAsync(runId, "Running", "Cancelling", _clock.UtcNow, reason, ct)
-            || await _runProvider.TransitionStatusAsync(runId, "Failing", "Cancelling", _clock.UtcNow, reason, ct);
+        bool transitioned = await _runProvider.TransitionStatusAsync(runId, RunStatus.Running, RunStatus.Cancelling, _clock.UtcNow, reason, ct)
+            || await _runProvider.TransitionStatusAsync(runId, RunStatus.Failing, RunStatus.Cancelling, _clock.UtcNow, reason, ct);
 
         if (!transitioned)
         {
@@ -90,27 +81,16 @@ internal sealed class RunCancellationService : IRunCancellationService
             // cleanup below: a redelivered cancel command, or one sent while the run was already
             // cancelling, must not leave bookmarks or a waiting branch behind.
             string currentStatus = (await _runProvider.GetByIdAsync(runId, ct)).Status;
-            if (!string.Equals(currentStatus, "Cancelling", StringComparison.Ordinal))
+            if (!string.Equals(currentStatus, RunStatus.Cancelling, StringComparison.Ordinal))
             {
                 return false;
             }
         }
         else
         {
-            await _historyEventProvider.InsertBatchAsync(
-            [
-                new HistoryEventRow
-                {
-                    HistoryEventId = 0,
-                    RunId = checked((int)runId),
-                    BranchRefId = null,
-                    NodeId = null,
-                    EventKind = HistoryEventKind.RunCancellationRequested,
-                    Severity = HistoryEventKind.SeverityFor(HistoryEventKind.RunCancellationRequested),
-                    PayloadJson = JsonSerializer.Serialize(new { Reason = reason }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    Timestamp = _clock.UtcNow
-                }
-            ], ct);
+            await _journal.AppendAsync(
+                new RunJournalEntry(checked((int)runId), HistoryEventKind.RunCancellationRequested) { Payload = new { Reason = reason } },
+                ct);
         }
 
         // Flip the local view before the cleanup, so anything checking mid-way sees the cancel.
@@ -120,34 +100,23 @@ internal sealed class RunCancellationService : IRunCancellationService
         // already-Cancelling path above fall through to it safely.
         await _bookmarkProvider.DeleteAllByRunIdAsync(checked((int)runId), ct);
 
-        // Cancel waiting branches
-        int? activeBranchCount = null;
         int cancelledBranches = await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
-        if (cancelledBranches > 0)
-        {
-            activeBranchCount = await _runCountersProvider.IncrementActiveBranchesAsync(checked((int)runId), -cancelledBranches, ct);
-        }
 
         // A run with nothing left running has no branch loop to carry it to a terminal status, so
-        // without this it would sit in 'Cancelling' until the 30-minute reaper swept it. The count is
-        // re-read when this call cancelled no branches itself, as on a repeated cancel.
-        await FinalizeIfIdleAsync(runId, activeBranchCount, ct);
+        // without this it would sit in 'Cancelling' until the 30-minute reaper swept it. Releasing zero
+        // branches, as on a repeated cancel, still finalizes a run that is already idle.
+        await ReleaseCancelledBranchesAsync(runId, cancelledBranches, ct);
 
         return true;
     }
 
-    private async Task FinalizeIfIdleAsync(long runId, int? knownActiveBranchCount, CancellationToken ct)
+    private async Task ReleaseCancelledBranchesAsync(long runId, int cancelledBranches, CancellationToken ct)
     {
-        // The finalizer, not a bare SetTerminalAsync (2.3): that would skip the pending-trigger drain,
-        // the run-completed publish and the sub-workflow completion hook, stranding parents.
+        // Through the terminator, not a bare SetTerminalAsync (2.3): that would skip the pending-trigger
+        // drain, the run-completed publish and the sub-workflow completion hook, stranding parents.
         try
         {
-            int activeBranchCount = knownActiveBranchCount
-                ?? (await _runCountersProvider.GetByRunIdAsync(checked((int)runId), ct)).ActiveBranchCount;
-            if (activeBranchCount <= 0)
-            {
-                await _runFinalizer.Value.FinalizeAsync(runId, ct);
-            }
+            await _branchTerminator.ReleaseAsync(checked((int)runId), cancelledBranches, ct);
         }
         catch (Exception)
         {
@@ -165,8 +134,8 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
 
         string status = (await _runProvider.GetByIdAsync(runId, ct)).Status;
-        bool isCancellationRequested = string.Equals(status, "Cancelling", StringComparison.Ordinal)
-            || string.Equals(status, "Cancelled", StringComparison.Ordinal);
+        bool isCancellationRequested = string.Equals(status, RunStatus.Cancelling, StringComparison.Ordinal)
+            || string.Equals(status, RunStatus.Cancelled, StringComparison.Ordinal);
         _memoryCache.Set(CreateCacheKey(runId), isCancellationRequested, CacheTtl);
         return isCancellationRequested;
     }

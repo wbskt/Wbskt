@@ -53,7 +53,7 @@ public sealed class SubWorkflowCompletionHookTests
         var finalizer = new RunFinalizer(
             new RecordingRunProvider(),
             new StubBranchProvider(),
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new RecordingPendingTriggerEventDrainer(),
             new RecordingRunCompletedPublisher(),
             bookmarkProvider,

@@ -20,6 +20,8 @@ public static class RunStatus
     public const string PartiallyFailed = "PartiallyFailed";
     public const string Cancelled = "Cancelled";
     public const string OutOfCredits = "OutOfCredits";
+    // Nothing in the engine sets this any more (the path that did was never reached). It stays because
+    // the run stats and the console's stats response still report a Faulted count.
     public const string Faulted = "Faulted";
 
     /// <summary>Every way a run can end without succeeding. Cancelled is a decision, not a failure.</summary>

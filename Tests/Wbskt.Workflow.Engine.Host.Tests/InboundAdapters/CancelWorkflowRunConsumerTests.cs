@@ -49,13 +49,12 @@ public sealed class CancelWorkflowRunConsumerTests
         var history = new Mock<IHistoryEventProvider>();
         var service = new RunCancellationService(
             run.Provider.Object,
-            history.Object,
+            new RunJournal(history.Object, Mock.Of<IClock>()),
             new MemoryCache(new MemoryCacheOptions()),
             Mock.Of<IClock>(c => c.UtcNow == new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)),
             Mock.Of<IBranchProvider>(),
             Mock.Of<IBookmarkProvider>(),
-            new UnlimitedRunCountersProvider(),
-            new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer()),
+            new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new RunCancellationTokenRegistry());
         var consumer = new CancelWorkflowRunConsumer(service);
 

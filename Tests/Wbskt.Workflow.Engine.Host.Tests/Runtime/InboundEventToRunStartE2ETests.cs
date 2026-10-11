@@ -33,7 +33,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
+            new RunStarter(providers, providers, providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
             runDispatcher,
             providers,
             new ExpressionEvaluator(new FixedClock()));
@@ -43,7 +43,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             providers,
             providers,
-            providers,
+            new RunJournal(providers, new FixedClock()),
             new WorkflowDefinitionCache(new MemoryCache(new MemoryCacheOptions()), providers),
             new NodeExecutorRegistry([
                 new PassthroughTriggerExecutor(NodeKind.TriggerClient, new FixedClock()),
@@ -53,7 +53,7 @@ public sealed class InboundEventToRunStartE2ETests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequenceIdGenerator(),
-            new CompletingRunFinalizer(providers),
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new CompletingRunFinalizer(providers))),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),

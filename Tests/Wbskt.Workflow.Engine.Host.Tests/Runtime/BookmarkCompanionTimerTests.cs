@@ -27,12 +27,13 @@ public sealed class BookmarkCompanionTimerTests
         Guid nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         WorkflowDefinition definition = CreateDefinition(nodeId);
         var bookmarkProvider = new RecordingBookmarkProvider();
+        var runCounters = new StubRunCountersProvider();
         var loop = new BranchLoop(
             new RecordingBranchProvider(nodeId, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1001),
             new StubRunProvider(),
-            new StubRunCountersProvider(),
+            runCounters,
             bookmarkProvider,
-            new RecordingHistoryEventProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.WaitForBookmark(
                 new SignalWakeCondition("operator-ack", "corr-42") { Ttl = TimeSpan.FromMinutes(5), TtlPort = "timeout" },
@@ -41,7 +42,7 @@ public sealed class BookmarkCompanionTimerTests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            new NoOpRunFinalizer(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),

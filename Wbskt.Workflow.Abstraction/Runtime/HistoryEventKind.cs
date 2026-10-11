@@ -12,6 +12,7 @@ public static class HistoryEventKind
     // Run lifecycle
     public const string RunStarted = "RunStarted";
     public const string RunFinalized = "RunFinalized";
+    // Not written any more; kept so a history row of this kind still reads with its severity.
     public const string RunFaulted = "RunFaulted";
     public const string RunCancellationRequested = "RunCancellationRequested";
 

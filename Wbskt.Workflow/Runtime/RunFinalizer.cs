@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -11,7 +10,7 @@ internal sealed class RunFinalizer : IRunFinalizer
 {
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;
-    private readonly IHistoryEventProvider _historyEventProvider;
+    private readonly IRunJournal _journal;
     private readonly IPendingTriggerEventDrainer _pendingTriggerEventDrainer;
     private readonly IRunCompletedPublisher _runCompletedPublisher;
     private readonly IBookmarkProvider _bookmarkProvider;
@@ -28,7 +27,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     public RunFinalizer(
         IRunProvider runProvider,
         IBranchProvider branchProvider,
-        IHistoryEventProvider historyEventProvider,
+        IRunJournal journal,
         IPendingTriggerEventDrainer pendingTriggerEventDrainer,
         IRunCompletedPublisher runCompletedPublisher,
         IBookmarkProvider bookmarkProvider,
@@ -42,7 +41,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     {
         _runProvider = runProvider;
         _branchProvider = branchProvider;
-        _historyEventProvider = historyEventProvider;
+        _journal = journal;
         _pendingTriggerEventDrainer = pendingTriggerEventDrainer;
         _runCompletedPublisher = runCompletedPublisher;
         _bookmarkProvider = bookmarkProvider;
@@ -91,20 +90,14 @@ internal sealed class RunFinalizer : IRunFinalizer
             updatedRun.WorkflowRefId.ToString(),
             terminalStatus,
             await ResolveWorkspaceIdAsync(updatedRun.WorkflowDefinitionId, ct));
-        await _historyEventProvider.InsertBatchAsync(
-        [
-            new HistoryEventRow
+        await _journal.AppendAsync(
+            new RunJournalEntry(updatedRun.Id, HistoryEventKind.RunFinalized)
             {
-                HistoryEventId = 0,
-                RunId = updatedRun.Id,
-                BranchRefId = null,
-                NodeId = null,
-                EventKind = HistoryEventKind.RunFinalized,
-                Severity = GetSeverity(terminalStatus),
-                PayloadJson = JsonSerializer.Serialize(new { Status = terminalStatus }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                Timestamp = completedAt
-            }
-        ], ct);
+                Payload = new { Status = terminalStatus },
+                // A run that ended badly is kept as long as the failures that caused it (see HistoryEventKind).
+                Severity = RunStatus.IsFailure(terminalStatus) ? HistoryEventKind.SeverityWarn : HistoryEventKind.SeverityInfo
+            },
+            ct);
         
         // The run just freed its correlation slot, so release exactly one event that a Queue
         // concurrency policy parked behind it. One, not all: draining more would re-enter the
@@ -126,45 +119,40 @@ internal sealed class RunFinalizer : IRunFinalizer
 
     private static string DetermineTerminalStatus(RunRow run, IReadOnlyCollection<BranchRow> branches)
     {
-        if (string.Equals(run.Status, "Cancelling", StringComparison.Ordinal))
+        if (string.Equals(run.Status, RunStatus.Cancelling, StringComparison.Ordinal))
         {
             if (string.Equals(run.CancellationReason, "OUT_OF_CREDITS", StringComparison.Ordinal))
             {
-                return "OutOfCredits";
+                return RunStatus.OutOfCredits;
             }
 
             // §5.4: a branch that actually completed despite the cancellation request means the
             // run only partially made it out - anything else (nothing completed, whether branches
             // were cancelled, failed, or the request simply beat every branch to the punch) is a
             // clean Cancelled.
-            bool hasCancelledBranch = branches.Any(branch => string.Equals(branch.Status, "Cancelled", StringComparison.Ordinal));
-            bool hasCompletedDespiteCancellation = branches.Any(branch => string.Equals(branch.Status, "Completed", StringComparison.Ordinal));
-            return hasCancelledBranch && hasCompletedDespiteCancellation ? "PartiallyFailed" : "Cancelled";
+            bool hasCancelledBranch = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Cancelled, StringComparison.Ordinal));
+            bool hasCompletedDespiteCancellation = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Completed, StringComparison.Ordinal));
+            return hasCancelledBranch && hasCompletedDespiteCancellation ? RunStatus.PartiallyFailed : RunStatus.Cancelled;
         }
 
-        if (string.Equals(run.Status, "Failing", StringComparison.Ordinal))
+        if (string.Equals(run.Status, RunStatus.Failing, StringComparison.Ordinal))
         {
-            return "Failed";
+            return RunStatus.Failed;
         }
 
-        bool hasCompleted = branches.Any(branch => string.Equals(branch.Status, "Completed", StringComparison.Ordinal));
-        bool hasFailed = branches.Any(branch => string.Equals(branch.Status, "Failed", StringComparison.Ordinal));
+        bool hasCompleted = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Completed, StringComparison.Ordinal));
+        bool hasFailed = branches.Any(branch => string.Equals(branch.Status, BranchStatus.Failed, StringComparison.Ordinal));
 
         if (hasFailed && hasCompleted)
         {
-            return "PartiallyFailed";
+            return RunStatus.PartiallyFailed;
         }
 
         if (hasFailed)
         {
-            return "Failed";
+            return RunStatus.Failed;
         }
 
-        return "Succeeded";
-    }
-
-    private static string GetSeverity(string terminalStatus)
-    {
-        return RunStatus.IsFailure(terminalStatus) ? "Warn" : "Info";
+        return RunStatus.Succeeded;
     }
 }

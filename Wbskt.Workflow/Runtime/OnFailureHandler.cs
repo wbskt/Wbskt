@@ -29,7 +29,7 @@ internal sealed class OnFailureHandler
     {
         return new Dictionary<string, JsonElement>
         {
-            ["lastError"] = JsonSerializer.SerializeToElement(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            ["lastError"] = JsonSerializer.SerializeToElement(new { fail.ErrorCode, fail.Message }, EngineJson.Options)
         };
     }
 }

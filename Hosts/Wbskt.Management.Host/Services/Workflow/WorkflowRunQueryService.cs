@@ -2,6 +2,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
@@ -24,7 +25,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     /// is still going on its other branches; a 'Cancelling' one is accepted again, as the engine repeats
     /// its cleanup. Every other status is terminal.
     /// </summary>
-    private static readonly HashSet<string> CancellableStatuses = new(StringComparer.Ordinal) { "Running", "Failing", "Cancelling" };
+    private static readonly HashSet<string> CancellableStatuses = new(StringComparer.Ordinal) { RunStatus.Running, RunStatus.Failing, RunStatus.Cancelling };
 
     private readonly IRunProvider _runProvider;
     private readonly IBranchProvider _branchProvider;

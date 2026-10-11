@@ -63,7 +63,7 @@ public sealed class NodeExecutorsE2ETests
             providers,
             providers,
             providers,
-            providers,
+            new RunJournal(providers, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
             new NodeExecutorRegistry([
                 new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock()),
@@ -75,7 +75,7 @@ public sealed class NodeExecutorsE2ETests
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer,
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),

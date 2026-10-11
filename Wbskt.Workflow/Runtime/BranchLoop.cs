@@ -15,9 +15,6 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class BranchLoop : IBranchLoop
 {
-    private const string ActiveStatus = "Active";
-    private const string CompletedStatus = "Completed";
-
     /// <summary>
     /// Local-state key marking a branch as a member of a fan-out cohort (written by ForkNodeExecutor
     /// and ParallelForEachNodeExecutor, read by JoinNodeExecutor). Kept here too because the fail
@@ -28,14 +25,14 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly IRunProvider _runProvider;
     private readonly IRunCountersProvider _runCountersProvider;
     private readonly IBookmarkProvider _bookmarkProvider;
-    private readonly IHistoryEventProvider _historyEventProvider;
+    private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
     private readonly IRunDispatcher _runDispatcher;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
-    private readonly IRunFinalizer _runFinalizer;
+    private readonly IBranchTerminator _branchTerminator;
     private readonly IRunCancellationService _runCancellationService;
     private readonly ICompensationOrchestrator _compensationOrchestrator;
     private readonly ICreditCostCalculator _creditCostCalculator;
@@ -49,14 +46,14 @@ internal sealed class BranchLoop : IBranchLoop
         IRunProvider runProvider,
         IRunCountersProvider runCountersProvider,
         IBookmarkProvider bookmarkProvider,
-        IHistoryEventProvider historyEventProvider,
+        IRunJournal journal,
         IWorkflowDefinitionCache workflowDefinitionCache,
         INodeExecutorRegistry nodeExecutorRegistry,
         IRunDispatcher runDispatcher,
         IIdempotencyKeyProvider idempotencyKeyProvider,
         IClock clock,
         IIdGenerator idGenerator,
-        IRunFinalizer runFinalizer,
+        IBranchTerminator branchTerminator,
         IRunCancellationService runCancellationService,
         ICompensationOrchestrator compensationOrchestrator,
         ICreditCostCalculator creditCostCalculator,
@@ -68,7 +65,7 @@ internal sealed class BranchLoop : IBranchLoop
         _runProvider = runProvider;
         _runCountersProvider = runCountersProvider;
         _bookmarkProvider = bookmarkProvider;
-        _historyEventProvider = historyEventProvider;
+        _journal = journal;
         _workflowDefinitionCache = workflowDefinitionCache;
         _nodeExecutorRegistry = nodeExecutorRegistry;
         _runDispatcher = runDispatcher;
@@ -76,7 +73,7 @@ internal sealed class BranchLoop : IBranchLoop
         _clock = clock;
         _idGenerator = idGenerator;
         _workflowMetrics = workflowMetrics;
-        _runFinalizer = runFinalizer;
+        _branchTerminator = branchTerminator;
         _runCancellationService = runCancellationService;
         _compensationOrchestrator = compensationOrchestrator;
         _creditCostCalculator = creditCostCalculator;
@@ -105,7 +102,7 @@ internal sealed class BranchLoop : IBranchLoop
             branchRow.RefId,
             null,
             entryKind,
-            JsonSerializer.Serialize(new { reason = reason.ToString() }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            new { reason = reason.ToString() },
             ct);
         _logger?.LogInformation("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
@@ -184,27 +181,11 @@ internal sealed class BranchLoop : IBranchLoop
                             branchRow.RefId,
                             node.NodeId,
                             HistoryEventKind.NodeRetrying,
-                            JsonSerializer.Serialize(
-                                new { attempt, maxAttempts, delayMs = delay.TotalMilliseconds, reason },
-                                new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                            new { attempt, maxAttempts, delayMs = delay.TotalMilliseconds, reason },
                             retryCt),
                         // Summed rather than written per attempt: a row per charge would roughly double
                         // history volume for a number that belongs on the outcome event anyway.
                         onCharge: cost => creditsCharged += cost);
-                }
-                catch (EngineFaultException ex)
-                {
-                    _logger?.LogError(ex, "Engine fault occurred executing node {NodeId} in branch {BranchId} for run {RunId}", branchRow.NodeId, branchId, runId);
-                    outcome = "Failed";
-                    await _runProvider.TransitionStatusAsync(runRow.Id, runRow.Status, "Faulted", null, null, ct);
-                    string faultJson = JsonSerializer.Serialize(new { ex.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                    await AppendEventAsync(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.RunFaulted, faultJson, ct);
-                    // Faulted is terminal for the run (the Run_SetTerminal guard now protects it from being
-                    // overwritten by sibling completions), so drain this branch's slot directly instead of
-                    // going through the finalizer.
-                    await _branchProvider.SetFailedAsync(branchId, faultJson, ct);
-                    await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
-                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -255,11 +236,11 @@ internal sealed class BranchLoop : IBranchLoop
                 // retry backoff; this is the executor's own elapsed time and is what per-node timing
                 // analytics reads.
                 double durationMs = stopwatch.Elapsed.TotalMilliseconds;
-                string? eventPayload = result switch
+                object eventPayload = result switch
                 {
-                    NodeExecutionResult.Fail fail => JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message, durationMs, creditsCharged }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    NodeExecutionResult.Continue cont => JsonSerializer.Serialize(new { port = cont.OutboundPort, output = cont.LocalStatePatch, durationMs, creditsCharged }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                    _ => JsonSerializer.Serialize(new { durationMs, creditsCharged }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                    NodeExecutionResult.Fail fail => new { fail.ErrorCode, fail.Message, durationMs, creditsCharged },
+                    NodeExecutionResult.Continue cont => new { port = cont.OutboundPort, output = cont.LocalStatePatch, durationMs, creditsCharged },
+                    _ => new { durationMs, creditsCharged }
                 };
 
                 _logger?.LogInformation("Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);
@@ -294,7 +275,7 @@ internal sealed class BranchLoop : IBranchLoop
                     }
 
                     string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, @continue.LocalStatePatch, @continue.RemoveKeys));
-                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, ActiveStatus, localJson, branchRow.LastOutputJson, ct);
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, BranchStatus.Active, localJson, branchRow.LastOutputJson, ct);
                     break;
                 }
 
@@ -305,7 +286,7 @@ internal sealed class BranchLoop : IBranchLoop
                     {
                         ForkSpec child = fork.Children.Single();
                         string childLocalJson = SerializeLocalState(MergeLocalState(SerializeLocalState(baseLocalState), child.LocalState));
-                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, child.OutboundPort), ActiveStatus, childLocalJson, branchRow.LastOutputJson, ct);
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, child.OutboundPort), BranchStatus.Active, childLocalJson, branchRow.LastOutputJson, ct);
                         break;
                     }
 
@@ -324,7 +305,7 @@ internal sealed class BranchLoop : IBranchLoop
                                 ParentBranchId = branchRow.RefId,
                                 ForkCohortId = cohortId,
                                 NodeId = ResolveForkTargetNodeId(definition, node.NodeId, child.OutboundPort),
-                                Status = ActiveStatus,
+                                Status = BranchStatus.Active,
                                 PendingTakePort = null,
                                 LocalJson = childLocalJson,
                                 LastOutputJson = null,
@@ -344,14 +325,14 @@ internal sealed class BranchLoop : IBranchLoop
                     }
 
                     string continueLocalJson = SerializeLocalState(baseLocalState);
-                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, fork.ContinueOutboundPort), ActiveStatus, continueLocalJson, branchRow.LastOutputJson, ct);
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, ResolveForkTargetNodeId(definition, node.NodeId, fork.ContinueOutboundPort), BranchStatus.Active, continueLocalJson, branchRow.LastOutputJson, ct);
                     break;
                 }
 
                 case NodeExecutionResult.WaitForBookmark wait:
                 {
                     string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, wait.LocalStatePatch));
-                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Waiting", localJson, branchRow.LastOutputJson, ct);
+                    branchRow = await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, BranchStatus.Waiting, localJson, branchRow.LastOutputJson, ct);
                     await AppendEventAsync(runRow.Id, branchRow.RefId, branchRow.NodeId, HistoryEventKind.BranchParked, ct);
 
                     // Single-row model (design §3.5): one bookmark row per wait. A TTL, if present,
@@ -377,11 +358,11 @@ internal sealed class BranchLoop : IBranchLoop
                         }
 
                         string localJson = SerializeLocalState(MergeLocalState(branchRow.LocalJson, handledContinue.LocalStatePatch, handledContinue.RemoveKeys));
-                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, ActiveStatus, localJson, branchRow.LastOutputJson, ct);
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, nextNodeId.Value, BranchStatus.Active, localJson, branchRow.LastOutputJson, ct);
                         break;
                     }
 
-                    string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    string errorJson = JsonSerializer.Serialize(new { fail.ErrorCode, fail.Message }, EngineJson.Options);
                     OnFailureConfig? config = (node as BaseActionNode)?.OnFailure;
                     ErrorOutcome outcome = config?.Outcome ?? ErrorOutcome.FailBranch;
                     bool shouldCompensate = (outcome == ErrorOutcome.Compensate) || (definition.RunCompensationOnFailure);
@@ -389,12 +370,12 @@ internal sealed class BranchLoop : IBranchLoop
                     if (outcome == ErrorOutcome.FailRun)
                     {
                         await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
-                        await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", null, null, ct);
+                        await _runProvider.TransitionStatusAsync(runRow.Id, RunStatus.Running, RunStatus.Failing, null, null, ct);
                         await _runCancellationService.RequestCancellationAsync(runRow.Id, $"FailRun cascade triggered by node {node.NodeId}", ct);
                     }
                     else if (shouldCompensate)
                     {
-                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, node.NodeId, "Compensating", branchRow.LocalJson, branchRow.LastOutputJson, ct);
+                        branchRow = await _branchProvider.UpdatePointerAsync(branchId, node.NodeId, BranchStatus.Compensating, branchRow.LocalJson, branchRow.LastOutputJson, ct);
                         await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
                         await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
                     }
@@ -403,7 +384,7 @@ internal sealed class BranchLoop : IBranchLoop
                         await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
                         if (definition.FailFast)
                         {
-                            await _runProvider.TransitionStatusAsync(runRow.Id, "Running", "Failing", null, null, ct);
+                            await _runProvider.TransitionStatusAsync(runRow.Id, RunStatus.Running, RunStatus.Failing, null, null, ct);
                         }
                     }
 
@@ -422,9 +403,7 @@ internal sealed class BranchLoop : IBranchLoop
                         branchRow.RefId,
                         node.NodeId,
                         HistoryEventKind.BranchFailed,
-                        JsonSerializer.Serialize(
-                            new { fail.ErrorCode, fail.Message, onFailure = outcome.ToString(), compensated = shouldCompensate },
-                            new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                        new { fail.ErrorCode, fail.Message, onFailure = outcome.ToString(), compensated = shouldCompensate },
                         ct);
 
                     // This branch is dying, so it will never reach its Join. Contribute on its behalf,
@@ -432,12 +411,7 @@ internal sealed class BranchLoop : IBranchLoop
                     // Join is silently skipped until the reaper eventually cancels the run.
                     await ContributeFailureToJoinAsync(runRow, branchRow, definition, ct);
 
-                    int postDecrementCount = await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
-                    if (postDecrementCount == 0)
-                    {
-                        await _runFinalizer.FinalizeAsync(runRow.Id, ct);
-                    }
-
+                    await _branchTerminator.ReleaseAsync(runRow.Id, 1, ct);
                     return;
                 }
 
@@ -518,7 +492,7 @@ internal sealed class BranchLoop : IBranchLoop
                 ParentBranchId = branchRow.RefId,
                 ForkCohortId = branchRow.ForkCohortId,
                 NodeId = continuationNodeId.Value,
-                Status = ActiveStatus,
+                Status = BranchStatus.Active,
                 PendingTakePort = null,
                 LocalJson = continuationLocalJson,
                 LastOutputJson = null,
@@ -540,25 +514,15 @@ internal sealed class BranchLoop : IBranchLoop
     private async Task CompleteBranchAsync(int runId, long branchId, Guid branchRefId, CancellationToken ct)
     {
         await _branchProvider.SetCompletedAsync(branchId, ct);
-        int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
         await AppendEventAsync(runId, branchRefId, null, HistoryEventKind.BranchCompleted, ct);
-
-        if (postDecrementCount == 0)
-        {
-            await _runFinalizer.FinalizeAsync(runId, ct);
-        }
+        await _branchTerminator.ReleaseAsync(runId, 1, ct);
     }
 
     private async Task CancelBranchAsync(int runId, long branchId, BranchRow branchRow, CancellationToken ct)
     {
-        await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, "Cancelled", branchRow.LocalJson, branchRow.LastOutputJson, ct);
-        int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
+        await _branchProvider.UpdatePointerAsync(branchId, branchRow.NodeId, BranchStatus.Cancelled, branchRow.LocalJson, branchRow.LastOutputJson, ct);
         await AppendEventAsync(runId, branchRow.RefId, null, HistoryEventKind.BranchCancelled, ct);
-
-        if (postDecrementCount == 0)
-        {
-            await _runFinalizer.FinalizeAsync(runId, ct);
-        }
+        await _branchTerminator.ReleaseAsync(runId, 1, ct);
     }
 
     private Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, CancellationToken ct)
@@ -566,21 +530,9 @@ internal sealed class BranchLoop : IBranchLoop
         return AppendEventAsync(runId, branchRefId, nodeId, eventKind, null, ct);
     }
 
-    private async Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, string? payloadJson, CancellationToken ct)
+    private Task AppendEventAsync(int runId, Guid branchRefId, Guid? nodeId, string eventKind, object? payload, CancellationToken ct)
     {
-        await _historyEventProvider.InsertBatchAsync([
-            new HistoryEventRow
-            {
-                HistoryEventId = 0,
-                RunId = runId,
-                BranchRefId = branchRefId,
-                NodeId = nodeId,
-                EventKind = eventKind,
-                Severity = HistoryEventKind.SeverityFor(eventKind),
-                PayloadJson = payloadJson,
-                Timestamp = _clock.UtcNow
-            }
-        ], ct);
+        return _journal.AppendAsync(new RunJournalEntry(runId, eventKind) { BranchRefId = branchRefId, NodeId = nodeId, Payload = payload }, ct);
     }
 
     private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)
@@ -645,13 +597,13 @@ internal sealed class BranchLoop : IBranchLoop
 
     private static IReadOnlyDictionary<string, JsonElement> DeserializeDictionary(string json)
     {
-        return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, EngineJson.Options)
             ?? new Dictionary<string, JsonElement>();
     }
 
     private string SerializeLocalState(IReadOnlyDictionary<string, JsonElement> localState)
     {
-        return JsonSerializer.Serialize(localState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return JsonSerializer.Serialize(localState, EngineJson.Options);
     }
 
     private BookmarkRow CreateBookmarkRow(int runId, Guid branchRefId, Guid nodeId, WakeCondition condition, DateTime nowUtc)
@@ -665,7 +617,7 @@ internal sealed class BranchLoop : IBranchLoop
             NodeId = nodeId,
             WakeConditionKind = GetWakeConditionKind(condition),
             MatchKey = GetWakeConditionMatchKey(condition),
-            WakeConditionJson = JsonSerializer.Serialize(condition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            WakeConditionJson = JsonSerializer.Serialize(condition, EngineJson.Options),
             ExpiresAt = GetWakeConditionExpiresAt(condition, nowUtc),
             TtlPort = condition.TtlPort,
             CreatedAt = nowUtc

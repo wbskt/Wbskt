@@ -41,7 +41,7 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
 
     private async Task<TriggerConcurrencyDecision> QueueAsync(Abstraction.Entities.TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
     {
-        string inboundEventJson = JsonSerializer.Serialize(evt, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        string inboundEventJson = JsonSerializer.Serialize(evt, EngineJson.Options);
         await _pendingTriggerEventProvider.EnqueueAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey ?? string.Empty, inboundEventJson, ct);
         return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, TriggerConcurrencyDecision.NoRuns);
     }

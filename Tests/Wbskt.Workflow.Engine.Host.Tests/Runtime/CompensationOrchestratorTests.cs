@@ -141,7 +141,7 @@ public sealed class CompensationOrchestratorTests
             Orchestrator = new CompensationOrchestrator(
                 new StubRunProvider(),
                 new StubBranchProvider(),
-                HistoryProvider,
+                new RunJournal(HistoryProvider, new FixedClock()),
                 new StubWorkflowDefinitionCache(definition),
                 new StubNodeExecutorRegistry(executor),
                 new FixedClock());
