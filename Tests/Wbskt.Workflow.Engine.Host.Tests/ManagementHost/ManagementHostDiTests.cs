@@ -31,6 +31,7 @@ public sealed class ManagementHostDiTests
         services.AddSingleton<IIdentityService, IdentityService>();
         services.AddQueuedEventBus();
         services.AddSingleton(Mock.Of<IEventBus>());
+        services.AddSingleton(Mock.Of<MassTransit.ISendEndpointProvider>());
         services.AddSingleton(Mock.Of<IWorkflowEngineClient>());
         services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
         services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();

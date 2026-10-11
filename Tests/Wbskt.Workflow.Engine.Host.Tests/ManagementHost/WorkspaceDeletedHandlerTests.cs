@@ -60,7 +60,7 @@ public sealed class WorkspaceDeletedHandlerTests
             .ReturnsAsync(new WorkspaceRetirement([], [201L, 202L, 203L], []));
         var bus = new Mock<IEventBus>();
         var queued = new Mock<IEventBus>(MockBehavior.Strict);
-        var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), bus.Object, queued.Object);
+        var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), bus.Object, queued.Object, Mock.Of<ISendEndpointProvider>());
 
         var handler = new WorkspaceDeletedHandler(
             provider.Object, bus.Object, gateway, Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceDeletedHandler>.Instance);

@@ -1,27 +1,23 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Wbskt.Workflow.Engine.Host.Controllers;
+namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 /// <summary>
 /// The inbound event id a webhook delivery is deduplicated on. The dispatcher claims
 /// <c>inbound-event:{id}</c> in dbo.IdempotencyKeys before starting anything, so two deliveries with
-/// the same id start one run. Without an <c>Idempotency-Key</c> header every delivery gets a fresh
-/// id, as before; with one, a sender's retry of the same delivery is dropped as a duplicate for as
-/// long as the claim is kept (WorkflowEngineOptions.IdempotencyRetentionWindow, 24 hours by default).
+/// the same id start one run. Without an <c>Idempotency-Key</c> header the id is the bus message's,
+/// so a redelivery of the same message starts no second run; with one, a sender's retry of the same
+/// delivery is dropped as a duplicate for as long as the claim is kept
+/// (WorkflowEngineOptions.IdempotencyRetentionWindow, 24 hours by default).
 /// </summary>
 internal static class WebhookEventIds
 {
-    public const int MaxKeyLength = 255;
-
-    public static bool IsValidKey(string key) =>
-        key.Length is > 0 and <= MaxKeyLength && key.All(c => c is >= '\x21' and <= '\x7e');
-
-    public static string For(Guid workspaceRef, string path, string? idempotencyKey, string? secret)
+    public static string For(Guid workspaceRef, string path, string? idempotencyKey, string? secret, string messageId)
     {
         if (idempotencyKey is null)
         {
-            return $"webhook:{workspaceRef}:{path}:{Guid.NewGuid()}";
+            return $"webhook:{workspaceRef}:{path}:{messageId}";
         }
 
         // Hashed so a caller-chosen key of any length fits the 200-character claim column. The path

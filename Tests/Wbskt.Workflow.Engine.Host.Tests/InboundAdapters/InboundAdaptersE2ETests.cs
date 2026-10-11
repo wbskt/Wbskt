@@ -2,6 +2,7 @@ using System.Text.Json;
 using MassTransit;
 using Moq;
 using Wbskt.Events.Client;
+using Wbskt.Events.Workflow;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Controllers;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -33,18 +34,15 @@ public sealed class InboundAdaptersE2ETests
     }
 
     [Fact]
-    public async Task WebhookController_routes_to_hub()
+    public async Task InboundCallbackConsumer_routes_a_webhook_to_hub()
     {
         var hub = CreateHub();
-        var runProvider = new Mock<IRunProvider>();
-        runProvider.Setup(r => r.GetByIdAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RunRow { Id = 1, RefId = Guid.Empty, WorkflowDefinitionId = 1, WorkflowRefId = Guid.Empty, WorkflowVersion = 1, TriggerNodeId = Guid.Empty, CorrelationKey = null, Status = "Active", StartedAt = DateTime.UtcNow, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null, CreditBudget = 0, CreatedAt = DateTime.UtcNow });
-        var controller = new InboundWebhookController(hub.Object, runProvider.Object)
-        {
-            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() }
-        };
+        var consumer = new InboundCallbackConsumer(hub.Object);
+        var context = new Mock<ConsumeContext<InboundWebhook>>();
+        context.SetupGet(c => c.Message).Returns(new InboundWebhook(Guid.NewGuid(), "alerts", "{\"value\":1}", null, null));
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
-        await controller.Post(Guid.NewGuid(), "alerts", JsonSerializer.SerializeToElement(new { value = 1 }), CancellationToken.None);
+        await consumer.Consume(context.Object);
 
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e => e.ChannelKind == "webhook"),

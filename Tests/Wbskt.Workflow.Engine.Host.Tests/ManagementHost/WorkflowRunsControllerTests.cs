@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Routing;
 using System.Text.Json;
@@ -511,7 +512,7 @@ public sealed class WorkflowRunsControllerTests
         {
             Runs.Setup(x => x.FindRowByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((RunRow?)null);
-            var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Bus.Object, Mock.Of<IEventBus>());
+            var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Bus.Object, Mock.Of<IEventBus>(), Mock.Of<ISendEndpointProvider>());
             var queryService = new WorkflowRunQueryService(Runs.Object, Mock.Of<IBranchProvider>(), Definitions.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
             Controller = new WorkflowRunsController(queryService, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunService>>()))
             {
