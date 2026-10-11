@@ -15,12 +15,14 @@ public sealed class SocketMetrics : IDisposable
     private readonly UpDownCounter<long> _open;
     private readonly Counter<long> _connects;
     private readonly Counter<long> _disconnects;
+    private readonly Counter<long> _dropped;
 
     public SocketMetrics()
     {
         _open = _meter.CreateUpDownCounter<long>("wbskt_socket_connections_open");
         _connects = _meter.CreateCounter<long>("wbskt_socket_connects_total");
         _disconnects = _meter.CreateCounter<long>("wbskt_socket_disconnects_total");
+        _dropped = _meter.CreateCounter<long>("wbskt_socket_messages_dropped_total");
     }
 
     public void Connected()
@@ -33,6 +35,12 @@ public sealed class SocketMetrics : IDisposable
     {
         _open.Add(-1);
         _disconnects.Add(1, new KeyValuePair<string, object?>("reason", reason.Tag()));
+    }
+
+    /// <summary>A device message was not passed on: over budget, or not a valid envelope.</summary>
+    public void Dropped(string reason)
+    {
+        _dropped.Add(1, new KeyValuePair<string, object?>("reason", reason));
     }
 
     public void Dispose() => _meter.Dispose();

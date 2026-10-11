@@ -49,6 +49,7 @@ public static class Program
         // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
+        builder.Services.Configure<MessageBudgetOptions>(builder.Configuration.GetSection(MessageBudgetOptions.SectionName));
 
         // Event Bus — per-instance fan-out so every socket instance sees every client event
         // (ClientCommandEvent, ClientPingEvent, ClientStatusChangedEvent); see EventBusExtensions.
