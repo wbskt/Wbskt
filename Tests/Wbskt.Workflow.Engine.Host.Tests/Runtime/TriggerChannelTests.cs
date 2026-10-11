@@ -195,6 +195,19 @@ public sealed class TriggerChannelTests
     }
 
     [Fact]
+    public void A_command_outcome_wakes_the_step_waiting_on_that_command()
+    {
+        Guid command = Guid.NewGuid();
+        InboundEvent acked = CommandChannel.Event(command, CommandChannel.Acked, null);
+        InboundEvent failed = CommandChannel.Event(command, CommandChannel.Failed, "The device is not connected.");
+
+        Assert.Equal(CommandChannel.Key(command), new CommandChannel().CorrelationKey(acked));
+        Assert.Contains(CommandChannel.Key(command), failed.MatchKeys);
+        // An ack and a failure for one command are different events, so neither is dropped as the other's duplicate.
+        Assert.NotEqual(acked.InboundEventId, failed.InboundEventId);
+    }
+
+    [Fact]
     public async Task Wake_only_channels_register_nothing_and_no_two_channels_claim_one_node()
     {
         BaseNode[] triggers =

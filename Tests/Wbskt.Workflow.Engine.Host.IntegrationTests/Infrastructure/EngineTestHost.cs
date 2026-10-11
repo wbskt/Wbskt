@@ -55,6 +55,7 @@ internal static class EngineTestHost
 internal sealed class NoopDeviceCommandPublisher : IDeviceCommandPublisher
 {
     public Task PublishCommandAsync(
+        Guid commandId,
         Guid clientRefId,
         int workspaceId,
         string command,

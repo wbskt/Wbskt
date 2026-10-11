@@ -4,9 +4,10 @@ public interface IDeviceCommandPublisher
 {
     /// <summary>
     /// Sends <paramref name="command"/> to a device. <paramref name="sentBy"/> names the workflow run
-    /// sending it, so the audit log shows the run, not a blank, as who did it.
+    /// sending it, so the audit log shows the run, not a blank, as who did it. The device's
+    /// acknowledgement, or the report that the command failed, carries <paramref name="commandId"/>.
     /// </summary>
-    Task PublishCommandAsync(Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct);
+    Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct);
 }
 
 /// <summary>The workflow and run a command came from.</summary>

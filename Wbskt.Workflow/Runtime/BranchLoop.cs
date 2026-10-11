@@ -343,6 +343,20 @@ internal sealed class BranchLoop : IBranchLoop
                     DateTime nowUtc = _clock.UtcNow;
                     await _bookmarkProvider.CreateAsync(CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, wait.Condition, nowUtc), ct);
 
+                    if (wait.AfterParked is { } afterParked)
+                    {
+                        try
+                        {
+                            await afterParked(ct);
+                        }
+                        catch (Exception ex)
+                        {
+                            // The branch is parked and its bookmark's TTL will move it on, so a failure
+                            // here is logged rather than failing a branch that is already waiting.
+                            _logger?.LogError(ex, "The follow-up of node {NodeId} failed after branch {BranchId} of run {RunId} parked.", branchRow.NodeId, branchId, runId);
+                        }
+                    }
+
                     return;
                 }
 
@@ -643,6 +657,7 @@ internal sealed class BranchLoop : IBranchLoop
             InboundWakeCondition => "inbound",
             HttpWakeCondition => "http",
             ChildRunCompletedWakeCondition => "childRunCompleted",
+            CommandOutcomeWakeCondition => "commandOutcome",
             AnyOfWakeCondition => "anyOf",
             _ => condition.GetType().Name
         };
@@ -660,6 +675,7 @@ internal sealed class BranchLoop : IBranchLoop
             InboundWakeCondition inbound => $"{inbound.DeviceRefId}:{inbound.PropertyName}",
             HttpWakeCondition http => HttpWakeChannel.Key(http.Token),
             ChildRunCompletedWakeCondition child => ChildCompletedChannel.Key(child.ChildRunId.ToString()),
+            CommandOutcomeWakeCondition command => CommandChannel.Key(command.CommandId),
             AnyOfWakeCondition => "anyOf",
             _ => string.Empty
         };

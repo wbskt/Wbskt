@@ -34,7 +34,17 @@ public abstract record NodeExecutionResult
 
     public sealed record Fork(IReadOnlyCollection<ForkSpec> Children, string? ContinueOutboundPort, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
 
-    public sealed record WaitForBookmark(WakeCondition Condition, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult;
+    public sealed record WaitForBookmark(WakeCondition Condition, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult
+    {
+        /// <summary>
+        /// Runs once the branch is parked and its bookmark exists: for a node whose wake answers
+        /// something it sends, sending it any earlier would let a fast answer arrive with nothing
+        /// waiting for it. Not part of a cached result, so a node replayed from its idempotency key
+        /// does not send again; its wait then ends by its TTL.
+        /// </summary>
+        [JsonIgnore]
+        public Func<CancellationToken, Task>? AfterParked { get; init; }
+    }
 
     public sealed record Fail(string ErrorCode, string Message, bool Retryable, [property: JsonIgnore] Exception? Cause) : NodeExecutionResult;
 
