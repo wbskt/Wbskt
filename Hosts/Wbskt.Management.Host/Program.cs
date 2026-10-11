@@ -181,31 +181,8 @@ public static class Program
             x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
             x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
         })
-        .AddWbsktJwtBearer(x =>
-        {
-            x.Events = new JwtBearerEvents
-            {
-                OnMessageReceived = context =>
-                {
-                    var isSignalR = context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications");
-                    if (!isSignalR)
-                    {
-                        return Task.CompletedTask;
-                    }
-
-                    var accessToken = context.Request.Query["access_token"];
-                    if (string.IsNullOrWhiteSpace(accessToken))
-                    {
-                        return Task.CompletedTask;
-                    }
-
-                    context.Token = accessToken;
-
-                    return Task.CompletedTask;
-
-                }
-            };
-        });
+        // The SignalR hub takes its token from ?access_token=, as browsers cannot set headers there.
+        .AddWbsktJwtBearer(x => x.Events = new JwtBearerEvents().AcceptQueryToken("/hubs/notifications"));
 
         builder.Services.AddAuthorization(options =>
         {

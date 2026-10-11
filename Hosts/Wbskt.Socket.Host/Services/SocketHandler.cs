@@ -1,11 +1,11 @@
 using System.Net.WebSockets;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Telemetry;
@@ -62,20 +62,17 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        var clientRefIdString = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var clientId = int.Parse(context.User.FindFirst("id")!.Value);
-        var workspaceId = int.Parse(context.User.FindFirst("workspace_id")!.Value);
-        if (!Guid.TryParse(clientRefIdString, out var clientRefId))
+        // The ClientOnly policy on /ws has already authenticated a device token; one that is not well
+        // formed (a claim missing or unreadable) is refused here rather than failing later.
+        if (!ClientIdentity.TryRead(context.User, out var identity))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
 
+        var (clientRefId, clientId, workspaceId, issuedAt) = identity;
+
         // A revoked client's JWT stays valid for up to an hour; the access gate closes that window.
-        // A token without a readable issue time is treated as older than any cutoff.
-        var issuedAt = long.TryParse(context.User.FindFirst("iat")?.Value, out var iat)
-            ? DateTimeOffset.FromUnixTimeSeconds(iat).UtcDateTime
-            : DateTime.MinValue;
         if (await _accessGate.IsRefusedAsync(clientRefId, issuedAt, context.RequestAborted))
         {
             _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);

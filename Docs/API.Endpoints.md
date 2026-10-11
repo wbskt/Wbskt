@@ -21,11 +21,11 @@ anonymously and the anonymous surface is an explicit, auditable choice:
   it changed no behaviour. It exists for the next endpoint added to the host that owns tenants,
   roles and permissions. `AuthController`'s credential endpoints carry `[AllowAnonymous]`
   individually.
-- **Socket host** — has no controllers at all. `/ws` opts out with `AllowAnonymous` because it
-  authenticates itself earlier in the pipeline: `WebSocketAuthMiddleware` validates the token and
-  assigns `context.User` before `UseAuthentication` runs, and the browser upgrade path carries its
-  token in `?access_token=` rather than a header, so the bearer handler never sees one.
-  `EndpointAuthorizationTests` fails if a controller appears here without stating its posture.
+- **Socket host** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a device
+  token: `type=client`), validated by the same bearer handler as the other hosts. Browsers cannot set
+  headers on a WebSocket, so on `/ws` the handler also reads `?access_token=` (`AcceptQueryToken`,
+  shared with the management host's SignalR hub). `EndpointAuthorizationTests` fails if a controller
+  appears here without stating its posture.
 - **Engine host** — the exception, and it is not publicly routed. `InboundApiKeyMiddleware` gates
   only endpoints carrying `[InboundEndpoint]`; a controller without that attribute is reachable
   unauthenticated by anything on the backend network.
