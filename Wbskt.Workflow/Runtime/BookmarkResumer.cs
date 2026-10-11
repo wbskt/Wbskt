@@ -48,10 +48,11 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         // several, start a new run, or match nothing - so there is no branch to name, and the column is
         // used as a claim token instead.
         //
-        // That is what makes the race safe: two hosts receiving the same delivery each mint their own
-        // token, the procedure's HOLDLOCK lets exactly one insert win, and both then read back the same
-        // row. Whichever host sees its own token owns the event; the other sees a stranger's and drops
-        // the delivery as a duplicate.
+        // That is what makes the race safe. Only the active engine consumes, but the same event can still
+        // arrive twice at once: a broker redelivery, the pending-trigger drainer re-dispatching it, or the
+        // outgoing leader finishing a message while the new one starts. Each attempt mints its own token,
+        // the procedure's HOLDLOCK lets exactly one insert win, and both read back the same row; the
+        // attempt that sees its own token owns the event, and the other drops it as a duplicate.
         IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(idempotencyKey, 0, claimToken, Guid.Empty, 0, ct);
         if (claim.BranchRefId != claimToken)
         {

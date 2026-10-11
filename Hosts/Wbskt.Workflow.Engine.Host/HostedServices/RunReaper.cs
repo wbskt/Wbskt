@@ -9,10 +9,9 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class RunReaper : BackgroundService
 {
-    private const string LeaseName = "run-reaper";
     private const int BatchSize = 100;
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<RunReaper> _logger;
     private readonly TimeSpan _pollInterval;
@@ -21,37 +20,37 @@ public sealed class RunReaper : BackgroundService
     [ActivatorUtilitiesConstructor]
     public RunReaper(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<RunReaper> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(clock, leaseHolder, scopeFactory, logger, options.Value.RunReaperInterval, options.Value.RunStuckThreshold)
+        : this(clock, leadership, scopeFactory, logger, options.Value.RunReaperInterval, options.Value.RunStuckThreshold)
     {
     }
 
     internal RunReaper(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IRunProvider runProvider,
         IRunCancellationService runCancellationService,
         IRunFinalizer runFinalizer,
         ILogger<RunReaper> logger,
         TimeSpan? pollInterval = null,
         TimeSpan? stuckThreshold = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(runProvider, runCancellationService, runFinalizer), logger, pollInterval, stuckThreshold)
+        : this(clock, leadership, new StaticScopeFactory(runProvider, runCancellationService, runFinalizer), logger, pollInterval, stuckThreshold)
     {
     }
 
     private RunReaper(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<RunReaper> logger,
         TimeSpan? pollInterval,
         TimeSpan? stuckThreshold)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromMinutes(5);
@@ -60,7 +59,7 @@ public sealed class RunReaper : BackgroundService
 
     public async Task ProcessStuckRunsAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

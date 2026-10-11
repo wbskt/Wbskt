@@ -19,11 +19,10 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// </remarks>
 public sealed class ClientHoldTicker : BackgroundService
 {
-    private const string LeaseName = "client-hold-tick";
     internal const int LeaseSeconds = 15;
 
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ClientHoldTicker> _logger;
     private readonly int _batchSize;
@@ -31,13 +30,13 @@ public sealed class ClientHoldTicker : BackgroundService
 
     public ClientHoldTicker(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<ClientHoldTicker> logger,
         IOptions<WorkflowEngineOptions> options)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         // Same cadence and batch as the schedule and presence tickers.
@@ -47,7 +46,7 @@ public sealed class ClientHoldTicker : BackgroundService
 
     public async Task ProcessDueHoldsAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

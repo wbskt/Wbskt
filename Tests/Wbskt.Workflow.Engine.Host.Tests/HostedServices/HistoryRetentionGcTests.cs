@@ -12,9 +12,9 @@ public sealed class HistoryRetentionGcTests
     public async Task Tick_loops_until_caught_up()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var historyProvider = new RecordingHistoryEventProvider([5000, 100]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leaseHolder, historyProvider, NullLogger<HistoryRetentionGc>.Instance);
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, historyProvider, NullLogger<HistoryRetentionGc>.Instance);
 
         // Act
         await gc.ProcessRetentionAsync(CancellationToken.None);
@@ -28,15 +28,15 @@ public sealed class HistoryRetentionGcTests
     public async Task Tick_skips_when_lease_not_held()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: false);
+        var leadership = new FixedLeadershipGate(false);
         var historyProvider = new RecordingHistoryEventProvider([5000]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leaseHolder, historyProvider, NullLogger<HistoryRetentionGc>.Instance);
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, historyProvider, NullLogger<HistoryRetentionGc>.Instance);
 
         // Act
         await gc.ProcessRetentionAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(["history-retention-gc"], leaseHolder.IsHeldCalls);
+        Assert.Equal(1, leadership.Checks);
         Assert.Empty(historyProvider.DeleteCalls);
     }
 
@@ -45,7 +45,7 @@ public sealed class HistoryRetentionGcTests
     {
         var historyProvider = new RecordingHistoryEventProvider([0]);
         var runProvider = new RecordingRunRetentionProvider([HistoryRetentionGc.RunBatchSize, 3]);
-        var gc = new HistoryRetentionGc(new FixedClock(), new RecordingLeaseHolder(isHeld: true), historyProvider,
+        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), historyProvider,
             NullLogger<HistoryRetentionGc>.Instance, elevatedRetentionWindow: TimeSpan.FromDays(365), runRetentionProvider: runProvider);
 
         await gc.ProcessRetentionAsync(CancellationToken.None);
@@ -72,17 +72,17 @@ public sealed class HistoryRetentionGcTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 
-    private sealed class RecordingLeaseHolder(bool isHeld) : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public List<string> IsHeldCalls { get; } = [];
+        public int Checks { get; private set; }
 
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct)
+        public bool IsActive
         {
-            IsHeldCalls.Add(leaseName);
-            return Task.FromResult(isHeld);
+            get
+            {
+                Checks++;
+                return isActive;
+            }
         }
     }
 

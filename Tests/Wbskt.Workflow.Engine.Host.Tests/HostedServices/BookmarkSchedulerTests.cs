@@ -18,7 +18,7 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([first, second]);
         var branchProvider = new RecordingBranchProvider((first.BranchRefId, 101), (second.BranchRefId, 102));
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new AlwaysHeldLeaseHolder(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
@@ -38,7 +38,7 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new AlwaysHeldLeaseHolder(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
@@ -56,7 +56,7 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 202));
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new AlwaysHeldLeaseHolder(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
@@ -75,7 +75,7 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
         var dispatcher = new RecordingRunDispatcher { ExceptionToThrow = new InvalidOperationException("boom") };
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new AlwaysHeldLeaseHolder(), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act / Assert (must not throw)
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
@@ -87,7 +87,7 @@ public sealed class BookmarkSchedulerTests
         // Arrange
         var provider = new RecordingBookmarkProvider([]);
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new AlwaysHeldLeaseHolder(), new RecordingBranchProvider(), provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), new RecordingBranchProvider(), provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
 
         // Act
         await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
@@ -126,11 +126,18 @@ public sealed class BookmarkSchedulerTests
         public string HostId => "host-1";
     }
 
-    private sealed class AlwaysHeldLeaseHolder : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(true);
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct) => Task.FromResult(true);
+        public int Checks { get; private set; }
+
+        public bool IsActive
+        {
+            get
+            {
+                Checks++;
+                return isActive;
+            }
+        }
     }
 
     private sealed class RecordingRunDispatcher : IRunDispatcher

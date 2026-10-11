@@ -83,8 +83,8 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var expressionEvaluator2 = evaluatorScope.ServiceProvider.GetRequiredService<IExpressionEvaluator>();
         using IServiceScope otherEvaluatorScope = provider.CreateScope();
         var expressionEvaluatorInOtherScope = otherEvaluatorScope.ServiceProvider.GetRequiredService<IExpressionEvaluator>();
-        var leaseHolder1 = provider.GetRequiredService<ILeaseHolder>();
-        var leaseHolder2 = provider.GetRequiredService<ILeaseHolder>();
+        var gate1 = provider.GetRequiredService<ILeadershipGate>();
+        var gate2 = provider.GetRequiredService<ILeadershipGate>();
         var workflowMetrics1 = provider.GetRequiredService<WorkflowMetrics>();
         var workflowMetrics2 = provider.GetRequiredService<WorkflowMetrics>();
         using IServiceScope scope1 = provider.CreateScope();
@@ -136,8 +136,8 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         // Scoped, not Singleton: same instance within a scope, a different one across scopes.
         Assert.Same(expressionEvaluator1, expressionEvaluator2);
         Assert.NotSame(expressionEvaluator1, expressionEvaluatorInOtherScope);
-        Assert.True(leaseHolder1.GetType().Name == "AlwaysHoldsLeaseHolder");
-        Assert.Same(leaseHolder1, leaseHolder2);
+        Assert.True(gate1.GetType().Name == "AlwaysActiveLeadershipGate");
+        Assert.Same(gate1, gate2);
         Assert.IsType<WorkflowMetrics>(workflowMetrics1);
         Assert.Same(workflowMetrics1, workflowMetrics2);
         Assert.IsType<BranchLoop>(loop1);

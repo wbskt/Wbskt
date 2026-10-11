@@ -17,7 +17,6 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// </summary>
 public sealed class ClientPresenceTicker : BackgroundService
 {
-    private const string LeaseName = "presence-tick";
 
     // Short on purpose: a check whose client presence has not caught up yet is simply left leased,
     // and is looked at again once this lease runs out.
@@ -33,7 +32,7 @@ public sealed class ClientPresenceTicker : BackgroundService
     private static readonly TimeSpan SameMoment = TimeSpan.FromMilliseconds(10);
 
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ClientPresenceTicker> _logger;
     private readonly int _batchSize;
@@ -41,13 +40,13 @@ public sealed class ClientPresenceTicker : BackgroundService
 
     public ClientPresenceTicker(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<ClientPresenceTicker> logger,
         IOptions<WorkflowEngineOptions> options)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         // Same cadence and batch as the schedule ticker: both turn a due row into an inbound event.
@@ -57,7 +56,7 @@ public sealed class ClientPresenceTicker : BackgroundService
 
     public async Task ProcessDueChecksAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

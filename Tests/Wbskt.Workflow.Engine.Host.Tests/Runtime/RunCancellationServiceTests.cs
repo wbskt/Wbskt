@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Caching.Memory;
-using Wbskt.EventBus.Abstractions;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -81,23 +80,6 @@ public sealed class RunCancellationServiceTests
         Assert.Equal(42, bookmarkProvider.DeletedRunId);
         // No duplicate history entry: this call transitioned nothing, so it has nothing new to record.
         Assert.Empty(historyProvider.Events);
-    }
-
-    [Fact]
-    public async Task MarkCancellationRequested_makes_the_local_view_flip_immediately()
-    {
-        // Cancellation is read through a short per-host cache. Without this, a host that learns of a
-        // cancel from the event bus keeps answering with whatever it cached before it.
-        var runProvider = new RecordingRunProvider("Running", transitionResult: false);
-        var cache = new MemoryCache(new MemoryCacheOptions());
-        var service = new RunCancellationService(runProvider, new RecordingHistoryEventProvider(), cache, new FixedClock(), new DummyServiceProvider());
-
-        Assert.False(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
-
-        service.MarkCancellationRequested(42);
-
-        Assert.True(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
-        Assert.True(service.GetToken(42).IsCancellationRequested);
     }
 
     [Fact]
@@ -196,7 +178,6 @@ public sealed class RunCancellationServiceTests
         var historyProvider = new RecordingHistoryEventProvider();
         var branchProvider = new CancellationTestBranchProvider();
         var bookmarkProvider = new CancellationTestBookmarkProvider();
-        var eventBus = new RecordingEventBus();
         var service = new RunCancellationService(
             runProvider,
             historyProvider,
@@ -204,57 +185,15 @@ public sealed class RunCancellationServiceTests
             new FixedClock(),
             new DummyServiceProvider(),
             branchProvider,
-            bookmarkProvider,
-            eventBus: eventBus);
+            bookmarkProvider);
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
         Assert.True(cancelled);
         Assert.Equal(42, bookmarkProvider.DeletedRunId);
         Assert.Equal(42, branchProvider.CancelledRunId);
-        // No second history entry for a transition this call did not make, and no republish - the two
-        // hosts consume each other's events, so echoing one back would never stop.
+        // No second history entry for a transition this call did not make.
         Assert.Empty(historyProvider.Events);
-        Assert.Equal(0, eventBus.PublishCount);
-    }
-
-    [Fact]
-    public async Task RequestCancellation_publishes_once_when_it_makes_the_transition()
-    {
-        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
-        var eventBus = new RecordingEventBus();
-        var service = new RunCancellationService(
-            runProvider,
-            new RecordingHistoryEventProvider(),
-            new MemoryCache(new MemoryCacheOptions()),
-            new FixedClock(),
-            new DummyServiceProvider(),
-            eventBus: eventBus);
-
-        await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
-
-        Assert.Equal(1, eventBus.PublishCount);
-    }
-
-    [Fact]
-    public async Task MarkCancellationRequested_is_visible_immediately_without_reading_the_run()
-    {
-        // The cross-host path: this host never issued the cancel, so without an explicit mark its cached
-        // answer would stay stale for the rest of the cache window. The run row still reads 'Running'
-        // here precisely to prove the answer is not coming from the database.
-        var service = new RunCancellationService(
-            new RecordingRunProvider("Running", transitionResult: false),
-            new RecordingHistoryEventProvider(),
-            new MemoryCache(new MemoryCacheOptions()),
-            new FixedClock(),
-            new DummyServiceProvider());
-
-        Assert.False(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
-
-        service.MarkCancellationRequested(42);
-
-        Assert.True(await service.IsCancellationRequestedAsync(42, CancellationToken.None));
-        Assert.True(service.GetToken(42).IsCancellationRequested);
     }
 
     [Fact]
@@ -663,17 +602,6 @@ public sealed class RunCancellationServiceTests
         public Task FinalizeAsync(long runId, CancellationToken ct)
         {
             FinalizedRuns.Add(runId);
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class RecordingEventBus : IEventBus
-    {
-        public int PublishCount { get; private set; }
-
-        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
-        {
-            PublishCount++;
             return Task.CompletedTask;
         }
     }

@@ -11,9 +11,8 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class ScheduledFireTicker : BackgroundService
 {
-    private const string LeaseName = "schedule-tick";
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ScheduledFireTicker> _logger;
     private readonly int _leaseSeconds;
@@ -23,13 +22,13 @@ public sealed class ScheduledFireTicker : BackgroundService
     [ActivatorUtilitiesConstructor]
     public ScheduledFireTicker(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<ScheduledFireTicker> logger,
         IOptions<WorkflowEngineOptions> options)
         : this(
             clock,
-            leaseHolder,
+            leadership,
             scopeFactory,
             logger,
             options.Value.LeaseDurationSeconds,
@@ -40,7 +39,7 @@ public sealed class ScheduledFireTicker : BackgroundService
 
     internal ScheduledFireTicker(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IScheduledFireProvider scheduledFireProvider,
         IInboundHub inboundHub,
         ILogger<ScheduledFireTicker> logger,
@@ -49,7 +48,7 @@ public sealed class ScheduledFireTicker : BackgroundService
         TimeSpan? pollInterval = null)
         : this(
             clock,
-            leaseHolder,
+            leadership,
             new StaticScopeFactory(scheduledFireProvider, inboundHub),
             logger,
             leaseSeconds,
@@ -60,7 +59,7 @@ public sealed class ScheduledFireTicker : BackgroundService
 
     private ScheduledFireTicker(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<ScheduledFireTicker> logger,
         int leaseSeconds,
@@ -68,7 +67,7 @@ public sealed class ScheduledFireTicker : BackgroundService
         TimeSpan? pollInterval)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _leaseSeconds = leaseSeconds;
@@ -78,7 +77,7 @@ public sealed class ScheduledFireTicker : BackgroundService
 
     public async Task ProcessScheduledFiresAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

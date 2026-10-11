@@ -8,10 +8,9 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class PendingTriggerEventBacklogReaper : BackgroundService
 {
-    private const string LeaseName = "pending-trigger-backlog-reaper";
     private const int BatchSize = 1000;
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PendingTriggerEventBacklogReaper> _logger;
     private readonly TimeSpan _pollInterval;
@@ -20,35 +19,35 @@ public sealed class PendingTriggerEventBacklogReaper : BackgroundService
     [ActivatorUtilitiesConstructor]
     public PendingTriggerEventBacklogReaper(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<PendingTriggerEventBacklogReaper> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(clock, leaseHolder, scopeFactory, logger, options.Value.PendingTriggerEventBacklogInterval, options.Value.PendingTriggerEventTtl)
+        : this(clock, leadership, scopeFactory, logger, options.Value.PendingTriggerEventBacklogInterval, options.Value.PendingTriggerEventTtl)
     {
     }
 
     internal PendingTriggerEventBacklogReaper(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IPendingTriggerEventProvider pendingTriggerEventProvider,
         ILogger<PendingTriggerEventBacklogReaper> logger,
         TimeSpan? pollInterval = null,
         TimeSpan? pendingTtl = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(pendingTriggerEventProvider), logger, pollInterval, pendingTtl)
+        : this(clock, leadership, new StaticScopeFactory(pendingTriggerEventProvider), logger, pollInterval, pendingTtl)
     {
     }
 
     private PendingTriggerEventBacklogReaper(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<PendingTriggerEventBacklogReaper> logger,
         TimeSpan? pollInterval,
         TimeSpan? pendingTtl)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromMinutes(10);
@@ -57,7 +56,7 @@ public sealed class PendingTriggerEventBacklogReaper : BackgroundService
 
     public async Task ProcessBacklogAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

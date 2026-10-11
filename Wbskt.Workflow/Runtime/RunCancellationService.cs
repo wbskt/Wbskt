@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
-using Wbskt.EventBus.Abstractions;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -18,7 +17,6 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IBookmarkProvider? _bookmarkProvider;
     private readonly IRunCountersProvider? _runCountersProvider;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IEventBus? _eventBus;
 
     // Singleton, not per-instance: this service is Scoped and the pump runs each branch in its own
     // scope, so a per-instance registry meant the branch loop watched one token source while every
@@ -34,7 +32,6 @@ internal sealed class RunCancellationService : IRunCancellationService
         IBranchProvider? branchProvider = null,
         IBookmarkProvider? bookmarkProvider = null,
         IRunCountersProvider? runCountersProvider = null,
-        IEventBus? eventBus = null,
         RunCancellationTokenRegistry? tokenRegistry = null)
     {
         // Optional so the many hand-built test instances need no extra argument; the engine always
@@ -49,7 +46,6 @@ internal sealed class RunCancellationService : IRunCancellationService
         _bookmarkProvider = bookmarkProvider;
         _runCountersProvider = runCountersProvider;
         _serviceProvider = serviceProvider;
-        _eventBus = eventBus;
     }
 
     public CancellationToken GetToken(long runId)
@@ -62,13 +58,9 @@ internal sealed class RunCancellationService : IRunCancellationService
         _tokenRegistry.Remove(runId);
     }
 
-    /// <summary>
-    /// Flips this host's view of the run to "cancelling" without touching the database. Cancellation is
-    /// read through a short-lived per-host cache, so a host that learns of a cancel from the event bus
-    /// rather than by issuing it must call this or <see cref="IsCancellationRequestedAsync"/> keeps
-    /// returning a stale <c>false</c> until the entry expires.
-    /// </summary>
-    public void MarkCancellationRequested(long runId)
+    // Cancellation is read through a short-lived cache, so the cancel overwrites the cached answer
+    // rather than leaving IsCancellationRequestedAsync returning a stale false until the entry expires.
+    private void MarkCancellationRequested(long runId)
     {
         _memoryCache.Set(CreateCacheKey(runId), true, CacheTtl);
         CancelCts(runId);
@@ -93,9 +85,9 @@ internal sealed class RunCancellationService : IRunCancellationService
 
         if (!transitioned)
         {
-            // Not transitioning means either "already Cancelling" or "terminal". The first still needs
-            // the local work below - that is the case where another host issued the cancel and this one
-            // is picking it up off the bus, and it owns the bookmarks, the branches and the finalizer.
+            // Not transitioning means either "already Cancelling" or "terminal". The first still gets the
+            // cleanup below: a redelivered cancel command, or one sent while the run was already
+            // cancelling, must not leave bookmarks or a waiting branch behind.
             string currentStatus = (await _runProvider.GetByIdAsync(runId, ct)).Status;
             if (!string.Equals(currentStatus, "Cancelling", StringComparison.Ordinal))
             {
@@ -143,16 +135,8 @@ internal sealed class RunCancellationService : IRunCancellationService
 
         // A run with nothing left running has no branch loop to carry it to a terminal status, so
         // without this it would sit in 'Cancelling' until the 30-minute reaper swept it. The count is
-        // re-read when this call cancelled no branches itself, which is the normal shape on the host
-        // that picked the cancel up off the bus after another host had already done the branch work.
+        // re-read when this call cancelled no branches itself, as on a repeated cancel.
         await FinalizeIfIdleAsync(runId, activeBranchCount, ct);
-
-        // Only announce a transition this call actually made. Republishing on the already-Cancelling
-        // path would bounce the event between hosts forever, since each one consumes what the other sends.
-        if (transitioned && _eventBus is not null)
-        {
-            await _eventBus.PublishAsync(new Events.Workflow.WorkflowRunCancellationRequestedEvent(runId, reason), ct);
-        }
 
         return true;
     }

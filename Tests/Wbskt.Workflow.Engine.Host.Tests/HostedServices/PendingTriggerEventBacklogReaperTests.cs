@@ -12,9 +12,9 @@ public sealed class PendingTriggerEventBacklogReaperTests
     public async Task Tick_deletes_expired_events()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingPendingTriggerEventProvider();
-        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leaseHolder, provider, NullLogger<PendingTriggerEventBacklogReaper>.Instance);
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, provider, NullLogger<PendingTriggerEventBacklogReaper>.Instance);
 
         // Act
         await reaper.ProcessBacklogAsync(CancellationToken.None);
@@ -27,15 +27,15 @@ public sealed class PendingTriggerEventBacklogReaperTests
     public async Task Tick_skips_when_lease_not_held()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: false);
+        var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingPendingTriggerEventProvider();
-        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leaseHolder, provider, NullLogger<PendingTriggerEventBacklogReaper>.Instance);
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, provider, NullLogger<PendingTriggerEventBacklogReaper>.Instance);
 
         // Act
         await reaper.ProcessBacklogAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(["pending-trigger-backlog-reaper"], leaseHolder.IsHeldCalls);
+        Assert.Equal(1, leadership.Checks);
         Assert.Null(provider.LastDeleteRequest);
     }
 
@@ -44,17 +44,17 @@ public sealed class PendingTriggerEventBacklogReaperTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 
-    private sealed class RecordingLeaseHolder(bool isHeld) : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public List<string> IsHeldCalls { get; } = [];
+        public int Checks { get; private set; }
 
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct)
+        public bool IsActive
         {
-            IsHeldCalls.Add(leaseName);
-            return Task.FromResult(isHeld);
+            get
+            {
+                Checks++;
+                return isActive;
+            }
         }
     }
 
