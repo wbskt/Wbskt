@@ -102,7 +102,7 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
             CorrelationKey = "e2e-smoke"
         };
 
-        (long runId, long branchId) = await runStarter.StartAsync(
+        (long runId, _, long branchId) = await runStarter.StartAsync(
             wd.Id,
             TriggerNodeId.ToString(),
             triggerEvent,
@@ -161,7 +161,7 @@ public sealed class HappyPathIntegrationTests(SqlEdgeFixture fixture, ITestOutpu
         using AsyncServiceScope scope = sp.CreateAsyncScope();
         var runStarter = scope.ServiceProvider.GetRequiredService<IRunStarter>();
 
-        (long runId, long branchId) = await runStarter.StartAsync(
+        (long runId, _, long branchId) = await runStarter.StartAsync(
             wd.Id,
             TriggerNodeId.ToString(),
             new InboundEvent(

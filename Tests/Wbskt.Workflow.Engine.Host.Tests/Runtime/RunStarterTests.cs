@@ -47,10 +47,11 @@ public sealed class RunStarterTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
         // Act
-        (long runId, long branchId) = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, CancellationToken.None);
+        (long runId, Guid runRefId, long branchId) = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, CancellationToken.None);
 
         // Assert
         Assert.Equal(501L, runId);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), runRefId);
         Assert.Equal(801L, branchId);
         Assert.Equal(["run", "counters", "branch", "history"], operations);
         Assert.Equal(1, countersProvider.TotalDelta);

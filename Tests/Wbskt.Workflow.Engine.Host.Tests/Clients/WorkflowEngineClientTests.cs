@@ -3,11 +3,16 @@ using System.Text;
 using System.Text.Json;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Engine.Contracts;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Clients;
 
 public sealed class WorkflowEngineClientTests
 {
+    // What the engine's controllers answer with: the shared contract, serialized as ASP.NET Core does.
+    private static string Engine(InboundOutcome outcome, Guid? runRefId = null) =>
+        JsonSerializer.Serialize(new InboundResponse(outcome, runRefId, []), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
     private static HttpClient BuildClient(HttpMessageHandler handler)
     {
         return new HttpClient(handler)
@@ -21,8 +26,7 @@ public sealed class WorkflowEngineClientTests
     {
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
-        var response = new { Outcome = "StartedRun", RunRefId = runRefId, RunId = 42 };
-        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(response));
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.StartedRun, runRefId));
         var client = new WorkflowEngineClient(BuildClient(handler));
         var request = new StartRunRequest("manual-node", null);
 
@@ -37,29 +41,26 @@ public sealed class WorkflowEngineClientTests
     {
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
-        var engineResponse = new { Outcome = "StartedRun", RunRefId = runRefId, RunId = (long)42 };
-        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.StartedRun, runRefId));
         var client = new WorkflowEngineClient(BuildClient(handler));
         var request = new StartRunRequest("node", null);
 
         StartRunResponse result = await client.StartManualRunAsync(workflowRefId, request, CancellationToken.None);
 
         Assert.Equal(runRefId, result.RunRefId);
-        Assert.Equal(42, result.RunId);
     }
 
     [Theory]
-    [InlineData("NoRegistration", StartRunOutcome.NoManualTrigger)]
-    [InlineData("Queued", StartRunOutcome.Queued)]
-    [InlineData("Dropped", StartRunOutcome.Dropped)]
-    [InlineData("Idempotent", StartRunOutcome.Duplicate)]
-    public async Task StartManualRunAsync_reports_non_start_outcomes_instead_of_throwing(string engineOutcome, StartRunOutcome expected)
+    [InlineData(InboundOutcome.NoRegistration, StartRunOutcome.NoManualTrigger)]
+    [InlineData(InboundOutcome.Queued, StartRunOutcome.Queued)]
+    [InlineData(InboundOutcome.Dropped, StartRunOutcome.Dropped)]
+    [InlineData(InboundOutcome.Idempotent, StartRunOutcome.Duplicate)]
+    public async Task StartManualRunAsync_reports_non_start_outcomes_instead_of_throwing(InboundOutcome engineOutcome, StartRunOutcome expected)
     {
         // These are all normal results - a concurrency policy did its job, or a retry was
         // deduplicated. Throwing turned each of them into an HTTP 500.
         var workflowRefId = Guid.NewGuid();
-        var engineResponse = new { Outcome = engineOutcome, RunRefId = (Guid?)null, RunId = (long?)null };
-        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(engineOutcome));
         var client = new WorkflowEngineClient(BuildClient(handler));
 
         StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
@@ -72,23 +73,20 @@ public sealed class WorkflowEngineClientTests
     {
         var workflowRefId = Guid.NewGuid();
         var runRefId = Guid.NewGuid();
-        var engineResponse = new { Outcome = "StartedRun", RunRefId = (Guid?)runRefId, RunId = (long?)77 };
-        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.StartedRun, runRefId));
         var client = new WorkflowEngineClient(BuildClient(handler));
 
         StartRunResponse response = await client.StartManualRunAsync(workflowRefId, new StartRunRequest("node", null), CancellationToken.None);
 
         Assert.Equal(StartRunOutcome.Started, response.Outcome);
         Assert.Equal(runRefId, response.RunRefId);
-        Assert.Equal(77, response.RunId);
     }
 
     [Fact]
     public async Task SignalAsync_posts_to_correct_url()
     {
         var runRefId = Guid.NewGuid();
-        var engineResponse = new { Outcome = "ResumedBookmark", Matched = true };
-        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.ResumedBookmark));
         var client = new WorkflowEngineClient(BuildClient(handler));
         var request = new SignalRequest("wake", JsonSerializer.SerializeToElement(new { ready = true }));
 
@@ -102,8 +100,7 @@ public sealed class WorkflowEngineClientTests
     public async Task SignalAsync_maps_response_to_SignalResponse()
     {
         var runRefId = Guid.NewGuid();
-        var engineResponse = new { Outcome = "ResumedBookmark", Matched = true };
-        var handler = new StubHttpHandler(HttpStatusCode.OK, JsonSerializer.Serialize(engineResponse));
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.ResumedBookmark));
         var client = new WorkflowEngineClient(BuildClient(handler));
         var request = new SignalRequest("wake", JsonSerializer.SerializeToElement(new { ready = true }));
 
@@ -111,6 +108,19 @@ public sealed class WorkflowEngineClientTests
 
         Assert.True(result.Matched);
         Assert.Equal("ResumedBookmark", result.Outcome);
+    }
+
+    [Fact]
+    public async Task SignalAsync_escapes_the_signal_name_as_one_path_segment()
+    {
+        // The name is the workflow author's; unescaped, "a/b" would post to a different route.
+        var runRefId = Guid.NewGuid();
+        var handler = new StubHttpHandler(HttpStatusCode.OK, Engine(InboundOutcome.NoRegistration));
+        var client = new WorkflowEngineClient(BuildClient(handler));
+
+        await client.SignalAsync(runRefId, "a/b?c", new SignalRequest("a/b?c", JsonSerializer.SerializeToElement(new { })), CancellationToken.None);
+
+        Assert.Equal($"/api/inbound/signal/{runRefId}/a%2Fb%3Fc", handler.LastRequestUri?.PathAndQuery);
     }
 
     private sealed class StubHttpHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler

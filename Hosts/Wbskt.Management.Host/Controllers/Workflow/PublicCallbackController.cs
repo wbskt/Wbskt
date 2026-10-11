@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Services.Clients;
-using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Engine.Contracts;
 
 namespace Wbskt.Management.Host.Controllers.Workflow;
 
@@ -32,10 +32,6 @@ public sealed class PublicCallbackController : ControllerBase
     /// <summary>The header a webhook caller presents its trigger's shared secret in.</summary>
     public const string WebhookSecretHeader = "X-Wbskt-Secret";
     public const string IdempotencyKeyHeader = "Idempotency-Key";
-    private const int MaxIdempotencyKeyLength = 255;
-
-    private static bool IsValidIdempotencyKey(string key) =>
-        key.Length is > 0 and <= MaxIdempotencyKeyLength && key.All(c => c is >= '\x21' and <= '\x7e');
 
     private readonly IWorkflowEngineGateway _engine;
     private readonly ILogger<PublicCallbackController> _logger;
@@ -80,9 +76,9 @@ public sealed class PublicCallbackController : ControllerBase
             string? idempotencyKey = Request.Headers.TryGetValue(IdempotencyKeyHeader, out Microsoft.Extensions.Primitives.StringValues key)
                 ? key.ToString()
                 : null;
-            if (idempotencyKey is not null && !IsValidIdempotencyKey(idempotencyKey))
+            if (idempotencyKey is not null && !IdempotencyKeys.IsValid(idempotencyKey))
             {
-                return BadRequest(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{MaxIdempotencyKeyLength} printable characters."));
+                return BadRequest(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{IdempotencyKeys.MaxLength} printable characters."));
             }
 
             await _engine.SendWebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);

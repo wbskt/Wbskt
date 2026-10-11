@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Engine.Host.Controllers;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Controllers;
@@ -38,9 +39,9 @@ public sealed class InboundSignalControllerTests
         var controller = new InboundSignalController(hub.Object);
         JsonElement payload = JsonSerializer.SerializeToElement(new { value = 1 });
 
-        InboundSignalResponse response = await controller.Post(Guid.NewGuid(), "approve", payload, CancellationToken.None);
+        InboundResponse response = await controller.Post(Guid.NewGuid(), "approve", payload, CancellationToken.None);
 
-        Assert.Equal("ResumedBookmark", response.Outcome);
+        Assert.Equal(InboundOutcome.ResumedBookmark, response.Outcome);
         Assert.True(response.Matched);
     }
 }

@@ -52,7 +52,7 @@ internal sealed class RunStarter : IRunStarter
         _logger = logger;
     }
 
-    public async Task<(long RunId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
+    public async Task<(long RunId, Guid RunRefId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
     {
         try
         {
@@ -151,7 +151,7 @@ internal sealed class RunStarter : IRunStarter
             // management host and every unit test get a no-op without needing a broker.
             await _runStartedPublisher.PublishAsync(createdRun, ct);
 
-            return (createdRun.Id, createdBranch.Id);
+            return (createdRun.Id, createdRun.RefId, createdBranch.Id);
         }
         catch (Exception ex)
         {

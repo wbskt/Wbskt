@@ -455,8 +455,10 @@ and every `/api/inbound/*` route additionally requires the shared key in `X-Wbsk
 | `POST api/inbound/manual/{workflowRefId}` | Starts a run. Takes an optional `idempotencyKey` so a retried call does not start a second run. Reached only via the management host's authenticated `POST …/workflows/{refId}/runs`. |
 | `POST api/inbound/signal/{scopeRunRefId}/{signalName}` | Delivers a signal to a parked run. Reached only via the management host's authenticated signal route — it has no public front door. |
 
-Unlike the public front door, these return their real outcome (`Outcome`, `Matched`, `RunRefId`) —
-the caller is a trusted service, so there is no oracle to protect against.
+Unlike the public front door, these return their real outcome, since the caller is a trusted service
+and there is no oracle to protect against. Both answer in one shape, `InboundResponse` in
+`Wbskt.Workflow.Engine.Contracts`, which the management host reads too: `outcome`, `runRefId` and
+`registrations`. Runs are named by RefId only; the engine's row ids never leave it.
 
 A webhook trigger may carry a **secret**. When it does, the caller must present it in the
 `X-Wbskt-Secret` header — on the public callback, which passes it to the engine beside the body (never
@@ -469,11 +471,11 @@ a non-matching event reports `Filtered` for that registration and starts nothing
 
 One event can match several trigger registrations — two workflows sharing a webhook path, or one
 workflow with two manual triggers — and each of them independently starts, queues or drops a run. The
-manual response therefore carries a `Registrations` array (`registrationId`,
-`workflowRefId`, `outcome`, `runRefId`, `runId`, `correlationKey`) alongside the top-level `Outcome`
+manual response therefore carries a `Registrations` array (`workflowRefId`, `outcome`, `runRefId`,
+`correlationKey`) alongside the top-level `Outcome`
 and `RunRefId`, which summarise the *first* started run and stay for callers written against the
-single-run shape. The signal endpoint has no such array: those channels only resolve
-bookmarks, so they cannot fan out.
+single-run shape. A signal's array is always empty: a signal only resumes a waiting run, so it cannot
+fan out.
 
 | Endpoint | What it does |
 |---|---|
