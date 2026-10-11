@@ -17,10 +17,10 @@ public sealed class RunReaperTests
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leadership, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
+        var reaper = new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider, cancellationService, finalizer), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
 
         // Act
-        await reaper.ProcessStuckRunsAsync(CancellationToken.None);
+        await reaper.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(1, leadership.Checks);
@@ -42,10 +42,10 @@ public sealed class RunReaperTests
         var runProvider = new RecordingRunProvider(runs);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leadership, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
+        var reaper = new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider, cancellationService, finalizer), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
 
         // Act
-        await reaper.ProcessStuckRunsAsync(CancellationToken.None);
+        await reaper.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(1, runProvider.GetStuckRunsCalls);
@@ -62,10 +62,10 @@ public sealed class RunReaperTests
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leadership, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
+        var reaper = new RunReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(runProvider, cancellationService, finalizer), NullLogger<RunReaper>.Instance, WorkerTestServices.Options());
 
         // Act
-        await reaper.ProcessStuckRunsAsync(CancellationToken.None);
+        await reaper.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Empty(cancellationService.Requests);

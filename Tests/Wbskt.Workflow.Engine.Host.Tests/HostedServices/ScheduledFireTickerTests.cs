@@ -16,10 +16,10 @@ public sealed class ScheduledFireTickerTests
         var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingScheduledFireProvider([]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         // Act
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(1, leadership.Checks);
@@ -35,10 +35,10 @@ public sealed class ScheduledFireTickerTests
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         // Act
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(1, provider.LeaseDueCalls);
@@ -63,10 +63,10 @@ public sealed class ScheduledFireTickerTests
         var at = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
         var first = new RecordingInboundHub();
         var second = new RecordingInboundHub();
-        await new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), first, NullLogger<ScheduledFireTicker>.Instance)
-            .ProcessScheduledFiresAsync(CancellationToken.None);
-        await new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), second, NullLogger<ScheduledFireTicker>.Instance)
-            .ProcessScheduledFiresAsync(CancellationToken.None);
+        await new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), first), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options())
+            .TickAsync(CancellationToken.None);
+        await new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), second), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options())
+            .TickAsync(CancellationToken.None);
 
         Assert.Equal(Assert.Single(first.Events).InboundEventId, Assert.Single(second.Events).InboundEventId);
         Assert.NotEqual(
@@ -82,10 +82,10 @@ public sealed class ScheduledFireTickerTests
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         // Act
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal([(42, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
@@ -99,9 +99,9 @@ public sealed class ScheduledFireTickerTests
         // stop a recurring schedule after its first fire.
         var fire = CreateFire(46, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Unspecified));
         var provider = new RecordingScheduledFireProvider([fire]);
-        var ticker = new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), provider, new RecordingInboundHub(), NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(provider, new RecordingInboundHub()), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         Assert.Equal([(46, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
     }
@@ -115,10 +115,10 @@ public sealed class ScheduledFireTickerTests
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         // Act
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal([(44, new DateTime(2026, 5, 26, 12, 5, 0, DateTimeKind.Utc))], provider.AdvancedFires);
@@ -134,10 +134,10 @@ public sealed class ScheduledFireTickerTests
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         // Act
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Empty(provider.AdvancedFires);
@@ -152,10 +152,10 @@ public sealed class ScheduledFireTickerTests
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, WorkerTestServices.Scopes(provider, inboundHub), NullLogger<ScheduledFireTicker>.Instance, WorkerTestServices.Options());
 
         // Act
-        await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
+        await ticker.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal([43L], provider.DeletedFireIds);

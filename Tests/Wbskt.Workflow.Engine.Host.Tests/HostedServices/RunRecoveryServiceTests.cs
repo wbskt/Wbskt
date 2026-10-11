@@ -20,7 +20,7 @@ public sealed class RunRecoveryServiceTests
         var branchProvider = new RecordingBranchProvider(branches);
         var runDispatcher = new RecordingRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
-        var service = new RunRecoveryService(branchProvider, runDispatcher, logger);
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
 
         // Act
         await service.RecoverAsync(CancellationToken.None);
@@ -36,7 +36,7 @@ public sealed class RunRecoveryServiceTests
         var branchProvider = new RecordingBranchProvider([]);
         var runDispatcher = new RecordingRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
-        var service = new RunRecoveryService(branchProvider, runDispatcher, logger);
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
 
         // Act
         await service.RecoverAsync(CancellationToken.None);
@@ -52,7 +52,7 @@ public sealed class RunRecoveryServiceTests
         var branchProvider = new RecordingBranchProvider([]);
         var runDispatcher = new RecordingRunDispatcher();
         var logger = new RecordingLogger<RunRecoveryService>();
-        var service = new RunRecoveryService(branchProvider, runDispatcher, logger);
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider), runDispatcher, logger);
 
         Assert.False(service.Ready.IsCompleted);
 
@@ -81,7 +81,7 @@ public sealed class RunRecoveryServiceTests
         runProvider.AddRun(CreateRunRow(172, "Failing"));
         
         var cancellationService = new RecordingRunCancellationService();
-        var service = new RunRecoveryService(branchProvider, runDispatcher, logger, runProvider, cancellationService);
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider, runProvider, cancellationService), runDispatcher, logger);
 
         // Act
         await service.RecoverAsync(CancellationToken.None);

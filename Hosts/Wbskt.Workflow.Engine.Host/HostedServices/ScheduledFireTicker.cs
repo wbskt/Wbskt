@@ -9,88 +9,30 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
-public sealed class ScheduledFireTicker : BackgroundService
+public sealed class ScheduledFireTicker(
+    IClock clock,
+    ILeadershipGate leadership,
+    IServiceScopeFactory scopeFactory,
+    ILogger<ScheduledFireTicker> logger,
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
-    private readonly IClock _clock;
-    private readonly ILeadershipGate _leadership;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ScheduledFireTicker> _logger;
-    private readonly int _leaseSeconds;
-    private readonly int _batchSize;
-    private readonly TimeSpan _pollInterval;
+    private readonly int _leaseSeconds = options.Value.LeaseDurationSeconds;
+    private readonly int _batchSize = options.Value.ScheduledFireLeaseBatchSize;
 
-    [ActivatorUtilitiesConstructor]
-    public ScheduledFireTicker(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<ScheduledFireTicker> logger,
-        IOptions<WorkflowEngineOptions> options)
-        : this(
-            clock,
-            leadership,
-            scopeFactory,
-            logger,
-            options.Value.LeaseDurationSeconds,
-            options.Value.ScheduledFireLeaseBatchSize,
-            options.Value.ScheduleTickInterval)
+    protected override string Name => "Scheduled fire ticker";
+
+    protected override TimeSpan Interval { get; } = options.Value.ScheduleTickInterval;
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-    }
-
-    internal ScheduledFireTicker(
-        IClock clock,
-        ILeadershipGate leadership,
-        IScheduledFireProvider scheduledFireProvider,
-        IInboundHub inboundHub,
-        ILogger<ScheduledFireTicker> logger,
-        int leaseSeconds = 120,
-        int batchSize = 64,
-        TimeSpan? pollInterval = null)
-        : this(
-            clock,
-            leadership,
-            new StaticScopeFactory(scheduledFireProvider, inboundHub),
-            logger,
-            leaseSeconds,
-            batchSize,
-            pollInterval)
-    {
-    }
-
-    private ScheduledFireTicker(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<ScheduledFireTicker> logger,
-        int leaseSeconds,
-        int batchSize,
-        TimeSpan? pollInterval)
-    {
-        _clock = clock;
-        _leadership = leadership;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _leaseSeconds = leaseSeconds;
-        _batchSize = batchSize;
-        _pollInterval = pollInterval ?? TimeSpan.FromSeconds(1);
-    }
-
-    public async Task ProcessScheduledFiresAsync(CancellationToken ct)
-    {
-        if (!_leadership.IsActive)
-        {
-            return;
-        }
-
-        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var scheduledFireProvider = scope.ServiceProvider.GetRequiredService<IScheduledFireProvider>();
-        var inboundHub = scope.ServiceProvider.GetRequiredService<IInboundHub>();
+        var scheduledFireProvider = services.GetRequiredService<IScheduledFireProvider>();
+        var inboundHub = services.GetRequiredService<IInboundHub>();
         IReadOnlyCollection<ScheduledFireRow> fires = await scheduledFireProvider.LeaseDueAsync(_leaseSeconds, _batchSize, ct);
         if (fires.Count > 0)
         {
-            _logger.LogInformation("Leased {Count} scheduled fires for dispatch", fires.Count);
+            Logger.LogInformation("Leased {Count} scheduled fires for dispatch", fires.Count);
         }
-        DateTime now = _clock.UtcNow;
+        DateTime now = clock.UtcNow;
 
         foreach (ScheduledFireRow fire in fires)
         {
@@ -112,71 +54,35 @@ public sealed class ScheduledFireTicker : BackgroundService
                     payload,
                     now);
 
-                _logger.LogInformation("Dispatching scheduled fire {FireId} for workflow {WorkflowRefId}", fire.Id, fire.WorkflowRefId);
+                Logger.LogInformation("Dispatching scheduled fire {FireId} for workflow {WorkflowRefId}", fire.Id, fire.WorkflowRefId);
                 await inboundHub.HandleAsync(inboundEvent, ct);
 
                 (bool parseFailed, DateTime? nextOccurrence) = ComputeNextOccurrence(fire);
                 if (parseFailed)
                 {
-                    _logger.LogError("Scheduled fire {FireId} has an unparseable cron expression '{Cron}'; leaving it in place for investigation.", fire.Id, fire.CronOrInterval);
+                    Logger.LogError("Scheduled fire {FireId} has an unparseable cron expression '{Cron}'; leaving it in place for investigation.", fire.Id, fire.CronOrInterval);
                     continue;
                 }
 
                 if (nextOccurrence.HasValue)
                 {
-                    _logger.LogDebug("Advancing scheduled fire {FireId} to {NextOccurrence}", fire.Id, nextOccurrence.Value);
+                    Logger.LogDebug("Advancing scheduled fire {FireId} to {NextOccurrence}", fire.Id, nextOccurrence.Value);
                     await scheduledFireProvider.AdvanceNextAsync(fire.Id, nextOccurrence.Value, ct);
                     continue;
                 }
 
-                _logger.LogDebug("Deleting one-time scheduled fire {FireId}", fire.Id);
+                Logger.LogDebug("Deleting one-time scheduled fire {FireId}", fire.Id);
                 await scheduledFireProvider.DeleteByIdAsync(fire.Id, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to process scheduled fire {FireId}", fire.Id);
+                Logger.LogError(ex, "Failed to process scheduled fire {FireId}", fire.Id);
             }
         }
     }
 
     internal static string OccurrenceEventId(ScheduledFireRow fire) =>
         $"schedule:{fire.Id}:{fire.NextFireAt:yyyyMMddTHHmmssfff}";
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Scheduled fire ticker is starting.");
-        await ExecuteGuardedAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(_pollInterval);
-        try
-        {
-            while (await timer.WaitForNextTickAsync(stoppingToken))
-            {
-                await ExecuteGuardedAsync(stoppingToken);
-            }
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Scheduled fire ticker is stopping.");
-            throw;
-        }
-    }
-
-    private async Task ExecuteGuardedAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            await ProcessScheduledFiresAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Scheduled fire ticker tick failed.");
-        }
-    }
 
     /// <summary>
     /// Returns (ParseFailed, Next). ParseFailed means the cron expression itself is unparseable
@@ -198,45 +104,5 @@ public sealed class ScheduledFireTicker : BackgroundService
 
         // Cronos insists on a Utc-kind DateTime; a value read back from SQL is Unspecified.
         return (false, cron!.GetNextOccurrence(DateTime.SpecifyKind(fire.NextFireAt, DateTimeKind.Utc), TimeZoneInfo.Utc));
-    }
-
-    private sealed class StaticScopeFactory(IScheduledFireProvider scheduledFireProvider, IInboundHub inboundHub) : IServiceScopeFactory
-    {
-        public IServiceScope CreateScope()
-        {
-            return new StaticServiceScope(scheduledFireProvider, inboundHub);
-        }
-    }
-
-    private sealed class StaticServiceScope(IScheduledFireProvider scheduledFireProvider, IInboundHub inboundHub) : IServiceScope, IAsyncDisposable
-    {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(scheduledFireProvider, inboundHub);
-
-        public void Dispose()
-        {
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StaticServiceProvider(IScheduledFireProvider scheduledFireProvider, IInboundHub inboundHub) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            if (serviceType == typeof(IScheduledFireProvider))
-            {
-                return scheduledFireProvider;
-            }
-
-            if (serviceType == typeof(IInboundHub))
-            {
-                return inboundHub;
-            }
-
-            return null;
-        }
     }
 }

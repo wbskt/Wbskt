@@ -17,58 +17,40 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// reading matched is still holding when the time is up, and fires; a device going quiet is what the
 /// presence trigger is for.
 /// </remarks>
-public sealed class ClientHoldTicker : BackgroundService
+public sealed class ClientHoldTicker(
+    IClock clock,
+    ILeadershipGate leadership,
+    IServiceScopeFactory scopeFactory,
+    ILogger<ClientHoldTicker> logger,
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
     internal const int LeaseSeconds = 15;
 
-    private readonly IClock _clock;
-    private readonly ILeadershipGate _leadership;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ClientHoldTicker> _logger;
-    private readonly int _batchSize;
-    private readonly TimeSpan _pollInterval;
+    private readonly int _batchSize = options.Value.ClientHoldLeaseBatchSize;
 
-    public ClientHoldTicker(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<ClientHoldTicker> logger,
-        IOptions<WorkflowEngineOptions> options)
+    protected override string Name => "Client hold ticker";
+
+    protected override TimeSpan Interval { get; } = options.Value.ClientHoldTickInterval;
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-        _clock = clock;
-        _leadership = leadership;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        // Same cadence and batch as the schedule and presence tickers.
-        _batchSize = options.Value.ScheduledFireLeaseBatchSize;
-        _pollInterval = options.Value.ScheduleTickInterval;
-    }
-
-    public async Task ProcessDueHoldsAsync(CancellationToken ct)
-    {
-        if (!_leadership.IsActive)
-        {
-            return;
-        }
-
-        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider.GetRequiredService<IClientHoldStateProvider>();
-        var inboundHub = scope.ServiceProvider.GetRequiredService<IInboundHub>();
+        var provider = services.GetRequiredService<IClientHoldStateProvider>();
+        var inboundHub = services.GetRequiredService<IInboundHub>();
         IReadOnlyCollection<ClientHoldStateRow> holds = await provider.LeaseDueAsync(LeaseSeconds, _batchSize, ct);
-        DateTime now = _clock.UtcNow;
+        DateTime now = clock.UtcNow;
 
         foreach (ClientHoldStateRow hold in holds)
         {
             try
             {
-                _logger.LogInformation("Client trigger {TriggerKey} held since {SinceAt}; dispatching", hold.TriggerKey, hold.SinceAt);
+                Logger.LogInformation("Client trigger {TriggerKey} held since {SinceAt}; dispatching", hold.TriggerKey, hold.SinceAt);
                 TriggerDispatchResult result = await inboundHub.HandleAsync(ToInboundEvent(hold, now), ct);
 
                 if (result.Outcome == TriggerDispatchOutcome.NoRegistration)
                 {
                     // The trigger was removed (its workflow disabled, or republished without it) while
                     // this hold was running. Nothing will ever clear the row, so it goes now.
-                    _logger.LogDebug("Client trigger {TriggerKey} is no longer registered; dropping its hold state", hold.TriggerKey);
+                    Logger.LogDebug("Client trigger {TriggerKey} is no longer registered; dropping its hold state", hold.TriggerKey);
                     await provider.DeleteByIdAsync(hold.Id, ct);
                     continue;
                 }
@@ -77,7 +59,7 @@ public sealed class ClientHoldTicker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to process client hold {HoldId}", hold.Id);
+                Logger.LogError(ex, "Failed to process client hold {HoldId}", hold.Id);
             }
         }
     }
@@ -100,30 +82,5 @@ public sealed class ClientHoldTicker : BackgroundService
             $"client-hold:{hold.Id}:{hold.SinceAt.Ticks}",
             payload,
             now);
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Client hold ticker is starting.");
-        using var timer = new PeriodicTimer(_pollInterval);
-        try
-        {
-            do
-            {
-                try
-                {
-                    await ProcessDueHoldsAsync(stoppingToken);
-                }
-                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-                {
-                    _logger.LogError(ex, "Client hold ticker tick failed.");
-                }
-            }
-            while (await timer.WaitForNextTickAsync(stoppingToken));
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Client hold ticker is stopping.");
-        }
     }
 }

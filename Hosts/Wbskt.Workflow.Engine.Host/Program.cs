@@ -80,6 +80,7 @@ public static class Program
         builder.Services.AddHostedService<EngineLeadershipCoordinator>();
         builder.Services.AddHostedService<BranchExecutionPump>();
         builder.Services.AddHostedService<BookmarkScheduler>();
+        builder.Services.AddHostedService<BookmarkOrphanGc>();
         builder.Services.AddHostedService<ScheduledFireTicker>();
         builder.Services.AddHostedService<ClientPresenceTicker>();
         builder.Services.AddHostedService<ClientHoldTicker>();

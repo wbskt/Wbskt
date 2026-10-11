@@ -14,10 +14,10 @@ public sealed class PendingTriggerEventBacklogReaperTests
         // Arrange
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingPendingTriggerEventProvider();
-        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, provider, NullLogger<PendingTriggerEventBacklogReaper>.Instance);
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
 
         // Act
-        await reaper.ProcessBacklogAsync(CancellationToken.None);
+        await reaper.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal((new DateTime(2026, 5, 25, 12, 30, 0, DateTimeKind.Utc), 1000), provider.LastDeleteRequest);
@@ -29,10 +29,10 @@ public sealed class PendingTriggerEventBacklogReaperTests
         // Arrange
         var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingPendingTriggerEventProvider();
-        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, provider, NullLogger<PendingTriggerEventBacklogReaper>.Instance);
+        var reaper = new PendingTriggerEventBacklogReaper(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<PendingTriggerEventBacklogReaper>.Instance, WorkerTestServices.Options());
 
         // Act
-        await reaper.ProcessBacklogAsync(CancellationToken.None);
+        await reaper.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(1, leadership.Checks);

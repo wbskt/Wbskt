@@ -24,13 +24,11 @@ public sealed class MetricsExporterTests
             .ReturnsAsync(new Dictionary<string, long>());
         using var metrics = new WorkflowMetrics();
         var exporter = new MetricsExporter(
-            Mock.Of<IRunProvider>(),
-            Mock.Of<IRunCountersProvider>(),
-            bookmarks.Object,
-            Mock.Of<IPendingTriggerEventProvider>(),
+            WorkerTestServices.Scopes(Mock.Of<IRunCountersProvider>(), bookmarks.Object, Mock.Of<IPendingTriggerEventProvider>()),
             metrics,
             new ChannelRunDispatcher(),
-            NullLogger<MetricsExporter>.Instance);
+            NullLogger<MetricsExporter>.Instance,
+            WorkerTestServices.Options());
 
         await exporter.ProcessMetricsAsync(CancellationToken.None);
 

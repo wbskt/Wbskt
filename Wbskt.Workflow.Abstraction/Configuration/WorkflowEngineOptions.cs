@@ -5,6 +5,8 @@ public sealed class WorkflowEngineOptions
     public TimeSpan BookmarkPollInterval { get; init; } = TimeSpan.FromSeconds(1);
     public TimeSpan BookmarkOrphanGcInterval { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan ScheduleTickInterval { get; init; } = TimeSpan.FromSeconds(1);
+    public TimeSpan PresenceTickInterval { get; init; } = TimeSpan.FromSeconds(1);
+    public TimeSpan ClientHoldTickInterval { get; init; } = TimeSpan.FromSeconds(1);
     public TimeSpan RunReaperInterval { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan RunStuckThreshold { get; init; } = TimeSpan.FromMinutes(30);
     public TimeSpan HistoryRetentionInterval { get; init; } = TimeSpan.FromHours(1);
@@ -36,6 +38,8 @@ public sealed class WorkflowEngineOptions
     public int MaxFanOut { get; init; } = 1000;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;
+    public int PresenceCheckLeaseBatchSize { get; init; } = 64;
+    public int ClientHoldLeaseBatchSize { get; init; } = 64;
 
     // Engine active/standby leader election (WP4) - separate from LeaseDurationSeconds above,
     // which governs per-item claim leases (bookmarks, scheduled fires), not the engine-leader lease.

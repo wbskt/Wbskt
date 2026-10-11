@@ -39,6 +39,7 @@ public sealed class WorkflowMetrics : IDisposable
         NodeDuration = _meter.CreateHistogram<double>("wbskt_workflow_node_duration_ms");
         DispatcherQueueDepth = _meter.CreateObservableGauge("wbskt_workflow_dispatcher_queue_depth", () => { return _dispatcherQueueDepth; });
         CreditsConsumed = _meter.CreateCounter<double>("wbskt_workflow_credits_consumed_total");
+        WorkerTicks = _meter.CreateCounter<long>("wbskt_workflow_worker_ticks_total");
 
         PendingTriggers = _meter.CreateObservableGauge("wbskt_workflow_pending_triggers", () =>
         {
@@ -54,6 +55,9 @@ public sealed class WorkflowMetrics : IDisposable
     public Histogram<double> NodeDuration { get; }
     public ObservableGauge<long> DispatcherQueueDepth { get; }
     public Counter<double> CreditsConsumed { get; }
+
+    /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
+    public Counter<long> WorkerTicks { get; }
     public ObservableGauge<long> PendingTriggers { get; }
 
     public void UpdateSnapshot(long activeBranches, long dispatcherQueueDepth, long pendingTriggerDepth, IReadOnlyDictionary<string, long> bookmarksByWakeKind)
