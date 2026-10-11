@@ -60,12 +60,9 @@ internal static class RetryExecutor
             string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{context.VisitToken}:{attempt}";
             IdempotencyKeyRow? existingRow = null;
 
-            // Recording an attempt's outcome was written out six times, identically. The duplication hid
-            // two things worth stating once: a provider that does not support this is disabled for the
-            // rest of the call rather than retried into, and there is no side-effect-free path here at
-            // all - a side-effect-free node never claims a key, so idempotencyKeyProvider is null for
-            // one and every call below is a no-op. (The old code had an isSideEffectFree branch inside
-            // each block that could therefore never run, and which wrote two rows nothing ever read.)
+            // Recording an attempt's outcome, once. There is no side-effect-free path here: a
+            // side-effect-free node never claims a key, so idempotencyKeyProvider is null for one and this
+            // is a no-op.
             async Task RecordOutcomeAsync(bool succeeded, string json)
             {
                 if (idempotencyKeyProvider is null)
@@ -73,20 +70,13 @@ internal static class RetryExecutor
                     return;
                 }
 
-                try
+                if (succeeded)
                 {
-                    if (succeeded)
-                    {
-                        await idempotencyKeyProvider.MarkSucceededAsync(keyValue, json, ct);
-                    }
-                    else
-                    {
-                        await idempotencyKeyProvider.MarkFailedAsync(keyValue, json, ct);
-                    }
+                    await idempotencyKeyProvider.MarkSucceededAsync(keyValue, json, ct);
                 }
-                catch (NotSupportedException)
+                else
                 {
-                    idempotencyKeyProvider = null;
+                    await idempotencyKeyProvider.MarkFailedAsync(keyValue, json, ct);
                 }
             }
 
@@ -100,12 +90,8 @@ internal static class RetryExecutor
                 {
                     // Key does not exist yet; normal flow.
                 }
-                catch (NotSupportedException)
-                {
-                    idempotencyKeyProvider = null;
-                }
 
-                if (idempotencyKeyProvider != null && existingRow != null)
+                if (existingRow != null)
                 {
                     if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
                     {
@@ -138,41 +124,34 @@ internal static class RetryExecutor
             {
                 if (existingRow == null)
                 {
-                    try
-                    {
-                        existingRow = await idempotencyKeyProvider.UpsertPendingAsync(
-                            keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
+                    existingRow = await idempotencyKeyProvider.UpsertPendingAsync(
+                        keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
 
-                        if (existingRow.BranchRefId != claimToken)
-                        {
-                            if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
-                            {
-                                if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
-                                {
-                                    var cachedResult = JsonSerializer.Deserialize<NodeExecutionResult>(existingRow.ResultJson, JsonOptions);
-                                    if (cachedResult != null)
-                                    {
-                                        return cachedResult;
-                                    }
-                                }
-                            }
-                            else if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
-                            {
-                                if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
-                                {
-                                    var cachedFail = JsonSerializer.Deserialize<NodeExecutionResult.Fail>(existingRow.ErrorJson, JsonOptions);
-                                    if (cachedFail != null)
-                                    {
-                                        return cachedFail;
-                                    }
-                                }
-                            }
-                            // If it was Pending, we continue to run the executor.
-                        }
-                    }
-                    catch (NotSupportedException)
+                    if (existingRow.BranchRefId != claimToken)
                     {
-                        idempotencyKeyProvider = null;
+                        if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
+                        {
+                            if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
+                            {
+                                var cachedResult = JsonSerializer.Deserialize<NodeExecutionResult>(existingRow.ResultJson, JsonOptions);
+                                if (cachedResult != null)
+                                {
+                                    return cachedResult;
+                                }
+                            }
+                        }
+                        else if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
+                        {
+                            if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
+                            {
+                                var cachedFail = JsonSerializer.Deserialize<NodeExecutionResult.Fail>(existingRow.ErrorJson, JsonOptions);
+                                if (cachedFail != null)
+                                {
+                                    return cachedFail;
+                                }
+                            }
+                        }
+                        // If it was Pending, we continue to run the executor.
                     }
                 }
             }

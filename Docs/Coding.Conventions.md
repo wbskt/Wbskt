@@ -46,6 +46,7 @@ Every new or changed endpoint follows these rules; `Docs/API.Endpoints.md` is th
 *   **Route parameters name the resource they identify:** `{clientRef}`, `{policyRef}`, `{templateRef}`, `{workflowRef}`, `{runRef}`, and `{signalName}` / `{variableName}` for names. Never a bare `{refId}`, `{id}` or `{name}`. The C# parameter has the same name.
 *   **Lists** take `PageRequest` and return `Page<T>` (see Method Signatures above). Time ranges are `from`/`to` through `TimeRange`.
 *   **Models live in model files, never at the bottom of a controller.** Request and response records go in the host's `Models/`; a contract that another project needs (the E2E tests, an SDK, the engine) goes in `Wbskt.Management.Models`. A response never exposes an internal `Id`.
+*   **The engine's `/api/inbound/*` is backend-only and must never be routed publicly.** Its contracts live in `Wbskt.Workflow.Engine.Contracts`; anything the outside world calls goes through the management host.
 *   **Renaming a route keeps the old one for one release** as a second action marked `[ApiExplorerSettings(IgnoreApi = true)]` that calls the new one, with a `Deprecated:` summary naming its replacement and an E2E test that it still answers. Note it in `Docs/API.Endpoints.md` and in the console issue, and remove it in the release after.
 
 ---
