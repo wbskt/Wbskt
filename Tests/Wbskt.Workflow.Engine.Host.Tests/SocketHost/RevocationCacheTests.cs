@@ -25,15 +25,17 @@ public sealed class RevocationCacheTests
     }
 
     [Fact]
-    public void Cleared_client_may_connect_again()
+    public void A_reinstated_client_may_connect_with_a_token_from_then_on()
     {
         var cache = new RevocationCache();
         var clientRefId = Guid.NewGuid();
+        var reinstatedAt = DateTime.UtcNow;
         cache.Revoke(clientRefId);
 
-        cache.Clear(clientRefId);
+        cache.Reinstate(clientRefId, reinstatedAt);
 
-        cache.IsRevoked(clientRefId, DateTime.UtcNow).Should().BeFalse();
+        cache.IsRevoked(clientRefId, reinstatedAt.AddSeconds(1)).Should().BeFalse();
+        cache.IsRevoked(clientRefId, reinstatedAt.AddMinutes(-1)).Should().BeTrue();
     }
 
     [Fact]

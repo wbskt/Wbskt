@@ -11,4 +11,11 @@ public sealed record ClientStatusChangedEvent(
     Guid PolicyRefId,
     int PolicyId,
     int WorkspaceId,
-    byte Status) : ActorEvent, IClientContext, IPolicyContext;
+    byte Status) : ActorEvent, IClientContext, IPolicyContext
+{
+    /// <summary>dbo.Clients.Status for Registered, the one status that may connect (ClientStatus in the management host).</summary>
+    public const byte RegisteredStatus = 1;
+
+    /// <summary>Whether the client may connect in its new status.</summary>
+    public bool HasAccess => Status == RegisteredStatus;
+}

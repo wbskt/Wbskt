@@ -2,13 +2,16 @@ using System.Collections.Concurrent;
 
 namespace Wbskt.Socket.Host.Infrastructure;
 
-// In-memory deny-list for revoked client tokens. A client's JWT stays valid for up to an hour, so
-// the auth middleware alone cannot stop the SDK's auto-reconnect loop; entries must outlive the
-// token lifetime. Single-node, same constraint as ConnectionManager.
+// In-memory deny-list for revoked client tokens, the fast path in front of the Redis cutoffs (see
+// ClientAccessGate). A client's JWT stays valid for up to an hour, so entries must outlive the token
+// lifetime.
 //
-// Each entry is a cutoff: tokens issued before it are refused. A status revocation or a delete
-// refuses everything (cutoff at the end of time); a secret rotation refuses only tokens issued
-// before it, so the device, once given the new secret, can sign in and connect straight away.
+// Each entry is a cutoff: tokens issued before it are refused, with the same rules as
+// ClientTokenCutoffs in Redis so the two never disagree. A status revocation or a delete refuses
+// everything (cutoff at the end of time); a secret rotation raises the cutoff to the rotation, so the
+// device, once given the new secret, can sign in and connect straight away; a re-approval sets it to
+// that moment, so the device signs in afresh and a token from before it lost access, an old secret's
+// included, stays refused.
 internal sealed class RevocationCache : IRevocationCache
 {
     // Client JWT lifetime (60 min) + margin.
@@ -27,7 +30,7 @@ internal sealed class RevocationCache : IRevocationCache
         // with the new secret in the same second as the rotation is accepted; the cost is that one
         // minted with the old secret earlier in that second is accepted too. That is the same
         // one-second window access-token revocation in the auth host accepts.
-        var truncated = new DateTime(cutoff.Ticks - cutoff.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+        var truncated = TruncateToSecond(cutoff);
         var keepUntil = DateTime.UtcNow.Add(RetentionPeriod);
         _entries.AddOrUpdate(
             clientRefId,
@@ -35,9 +38,9 @@ internal sealed class RevocationCache : IRevocationCache
             (_, existing) => new Entry(existing.Cutoff > truncated ? existing.Cutoff : truncated, keepUntil));
     }
 
-    public void Clear(Guid clientRefId)
+    public void Reinstate(Guid clientRefId, DateTime reinstatedAt)
     {
-        _entries.TryRemove(clientRefId, out _);
+        _entries[clientRefId] = new Entry(TruncateToSecond(reinstatedAt), DateTime.UtcNow.Add(RetentionPeriod));
     }
 
     public bool IsRevoked(Guid clientRefId, DateTime issuedAt)
@@ -55,6 +58,9 @@ internal sealed class RevocationCache : IRevocationCache
 
         return issuedAt < entry.Cutoff;
     }
+
+    private static DateTime TruncateToSecond(DateTime value) =>
+        new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
 
     private readonly record struct Entry(DateTime Cutoff, DateTime KeepUntil);
 }
