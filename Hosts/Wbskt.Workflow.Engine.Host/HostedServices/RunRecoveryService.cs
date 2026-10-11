@@ -23,16 +23,6 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         _logger = logger;
     }
 
-    internal RunRecoveryService(
-        IBranchProvider branchProvider,
-        IRunDispatcher runDispatcher,
-        ILogger<RunRecoveryService> logger,
-        IRunProvider? runProvider = null,
-        IRunCancellationService? runCancellationService = null)
-        : this(new StaticScopeFactory(branchProvider, runProvider, runCancellationService), runDispatcher, logger)
-    {
-    }
-
     // Recovery only ever runs on a new leader (see EngineLeadershipCoordinator) - the previous
     // leader is either dead or self-fenced by LeadershipState, so no other instance can be
     // concurrently dispatching these same branches. Not an IHostedService: EngineLeadershipCoordinator
@@ -96,57 +86,6 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         {
             _readyTcs.TrySetException(ex);
             throw;
-        }
-    }
-
-    private sealed class StaticScopeFactory(
-        IBranchProvider branchProvider,
-        IRunProvider? runProvider,
-        IRunCancellationService? runCancellationService) : IServiceScopeFactory
-    {
-        public IServiceScope CreateScope()
-        {
-            return new StaticServiceScope(branchProvider, runProvider, runCancellationService);
-        }
-    }
-
-    private sealed class StaticServiceScope(
-        IBranchProvider branchProvider,
-        IRunProvider? runProvider,
-        IRunCancellationService? runCancellationService) : IServiceScope, IAsyncDisposable
-    {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(branchProvider, runProvider, runCancellationService);
-
-        public void Dispose()
-        {
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StaticServiceProvider(
-        IBranchProvider branchProvider,
-        IRunProvider? runProvider,
-        IRunCancellationService? runCancellationService) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            if (serviceType == typeof(IBranchProvider))
-            {
-                return branchProvider;
-            }
-            if (serviceType == typeof(IRunProvider))
-            {
-                return runProvider;
-            }
-            if (serviceType == typeof(IRunCancellationService))
-            {
-                return runCancellationService;
-            }
-            return null;
         }
     }
 }

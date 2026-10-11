@@ -14,9 +14,9 @@ public sealed class IdempotencyKeyGcTests
     {
         var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingIdempotencyKeyProvider([5000, 42]);
-        var gc = new IdempotencyKeyGc(new FixedClock(), leadership, provider, NullLogger<IdempotencyKeyGc>.Instance);
+        var gc = new IdempotencyKeyGc(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<IdempotencyKeyGc>.Instance, WorkerTestServices.Options());
 
-        await gc.ProcessRetentionAsync(CancellationToken.None);
+        await gc.TickAsync(CancellationToken.None);
 
         Assert.Equal(2, provider.DeleteCalls.Count);
         // Cutoff = now - 24h (the default retention window).
@@ -28,9 +28,9 @@ public sealed class IdempotencyKeyGcTests
     {
         var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingIdempotencyKeyProvider([5000]);
-        var gc = new IdempotencyKeyGc(new FixedClock(), leadership, provider, NullLogger<IdempotencyKeyGc>.Instance);
+        var gc = new IdempotencyKeyGc(new FixedClock(), leadership, WorkerTestServices.Scopes(provider), NullLogger<IdempotencyKeyGc>.Instance, WorkerTestServices.Options());
 
-        await gc.ProcessRetentionAsync(CancellationToken.None);
+        await gc.TickAsync(CancellationToken.None);
 
         Assert.Equal(1, leadership.Checks);
         Assert.Empty(provider.DeleteCalls);

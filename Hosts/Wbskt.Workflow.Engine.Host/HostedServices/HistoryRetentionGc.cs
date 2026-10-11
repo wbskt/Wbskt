@@ -6,72 +6,28 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
-public sealed class HistoryRetentionGc : BackgroundService
+public sealed class HistoryRetentionGc(
+    IClock clock,
+    ILeadershipGate leadership,
+    IServiceScopeFactory scopeFactory,
+    ILogger<HistoryRetentionGc> logger,
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
     private const int BatchSize = 5000;
     // Each run takes its branches and history with it, so a run batch is much heavier than a row batch.
     internal const int RunBatchSize = 100;
-    private readonly IClock _clock;
-    private readonly ILeadershipGate _leadership;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<HistoryRetentionGc> _logger;
-    private readonly TimeSpan _pollInterval;
-    private readonly TimeSpan _retentionWindow;
-    private readonly TimeSpan _elevatedRetentionWindow;
+    private readonly TimeSpan _retentionWindow = options.Value.HistoryRetentionWindow;
+    private readonly TimeSpan _elevatedRetentionWindow = options.Value.HistoryRetentionWindowElevated;
 
-    [ActivatorUtilitiesConstructor]
-    public HistoryRetentionGc(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<HistoryRetentionGc> logger,
-        IOptions<WorkflowEngineOptions> options)
-        : this(clock, leadership, scopeFactory, logger, options.Value.HistoryRetentionInterval, options.Value.HistoryRetentionWindow, options.Value.HistoryRetentionWindowElevated)
+    protected override string Name => "History retention GC";
+
+    protected override TimeSpan Interval { get; } = options.Value.HistoryRetentionInterval;
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-    }
-
-    internal HistoryRetentionGc(
-        IClock clock,
-        ILeadershipGate leadership,
-        IHistoryEventProvider historyEventProvider,
-        ILogger<HistoryRetentionGc> logger,
-        TimeSpan? pollInterval = null,
-        TimeSpan? retentionWindow = null,
-        TimeSpan? elevatedRetentionWindow = null,
-        IRunRetentionProvider? runRetentionProvider = null)
-        : this(clock, leadership, new StaticScopeFactory(historyEventProvider, runRetentionProvider), logger, pollInterval, retentionWindow, elevatedRetentionWindow)
-    {
-    }
-
-    private HistoryRetentionGc(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<HistoryRetentionGc> logger,
-        TimeSpan? pollInterval,
-        TimeSpan? retentionWindow,
-        TimeSpan? elevatedRetentionWindow = null)
-    {
-        _clock = clock;
-        _leadership = leadership;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _pollInterval = pollInterval ?? TimeSpan.FromHours(1);
-        _retentionWindow = retentionWindow ?? TimeSpan.FromDays(30);
-        _elevatedRetentionWindow = elevatedRetentionWindow ?? TimeSpan.FromDays(365);
-    }
-
-    public async Task ProcessRetentionAsync(CancellationToken ct)
-    {
-        if (!_leadership.IsActive)
-        {
-            return;
-        }
-
-        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var historyEventProvider = scope.ServiceProvider.GetRequiredService<IHistoryEventProvider>();
-        DateTime cutoffUtc = _clock.UtcNow - _retentionWindow;
-        DateTime elevatedCutoffUtc = _clock.UtcNow - _elevatedRetentionWindow;
+        var historyEventProvider = services.GetRequiredService<IHistoryEventProvider>();
+        DateTime cutoffUtc = clock.UtcNow - _retentionWindow;
+        DateTime elevatedCutoffUtc = clock.UtcNow - _elevatedRetentionWindow;
         while (true)
         {
             int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, elevatedCutoffUtc, ct);
@@ -83,7 +39,7 @@ public sealed class HistoryRetentionGc : BackgroundService
 
         // Once even a run's Warn/Error history is past retention, the run row and its branches are
         // all that is left; without this they were kept forever, full branch state included.
-        var runRetentionProvider = scope.ServiceProvider.GetService<IRunRetentionProvider>();
+        var runRetentionProvider = services.GetService<IRunRetentionProvider>();
         if (runRetentionProvider is null)
         {
             return;
@@ -96,68 +52,6 @@ public sealed class HistoryRetentionGc : BackgroundService
             {
                 return;
             }
-        }
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        await ExecuteGuardedAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(_pollInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            await ExecuteGuardedAsync(stoppingToken);
-        }
-    }
-
-    private async Task ExecuteGuardedAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            await ProcessRetentionAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "History retention GC tick failed.");
-        }
-    }
-
-    private sealed class StaticScopeFactory(IHistoryEventProvider historyEventProvider, IRunRetentionProvider? runRetentionProvider) : IServiceScopeFactory
-    {
-        public IServiceScope CreateScope()
-        {
-            return new StaticServiceScope(historyEventProvider, runRetentionProvider);
-        }
-    }
-
-    private sealed class StaticServiceScope(IHistoryEventProvider historyEventProvider, IRunRetentionProvider? runRetentionProvider) : IServiceScope, IAsyncDisposable
-    {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(historyEventProvider, runRetentionProvider);
-
-        public void Dispose()
-        {
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StaticServiceProvider(IHistoryEventProvider historyEventProvider, IRunRetentionProvider? runRetentionProvider) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            if (serviceType == typeof(IHistoryEventProvider))
-            {
-                return historyEventProvider;
-            }
-
-            return serviceType == typeof(IRunRetentionProvider) ? runRetentionProvider : null;
         }
     }
 }

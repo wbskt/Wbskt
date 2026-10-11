@@ -15,9 +15,13 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// client that came back (or dropped again) in the meantime makes the check stale, and it is
 /// deleted without starting anything.
 /// </summary>
-public sealed class ClientPresenceTicker : BackgroundService
+public sealed class ClientPresenceTicker(
+    IClock clock,
+    ILeadershipGate leadership,
+    IServiceScopeFactory scopeFactory,
+    ILogger<ClientPresenceTicker> logger,
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
-
     // Short on purpose: a check whose client presence has not caught up yet is simply left leased,
     // and is looked at again once this lease runs out.
     internal const int LeaseSeconds = 15;
@@ -31,41 +35,18 @@ public sealed class ClientPresenceTicker : BackgroundService
     // than this is the same moment.
     private static readonly TimeSpan SameMoment = TimeSpan.FromMilliseconds(10);
 
-    private readonly IClock _clock;
-    private readonly ILeadershipGate _leadership;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ClientPresenceTicker> _logger;
-    private readonly int _batchSize;
-    private readonly TimeSpan _pollInterval;
+    private readonly int _batchSize = options.Value.PresenceCheckLeaseBatchSize;
 
-    public ClientPresenceTicker(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<ClientPresenceTicker> logger,
-        IOptions<WorkflowEngineOptions> options)
+    protected override string Name => "Client presence ticker";
+
+    protected override TimeSpan Interval { get; } = options.Value.PresenceTickInterval;
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-        _clock = clock;
-        _leadership = leadership;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        // Same cadence and batch as the schedule ticker: both turn a due row into an inbound event.
-        _batchSize = options.Value.ScheduledFireLeaseBatchSize;
-        _pollInterval = options.Value.ScheduleTickInterval;
-    }
-
-    public async Task ProcessDueChecksAsync(CancellationToken ct)
-    {
-        if (!_leadership.IsActive)
-        {
-            return;
-        }
-
-        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider.GetRequiredService<IClientPresenceCheckProvider>();
-        var inboundHub = scope.ServiceProvider.GetRequiredService<IInboundHub>();
+        var provider = services.GetRequiredService<IClientPresenceCheckProvider>();
+        var inboundHub = services.GetRequiredService<IInboundHub>();
         IReadOnlyCollection<ClientPresenceCheckRow> checks = await provider.LeaseDueAsync(LeaseSeconds, _batchSize, ct);
-        DateTime now = _clock.UtcNow;
+        DateTime now = clock.UtcNow;
 
         foreach (ClientPresenceCheckRow check in checks)
         {
@@ -74,16 +55,16 @@ public sealed class ClientPresenceTicker : BackgroundService
                 switch (Evaluate(check, now))
                 {
                     case PresenceCheckVerdict.Pending:
-                        _logger.LogDebug("Presence check {CheckId} is waiting for client {ClientRefId}'s presence to catch up", check.Id, check.ClientRefId);
+                        Logger.LogDebug("Presence check {CheckId} is waiting for client {ClientRefId}'s presence to catch up", check.Id, check.ClientRefId);
                         continue;
 
                     case PresenceCheckVerdict.Fire:
-                        _logger.LogInformation("Client {ClientRefId} stayed {State}; dispatching presence trigger {TriggerKey}", check.ClientRefId, check.State, check.TriggerKey);
+                        Logger.LogInformation("Client {ClientRefId} stayed {State}; dispatching presence trigger {TriggerKey}", check.ClientRefId, check.State, check.TriggerKey);
                         await inboundHub.HandleAsync(ToInboundEvent(check, now), ct);
                         break;
 
                     case PresenceCheckVerdict.Stale:
-                        _logger.LogDebug("Presence check {CheckId} is stale; client {ClientRefId} did not stay {State}", check.Id, check.ClientRefId, check.State);
+                        Logger.LogDebug("Presence check {CheckId} is stale; client {ClientRefId} did not stay {State}", check.Id, check.ClientRefId, check.State);
                         break;
                 }
 
@@ -91,7 +72,7 @@ public sealed class ClientPresenceTicker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to process presence check {CheckId}", check.Id);
+                Logger.LogError(ex, "Failed to process presence check {CheckId}", check.Id);
             }
         }
     }
@@ -173,31 +154,6 @@ public sealed class ClientPresenceTicker : BackgroundService
             $"presence:{check.Id}",
             payload,
             now);
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Client presence ticker is starting.");
-        using var timer = new PeriodicTimer(_pollInterval);
-        try
-        {
-            do
-            {
-                try
-                {
-                    await ProcessDueChecksAsync(stoppingToken);
-                }
-                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-                {
-                    _logger.LogError(ex, "Client presence ticker tick failed.");
-                }
-            }
-            while (await timer.WaitForNextTickAsync(stoppingToken));
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Client presence ticker is stopping.");
-        }
     }
 }
 

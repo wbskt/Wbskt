@@ -25,7 +25,7 @@ public sealed class ClientHoldTickerTests
         var provider = new RecordingHoldStateProvider { Due = [hold] };
         var hub = new RecordingInboundHub(TriggerDispatchOutcome.StartedRun);
 
-        await CreateTicker(provider, hub).ProcessDueHoldsAsync(CancellationToken.None);
+        await CreateTicker(provider, hub).TickAsync(CancellationToken.None);
 
         InboundEvent evt = Assert.Single(hub.Events);
         Assert.Equal(ClientHoldTriggerKey.TriggerKind, evt.ChannelKind);
@@ -45,7 +45,7 @@ public sealed class ClientHoldTickerTests
         var provider = new RecordingHoldStateProvider { Due = [Hold(id: 3, holdSeconds: 60)] };
         var hub = new RecordingInboundHub(TriggerDispatchOutcome.NoRegistration);
 
-        await CreateTicker(provider, hub).ProcessDueHoldsAsync(CancellationToken.None);
+        await CreateTicker(provider, hub).TickAsync(CancellationToken.None);
 
         Assert.Equal([3], provider.Deleted);
         Assert.Empty(provider.Fired);
@@ -59,7 +59,7 @@ public sealed class ClientHoldTickerTests
         var provider = new RecordingHoldStateProvider { Due = [Hold(id: 4, holdSeconds: 60)] };
         var hub = new RecordingInboundHub(TriggerDispatchOutcome.Idempotent);
 
-        await CreateTicker(provider, hub).ProcessDueHoldsAsync(CancellationToken.None);
+        await CreateTicker(provider, hub).TickAsync(CancellationToken.None);
 
         Assert.Equal([(4, SinceAt)], provider.Fired);
     }
@@ -70,7 +70,7 @@ public sealed class ClientHoldTickerTests
         var provider = new RecordingHoldStateProvider { Due = [Hold(id: 1, holdSeconds: 60)] };
         var hub = new RecordingInboundHub(TriggerDispatchOutcome.StartedRun);
 
-        await CreateTicker(provider, hub, isLeader: false).ProcessDueHoldsAsync(CancellationToken.None);
+        await CreateTicker(provider, hub, isLeader: false).TickAsync(CancellationToken.None);
 
         Assert.Empty(hub.Events);
         Assert.Empty(provider.Fired);

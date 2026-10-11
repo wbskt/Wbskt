@@ -10,66 +10,26 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// Deletes old idempotency-claim rows so the table doesn't grow unbounded. Every inbound event
 /// inserts a claim row; once it's older than the retention window the dedup it provided is no
 /// longer needed (the source event won't be redelivered after that long), so it can be reaped.
-/// Lease-gated so only one host runs it.
+/// Runs on the active engine only.
 /// </summary>
-public sealed class IdempotencyKeyGc : BackgroundService
+public sealed class IdempotencyKeyGc(
+    IClock clock,
+    ILeadershipGate leadership,
+    IServiceScopeFactory scopeFactory,
+    ILogger<IdempotencyKeyGc> logger,
+    IOptions<WorkflowEngineOptions> options) : LeaderPeriodicWorker(leadership, scopeFactory, logger)
 {
     private const int BatchSize = 5000;
-    private readonly IClock _clock;
-    private readonly ILeadershipGate _leadership;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<IdempotencyKeyGc> _logger;
-    private readonly TimeSpan _pollInterval;
-    private readonly TimeSpan _retentionWindow;
+    private readonly TimeSpan _retentionWindow = options.Value.IdempotencyRetentionWindow;
 
-    [ActivatorUtilitiesConstructor]
-    public IdempotencyKeyGc(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<IdempotencyKeyGc> logger,
-        IOptions<WorkflowEngineOptions> options)
-        : this(clock, leadership, scopeFactory, logger, options.Value.IdempotencyRetentionInterval, options.Value.IdempotencyRetentionWindow)
+    protected override string Name => "Idempotency key GC";
+
+    protected override TimeSpan Interval { get; } = options.Value.IdempotencyRetentionInterval;
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
-    }
-
-    internal IdempotencyKeyGc(
-        IClock clock,
-        ILeadershipGate leadership,
-        IIdempotencyKeyProvider idempotencyKeyProvider,
-        ILogger<IdempotencyKeyGc> logger,
-        TimeSpan? pollInterval = null,
-        TimeSpan? retentionWindow = null)
-        : this(clock, leadership, new StaticScopeFactory(idempotencyKeyProvider), logger, pollInterval, retentionWindow)
-    {
-    }
-
-    private IdempotencyKeyGc(
-        IClock clock,
-        ILeadershipGate leadership,
-        IServiceScopeFactory scopeFactory,
-        ILogger<IdempotencyKeyGc> logger,
-        TimeSpan? pollInterval,
-        TimeSpan? retentionWindow)
-    {
-        _clock = clock;
-        _leadership = leadership;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _pollInterval = pollInterval ?? TimeSpan.FromHours(1);
-        _retentionWindow = retentionWindow ?? TimeSpan.FromHours(24);
-    }
-
-    public async Task ProcessRetentionAsync(CancellationToken ct)
-    {
-        if (!_leadership.IsActive)
-        {
-            return;
-        }
-
-        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
-        var idempotencyKeyProvider = scope.ServiceProvider.GetRequiredService<IIdempotencyKeyProvider>();
-        DateTime cutoffUtc = _clock.UtcNow - _retentionWindow;
+        var idempotencyKeyProvider = services.GetRequiredService<IIdempotencyKeyProvider>();
+        DateTime cutoffUtc = clock.UtcNow - _retentionWindow;
         while (true)
         {
             int deleted = await idempotencyKeyProvider.DeleteExpiredAsync(cutoffUtc, BatchSize, ct);
@@ -77,63 +37,6 @@ public sealed class IdempotencyKeyGc : BackgroundService
             {
                 return;
             }
-        }
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        await ExecuteGuardedAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(_pollInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            await ExecuteGuardedAsync(stoppingToken);
-        }
-    }
-
-    private async Task ExecuteGuardedAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            await ProcessRetentionAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Idempotency key GC tick failed.");
-        }
-    }
-
-    private sealed class StaticScopeFactory(IIdempotencyKeyProvider idempotencyKeyProvider) : IServiceScopeFactory
-    {
-        public IServiceScope CreateScope()
-        {
-            return new StaticServiceScope(idempotencyKeyProvider);
-        }
-    }
-
-    private sealed class StaticServiceScope(IIdempotencyKeyProvider idempotencyKeyProvider) : IServiceScope, IAsyncDisposable
-    {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(idempotencyKeyProvider);
-
-        public void Dispose()
-        {
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StaticServiceProvider(IIdempotencyKeyProvider idempotencyKeyProvider) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            return serviceType == typeof(IIdempotencyKeyProvider) ? idempotencyKeyProvider : null;
         }
     }
 }

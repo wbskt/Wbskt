@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
+using Wbskt.Workflow.Engine.Host.Tests.HostedServices;
 using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
@@ -82,17 +83,10 @@ public sealed class BookmarkCompanionTimerTests
         var bookmark = CreateBookmark(78, Guid.Parse("22222222-2222-2222-2222-222222222222"), 42, branchRefId, "inbound", "mqtt:client-1", expiresAt: new DateTime(2026, 5, 26, 12, 35, 0, DateTimeKind.Utc), ttlPort: "timeout");
         var bookmarkProvider = new RecordingBookmarkProvider(bookmark) { DueBookmarks = [bookmark] };
         var branchProvider = new RecordingBranchProvider(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), branchRefId, 1001);
-        var scheduler = new BookmarkScheduler(
-            new FixedClock(),
-            new FixedHostIdentity(),
-            new FixedLeadershipGate(true),
-            branchProvider,
-            bookmarkProvider,
-            new RecordingRunDispatcher(),
-            NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, bookmarkProvider), new RecordingRunDispatcher(), NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act
-        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
 
         // Assert: the TTL claim removed the row (claim-by-delete) and took the TtlPort edge.
         Assert.Empty(bookmarkProvider.Bookmarks);
@@ -394,11 +388,6 @@ public sealed class BookmarkCompanionTimerTests
             Guid.Parse("66666666-6666-6666-6666-666666666666")]);
 
         public Guid NewId() => _ids.Dequeue();
-    }
-
-    private sealed class FixedHostIdentity : IHostIdentity
-    {
-        public string HostId => "host-1";
     }
 
     private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate

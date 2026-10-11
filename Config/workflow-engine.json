@@ -3,6 +3,8 @@
     "BookmarkPollInterval": "00:00:01",
     "BookmarkOrphanGcInterval": "00:05:00",
     "ScheduleTickInterval": "00:00:01",
+    "PresenceTickInterval": "00:00:01",
+    "ClientHoldTickInterval": "00:00:01",
     "RunReaperInterval": "00:05:00",
     "RunStuckThreshold": "00:30:00",
     "HistoryRetentionInterval": "01:00:00",
@@ -14,6 +16,8 @@
     "IdempotencyRetentionWindow": "1.00:00:00",
     "LeaseDurationSeconds": 120,
     "BookmarkLeaseBatchSize": 64,
-    "ScheduledFireLeaseBatchSize": 64
+    "ScheduledFireLeaseBatchSize": 64,
+    "PresenceCheckLeaseBatchSize": 64,
+    "ClientHoldLeaseBatchSize": 64
   }
 }

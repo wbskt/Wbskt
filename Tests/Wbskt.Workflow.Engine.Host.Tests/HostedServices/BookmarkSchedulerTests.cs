@@ -18,10 +18,10 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([first, second]);
         var branchProvider = new RecordingBranchProvider((first.BranchRefId, 101), (second.BranchRefId, 102));
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, provider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act
-        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(2, dispatcher.Requests.Count);
@@ -38,10 +38,10 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, provider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act
-        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
 
         // Assert
         BranchRow updated = Assert.Single(branchProvider.Upserted);
@@ -56,10 +56,10 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 202));
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, provider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act
-        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Empty(branchProvider.Upserted);
@@ -75,10 +75,10 @@ public sealed class BookmarkSchedulerTests
         var provider = new RecordingBookmarkProvider([bookmark]);
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 201));
         var dispatcher = new RecordingRunDispatcher { ExceptionToThrow = new InvalidOperationException("boom") };
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), branchProvider, provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(branchProvider, provider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act / Assert (must not throw)
-        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -87,10 +87,10 @@ public sealed class BookmarkSchedulerTests
         // Arrange
         var provider = new RecordingBookmarkProvider([]);
         var dispatcher = new RecordingRunDispatcher();
-        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedHostIdentity(), new FixedLeadershipGate(true), new RecordingBranchProvider(), provider, dispatcher, NullLogger<BookmarkScheduler>.Instance);
+        var scheduler = new BookmarkScheduler(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(new RecordingBranchProvider(), provider), dispatcher, NullLogger<BookmarkScheduler>.Instance, WorkerTestServices.Options());
 
         // Act
-        await scheduler.ProcessDueBookmarksAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Empty(dispatcher.Requests);
@@ -119,11 +119,6 @@ public sealed class BookmarkSchedulerTests
     private sealed class FixedClock : IClock
     {
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
-    }
-
-    private sealed class FixedHostIdentity : IHostIdentity
-    {
-        public string HostId => "host-1";
     }
 
     private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
@@ -223,5 +218,3 @@ public sealed class BookmarkSchedulerTests
         public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
     }
 }
-
-

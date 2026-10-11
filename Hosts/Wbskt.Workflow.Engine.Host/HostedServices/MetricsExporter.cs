@@ -14,42 +14,18 @@ internal sealed class MetricsExporter : BackgroundService
     private readonly ILogger<MetricsExporter> _logger;
     private readonly TimeSpan _pollInterval;
 
-    [ActivatorUtilitiesConstructor]
     public MetricsExporter(
         IServiceScopeFactory scopeFactory,
         WorkflowMetrics workflowMetrics,
         ChannelRunDispatcher dispatcher,
         ILogger<MetricsExporter> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(scopeFactory, workflowMetrics, dispatcher, logger, options.Value.MetricsExportInterval)
-    {
-    }
-
-    internal MetricsExporter(
-        IRunProvider runProvider,
-        IRunCountersProvider runCountersProvider,
-        IBookmarkProvider bookmarkProvider,
-        IPendingTriggerEventProvider pendingTriggerEventProvider,
-        WorkflowMetrics workflowMetrics,
-        ChannelRunDispatcher dispatcher,
-        ILogger<MetricsExporter> logger,
-        TimeSpan? pollInterval = null)
-        : this(new StaticScopeFactory(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider), workflowMetrics, dispatcher, logger, pollInterval)
-    {
-    }
-
-    private MetricsExporter(
-        IServiceScopeFactory scopeFactory,
-        WorkflowMetrics workflowMetrics,
-        ChannelRunDispatcher dispatcher,
-        ILogger<MetricsExporter> logger,
-        TimeSpan? pollInterval)
     {
         _scopeFactory = scopeFactory;
         _workflowMetrics = workflowMetrics;
         _dispatcher = dispatcher;
         _logger = logger;
-        _pollInterval = pollInterval ?? TimeSpan.FromSeconds(15);
+        _pollInterval = options.Value.MetricsExportInterval;
     }
 
     public async Task ProcessMetricsAsync(CancellationToken ct)
@@ -104,68 +80,6 @@ internal sealed class MetricsExporter : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Metrics exporter tick failed.");
-        }
-    }
-
-    private sealed class StaticScopeFactory(
-        IRunProvider runProvider,
-        IRunCountersProvider runCountersProvider,
-        IBookmarkProvider bookmarkProvider,
-        IPendingTriggerEventProvider pendingTriggerEventProvider) : IServiceScopeFactory
-    {
-        public IServiceScope CreateScope()
-        {
-            return new StaticServiceScope(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider);
-        }
-    }
-
-    private sealed class StaticServiceScope(
-        IRunProvider runProvider,
-        IRunCountersProvider runCountersProvider,
-        IBookmarkProvider bookmarkProvider,
-        IPendingTriggerEventProvider pendingTriggerEventProvider) : IServiceScope, IAsyncDisposable
-    {
-        public IServiceProvider ServiceProvider { get; } = new StaticServiceProvider(runProvider, runCountersProvider, bookmarkProvider, pendingTriggerEventProvider);
-
-        public void Dispose()
-        {
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StaticServiceProvider(
-        IRunProvider runProvider,
-        IRunCountersProvider runCountersProvider,
-        IBookmarkProvider bookmarkProvider,
-        IPendingTriggerEventProvider pendingTriggerEventProvider) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            if (serviceType == typeof(IRunProvider))
-            {
-                return runProvider;
-            }
-
-            if (serviceType == typeof(IRunCountersProvider))
-            {
-                return runCountersProvider;
-            }
-
-            if (serviceType == typeof(IBookmarkProvider))
-            {
-                return bookmarkProvider;
-            }
-
-            if (serviceType == typeof(IPendingTriggerEventProvider))
-            {
-                return pendingTriggerEventProvider;
-            }
-
-            return null;
         }
     }
 }

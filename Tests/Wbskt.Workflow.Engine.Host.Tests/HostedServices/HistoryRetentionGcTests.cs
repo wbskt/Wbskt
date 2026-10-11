@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -14,10 +15,10 @@ public sealed class HistoryRetentionGcTests
         // Arrange
         var leadership = new FixedLeadershipGate(true);
         var historyProvider = new RecordingHistoryEventProvider([5000, 100]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leadership, historyProvider, NullLogger<HistoryRetentionGc>.Instance);
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options());
 
         // Act
-        await gc.ProcessRetentionAsync(CancellationToken.None);
+        await gc.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(2, historyProvider.DeleteCalls.Count);
@@ -30,10 +31,10 @@ public sealed class HistoryRetentionGcTests
         // Arrange
         var leadership = new FixedLeadershipGate(false);
         var historyProvider = new RecordingHistoryEventProvider([5000]);
-        var gc = new HistoryRetentionGc(new FixedClock(), leadership, historyProvider, NullLogger<HistoryRetentionGc>.Instance);
+        var gc = new HistoryRetentionGc(new FixedClock(), leadership, WorkerTestServices.Scopes(historyProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options());
 
         // Act
-        await gc.ProcessRetentionAsync(CancellationToken.None);
+        await gc.TickAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(1, leadership.Checks);
@@ -45,10 +46,9 @@ public sealed class HistoryRetentionGcTests
     {
         var historyProvider = new RecordingHistoryEventProvider([0]);
         var runProvider = new RecordingRunRetentionProvider([HistoryRetentionGc.RunBatchSize, 3]);
-        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), historyProvider,
-            NullLogger<HistoryRetentionGc>.Instance, elevatedRetentionWindow: TimeSpan.FromDays(365), runRetentionProvider: runProvider);
+        var gc = new HistoryRetentionGc(new FixedClock(), new FixedLeadershipGate(true), WorkerTestServices.Scopes(historyProvider, runProvider), NullLogger<HistoryRetentionGc>.Instance, WorkerTestServices.Options(new WorkflowEngineOptions { HistoryRetentionWindowElevated = TimeSpan.FromDays(365) }));
 
-        await gc.ProcessRetentionAsync(CancellationToken.None);
+        await gc.TickAsync(CancellationToken.None);
 
         var expectedCutoff = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc).AddDays(-365);
         Assert.Equal([(expectedCutoff, HistoryRetentionGc.RunBatchSize), (expectedCutoff, HistoryRetentionGc.RunBatchSize)], runProvider.DeleteCalls);

@@ -121,7 +121,7 @@ public sealed class ClientPresenceTickerTests
         var provider = new RecordingPresenceCheckProvider { Due = [Offline(isConnected: false, connectedAt: null, lastActivityAt: ChangedAt)] };
         var hub = new RecordingInboundHub();
 
-        await CreateTicker(provider, hub, isLeader: false).ProcessDueChecksAsync(CancellationToken.None);
+        await CreateTicker(provider, hub, isLeader: false).TickAsync(CancellationToken.None);
 
         Assert.Empty(hub.Events);
         Assert.Empty(provider.Deleted);
@@ -134,7 +134,7 @@ public sealed class ClientPresenceTickerTests
         var provider = new RecordingPresenceCheckProvider { Due = [check] };
         var hub = new RecordingInboundHub();
 
-        await CreateTicker(provider, hub).ProcessDueChecksAsync(CancellationToken.None);
+        await CreateTicker(provider, hub).TickAsync(CancellationToken.None);
 
         InboundEvent evt = Assert.Single(hub.Events);
         Assert.Equal("presence", evt.ChannelKind);
@@ -155,7 +155,7 @@ public sealed class ClientPresenceTickerTests
         var provider = new RecordingPresenceCheckProvider { Due = [stale, pending] };
         var hub = new RecordingInboundHub();
 
-        await CreateTicker(provider, hub).ProcessDueChecksAsync(CancellationToken.None);
+        await CreateTicker(provider, hub).TickAsync(CancellationToken.None);
 
         Assert.Empty(hub.Events);
         Assert.Equal([1], provider.Deleted);
