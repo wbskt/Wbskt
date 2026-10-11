@@ -143,11 +143,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                         break;
                 }
 
-                (long runId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
+                (long runId, Guid runRefId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
                 _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
                 await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
 
-                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, runId, correlationValue));
+                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, runId, correlationValue, runRefId));
             }
         }
         catch when (bookmarkMatch.ClaimKey != null)
@@ -177,7 +177,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             summary?.RunId,
             null,
             summary?.CorrelationKey ?? defaultCorrelation,
-            perRegistration);
+            perRegistration,
+            summary?.RunRefId);
     }
 
     /// <summary>

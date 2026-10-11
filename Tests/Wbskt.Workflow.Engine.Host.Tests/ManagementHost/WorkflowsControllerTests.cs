@@ -93,7 +93,7 @@ public sealed class WorkflowsControllerTests
         var runRefId = Guid.NewGuid();
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, null!, DateTime.UtcNow)));
-        var expected = new StartRunResponse(runRefId, 88);
+        var expected = new StartRunResponse(runRefId);
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
         var bus = new Mock<IEventBus>();
@@ -105,7 +105,6 @@ public sealed class WorkflowsControllerTests
         var okResult = Assert.IsType<OkObjectResult>(response.Result);
         var startRunResponse = Assert.IsType<StartRunResponse>(okResult.Value);
         Assert.Equal(runRefId, startRunResponse.RunRefId);
-        Assert.Equal(88, startRunResponse.RunId);
         service.Verify(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()), Times.Once);
         engineClient.Verify(x => x.StartManualRunAsync(workflowRefId, request, It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(x => x.PublishAsync(
@@ -122,7 +121,7 @@ public sealed class WorkflowsControllerTests
         service.Setup(x => x.GetCurrentAsync(WorkspaceId, workflowRefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<WorkflowDefinitionDto>.Success(new WorkflowDefinitionDto(workflowRefId, 1, "Published", "Workflow", null, null!, DateTime.UtcNow)));
         engineClient.Setup(x => x.StartManualRunAsync(workflowRefId, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StartRunResponse(Guid.Empty, 0, StartRunOutcome.Dropped));
+            .ReturnsAsync(new StartRunResponse(Guid.Empty, StartRunOutcome.Dropped));
         var bus = new Mock<IEventBus>();
         var controller = new WorkflowsController(service.Object, Mock.Of<IWorkflowLifecycleService>(), new WorkflowRunService(service.Object, Mock.Of<IWorkflowRunQueryService>(), engineClient.Object, bus.Object, Mock.Of<ILogger<WorkflowRunService>>()));
 

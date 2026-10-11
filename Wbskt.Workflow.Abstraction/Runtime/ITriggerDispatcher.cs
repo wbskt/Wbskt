@@ -22,12 +22,14 @@ public interface ITriggerDispatcher
 /// bookmark-resume, idempotent-duplicate and no-registration paths, which never reach registration
 /// processing.
 /// </param>
+/// <param name="RunRefId">The RefId of <paramref name="RunId"/>, for callers outside the engine.</param>
 public sealed record TriggerDispatchResult(
     TriggerDispatchOutcome Outcome,
     long? RunId,
     long? BookmarkId,
     string Reason,
-    IReadOnlyList<TriggerRegistrationDispatch>? Registrations = null)
+    IReadOnlyList<TriggerRegistrationDispatch>? Registrations = null,
+    Guid? RunRefId = null)
 {
     public IReadOnlyList<TriggerRegistrationDispatch> Registrations { get; init; } = Registrations ?? [];
 
@@ -42,7 +44,8 @@ public sealed record TriggerRegistrationDispatch(
     Guid WorkflowRefId,
     TriggerDispatchOutcome Outcome,
     long? RunId,
-    string CorrelationKey);
+    string CorrelationKey,
+    Guid? RunRefId = null);
 
 public enum TriggerDispatchOutcome
 {

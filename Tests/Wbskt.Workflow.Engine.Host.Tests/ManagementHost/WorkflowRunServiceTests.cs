@@ -35,7 +35,7 @@ public sealed class WorkflowRunServiceTests
     private void EngineAnswers(StartRunOutcome outcome)
     {
         _engine.Setup(e => e.StartManualRunAsync(WorkflowRef, It.IsAny<StartRunRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StartRunResponse(Guid.NewGuid(), 1, outcome));
+            .ReturnsAsync(new StartRunResponse(Guid.NewGuid(), outcome));
     }
 
     [Theory]

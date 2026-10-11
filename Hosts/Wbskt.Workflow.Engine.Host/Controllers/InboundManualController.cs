@@ -1,39 +1,26 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Engine.Host.Middleware;
 using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
 [ApiController]
-[Route("api/inbound/manual")]
+[Route(EngineInboundApi.ManualRoute)]
 [InboundEndpoint]
-public sealed class InboundManualController(IInboundHub hub, IRunProvider runProvider) : ControllerBase
+public sealed class InboundManualController(IInboundHub hub) : ControllerBase
 {
     [HttpPost("{workflowRefId:guid}")]
-    public async Task<InboundManualResponse> Post(Guid workflowRefId, [FromBody] JsonElement payload, [FromQuery] string? idempotencyKey, CancellationToken ct)
+    public async Task<InboundResponse> Post(Guid workflowRefId, [FromBody] JsonElement payload, [FromQuery] string? idempotencyKey, CancellationToken ct)
     {
         // A caller-supplied idempotency key makes the inbound event id stable across retries,
         // so re-POSTing the same key dedupes to a single run instead of starting another.
         InboundEvent evt = ManualChannel.Event(workflowRefId, payload, idempotencyKey, default);
 
-        TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
-
         // A workflow may carry more than one manual trigger, so the event can start more than one run.
-        // Outcome/RunRefId/RunId summarise the first; Registrations carries all of them.
-        IReadOnlyList<InboundDispatchEntry> dispatches = await InboundDispatchProjection.ProjectAsync(result, runProvider, ct);
-
-        if (result.RunId.HasValue)
-        {
-            Guid runRefId = dispatches.FirstOrDefault(d => d.RunId == result.RunId)?.RunRefId
-                ?? (await runProvider.GetByIdAsync(result.RunId.Value, ct)).RefId;
-            return new InboundManualResponse(result.Outcome.ToString(), runRefId, result.RunId, dispatches);
-        }
-
-        return new InboundManualResponse(result.Outcome.ToString(), null, null, dispatches);
+        TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
+        return InboundDispatchProjection.ToResponse(result);
     }
 }
-
-public sealed record InboundManualResponse(string Outcome, Guid? RunRefId, long? RunId, IReadOnlyList<InboundDispatchEntry> Registrations);

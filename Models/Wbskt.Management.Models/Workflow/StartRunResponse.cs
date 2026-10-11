@@ -7,7 +7,7 @@ namespace Wbskt.Management.Models.Workflow;
 /// </summary>
 public enum StartRunOutcome
 {
-    /// <summary>A new run was created. <c>RunRefId</c>/<c>RunId</c> identify it.</summary>
+    /// <summary>A new run was created. <c>RunRefId</c> identifies it.</summary>
     Started,
 
     /// <summary>
@@ -29,4 +29,4 @@ public enum StartRunOutcome
     NoManualTrigger
 }
 
-public record StartRunResponse(Guid RunRefId, long RunId, StartRunOutcome Outcome = StartRunOutcome.Started);
+public record StartRunResponse(Guid RunRefId, StartRunOutcome Outcome = StartRunOutcome.Started);

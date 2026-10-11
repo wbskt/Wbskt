@@ -1,32 +1,34 @@
-using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Contracts;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
-
-/// <summary>What one matched trigger registration did with an inbound event.</summary>
-public sealed record InboundDispatchEntry(long RegistrationId, Guid WorkflowRefId, string Outcome, Guid? RunRefId, long? RunId, string CorrelationKey);
 
 internal static class InboundDispatchProjection
 {
     /// <summary>
-    /// Projects every per-registration outcome for the response. One inbound event can match several
-    /// registrations, so a single run id would name one arbitrary winner and hide the rest.
+    /// The response every inbound endpoint answers with. Every per-registration outcome is kept: one
+    /// inbound event can match several registrations, so a single run would name one arbitrary winner
+    /// and hide the rest. Runs are named by the RefIds the dispatcher already carries, so nothing is
+    /// read back.
     /// </summary>
-    public static async Task<IReadOnlyList<InboundDispatchEntry>> ProjectAsync(TriggerDispatchResult result, IRunProvider runProvider, CancellationToken ct)
+    public static InboundResponse ToResponse(TriggerDispatchResult result) => new(
+        ToOutcome(result.Outcome),
+        result.RunRefId,
+        result.Registrations
+            .Select(r => new InboundRegistrationOutcome(r.WorkflowRefId, ToOutcome(r.Outcome), r.RunRefId, r.CorrelationKey))
+            .ToArray());
+
+    private static InboundOutcome ToOutcome(TriggerDispatchOutcome outcome) => outcome switch
     {
-        if (result.Registrations.Count == 0)
-        {
-            return [];
-        }
-
-        var entries = new InboundDispatchEntry[result.Registrations.Count];
-        for (int i = 0; i < entries.Length; i++)
-        {
-            TriggerRegistrationDispatch dispatch = result.Registrations[i];
-            Guid? runRefId = dispatch.RunId.HasValue ? (await runProvider.GetByIdAsync(dispatch.RunId.Value, ct)).RefId : null;
-            entries[i] = new InboundDispatchEntry(dispatch.RegistrationId, dispatch.WorkflowRefId, dispatch.Outcome.ToString(), runRefId, dispatch.RunId, dispatch.CorrelationKey);
-        }
-
-        return entries;
-    }
+        TriggerDispatchOutcome.ResumedBookmark => InboundOutcome.ResumedBookmark,
+        TriggerDispatchOutcome.StartedRun => InboundOutcome.StartedRun,
+        TriggerDispatchOutcome.Queued => InboundOutcome.Queued,
+        TriggerDispatchOutcome.Dropped => InboundOutcome.Dropped,
+        TriggerDispatchOutcome.Cancelled => InboundOutcome.Cancelled,
+        TriggerDispatchOutcome.NoRegistration => InboundOutcome.NoRegistration,
+        TriggerDispatchOutcome.Idempotent => InboundOutcome.Idempotent,
+        TriggerDispatchOutcome.Filtered => InboundOutcome.Filtered,
+        TriggerDispatchOutcome.SecretMismatch => InboundOutcome.SecretMismatch,
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No inbound outcome for this dispatch outcome.")
+    };
 }

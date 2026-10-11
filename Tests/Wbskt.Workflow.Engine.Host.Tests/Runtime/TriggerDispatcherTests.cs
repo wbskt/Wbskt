@@ -160,6 +160,7 @@ public sealed class TriggerDispatcherTests
         // Assert
         Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
         Assert.Equal(501L, result.RunId);
+        Assert.Equal(RunRefFor(501L), result.RunRefId);
         Assert.Equal(["start", "dispatch"], operations);
         Assert.Equal([(501L, 801L, BranchExecutionReason.TriggerStarted)], runDispatcher.Requests);
     }
@@ -187,6 +188,7 @@ public sealed class TriggerDispatcherTests
                 Assert.Equal(first.WorkflowRefId, entry.WorkflowRefId);
                 Assert.Equal(TriggerDispatchOutcome.StartedRun, entry.Outcome);
                 Assert.Equal(501L, entry.RunId);
+                Assert.Equal(RunRefFor(501L), entry.RunRefId);
             },
             entry =>
             {
@@ -194,6 +196,7 @@ public sealed class TriggerDispatcherTests
                 Assert.Equal(second.WorkflowRefId, entry.WorkflowRefId);
                 Assert.Equal(TriggerDispatchOutcome.StartedRun, entry.Outcome);
                 Assert.Equal(502L, entry.RunId);
+                Assert.Equal(RunRefFor(502L), entry.RunRefId);
             });
     }
 
@@ -511,16 +514,18 @@ public sealed class TriggerDispatcherTests
         }
     }
 
+    private static Guid RunRefFor(long runId) => new($"00000000-0000-0000-0000-{runId:D12}");
+
     private sealed class RecordingRunStarter(List<string> operations) : IRunStarter
     {
         private int _started;
 
-        public Task<(long RunId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
+        public Task<(long RunId, Guid RunRefId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
         {
             operations.Add("start");
             // Distinct ids per call so a fan-out over several registrations is distinguishable.
             int offset = _started++;
-            return Task.FromResult((501L + offset, 801L + offset));
+            return Task.FromResult((501L + offset, RunRefFor(501L + offset), 801L + offset));
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Wbskt.Workflow.Engine.Contracts;
 
 namespace Wbskt.Workflow.Engine.Host.Middleware;
 
@@ -9,8 +10,6 @@ namespace Wbskt.Workflow.Engine.Host.Middleware;
 // treats an unset key as "checks disabled" for local convenience.
 public sealed class InboundApiKeyMiddleware
 {
-    private const string ApiKeyHeaderName = "X-Wbskt-Api-Key";
-
     private readonly RequestDelegate _next;
     private readonly byte[]? _expectedApiKey;
     private readonly bool _isProduction;
@@ -45,7 +44,7 @@ public sealed class InboundApiKeyMiddleware
             return;
         }
 
-        byte[] providedKey = Encoding.UTF8.GetBytes(context.Request.Headers[ApiKeyHeaderName].ToString());
+        byte[] providedKey = Encoding.UTF8.GetBytes(context.Request.Headers[EngineInboundApi.ApiKeyHeader].ToString());
         if (!CryptographicOperations.FixedTimeEquals(providedKey, _expectedApiKey))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
