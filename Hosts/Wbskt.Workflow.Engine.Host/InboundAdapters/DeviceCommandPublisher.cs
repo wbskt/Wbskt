@@ -1,6 +1,7 @@
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Providers;
 
@@ -26,6 +27,14 @@ public sealed class DeviceCommandPublisher(
         {
             logger.LogWarning("No client '{ClientRefId}' in workspace {WorkspaceId}; command '{Command}' not sent.", clientRefId, workspaceId, command);
             await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, 0, workspaceId, command, UnknownClientReason, Guid.NewGuid()), sentBy), ct);
+            return;
+        }
+
+        // The validator refuses these at publish time; this catches a definition saved before it did.
+        if (DeviceMessageRules.FindViolation(command, payload) is { } violation)
+        {
+            logger.LogWarning("Command '{Command}' to client '{ClientRefId}' refused: {Reason}", command, clientRefId, violation);
+            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, violation, Guid.NewGuid()), sentBy), ct);
             return;
         }
 

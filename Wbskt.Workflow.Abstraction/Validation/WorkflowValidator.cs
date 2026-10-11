@@ -1,6 +1,8 @@
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
@@ -299,6 +301,17 @@ public sealed class WorkflowValidator
     {
         foreach (var node in def.Nodes)
         {
+            // The same rules the console applies, so a workflow cannot send a device a sys.* frame.
+            if (node is SendClientMessageNode sendMessage
+                && DeviceMessageRules.FindViolation(sendMessage.Config?.Type, sendMessage.Config?.Payload?.GetRawText()) is { } violation)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "CLIENT_MESSAGE_INVALID",
+                    $"ClientMessage node '{node.NodeId}': {violation}",
+                    node.NodeId));
+            }
+
             if (node is WaitForHttpNode waitForHttp)
             {
                 string? token = waitForHttp.Config?.Token?.Trim();

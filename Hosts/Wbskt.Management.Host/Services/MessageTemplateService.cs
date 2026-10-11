@@ -8,8 +8,6 @@ namespace Wbskt.Management.Host.Services;
 
 internal sealed class MessageTemplateService : IMessageTemplateService
 {
-    private const int MaxPayloadChars = 32 * 1024; // half the 64 KB socket message cap
-
     private readonly IMessageTemplateProvider _templateProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly ILogger<MessageTemplateService> _logger;
@@ -118,19 +116,19 @@ internal sealed class MessageTemplateService : IMessageTemplateService
         }
 
         var messageType = request.MessageType?.Trim();
-        if (string.IsNullOrEmpty(messageType) || messageType.Length > 100)
+        if (!DeviceMessageRules.IsValidType(messageType))
         {
             return (Result.Failure(Error.Validation("TEMPLATE_TYPE_INVALID", "Message type must be 1-100 characters.")), null);
         }
 
-        if (ReservedMessageTypes.IsReserved(messageType))
+        if (DeviceMessageRules.IsReserved(messageType))
         {
             return (Result.Failure(Error.Validation("TEMPLATE_TYPE_RESERVED", "Message type is reserved for the platform protocol.")), null);
         }
 
-        if (string.IsNullOrWhiteSpace(request.PayloadJson) || request.PayloadJson.Length > MaxPayloadChars)
+        if (string.IsNullOrWhiteSpace(request.PayloadJson) || request.PayloadJson.Length > DeviceMessageRules.MaxPayloadChars)
         {
-            return (Result.Failure(Error.Validation("TEMPLATE_PAYLOAD_INVALID", $"Payload must be 1-{MaxPayloadChars} characters.")), null);
+            return (Result.Failure(Error.Validation("TEMPLATE_PAYLOAD_INVALID", $"Payload must be 1-{DeviceMessageRules.MaxPayloadChars} characters.")), null);
         }
 
         try
