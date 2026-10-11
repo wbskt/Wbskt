@@ -2055,7 +2055,7 @@ const simulator = {
         }
         const url = config.socketUrl(`/ws?access_token=${encodeURIComponent(token)}`);
         let ws;
-        try { ws = new WebSocket(url); } catch (e) { this.log(sim, `Socket error: ${e.message}`, 'error'); this.setStatus(sim, 'disconnected'); return; }
+        try { ws = new WebSocket(url, 'wbskt.v1'); } catch (e) { this.log(sim, `Socket error: ${e.message}`, 'error'); this.setStatus(sim, 'disconnected'); return; }
         sim.ws = ws;
         ws.onopen = () => {
             sim.retry = 0;
@@ -2083,7 +2083,7 @@ const simulator = {
         try { msg = JSON.parse(raw); } catch { this.log(sim, `RECV ${raw}`, 'recv'); return; }
         if (msg.type === 'sys.ping') {
             this.log(sim, 'RECV sys.ping', 'sys');
-            this.send(sim, { type: 'sys.pong', payload: { originalTimestamp: msg.payload?.timestamp } }, 'sys');
+            this.send(sim, { type: 'sys.pong', payload: { originalTimestamp: msg.payload?.timestamp, id: msg.payload?.id } }, 'sys');
             return;
         }
         this.log(sim, `RECV ${raw}`, 'recv');

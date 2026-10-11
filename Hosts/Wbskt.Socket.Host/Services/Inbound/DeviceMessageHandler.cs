@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 

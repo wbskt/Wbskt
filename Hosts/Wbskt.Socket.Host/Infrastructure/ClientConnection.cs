@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.Socket.Host.Infrastructure;
 
@@ -27,14 +27,51 @@ public sealed class ClientConnection : IDisposable
     // same client (one per socket-host instance) is the older one to close.
     public DateTime EstablishedAtUtc { get; init; } = DateTime.UtcNow;
 
-    // Timestamp of the last sys.ping sent on this connection; RTT fallback when the pong payload is unreadable.
-    public DateTime? LastPingSentAt { get; set; }
+    // The sys.ping waiting for its pong; only the latest one counts.
+    private (string Id, DateTime SentAt)? _pendingPing;
 
     /// <summary>The close someone asked for, if any; the receive loop reports its reason.</summary>
     public CloseRequest? CloseRequest { get; private set; }
 
     /// <summary>Cancelled when a requested close was not answered in time, to cut the receive loop short.</summary>
     public CancellationToken Closing => _closing.Token;
+
+    /// <summary>
+    /// Sends a <c>sys.ping</c> and remembers it, so the pong is timed on this host's clock rather
+    /// than by a timestamp the device echoes back. A ping still unanswered is forgotten.
+    /// </summary>
+    public Task SendPingAsync(CancellationToken cancellationToken)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var sentAt = DateTime.UtcNow;
+        lock (_gate)
+        {
+            _pendingPing = (id, sentAt);
+        }
+
+        return SendAsync(new SocketMessage(MessageTypes.Ping, new PingPayload(sentAt, id)), cancellationToken);
+    }
+
+    /// <summary>
+    /// Matches a pong to the ping waiting for it and returns when that ping was sent. A pong with an
+    /// id must carry the pending ping's; one without (SDKs before the ping id) answers the pending
+    /// ping. Either way a ping is answered once.
+    /// </summary>
+    public bool TryCompletePing(string? id, out DateTime sentAt)
+    {
+        lock (_gate)
+        {
+            if (_pendingPing is not { } pending || (id != null && id != pending.Id))
+            {
+                sentAt = default;
+                return false;
+            }
+
+            _pendingPing = null;
+            sentAt = pending.SentAt;
+            return true;
+        }
+    }
 
     public async Task SendAsync(SocketMessage message, CancellationToken cancellationToken)
     {

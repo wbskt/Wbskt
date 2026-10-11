@@ -1,10 +1,12 @@
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
+using Wbskt.Protocol;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Services;
 using Wbskt.Socket.Host.Services.Inbound;
@@ -18,11 +20,18 @@ public sealed class InboundMessageDispatcherTests
     private static readonly Guid CommandId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
     private readonly RecordingEventBus _bus = new();
-    private readonly ClientConnection _connection = new() { Socket = Mock.Of<WebSocket>(), ClientId = 1, WorkspaceId = 2 };
+    private readonly List<string> _sent = [];
+    private readonly ClientConnection _connection;
     private readonly InboundMessageDispatcher _dispatcher;
 
     public InboundMessageDispatcherTests()
     {
+        var socket = new Mock<WebSocket>();
+        socket.Setup(x => x.SendAsync(It.IsAny<ArraySegment<byte>>(), WebSocketMessageType.Text, true, It.IsAny<CancellationToken>()))
+            .Callback((ArraySegment<byte> bytes, WebSocketMessageType _, bool _, CancellationToken _) => _sent.Add(Encoding.UTF8.GetString(bytes)))
+            .Returns(Task.CompletedTask);
+        _connection = new ClientConnection { Socket = socket.Object, ClientId = 1, WorkspaceId = 2 };
+
         IInboundMessageHandler[] handlers =
         [
             new PongHandler(_bus, NullLogger<PongHandler>.Instance),
@@ -59,7 +68,7 @@ public sealed class InboundMessageDispatcherTests
     [Fact]
     public async Task An_over_long_type_is_dropped()
     {
-        await Dispatch($$$"""{"type":"{{{new string('t', InboundMessageDispatcher.MaxTypeLength + 1)}}}","payload":{}}""");
+        await Dispatch($$$"""{"type":"{{{new string('t', MessageTypes.MaxTypeLength + 1)}}}","payload":{}}""");
 
         _bus.Published.Should().BeEmpty();
     }
@@ -100,14 +109,37 @@ public sealed class InboundMessageDispatcherTests
     }
 
     [Fact]
-    public async Task A_pong_echoing_the_ping_time_is_published_as_a_latency_reading()
+    public async Task A_pong_carrying_the_pending_pings_id_is_timed_from_when_the_ping_was_sent()
     {
-        var pingedAt = DateTime.UtcNow.AddMilliseconds(-250);
+        var ping = await SendPing();
+        await Task.Delay(50);
 
-        await Dispatch($$$"""{"type":"sys.pong","payload":{"originalTimestamp":"{{{pingedAt:O}}}"}}""");
+        // The echoed timestamp is ignored: a device cannot make its latency look better than it is.
+        await Dispatch($$$"""{"type":"sys.pong","payload":{"originalTimestamp":"{{{DateTime.UtcNow:O}}}","id":"{{{ping.Id}}}"}}""");
 
         _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientLatencyMeasuredEvent>()
-            .Which.RoundTripMs.Should().BeGreaterThanOrEqualTo(250);
+            .Which.RoundTripMs.Should().BeGreaterThanOrEqualTo(40);
+    }
+
+    [Fact]
+    public async Task A_pong_without_an_id_answers_the_pending_ping_once()
+    {
+        await SendPing();
+
+        await Dispatch("""{"type":"sys.pong","payload":{"originalTimestamp":"2026-01-01T00:00:00Z"}}""");
+        await Dispatch("""{"type":"sys.pong","payload":{"originalTimestamp":"2026-01-01T00:00:00Z"}}""");
+
+        _bus.Published.Should().ContainSingle().Which.Should().BeOfType<ClientLatencyMeasuredEvent>();
+    }
+
+    [Fact]
+    public async Task A_pong_for_another_ping_publishes_nothing()
+    {
+        await SendPing();
+
+        await Dispatch("""{"type":"sys.pong","payload":{"originalTimestamp":"2026-01-01T00:00:00Z","id":"not-the-pending-one"}}""");
+
+        _bus.Published.Should().BeEmpty();
     }
 
     [Fact]
@@ -116,6 +148,14 @@ public sealed class InboundMessageDispatcherTests
         await Dispatch("""{"type":"sys.pong","payload":{}}""");
 
         _bus.Published.Should().BeEmpty();
+    }
+
+    private async Task<PingPayload> SendPing()
+    {
+        await _connection.SendPingAsync(CancellationToken.None);
+        var frame = JsonDocument.Parse(_sent.Last()).RootElement;
+        frame.GetProperty("type").GetString().Should().Be(MessageTypes.Ping);
+        return frame.GetProperty("payload").Deserialize<PingPayload>()!;
     }
 
     private sealed class RecordingEventBus : IEventBus

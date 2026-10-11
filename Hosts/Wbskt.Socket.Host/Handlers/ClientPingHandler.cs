@@ -1,6 +1,5 @@
 using System.Net.WebSockets;
 using MassTransit;
-using Wbskt.Client.Sdk.Models;
 using Wbskt.Events.Client;
 using Wbskt.Socket.Host.Infrastructure;
 
@@ -26,11 +25,8 @@ public sealed class ClientPingHandler : IConsumer<ClientPingEvent>
             return;
         }
 
-        // The timestamp is stamped at send (not the event's PingTime) so bus latency stays out of the RTT.
-        var sentAt = DateTime.UtcNow;
-        connection.LastPingSentAt = sentAt;
-
-        await connection.SendAsync(new SocketMessage("sys.ping", new { timestamp = sentAt }), context.CancellationToken);
+        // Timed from the send (not the event's PingTime) so bus latency stays out of the RTT.
+        await connection.SendPingAsync(context.CancellationToken);
         _logger.LogDebug("Sent sys.ping to client {ClientRefId}.", context.Message.ClientRefId);
     }
 }

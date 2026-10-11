@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 
@@ -21,7 +21,7 @@ public sealed class AckHandler : IInboundMessageHandler
         _logger = logger;
     }
 
-    public string Type => "sys.ack";
+    public string Type => MessageTypes.Ack;
 
     public async Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken)
     {

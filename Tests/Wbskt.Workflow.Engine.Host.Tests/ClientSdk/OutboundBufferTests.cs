@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using Wbskt.Client.Sdk.Internal;
 using Wbskt.Client.Sdk.Models;
 

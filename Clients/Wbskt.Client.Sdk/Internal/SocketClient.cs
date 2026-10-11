@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.Client.Sdk.Internal;
 
@@ -42,6 +42,7 @@ internal sealed class SocketClient : IAsyncDisposable
 
         var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws");
         _webSocket.Options.SetRequestHeader("Authorization", $"Bearer {token}");
+        _webSocket.Options.AddSubProtocol(SocketProtocol.V1);
         await _webSocket.ConnectAsync(uri, _cts.Token);
         OnConnected?.Invoke();
         
@@ -75,52 +76,34 @@ internal sealed class SocketClient : IAsyncDisposable
         }
     }
 
-    private const int MaxMessageBytes = 64 * 1024;
-
     private async Task ReceiveLoopAsync()
     {
-        var buffer = new byte[1024 * 4];
-        using var messageBuffer = new MemoryStream();
+        using var reader = new WebSocketMessageReader(_webSocket, SocketProtocol.MaxMessageBytes);
         try
         {
             while (_webSocket.State == WebSocketState.Open && !_cts.Token.IsCancellationRequested)
             {
-                // A logical message can span multiple frames; assemble until EndOfMessage.
-                messageBuffer.SetLength(0);
-                WebSocketReceiveResult result;
-                do
+                var read = await reader.ReadAsync(_cts.Token);
+                switch (read.Kind)
                 {
-                    result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
-
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
+                    case FrameKind.Closed:
                         await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", _cts.Token);
                         return;
-                    }
-
-                    if (messageBuffer.Length + result.Count > MaxMessageBytes)
-                    {
+                    case FrameKind.TooBig:
                         // Oversized message; drop the connection and let the reconnect monitor recover.
                         return;
-                    }
-
-                    messageBuffer.Write(buffer, 0, result.Count);
-                } while (!result.EndOfMessage);
-
-                if (result.MessageType != WebSocketMessageType.Text)
-                {
-                    continue;
+                    case FrameKind.Binary:
+                        continue;
                 }
 
-                var json = Encoding.UTF8.GetString(messageBuffer.GetBuffer(), 0, (int)messageBuffer.Length);
-                using var doc = JsonDocument.Parse(json);
+                using var doc = JsonDocument.Parse(read.Text!);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
                 switch (type)
                 {
-                    case "sys.ping":
-                        var ts = doc.RootElement.GetProperty("payload").GetProperty("timestamp").GetDateTime();
-                        await SendAsync(new SocketMessage("sys.pong", new { originalTimestamp = ts }));
+                    case MessageTypes.Ping:
+                        var ping = doc.RootElement.GetProperty("payload").Deserialize<PingPayload>()!;
+                        await SendAsync(new SocketMessage(MessageTypes.Pong, new PongPayload(ping.Timestamp, ping.Id)));
                         break;
                     default:
                         var payload = doc.RootElement.TryGetProperty("payload", out var p) ? (object)p.Clone() : null;
@@ -133,12 +116,12 @@ internal sealed class SocketClient : IAsyncDisposable
                             if (CommandExpiry.IsExpired(doc.RootElement, DateTimeOffset.UtcNow))
                             {
                                 // Answered, so the platform reports it as refused rather than lost.
-                                await SendAsync(new SocketMessage("sys.ack", new { commandId, type, refused = "expired" }));
+                                await SendAsync(new SocketMessage(MessageTypes.Ack, new AckPayload(commandId, type, AckPayload.Expired)));
                                 break;
                             }
 
                             // Transport-level delivery ack; app-level acks are ordinary messages.
-                            await SendAsync(new SocketMessage("sys.ack", new { commandId }));
+                            await SendAsync(new SocketMessage(MessageTypes.Ack, new AckPayload(commandId)));
                         }
 
                         OnMessageReceived?.Invoke(type ?? "unknown", payload, commandId);

@@ -1,11 +1,11 @@
 using System.Text.Json;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 
 namespace Wbskt.Socket.Host.Services.Inbound;
 
-/// <summary><c>sys.pong</c>: the answer to our <c>sys.ping</c>, turned into a latency reading.</summary>
+/// <summary><c>sys.pong</c>: the answer to our <c>sys.ping</c> (matched by its id), turned into a latency reading.</summary>
 public sealed class PongHandler : IInboundMessageHandler
 {
     private readonly IEventBus _eventBus;
@@ -17,37 +17,31 @@ public sealed class PongHandler : IInboundMessageHandler
         _logger = logger;
     }
 
-    public string Type => "sys.pong";
+    public string Type => MessageTypes.Pong;
 
     public async Task HandleAsync(InboundContext context, SocketMessage message, CancellationToken cancellationToken)
     {
         var connection = context.Connection;
 
-        // RTT is measured here, on the socket, so bus hops never inflate the number.
-        var originalPingTime = TryGetOriginalTimestamp(message.Payload) ?? connection.LastPingSentAt;
-        if (originalPingTime == null)
+        // RTT is measured here, on the socket and on this host's clock, so neither bus hops nor a
+        // device's echoed timestamp can change the number.
+        if (!connection.TryCompletePing(TryGetPingId(message.Payload), out var sentAt))
         {
             _logger.LogDebug("Received sys.pong from {ClientRefId} without a matching ping.", context.ClientRefId);
             return;
         }
 
-        var roundTripMs = (DateTime.UtcNow - originalPingTime.Value).TotalMilliseconds;
+        var roundTripMs = (DateTime.UtcNow - sentAt).TotalMilliseconds;
         await _eventBus.PublishAsync(new ClientLatencyMeasuredEvent(context.ClientRefId, connection.ClientId, connection.WorkspaceId, roundTripMs), cancellationToken);
     }
 
-    private static DateTime? TryGetOriginalTimestamp(object payload)
+    private static string? TryGetPingId(object payload)
     {
-        // The client echoes the server's own sys.ping timestamp back as 'originalTimestamp',
-        // so the round trip is computed entirely on this host's clock.
-        if (payload is JsonElement element
+        return payload is JsonElement element
             && element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty("originalTimestamp", out var timestamp)
-            && timestamp.ValueKind == JsonValueKind.String
-            && timestamp.TryGetDateTime(out var parsed))
-        {
-            return parsed.ToUniversalTime();
-        }
-
-        return null;
+            && element.TryGetProperty("id", out var id)
+            && id.ValueKind == JsonValueKind.String
+            ? id.GetString()
+            : null;
     }
 }

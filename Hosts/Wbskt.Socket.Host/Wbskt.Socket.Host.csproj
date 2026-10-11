@@ -21,7 +21,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\Clients\Wbskt.Client.Sdk\Wbskt.Client.Sdk.csproj" />
+      <ProjectReference Include="..\..\Clients\Wbskt.Protocol\Wbskt.Protocol.csproj" />
       <ProjectReference Include="..\..\Events\Wbskt.EventBus\Wbskt.EventBus.csproj" />
       <ProjectReference Include="..\..\Events\Wbskt.EventBus.RabbitMQ\Wbskt.EventBus.RabbitMQ.csproj" />
       <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />

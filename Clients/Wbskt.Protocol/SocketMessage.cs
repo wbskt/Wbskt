@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
-using Wbskt.Client.Sdk.Internal;
 
-namespace Wbskt.Client.Sdk.Models;
+namespace Wbskt.Protocol;
 
 /// <summary>
 /// Represents a message exchanged between the client and server.

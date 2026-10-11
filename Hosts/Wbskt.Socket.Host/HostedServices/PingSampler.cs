@@ -1,5 +1,4 @@
 using System.Net.WebSockets;
-using Wbskt.Client.Sdk.Models;
 using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Socket.Host.HostedServices;
@@ -37,9 +36,7 @@ internal sealed class PingSampler : BackgroundService
 
                     try
                     {
-                        var sentAt = DateTime.UtcNow;
-                        connection.LastPingSentAt = sentAt;
-                        await connection.SendAsync(new SocketMessage("sys.ping", new { timestamp = sentAt }), stoppingToken);
+                        await connection.SendPingAsync(stoppingToken);
                     }
                     catch (OperationCanceledException)
                     {
