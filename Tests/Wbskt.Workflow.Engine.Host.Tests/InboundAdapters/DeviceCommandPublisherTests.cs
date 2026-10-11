@@ -68,6 +68,32 @@ public sealed class DeviceCommandPublisherTests
     }
 
     [Theory]
+    [InlineData("sys.ping")]
+    [InlineData("state.report")]
+    public async Task A_reserved_command_type_is_refused_and_reported(string type)
+    {
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
+            .PublishCommandAsync(ClientRefId, WorkspaceId, type, "{}", null, CancellationToken.None);
+
+        Assert.Null(_sent);
+        Assert.NotNull(_failed);
+        Assert.Contains("reserved", _failed!.Reason);
+        Assert.Equal(ClientId, _failed.ClientId);
+    }
+
+    [Fact]
+    public async Task An_oversized_payload_is_refused_and_reported()
+    {
+        string payload = new('x', 32 * 1024 + 1);
+
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
+            .PublishCommandAsync(ClientRefId, WorkspaceId, "OpenVent", payload, null, CancellationToken.None);
+
+        Assert.Null(_sent);
+        Assert.NotNull(_failed);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task A_command_to_a_device_that_is_missing_or_in_another_workspace_is_refused(bool otherWorkspace)

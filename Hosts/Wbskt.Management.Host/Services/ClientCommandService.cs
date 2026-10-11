@@ -2,6 +2,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services;
 
@@ -13,7 +14,6 @@ public sealed class ClientCommandService : IClientCommandService
     /// <summary>How long a command or ping waits for the broker before the caller is told to retry.</summary>
     internal static readonly TimeSpan ActionPublishTimeout = TimeSpan.FromSeconds(5);
 
-    private const int MaxPayloadLength = 32 * 1024;
 
     public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The device could not be reached right now. Try again shortly.");
 
@@ -80,19 +80,19 @@ public sealed class ClientCommandService : IClientCommandService
 
     private static Error? Validate(ClientCommandRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Type) || request.Type.Length > 100)
+        if (!DeviceMessageRules.IsValidType(request.Type))
         {
             return Error.Validation("COMMAND_TYPE_INVALID", "Command type must be 1-100 characters.");
         }
 
-        if (ReservedMessageTypes.IsReserved(request.Type))
+        if (DeviceMessageRules.IsReserved(request.Type))
         {
             return Error.Validation("COMMAND_TYPE_RESERVED", "Command type is reserved for the platform protocol.");
         }
 
-        if (request.Payload is { Length: > MaxPayloadLength })
+        if (request.Payload is { Length: > DeviceMessageRules.MaxPayloadChars })
         {
-            return Error.Validation("COMMAND_PAYLOAD_TOO_LARGE", "Command payload is limited to 32768 characters.");
+            return Error.Validation("COMMAND_PAYLOAD_TOO_LARGE", $"Command payload is limited to {DeviceMessageRules.MaxPayloadChars} characters.");
         }
 
         if (request.ExpiresAt is { } expiresAt

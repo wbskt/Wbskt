@@ -96,6 +96,38 @@ public class WorkflowValidatorTests
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "WAITFORHTTP_WEAK_TOKEN");
     }
 
+    [Theory]
+    [InlineData("sys.ping")]
+    [InlineData("capabilities")]
+    [InlineData("state.report")]
+    [InlineData("")]
+    public void Validate_refuses_a_client_message_the_console_would_refuse(string type)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, CreateClientMessage(type)] });
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "CLIENT_MESSAGE_INVALID");
+    }
+
+    [Fact]
+    public void Validate_allows_an_ordinary_client_message()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, CreateClientMessage("OpenVent")] });
+        Assert.DoesNotContain(result.Issues, i => i.Code == "CLIENT_MESSAGE_INVALID");
+    }
+
+    private static SendClientMessageNode CreateClientMessage(string type) => new()
+    {
+        NodeId = new Guid("aaaaaaaa-0000-0000-0000-00000000009c"),
+        Name = "send",
+        Ports =
+        [
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }
+        ],
+        Config = new SendClientMessageConfig { ClientRef = Guid.NewGuid().ToString(), Type = type }
+    };
+
     [Fact]
     public void Validate_allows_waitforhttp_with_strong_token()
     {
