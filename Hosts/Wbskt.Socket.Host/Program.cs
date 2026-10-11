@@ -9,7 +9,7 @@ using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
-using Wbskt.Socket.Host.Extensions;
+using Wbskt.Infrastructure.Hosting;
 using Wbskt.Socket.Host.HostedServices;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Middleware;
@@ -75,23 +75,14 @@ public static class Program
         // AddMassTransit (masstransit-bus, tagged "ready").
         builder.Services.AddHealthChecks();
 
-        builder.Services.AddControllers();
+        // No controllers and so no API docs: the device protocol on /ws is this host's whole API.
         builder.Services.AddWbsktJson();
-        builder.Services.AddCustomOpenApi();
 
         var app = builder.Build();
 
         await app.RunStartupTasksAsync();
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
-
-        if (app.Configuration.IsApiDocsEnabled(app.Environment))
-        {
-            // API docs (on in Development, opt-in elsewhere via ApiDocs:Enabled) are exempt from the
-            // default-deny fallback policy.
-            app.MapOpenApi().AllowAnonymous();
-            app.MapCustomScalarApiReference();
-        }
 
         // The server pings every interval and drops a connection that has not answered within the
         // timeout. Without the timeout, a device that loses power or Wi-Fi leaves a half-open socket
@@ -124,7 +115,6 @@ public static class Program
         }).AllowAnonymous();
 
         app.MapWbsktHealthChecks();
-        app.MapControllers();
 
         await app.RunAsync();
     }

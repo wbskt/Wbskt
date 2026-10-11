@@ -310,7 +310,6 @@ services:
     environment:
       <<: *host-env
       OTEL_SERVICE_NAME: wbskt-socket
-      ApiDocs__Enabled: ${API_DOCS_ENABLED:-false}
       # Signs nothing; validates client tokens against management's public keys, fetched on first use.
       Jwt__TrustedJwksUrl: http://management:8080/.well-known/jwks.json
       # Device revocations the management host records, checked when a device connects.

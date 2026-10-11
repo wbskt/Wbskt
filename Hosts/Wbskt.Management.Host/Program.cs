@@ -14,6 +14,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.HealthChecks;
