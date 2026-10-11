@@ -5,10 +5,8 @@ namespace Wbskt.Workflow.Abstraction.Models.Bookmarks;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(TimerWakeCondition), "timer")]
 [JsonDerivedType(typeof(SignalWakeCondition), "signal")]
-[JsonDerivedType(typeof(InboundWakeCondition), "inbound")]
 [JsonDerivedType(typeof(HttpWakeCondition), "http")]
 [JsonDerivedType(typeof(ChildRunCompletedWakeCondition), "childRunCompleted")]
-[JsonDerivedType(typeof(AnyOfWakeCondition), "anyOf")]
 [JsonDerivedType(typeof(CommandOutcomeWakeCondition), "commandOutcome")]
 public abstract record WakeCondition
 {

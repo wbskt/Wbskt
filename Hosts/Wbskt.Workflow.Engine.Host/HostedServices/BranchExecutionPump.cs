@@ -60,7 +60,7 @@ internal sealed class BranchExecutionPump : BackgroundService
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Branch execution failed for RunId {RunId} BranchId {BranchId}.", request.RunId, request.BranchId);
-                        await ContainLeakedBranchAsync(request, ex, stoppingToken);
+                        await ContainLeakedBranchAsync(request, stoppingToken);
                     }
                     finally
                     {
@@ -84,7 +84,7 @@ internal sealed class BranchExecutionPump : BackgroundService
     /// Every step is individually guarded: if remediation itself fails the run is left to the
     /// RunReaper rather than taking down the pump's worker.
     /// </summary>
-    private async Task ContainLeakedBranchAsync(BranchExecutionRequest request, Exception cause, CancellationToken ct)
+    private async Task ContainLeakedBranchAsync(BranchExecutionRequest request, CancellationToken ct)
     {
         try
         {
@@ -106,8 +106,10 @@ internal sealed class BranchExecutionPump : BackgroundService
                 request.BranchId,
                 request.RunId);
 
+            // A fixed message: the branch's error is shown to the workspace, and an exception's own
+            // message can name tables, hosts or connection details. The exception is in the log above.
             string errorJson = System.Text.Json.JsonSerializer.Serialize(
-                new { ErrorCode = "BRANCH_LOOP_ESCAPED", Message = cause.Message },
+                new { ErrorCode = "BRANCH_LOOP_ESCAPED", Message = "The engine hit an unexpected error running this branch." },
                 new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
 
             await branchProvider.SetFailedAsync(request.BranchId, errorJson, ct);

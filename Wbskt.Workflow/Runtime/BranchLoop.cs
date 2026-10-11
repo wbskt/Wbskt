@@ -107,20 +107,6 @@ internal sealed class BranchLoop : IBranchLoop
             ct);
         _logger?.LogInformation("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
-        // Spec §2.10 Branch Loop (pseudocode)
-        // loop:
-        //   node ← lookup(definition, branch.CurrentNodeId)
-        //   if not found → branch ends (Completed, no edges)
-        //   emit HistoryEvent.NodeStarted
-        //   executor ← registry[node.Kind]
-        //   ctx      ← buildContext(run, branch)
-        //   result   ← executor.ExecuteAsync(node, ctx)
-        //   switch result:
-        //     Continue: resolve next node, persist pointer, loop
-        //     Fork: handled in later phase task
-        //     WaitForBookmark: handled in later phase task
-        //     Fail: handled in later phase task
-        //     Terminal: branch ends (Completed)
         while (true)
         {
             if (await _runCancellationService.IsCancellationRequestedAsync(runId, ct))
@@ -439,7 +425,7 @@ internal sealed class BranchLoop : IBranchLoop
                     return;
 
                 default:
-                    throw new NotImplementedException("Additional branch loop outcomes are implemented in later phase tasks.");
+                    throw new InvalidOperationException($"A node returned {result.GetType().Name}, which the branch loop does not handle.");
             }
         }
     }
@@ -654,11 +640,9 @@ internal sealed class BranchLoop : IBranchLoop
         {
             TimerWakeCondition => "timer",
             SignalWakeCondition => "signal",
-            InboundWakeCondition => "inbound",
             HttpWakeCondition => "http",
             ChildRunCompletedWakeCondition => "childRunCompleted",
             CommandOutcomeWakeCondition => "commandOutcome",
-            AnyOfWakeCondition => "anyOf",
             _ => condition.GetType().Name
         };
     }
@@ -672,11 +656,9 @@ internal sealed class BranchLoop : IBranchLoop
             // Timers aren't matched by an inbound event key — they're woken by ExpiresAt alone.
             TimerWakeCondition => string.Empty,
             SignalWakeCondition signal => SignalChannel.Key(signal.Name, signal.Correlation),
-            InboundWakeCondition inbound => $"{inbound.DeviceRefId}:{inbound.PropertyName}",
             HttpWakeCondition http => HttpWakeChannel.Key(http.Token),
             ChildRunCompletedWakeCondition child => ChildCompletedChannel.Key(child.ChildRunId.ToString()),
             CommandOutcomeWakeCondition command => CommandChannel.Key(command.CommandId),
-            AnyOfWakeCondition => "anyOf",
             _ => string.Empty
         };
     }

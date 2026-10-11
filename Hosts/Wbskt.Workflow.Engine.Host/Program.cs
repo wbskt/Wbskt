@@ -97,9 +97,7 @@ public static class Program
         // Re-registers ILeadershipGate (AddWorkflowEngine defaults to always-active for
         // tests/Management) - last registration wins, so the engine host resolves the real one.
         services.AddSingleton<ILeadershipGate, LeadershipGate>();
-        services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
         services.AddScoped<IClientCommandTargetProvider, ClientCommandTargetProvider>();
-        services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
         services.AddScoped<IClientPresenceCheckProvider, ClientPresenceCheckProvider>();
         services.AddScoped<ClientPresenceParker>();
         services.AddScoped<IClientHoldStateProvider, ClientHoldStateProvider>();

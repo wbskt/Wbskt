@@ -28,28 +28,6 @@ public class WakeConditionTests
     }
 
     [Fact]
-    public void AnyOfWakeCondition_roundtrips_nested_polymorphic_conditions()
-    {
-        WakeCondition cond = new AnyOfWakeCondition([
-            new TimerWakeCondition(DateTime.UtcNow),
-            new SignalWakeCondition("ack", "r1")
-        ]);
-        var json = JsonSerializer.Serialize(cond, Options);
-        var back = JsonSerializer.Deserialize<WakeCondition>(json, Options);
-        var anyOf = Assert.IsType<AnyOfWakeCondition>(back);
-        Assert.Equal(2, anyOf.Conditions.Count);
-    }
-
-    [Fact]
-    public void InboundWakeCondition_roundtrips()
-    {
-        WakeCondition cond = new InboundWakeCondition("dev-A", "temperature");
-        var json = JsonSerializer.Serialize(cond, Options);
-        var back = JsonSerializer.Deserialize<WakeCondition>(json, Options);
-        Assert.IsType<InboundWakeCondition>(back);
-    }
-
-    [Fact]
     public void HttpWakeCondition_roundtrips()
     {
         WakeCondition cond = new HttpWakeCondition("tok-123");
