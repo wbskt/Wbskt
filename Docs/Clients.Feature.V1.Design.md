@@ -30,7 +30,7 @@ A codebase review (2026-07-20) found the platform covers roughly half of this. T
 |---|---|
 | List clients / by policy (status+name filters, paged) | `ClientsController` `GET api/workspaces/{workspaceRef}/clients` and `GET …/clients/policy/{policyRefId}` |
 | Approve / revoke / reject / revive | `PATCH …/clients/{clientRefId}/status` (`ClientStatus: Pending=0, Registered=1, Revoked=2, Rejected=3`) |
-| Send command | `POST …/clients/{clientRefId}/command` → `ClientCommandEvent` → `Socket.Host/Handlers/ClientPayloadHandler` → socket; `ClientCommandDeliveredEvent`/`ClientCommandFailedEvent` |
+| Send command | `POST …/clients/{clientRefId}/command` → `ClientCommandEvent` → `Socket.Host/Handlers/ClientCommandHandler` → socket; `ClientCommandDeliveredEvent`/`ClientCommandFailedEvent` |
 | Presence | `Management.Host/Handlers/ClientPresenceHandler` ← connect/disconnect events → `Client_UpdatePresence` (`IsConnected`, `LastActivityAt`) |
 | Browser realtime | `Hubs/NotificationHub` at `/hubs/notifications`; every `[SignalRNotify]` event auto-forwarded to group `ws:{WorkspaceId}` (`SignalRForwardingHandler`) |
 | Durable history | `EventLogs` table ← `EventLoggerHandler` (every `IEvent`, batched); `GET …/event-logs?clientRefId=…` |
