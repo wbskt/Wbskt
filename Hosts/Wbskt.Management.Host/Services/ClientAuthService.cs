@@ -52,10 +52,10 @@ internal sealed class ClientAuthService : IClientAuthService
         {
             new Claim(ClaimTypes.NameIdentifier, client.RefId.ToString()),
             new Claim(ClaimTypes.Name, client.Name),
-            new Claim("id", client.Id.ToString()),
-            new Claim("policy_ref", client.PolicyRefId.ToString()),
-            new Claim("workspace_id", client.WorkspaceId.ToString()),
-            new Claim("type", "client")
+            new Claim(ClientClaims.Id, client.Id.ToString()),
+            new Claim(ClientClaims.PolicyRef, client.PolicyRefId.ToString()),
+            new Claim(ClientClaims.WorkspaceId, client.WorkspaceId.ToString()),
+            new Claim(ClientClaims.Type, ClientClaims.ClientType)
         };
 
         var token = _jwtService.GenerateToken(claims, JwtAudiences.Socket, ClientTokenCutoffs.TokenLifetime);

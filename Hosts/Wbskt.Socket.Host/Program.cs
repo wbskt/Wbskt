@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Serilog;
 using Wbskt.EventBus.RabbitMQ;
@@ -12,7 +13,6 @@ using Wbskt.Primitives.Constants;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Socket.Host.HostedServices;
 using Wbskt.Socket.Host.Infrastructure;
-using Wbskt.Socket.Host.Middleware;
 using Wbskt.Socket.Host.Services;
 using Wbskt.Infrastructure.Telemetry;
 using Wbskt.Socket.Host.Telemetry;
@@ -63,12 +63,22 @@ public static class Program
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
 
+        // Device tokens through the framework's bearer handler, from the Authorization header or, for
+        // browsers, which cannot set headers on a WebSocket, from ?access_token= on /ws.
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddWbsktJwtBearer(x => x.Events = new JwtBearerEvents().AcceptQueryToken("/ws"));
+
         builder.Services.AddAuthorization(options =>
         {
-            // Default-deny, matching the management host. This host has no controllers today, so it
-            // changes nothing now; it exists so that the first one added cannot ship anonymous by
-            // accident. /ws opts out explicitly below - see the note there.
+            // Default-deny, matching the management host, so that a controller added later cannot
+            // ship anonymous by accident.
             options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+
+            // Issuer and audience already rule out a user token (only the management host signs for
+            // wbskt-socket); the type claim stays as a second, independent guard.
+            options.AddPolicy(ClientClaims.ClientOnlyPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim(ClientClaims.Type, ClientClaims.ClientType));
         });
 
         // Bus only: this host holds no database connection. The check itself comes from
@@ -95,24 +105,13 @@ public static class Program
             KeepAliveTimeout = TimeSpan.FromSeconds(app.Configuration.GetValue("WebSockets:KeepAliveTimeoutSeconds", 30))
         });
 
-        // Custom WebSocket Authentication Middleware
-        app.UseMiddleware<WebSocketAuthMiddleware>();
-
         app.UseAuthentication();
         app.UseAuthorization();
 
-        // Exempt from the fallback policy because this route authenticates itself, earlier in the
-        // pipeline: WebSocketAuthMiddleware validates the token, rejects anything that is not a
-        // client token, and assigns context.User before UseAuthentication runs. Letting the
-        // authorization pipeline also gate it would make the browser upgrade path - which carries
-        // its token in ?access_token= rather than a header, so the JWT bearer handler never sees
-        // one - depend on that middleware-assigned principal surviving UseAuthentication. It does
-        // survive today, but nothing enforces that, and the failure mode is every browser client
-        // silently failing to connect.
         app.Map("/ws", async (HttpContext context, ISocketHandler handler) =>
         {
             await handler.HandleAsync(context);
-        }).AllowAnonymous();
+        }).RequireAuthorization(ClientClaims.ClientOnlyPolicy);
 
         app.MapWbsktHealthChecks();
 

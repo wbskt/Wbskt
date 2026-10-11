@@ -38,11 +38,8 @@ public sealed class EndpointAuthorizationTests
     }
 
     /// <summary>
-    /// The Socket host's only routed surface is <c>/ws</c>, mapped directly and authenticated by
-    /// <c>WebSocketAuthMiddleware</c> before the authorization pipeline runs — which is why that one
-    /// endpoint opts out of the host's fallback policy with <c>AllowAnonymous</c>. A controller
-    /// appearing here means that reasoning no longer covers the whole host, and the new endpoint
-    /// needs its own posture stated.
+    /// The Socket host's only routed surface is <c>/ws</c>, mapped directly with the
+    /// <c>ClientOnly</c> policy. A controller appearing here needs its own posture stated.
     /// </summary>
     [Fact]
     public void Socket_host_has_no_controllers()
