@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
@@ -21,12 +22,16 @@ internal sealed class SocketHandler : ISocketHandler
     // Messages are assembled across frames up to this cap; larger senders are disconnected.
     private const int MaxMessageBytes = 64 * 1024;
 
+    // Message types longer than this are refused; the same cap CommandRefusal puts on a refused type.
+    internal const int MaxTypeLength = 100;
+
     private readonly IConnectionManager _connectionManager;
     private readonly IClientAccessGate _accessGate;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
     private readonly SocketMetrics _metrics;
+    private readonly MessageBudgetOptions _budgetOptions;
     private readonly string _hostId;
 
     public SocketHandler(
@@ -36,8 +41,10 @@ internal sealed class SocketHandler : ISocketHandler
         IHostApplicationLifetime appLifetime,
         IEventBus eventBus,
         BusInstanceId busInstanceId,
-        SocketMetrics metrics)
+        SocketMetrics metrics,
+        IOptions<MessageBudgetOptions> budgetOptions)
     {
+        _budgetOptions = budgetOptions.Value;
         _metrics = metrics;
         _connectionManager = connectionManager;
         _accessGate = accessGate;
@@ -162,6 +169,7 @@ internal sealed class SocketHandler : ISocketHandler
         var webSocket = connection.Socket;
         var buffer = new byte[1024 * 4];
         using var messageBuffer = new MemoryStream();
+        var budget = new MessageBudget(_budgetOptions);
 
         while (webSocket.State is WebSocketState.Open or WebSocketState.CloseSent && !cancellationToken.IsCancellationRequested)
         {
@@ -199,6 +207,26 @@ internal sealed class SocketHandler : ISocketHandler
                 continue;
             }
 
+            // Every message becomes broker traffic (event log, live feed, workflow triggers), so a
+            // device over its budget loses the excess, and one that keeps on is disconnected.
+            if (!budget.TryTake())
+            {
+                _metrics.Dropped("throttled");
+                if (budget.ConsecutiveDropped == 1)
+                {
+                    _logger.LogWarning("Client {ClientRefId} is sending faster than its message budget; dropping the excess.", clientRefId);
+                }
+
+                if (budget.Exhausted)
+                {
+                    _logger.LogWarning("Client {ClientRefId} stayed over its message budget for {Dropped} messages; closing.", clientRefId, budget.ConsecutiveDropped);
+                    await connection.RequestCloseAsync(DisconnectReason.Throttled, WebSocketCloseStatus.PolicyViolation, "Too many messages.");
+                    return DisconnectReason.Throttled;
+                }
+
+                continue;
+            }
+
             var messageJson = Encoding.UTF8.GetString(messageBuffer.GetBuffer(), 0, (int)messageBuffer.Length);
             _logger.LogDebug("Received from {ClientRefId}: {Message}", clientRefId, messageJson);
 
@@ -207,6 +235,14 @@ internal sealed class SocketHandler : ISocketHandler
                 var message = JsonSerializer.Deserialize<SocketMessage>(messageJson);
                 if (message == null)
                 {
+                    continue;
+                }
+
+                // The type routes the message and names it in the event log and in triggers.
+                if (string.IsNullOrWhiteSpace(message.Type) || message.Type.Length > MaxTypeLength)
+                {
+                    _metrics.Dropped("invalid");
+                    _logger.LogDebug("Dropping a message from {ClientRefId} with a missing or over-long type.", clientRefId);
                     continue;
                 }
 
@@ -270,7 +306,6 @@ internal sealed class SocketHandler : ISocketHandler
                 }
 
                 var roundTripMs = (DateTime.UtcNow - originalPingTime.Value).TotalMilliseconds;
-                await _eventBus.PublishAsync(new ClientPongEvent(clientRefId, connection.ClientId, connection.WorkspaceId, originalPingTime.Value), cancellationToken);
                 await _eventBus.PublishAsync(new ClientLatencyMeasuredEvent(clientRefId, connection.ClientId, connection.WorkspaceId, roundTripMs), cancellationToken);
                 break;
             case "sys.ack":
