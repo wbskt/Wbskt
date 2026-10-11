@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Wbskt.Client.Sdk.Internal;
+namespace Wbskt.Protocol;
 
 /// <summary>
 /// Reads an optional timestamp without failing the whole message: anything that is not an

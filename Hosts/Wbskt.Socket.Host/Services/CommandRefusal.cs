@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using System.Text.Json;
 
 namespace Wbskt.Socket.Host.Services;
@@ -9,7 +10,6 @@ namespace Wbskt.Socket.Host.Services;
 /// </summary>
 internal static class CommandRefusal
 {
-    private const int MaxTypeLength = 100;
     private const int MaxReasonLength = 100;
 
     public static bool TryRead(object payload, out string type, out string reason)
@@ -28,7 +28,7 @@ internal static class CommandRefusal
         reason = $"Refused by the device: {Cap(refused.GetString()!, MaxReasonLength)}";
         if (element.TryGetProperty("type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String)
         {
-            type = Cap(typeElement.GetString() ?? string.Empty, MaxTypeLength);
+            type = Cap(typeElement.GetString() ?? string.Empty, MessageTypes.MaxTypeLength);
         }
 
         return true;

@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 using MassTransit;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;

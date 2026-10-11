@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 using Wbskt.Socket.Host.Telemetry;
 
 namespace Wbskt.Socket.Host.Services.Inbound;
@@ -11,12 +11,6 @@ namespace Wbskt.Socket.Host.Services.Inbound;
 /// </summary>
 public sealed class InboundMessageDispatcher
 {
-    /// <summary>Reserved for the platform protocol; never reaches workflow triggers or the device-message log.</summary>
-    public const string SystemPrefix = "sys.";
-
-    // Message types longer than this are refused; the same cap CommandRefusal puts on a refused type.
-    internal const int MaxTypeLength = 100;
-
     private readonly IReadOnlyDictionary<string, IInboundMessageHandler> _systemHandlers;
     private readonly DeviceMessageHandler _deviceMessages;
     private readonly SocketMetrics _metrics;
@@ -45,14 +39,14 @@ public sealed class InboundMessageDispatcher
         }
 
         // The type routes the message and names it in the event log and in triggers.
-        if (message == null || string.IsNullOrWhiteSpace(message.Type) || message.Type.Length > MaxTypeLength)
+        if (message == null || string.IsNullOrWhiteSpace(message.Type) || message.Type.Length > MessageTypes.MaxTypeLength)
         {
             _metrics.Dropped("invalid");
             _logger.LogDebug("Dropping a message from {ClientRefId} with a missing or over-long type.", context.ClientRefId);
             return;
         }
 
-        if (!message.Type.StartsWith(SystemPrefix, StringComparison.Ordinal))
+        if (!MessageTypes.IsSystem(message.Type))
         {
             await _deviceMessages.HandleAsync(context, message, cancellationToken);
             return;

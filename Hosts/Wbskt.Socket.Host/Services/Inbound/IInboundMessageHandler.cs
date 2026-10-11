@@ -1,4 +1,4 @@
-using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Socket.Host.Services.Inbound;

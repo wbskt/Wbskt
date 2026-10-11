@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 
-namespace Wbskt.Socket.Host.Services;
+namespace Wbskt.Protocol;
 
 /// <summary>What one read from the socket produced.</summary>
 public enum FrameKind

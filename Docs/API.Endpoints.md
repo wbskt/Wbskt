@@ -421,8 +421,15 @@ The device data plane. One long-lived WebSocket per client; everything else is a
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
 
-Once open, the connection carries the platform protocol — `sys.ping`/`sys.pong`, command frames and
-their `sys.ack`, state and capability reports. Commands arrive from the management host over the bus
+The protocol is versioned by WebSocket subprotocol: a client offers `Sec-WebSocket-Protocol: wbskt.v1`
+and the host accepts it. A client that offers none is spoken to as v1; one that offers only other
+versions is refused with 400 before the upgrade. The message types, payloads and limits live in
+`Clients/Wbskt.Protocol`, which the socket host and the .NET SDK both build against.
+
+Once open, the connection carries the platform protocol — `sys.ping { timestamp, id }`/`sys.pong
+{ originalTimestamp, id }` (the host times the round trip on its own clock and matches the pong by
+`id`; a pong without one answers the pending ping), command frames and their `sys.ack`, state and
+capability reports. Commands arrive from the management host over the bus
 and are routed by `ClientRefId` to whichever socket host holds the connection. Every socket host
 receives every command; only the one the management host saw holding the connection reports it
 missing. A command frame may carry `expiresAt`; an SDK that receives it late answers
