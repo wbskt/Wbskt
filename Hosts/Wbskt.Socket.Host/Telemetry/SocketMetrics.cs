@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Socket.Host.Telemetry;
 
@@ -9,18 +10,6 @@ namespace Wbskt.Socket.Host.Telemetry;
 public sealed class SocketMetrics : IDisposable
 {
     public const string MeterName = "Wbskt.Socket";
-
-    /// <summary>The client sent a Close frame, the normal end of a session.</summary>
-    public const string ClientClosed = "client_closed";
-
-    /// <summary>The connection dropped without a Close: network loss, a killed process, a proxy timeout.</summary>
-    public const string Aborted = "aborted";
-
-    /// <summary>This instance is shutting down - a deploy or a restart, not a device problem.</summary>
-    public const string ServerStopping = "server_stopping";
-
-    /// <summary>The receive loop failed unexpectedly.</summary>
-    public const string Error = "error";
 
     private readonly Meter _meter = new(MeterName);
     private readonly UpDownCounter<long> _open;
@@ -40,10 +29,10 @@ public sealed class SocketMetrics : IDisposable
         _connects.Add(1);
     }
 
-    public void Disconnected(string reason)
+    public void Disconnected(DisconnectReason reason)
     {
         _open.Add(-1);
-        _disconnects.Add(1, new KeyValuePair<string, object?>("reason", reason));
+        _disconnects.Add(1, new KeyValuePair<string, object?>("reason", reason.Tag()));
     }
 
     public void Dispose() => _meter.Dispose();

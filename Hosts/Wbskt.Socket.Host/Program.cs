@@ -45,6 +45,7 @@ public static class Program
         builder.Services.AddSingleton<IRevocationCache, RevocationCache>();
         // The durable copy of the same revocations, written by the management host; see ClientTokenCutoffs.
         builder.Services.AddClientTokenCutoffs(builder.Configuration);
+        builder.Services.AddSingleton<IClientAccessGate, ClientAccessGate>();
         // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();

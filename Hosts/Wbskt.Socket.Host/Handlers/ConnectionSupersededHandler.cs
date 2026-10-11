@@ -10,8 +10,8 @@ namespace Wbskt.Socket.Host.Handlers;
 // ClientConnectedEvent, including ones published by other instances. If another instance just
 // accepted a connection for a client we're still holding locally with an older connection, ours
 // is the stale duplicate (e.g. the client's previous host never noticed the network drop) -
-// close it. The resulting ClientDisconnectedEvent's host-scoped presence clear is a no-op
-// because the new host already owns ConnectedHostId (see Client_UpdatePresence.sql).
+// close it. A superseded connection publishes no ClientDisconnectedEvent: the device is not offline,
+// and the new host already owns ConnectedHostId (see Client_UpdatePresence.sql).
 //
 // EstablishedAtUtc/CreatedAtUtc are stamped by two different containers' clocks with no sync
 // guarantee, so a strict ">=" compare is unsafe: it can fail *symmetrically* under skew (each
@@ -64,10 +64,9 @@ public sealed class ConnectionSupersededHandler : IConsumer<ClientConnectedEvent
             "Client {ClientRefId} connected on host {HostId}; closing our superseded connection.",
             message.ClientRefId, message.HostId);
 
-        await _connectionManager.RemoveConnectionAsync(
-            message.ClientRefId,
+        await existing.RequestCloseAsync(
+            DisconnectReason.Superseded,
             WebSocketCloseStatus.PolicyViolation,
-            "Superseded by a newer connection on another host.",
-            context.CancellationToken);
+            "Superseded by a newer connection on another host.");
     }
 }

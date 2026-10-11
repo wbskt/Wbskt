@@ -28,10 +28,9 @@ internal sealed class PingSampler : BackgroundService
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                foreach (var clientRefId in _connectionManager.GetConnectedClients())
+                foreach (var (clientRefId, connection) in _connectionManager.GetConnections())
                 {
-                    var connection = _connectionManager.GetConnection(clientRefId);
-                    if (connection?.Socket.State != WebSocketState.Open)
+                    if (connection.Socket.State != WebSocketState.Open)
                     {
                         continue;
                     }

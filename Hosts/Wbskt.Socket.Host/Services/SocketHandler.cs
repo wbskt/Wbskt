@@ -6,7 +6,6 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Client;
-using Wbskt.Infrastructure.Security;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Telemetry;
 
@@ -23,8 +22,7 @@ internal sealed class SocketHandler : ISocketHandler
     private const int MaxMessageBytes = 64 * 1024;
 
     private readonly IConnectionManager _connectionManager;
-    private readonly IRevocationCache _revocationCache;
-    private readonly IClientTokenCutoffs _cutoffs;
+    private readonly IClientAccessGate _accessGate;
     private readonly ILogger<SocketHandler> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly IEventBus _eventBus;
@@ -33,8 +31,7 @@ internal sealed class SocketHandler : ISocketHandler
 
     public SocketHandler(
         IConnectionManager connectionManager,
-        IRevocationCache revocationCache,
-        IClientTokenCutoffs cutoffs,
+        IClientAccessGate accessGate,
         ILogger<SocketHandler> logger,
         IHostApplicationLifetime appLifetime,
         IEventBus eventBus,
@@ -43,8 +40,7 @@ internal sealed class SocketHandler : ISocketHandler
     {
         _metrics = metrics;
         _connectionManager = connectionManager;
-        _revocationCache = revocationCache;
-        _cutoffs = cutoffs;
+        _accessGate = accessGate;
         _logger = logger;
         _appLifetime = appLifetime;
         _eventBus = eventBus;
@@ -59,12 +55,6 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        // Create a linked token that triggers if the client leaves OR the server stops
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            context.RequestAborted,
-            _appLifetime.ApplicationStopping
-        );
-
         var clientRefIdString = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var clientId = int.Parse(context.User.FindFirst("id")!.Value);
         var workspaceId = int.Parse(context.User.FindFirst("workspace_id")!.Value);
@@ -74,15 +64,12 @@ internal sealed class SocketHandler : ISocketHandler
             return;
         }
 
-        // A revoked client's JWT stays valid for up to an hour; the deny-list closes that window. A
-        // token without a readable issue time is treated as older than any cutoff. This host's list
-        // is filled by events and lost on restart, so the cutoff the management host keeps in Redis
-        // is asked too; the list alone decides only when Redis cannot answer.
+        // A revoked client's JWT stays valid for up to an hour; the access gate closes that window.
+        // A token without a readable issue time is treated as older than any cutoff.
         var issuedAt = long.TryParse(context.User.FindFirst("iat")?.Value, out var iat)
             ? DateTimeOffset.FromUnixTimeSeconds(iat).UtcDateTime
             : DateTime.MinValue;
-        if (_revocationCache.IsRevoked(clientRefId, issuedAt)
-            || await _cutoffs.IsRevokedAsync(clientRefId, issuedAt, cts.Token) == true)
+        if (await _accessGate.IsRefusedAsync(clientRefId, issuedAt, context.RequestAborted))
         {
             _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -90,23 +77,25 @@ internal sealed class SocketHandler : ISocketHandler
         }
 
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-        var connection = new ClientConnection
+        using var connection = new ClientConnection
         {
             Socket = webSocket,
             ClientId = clientId,
             WorkspaceId = workspaceId
         };
 
-        if (!_connectionManager.TryAddConnection(clientRefId, connection))
-        {
-            _logger.LogWarning("Rejecting duplicate websocket for client {ClientRefId}", clientRefId);
-            await webSocket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Multiple concurrent connections are not allowed.", CancellationToken.None);
-            return;
-        }
+        // Ends the receive loop when the device goes away, the host stops, or a close someone asked
+        // for (see ClientConnection.RequestCloseAsync) is not answered in time.
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+            context.RequestAborted,
+            _appLifetime.ApplicationStopping,
+            connection.Closing);
 
+        // The newest connection wins: one this host still holds for the client is closed as superseded.
+        _connectionManager.Register(clientRefId, connection);
         _logger.LogInformation("Client {ClientRefId} connected.", clientRefId);
         _metrics.Connected();
-        var disconnectReason = SocketMetrics.ClientClosed;
+        var reason = DisconnectReason.ClientClosed;
 
         try
         {
@@ -114,40 +103,67 @@ internal sealed class SocketHandler : ISocketHandler
             // having connected, or its disconnect has nothing to pair with.
             await _eventBus.PublishAsync(new ClientConnectedEvent(clientRefId, clientId, workspaceId, _hostId), CancellationToken.None);
 
-            // Use the HttpContext.RequestAborted token to detect when the underlying TCP connection is lost
-            await ReceiveLoopAsync(clientRefId, connection, cts.Token);
+            reason = await ReceiveLoopAsync(clientRefId, connection, cts.Token);
         }
         catch (OperationCanceledException)
         {
-            disconnectReason = _appLifetime.ApplicationStopping.IsCancellationRequested ? SocketMetrics.ServerStopping : SocketMetrics.Aborted;
-            _logger.LogInformation("Connection for client {ClientRefId} was cancelled.", clientRefId);
+            reason = _appLifetime.ApplicationStopping.IsCancellationRequested ? DisconnectReason.ServerStopping : DisconnectReason.Aborted;
         }
         catch (WebSocketException ex)
         {
-            disconnectReason = SocketMetrics.Aborted;
-            _logger.LogWarning("WebSocket error for client {ClientRefId}: {Message}", clientRefId, ex.Message);
+            reason = DisconnectReason.Aborted;
+            _logger.LogDebug("WebSocket error for client {ClientRefId}: {Message}", clientRefId, ex.Message);
         }
         catch (Exception ex)
         {
-            disconnectReason = SocketMetrics.Error;
+            reason = DisconnectReason.Error;
             _logger.LogError(ex, "Unexpected error in WebSocket loop for client {ClientRefId}.", clientRefId);
         }
         finally
         {
-            _metrics.Disconnected(disconnectReason);
-            await _connectionManager.RemoveConnectionAsync(clientRefId, cancellationToken: CancellationToken.None);
-            _logger.LogInformation("Client {ClientRefId} disconnected and cleaned up.", clientRefId);
-            await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, "Socket closed", _hostId), CancellationToken.None);
+            // A close someone asked for is the real reason, whatever the loop saw as it ended.
+            reason = connection.CloseRequest?.Reason ?? reason;
+            _connectionManager.Unregister(clientRefId, connection);
+            await CloseQuietlyAsync(webSocket, reason);
+            _metrics.Disconnected(reason);
+            _logger.LogInformation("Client {ClientRefId} disconnected ({Reason}).", clientRefId, reason.Tag());
+
+            // A superseded connection is not the device going offline: its newer connection, here or on
+            // another host, already announced it as connected.
+            if (reason != DisconnectReason.Superseded)
+            {
+                var description = connection.CloseRequest?.Description ?? reason.Describe();
+                await _eventBus.PublishAsync(new ClientDisconnectedEvent(clientRefId, clientId, workspaceId, description, _hostId), CancellationToken.None);
+            }
         }
     }
 
-    private async Task ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, CancellationToken cancellationToken)
+    private static async Task CloseQuietlyAsync(WebSocket webSocket, DisconnectReason reason)
+    {
+        if (webSocket.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
+        {
+            return;
+        }
+
+        try
+        {
+            var status = reason == DisconnectReason.ServerStopping ? WebSocketCloseStatus.EndpointUnavailable : WebSocketCloseStatus.NormalClosure;
+            using var timeout = new CancellationTokenSource(ClientConnection.CloseGrace);
+            await webSocket.CloseOutputAsync(status, reason.Describe(), timeout.Token);
+        }
+        catch
+        {
+            // The connection is going away regardless.
+        }
+    }
+
+    private async Task<DisconnectReason> ReceiveLoopAsync(Guid clientRefId, ClientConnection connection, CancellationToken cancellationToken)
     {
         var webSocket = connection.Socket;
         var buffer = new byte[1024 * 4];
         using var messageBuffer = new MemoryStream();
 
-        while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+        while (webSocket.State is WebSocketState.Open or WebSocketState.CloseSent && !cancellationToken.IsCancellationRequested)
         {
             // A logical message can span multiple frames; assemble until EndOfMessage.
             messageBuffer.SetLength(0);
@@ -158,22 +174,27 @@ internal sealed class SocketHandler : ISocketHandler
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    _logger.LogInformation("Client {ClientRefId} initiated close.", clientRefId);
-                    await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
-                    return;
+                    // Either the device closed, or it answered a close we sent (the handshake is then complete).
+                    if (webSocket.State == WebSocketState.CloseReceived)
+                    {
+                        await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", cancellationToken);
+                    }
+
+                    return DisconnectReason.ClientClosed;
                 }
 
                 if (messageBuffer.Length + result.Count > MaxMessageBytes)
                 {
                     _logger.LogWarning("Client {ClientRefId} exceeded the {MaxMessageBytes}-byte message limit; closing.", clientRefId, MaxMessageBytes);
-                    await webSocket.CloseAsync(WebSocketCloseStatus.MessageTooBig, $"Messages are limited to {MaxMessageBytes} bytes.", cancellationToken);
-                    return;
+                    await connection.RequestCloseAsync(DisconnectReason.MessageTooBig, WebSocketCloseStatus.MessageTooBig, $"Messages are limited to {MaxMessageBytes} bytes.");
+                    return DisconnectReason.MessageTooBig;
                 }
 
                 messageBuffer.Write(buffer, 0, result.Count);
             } while (!result.EndOfMessage);
 
-            if (result.MessageType != WebSocketMessageType.Text)
+            // After we sent a Close, anything but the device's own Close is ignored.
+            if (result.MessageType != WebSocketMessageType.Text || connection.CloseRequest != null)
             {
                 continue;
             }
@@ -207,6 +228,8 @@ internal sealed class SocketHandler : ISocketHandler
                 _logger.LogWarning("Invalid JSON received from client {ClientRefId}: {Error}", clientRefId, ex.Message);
             }
         }
+
+        return DisconnectReason.Aborted;
     }
 
     internal static readonly TimeSpan MaxSentAtAge = TimeSpan.FromDays(7);

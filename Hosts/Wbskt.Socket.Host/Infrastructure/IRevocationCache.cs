@@ -8,7 +8,8 @@ public interface IRevocationCache
     /// <summary>Refuses tokens issued before <paramref name="cutoff"/> (its secret was rotated).</summary>
     void RevokeIssuedBefore(Guid clientRefId, DateTime cutoff);
 
-    void Clear(Guid clientRefId);
+    /// <summary>Refuses tokens issued before <paramref name="reinstatedAt"/> only (it was approved again).</summary>
+    void Reinstate(Guid clientRefId, DateTime reinstatedAt);
 
     /// <summary>Whether a token for the client issued at <paramref name="issuedAt"/> (UTC) is refused.</summary>
     bool IsRevoked(Guid clientRefId, DateTime issuedAt);

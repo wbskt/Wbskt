@@ -5,6 +5,8 @@ namespace Wbskt.Socket.Host.Infrastructure;
 
 internal sealed class ConnectionManager : IConnectionManager
 {
+    internal const string SupersededDescription = "Superseded by a newer connection.";
+
     private readonly ILogger<ConnectionManager> _logger;
     private readonly ConcurrentDictionary<Guid, ClientConnection> _connections = new();
 
@@ -13,36 +15,38 @@ internal sealed class ConnectionManager : IConnectionManager
         _logger = logger;
     }
 
-    public bool TryAddConnection(Guid clientRefId, ClientConnection connection)
+    public void Register(Guid clientRefId, ClientConnection connection)
     {
-        if (!_connections.TryAdd(clientRefId, connection))
+        ClientConnection? replaced = null;
+        _connections.AddOrUpdate(clientRefId, connection, (_, existing) =>
         {
-            _logger.LogWarning("Connection attempt rejected. Client {ClientRefId} is already connected.", clientRefId);
-            return false;
+            replaced = existing;
+            return connection;
+        });
+
+        if (replaced != null && !ReferenceEquals(replaced, connection))
+        {
+            // A device that reconnects before this host noticed its old socket die (Wi-Fi drop, a
+            // half-open TCP connection) is let in at once; the old connection is the stale one.
+            _logger.LogInformation("Client {ClientRefId} connected again; closing its previous connection.", clientRefId);
+            _ = replaced.RequestCloseAsync(DisconnectReason.Superseded, WebSocketCloseStatus.PolicyViolation, SupersededDescription);
         }
-        return true;
     }
 
-    public async Task RemoveConnectionAsync(Guid clientRefId, WebSocketCloseStatus closeStatus = WebSocketCloseStatus.NormalClosure,
-        string closeDescription = "Closed by manager", CancellationToken cancellationToken = default)
+    public bool Unregister(Guid clientRefId, ClientConnection connection)
     {
-        if (_connections.TryRemove(clientRefId, out var connection))
+        return _connections.TryRemove(KeyValuePair.Create(clientRefId, connection));
+    }
+
+    public async Task<bool> RequestCloseAsync(Guid clientRefId, DisconnectReason reason, WebSocketCloseStatus status, string description)
+    {
+        if (!_connections.TryGetValue(clientRefId, out var connection))
         {
-            var socket = connection.Socket;
-            if (socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived)
-            {
-                try
-                {
-                    await socket.CloseAsync(closeStatus, closeDescription, cancellationToken);
-                }
-                catch
-                {
-                    // Ignore exceptions during close, we just want to ensure it's removed and disposed
-                }
-            }
-            socket.Dispose();
-            connection.Dispose();
+            return false;
         }
+
+        await connection.RequestCloseAsync(reason, status, description);
+        return true;
     }
 
     public ClientConnection? GetConnection(Guid clientRefId)
@@ -51,8 +55,8 @@ internal sealed class ConnectionManager : IConnectionManager
         return connection;
     }
 
-    public IReadOnlyCollection<Guid> GetConnectedClients()
+    public IReadOnlyCollection<KeyValuePair<Guid, ClientConnection>> GetConnections()
     {
-        return _connections.Keys.ToList().AsReadOnly();
+        return _connections.ToArray();
     }
 }

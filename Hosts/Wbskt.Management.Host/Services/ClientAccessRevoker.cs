@@ -36,9 +36,12 @@ internal sealed class ClientAccessRevoker
     /// </summary>
     public async Task StatusChangedAsync(int workspaceId, ClientStatusChange change, ClientStatus status, CancellationToken cancellationToken)
     {
+        // The event is stamped with the moment written to Redis: a socket host reinstating from the
+        // event sets the same cutoff, so its own list and Redis agree.
+        var changedAt = _time.GetUtcNow().UtcDateTime;
         if (status == ClientStatus.Registered)
         {
-            await _cutoffs.ReinstateAsync(change.RefId, _time.GetUtcNow().UtcDateTime);
+            await _cutoffs.ReinstateAsync(change.RefId, changedAt);
         }
         else if (change.OldStatus == ClientStatus.Registered)
         {
@@ -48,6 +51,7 @@ internal sealed class ClientAccessRevoker
         await _eventBus.PublishAsync(
             new ClientStatusChangedEvent(change.RefId, change.Id, change.PolicyRefId, change.PolicyId, workspaceId, (byte)status)
             {
+                CreatedAtUtc = changedAt,
                 Changes = [new FieldChange("status", change.OldStatus.ToString(), status.ToString())]
             },
             cancellationToken);
