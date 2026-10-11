@@ -66,7 +66,7 @@ public sealed class BookmarkCompanionTimerTests
             dispatcher);
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["client-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(new InboundEvent("mqtt", ["client-1"], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.True(result.Matched);

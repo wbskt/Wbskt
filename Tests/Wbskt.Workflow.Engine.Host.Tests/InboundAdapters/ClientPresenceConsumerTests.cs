@@ -42,19 +42,15 @@ public sealed class ClientPresenceConsumerTests
     }
 
     [Fact]
-    public async Task Connect_still_reaches_the_hub_and_parks_online_checks()
+    public async Task Connect_parks_online_checks_only()
     {
         string online = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Online, 0, Guid.NewGuid(), Guid.NewGuid());
         string offline = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Offline, 60, Guid.NewGuid(), Guid.NewGuid());
         var provider = new RecordingPresenceCheckProvider(online, offline);
-        var hub = new Mock<IInboundHub>();
-        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.NoRegistration, null, null, "none"));
-        var consumer = new ClientConnectedConsumer(hub.Object, new ClientPresenceParker(provider));
+        var consumer = new ClientConnectedConsumer(new ClientPresenceParker(provider));
 
         await consumer.Consume(Context(new ClientConnectedEvent(ClientRef, 12, 34, "host-1") { CreatedAtUtc = ChangedAt }));
 
-        hub.Verify(h => h.HandleAsync(It.Is<InboundEvent>(e => e.ChannelKind == "client-connected"), It.IsAny<CancellationToken>()), Times.Once);
         var insert = Assert.Single(provider.Inserts);
         Assert.Equal((online, ClientRef, "online", ChangedAt, ChangedAt), insert);
     }

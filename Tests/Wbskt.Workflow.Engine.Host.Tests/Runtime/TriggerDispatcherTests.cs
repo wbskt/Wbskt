@@ -451,7 +451,7 @@ public sealed class TriggerDispatcherTests
     {
         public List<InboundEvent> Events { get; } = [];
 
-        public Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, CancellationToken ct)
+        public Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, bool hasRegistrations, CancellationToken ct)
         {
             Events.Add(evt);
             return Task.FromResult(result);
