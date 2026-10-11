@@ -1,10 +1,14 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Scalar.AspNetCore;
 
-namespace Wbskt.Socket.Host.Extensions;
+namespace Wbskt.Infrastructure.Hosting;
 
-internal static class OpenApiExtension
+/// <summary>The API reference every host with controllers serves: OpenAPI with the bearer scheme, shown through Scalar.</summary>
+public static class OpenApiExtensions
 {
     public static void AddCustomOpenApi(this IServiceCollection serviceCollection)
     {
