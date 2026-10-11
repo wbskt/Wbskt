@@ -38,6 +38,11 @@ public interface IClientProvider : IReferenceProvider
     Task<bool> UpdateSecretAsync(int id, int workspaceId, byte[] secretHash, CancellationToken cancellationToken = default);
     Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default);
     Task ResetAllPresenceAsync(string? hostId = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Clears the presence of clients held by a socket host not heard from for <paramref name="staleAfter"/>,
+    /// and returns them. Each row is claimed once, however many instances sweep at the same time.
+    /// </summary>
+    Task<IReadOnlyCollection<ExpiredPresence>> ExpirePresenceAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default);
     Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);

@@ -18,7 +18,9 @@ namespace Wbskt.EventBus.RabbitMQ;
 // container's hostname) because StartupPresenceResetPublisher relies on the restarted instance
 // republishing the same id its previous run used, so Client_ResetAllPresence can find and clear
 // exactly the presence rows that instance left dangling after a crash. Giving either identity the
-// other's lifetime would break its own use case.
+// other's lifetime would break its own use case. (A container that is recreated, as every deploy
+// does, gets a new hostname and so a new id; presence it left behind is cleared instead by the
+// heartbeat lease, see SocketHostHeartbeat.)
 public sealed record BusInstanceId(string Value);
 
 public static class EventBusExtensions

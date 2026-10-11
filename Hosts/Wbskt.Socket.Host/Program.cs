@@ -55,6 +55,7 @@ public static class Program
 
         // Background services (registered after the bus so it starts first)
         builder.Services.AddHostedService<StartupPresenceResetPublisher>();
+        builder.Services.AddHostedService<HeartbeatPublisher>();
         builder.Services.AddHostedService<PingSampler>();
 
         // Startup Tasks
