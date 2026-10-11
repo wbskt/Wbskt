@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
@@ -354,7 +355,7 @@ public sealed class TriggerDispatcherTests
         // lets BookmarkResumer reclaim it.
         var idempotency = new MockIdempotencyKeyProvider();
         var dispatcher = new TriggerDispatcher(
-            new CorrelationKeyResolver(),
+            new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
             new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
             new ThrowingTriggerConcurrencyEnforcer(),
@@ -378,7 +379,7 @@ public sealed class TriggerDispatcherTests
         RecordingRunDispatcher? runDispatcher = null)
     {
         return new TriggerDispatcher(
-            new CorrelationKeyResolver(),
+            new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             bookmarkResumer ?? new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false)),
             triggerRegistrationProvider ?? new RecordingTriggerRegistrationProvider(),
             concurrencyEnforcer ?? new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, [])),

@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
@@ -29,7 +30,7 @@ public sealed class RunStarterTests
             branchProvider,
             new RunJournal(historyProvider, new FixedClock()),
             workflowDefinitionProvider,
-            new CorrelationKeyResolver(),
+            new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
             new FixedClock(),
             new SequenceIdGenerator(),
@@ -83,7 +84,7 @@ public sealed class RunStarterTests
             new RecordingBranchProvider(operations),
             new RunJournal(new RecordingHistoryEventProvider(operations), new FixedClock()),
             new RecordingWorkflowDefinitionProvider(),
-            new CorrelationKeyResolver(),
+            new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
             new FixedClock(),
             new SequenceIdGenerator(),

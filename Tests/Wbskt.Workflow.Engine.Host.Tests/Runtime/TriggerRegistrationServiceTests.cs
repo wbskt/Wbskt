@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 
@@ -21,7 +22,7 @@ public sealed class TriggerRegistrationServiceTests
         // Arrange
         var workflowDefinitionProvider = new RecordingWorkflowDefinitionProvider(CreateDefinition());
         var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
-        var service = new TriggerRegistrationService(workflowDefinitionProvider, triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+        var service = new TriggerRegistrationService(workflowDefinitionProvider, triggerRegistrationProvider, new RecordingScheduledFireProvider(), TriggerChannelRegistry.Default, new FixedClock());
 
         // Act
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
@@ -39,7 +40,7 @@ public sealed class TriggerRegistrationServiceTests
     {
         // Arrange
         var scheduledFireProvider = new RecordingScheduledFireProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, TriggerChannelRegistry.Default, new FixedClock());
 
         // Act
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
@@ -62,7 +63,7 @@ public sealed class TriggerRegistrationServiceTests
             ]
         };
         var scheduledFireProvider = new RecordingScheduledFireProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), new RecordingTriggerRegistrationProvider(), scheduledFireProvider, TriggerChannelRegistry.Default, new FixedClock());
 
         // Act
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
@@ -78,7 +79,7 @@ public sealed class TriggerRegistrationServiceTests
         // Arrange
         var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
         var scheduledFireProvider = new RecordingScheduledFireProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), triggerRegistrationProvider, scheduledFireProvider, new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), triggerRegistrationProvider, scheduledFireProvider, TriggerChannelRegistry.Default, new FixedClock());
 
         // Act
         await service.OnDeprecatedAsync(42, CancellationToken.None);
@@ -106,7 +107,7 @@ public sealed class TriggerRegistrationServiceTests
             ]
         };
         var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), TriggerChannelRegistry.Default, new FixedClock());
 
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 
@@ -127,7 +128,7 @@ public sealed class TriggerRegistrationServiceTests
     public async Task OnPublished_leaves_filter_and_secret_null_when_the_author_configured_neither()
     {
         var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(CreateDefinition()), triggerRegistrationProvider, new RecordingScheduledFireProvider(), TriggerChannelRegistry.Default, new FixedClock());
 
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 
@@ -173,7 +174,7 @@ public sealed class TriggerRegistrationServiceTests
             ]
         };
         var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), TriggerChannelRegistry.Default, new FixedClock());
 
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 
@@ -199,7 +200,7 @@ public sealed class TriggerRegistrationServiceTests
             ]
         };
         var triggerRegistrationProvider = new RecordingTriggerRegistrationProvider();
-        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), new FixedClock());
+        var service = new TriggerRegistrationService(new RecordingWorkflowDefinitionProvider(definition), triggerRegistrationProvider, new RecordingScheduledFireProvider(), TriggerChannelRegistry.Default, new FixedClock());
 
         await service.OnPublishedAsync(42, WorkspaceRef, CancellationToken.None);
 

@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.HostedServices;
 
@@ -70,8 +71,8 @@ public sealed class ScheduledFireTickerTests
 
         Assert.Equal(Assert.Single(first.Events).InboundEventId, Assert.Single(second.Events).InboundEventId);
         Assert.NotEqual(
-            ScheduledFireTicker.OccurrenceEventId(CreateFire(45, "0 */5 * * * *", at)),
-            ScheduledFireTicker.OccurrenceEventId(CreateFire(45, "0 */5 * * * *", at.AddMinutes(5))));
+            ScheduleChannel.OccurrenceEventId(CreateFire(45, "0 */5 * * * *", at)),
+            ScheduleChannel.OccurrenceEventId(CreateFire(45, "0 */5 * * * *", at.AddMinutes(5))));
     }
 
     [Fact]

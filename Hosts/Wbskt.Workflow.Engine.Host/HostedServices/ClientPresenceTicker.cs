@@ -6,6 +6,7 @@ using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
@@ -147,7 +148,7 @@ public sealed class ClientPresenceTicker(
         };
 
         return new InboundEvent(
-            ClientPresenceTriggerKey.TriggerKind,
+            PresenceChannel.Name,
             [check.TriggerKey],
             // The check's own id: stable if the process dies between this dispatch and the delete, so
             // the re-leased check is dropped by the dispatcher's idempotency claim instead of running twice.

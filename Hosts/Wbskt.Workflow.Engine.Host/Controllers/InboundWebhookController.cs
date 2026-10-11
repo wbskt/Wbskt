@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Middleware;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.Controllers;
 
@@ -35,24 +36,12 @@ public sealed class InboundWebhookController(IInboundHub hub, Wbskt.Workflow.Abs
             return BadRequest(new { Code = "IDEMPOTENCY_KEY_INVALID", Message = $"{IdempotencyKeyHeader} must be 1-{WebhookEventIds.MaxKeyLength} printable characters." });
         }
 
-        // The key is workspace-scoped (webhook:{workspaceRef}:{path}) and must match both the
-        // registration minted by TriggerRegistrationService and CorrelationKeyResolver's webhook key.
-        InboundEvent inboundEvent = new(
-            "webhook",
-            [$"webhook:{workspaceRef}:{channelKind}"],
+        InboundEvent inboundEvent = WebhookChannel.Event(
+            workspaceRef,
+            channelKind,
+            payload,
             WebhookEventIds.For(workspaceRef, channelKind, idempotencyKey, secret),
-            new Dictionary<string, JsonElement>
-            {
-                ["workspaceRefId"] = JsonSerializer.SerializeToElement(workspaceRef.ToString()),
-                ["webhookPath"] = JsonSerializer.SerializeToElement(channelKind),
-                ["body"] = payload
-            },
-            default)
-        {
-            // Carried beside the payload, never inside it: the payload is persisted as the run's trigger
-            // data, and a secret written there would be readable from the run's history forever.
-            Secret = secret
-        };
+            secret);
 
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, ct);
 

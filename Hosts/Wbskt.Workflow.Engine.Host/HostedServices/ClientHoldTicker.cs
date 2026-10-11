@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
@@ -75,7 +76,7 @@ public sealed class ClientHoldTicker(
         payload["holdSeconds"] = JsonSerializer.SerializeToElement(holdSeconds);
 
         return new InboundEvent(
-            ClientHoldTriggerKey.TriggerKind,
+            ClientHoldChannel.Name,
             [hold.TriggerKey],
             // One id per hold: a re-leased hold (the process died before it was marked fired) is dropped
             // by the dispatcher's idempotency claim, while a later hold of the same trigger is not.

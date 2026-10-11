@@ -1,5 +1,5 @@
-using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Runtime;
 
@@ -7,17 +7,6 @@ internal sealed class SubWorkflowCompletionHook(IInboundHub hub, IIdGenerator id
 {
     public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, CancellationToken ct)
     {
-        InboundEvent evt = new(
-            "child-completed",
-            [$"child-completed:{runRefId}"],
-            $"child-completed:{runRefId}:{idGenerator.NewId()}",
-            new Dictionary<string, JsonElement>
-            {
-                ["childRunRefId"] = JsonSerializer.SerializeToElement(runRefId),
-                ["status"] = JsonSerializer.SerializeToElement(terminalStatus)
-            },
-            default);
-
-        return hub.HandleAsync(evt, ct);
+        return hub.HandleAsync(ChildCompletedChannel.Event(runRefId, terminalStatus, idGenerator.NewId()), ct);
     }
 }

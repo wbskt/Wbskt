@@ -7,9 +7,9 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
 /// Parks a branch until a named signal arrives for this run (the inbound "signal" channel), or
-/// until an optional TTL elapses. The bookmark match key is "signal:{name}:{scope}", where scope
-/// defaults to the run's RefId - exactly the correlation key CorrelationKeyResolver produces for an
-/// inbound signal, so the two match. See <see cref="AwaitInboundNodeExecutor"/> for the shared
+/// until an optional TTL elapses. The bookmark match key is
+/// <see cref="Channels.SignalChannel.Key"/> of the name and a scope that defaults to the run's RefId,
+/// the same key the channel computes for an inbound signal, so the two match. See <see cref="AwaitInboundNodeExecutor"/> for the shared
 /// park/resume/timeout machine.
 /// </summary>
 internal sealed class AwaitSignalNodeExecutor(IClock clock) : AwaitInboundNodeExecutor(clock)
