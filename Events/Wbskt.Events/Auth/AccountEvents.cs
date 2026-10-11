@@ -19,6 +19,13 @@ public abstract record AccountEvent(int UserId, Guid UserRefId) : BaseEvent, IUs
 [EventCriticality(EventCriticality.Warning)]
 public sealed record PasswordChangedEvent(int UserId, Guid UserRefId, string How) : AccountEvent(UserId, UserRefId);
 
+/// <summary>
+/// A reset link was mailed to the account's address. Not proof the owner asked for it: anyone can name
+/// an address on the forgot-password page, which is why owners see it.
+/// </summary>
+[EventCriticality(EventCriticality.Info)]
+public sealed record PasswordResetRequestedEvent(int UserId, Guid UserRefId) : AccountEvent(UserId, UserRefId);
+
 /// <summary>The person signed out of every session (<c>all</c>) or ended one (<c>one</c>).</summary>
 [EventCriticality(EventCriticality.Info)]
 public sealed record SessionsRevokedEvent(int UserId, Guid UserRefId, string Which) : AccountEvent(UserId, UserRefId);

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Services.Email;
@@ -77,6 +78,27 @@ public sealed class OutboundMailPipelineTests
         // Html, unlike the workflow email node. These bodies are ours and are built from templates in
         // this repository, which is the whole reason the format is a per-send argument.
         Assert.Equal(EmailBodyFormat.Html, sent.Format);
+    }
+
+    /// <summary>
+    /// Without a line on success, "the relay took it and it went missing later" and "it was never
+    /// handed over" read the same in the logs. The body carries the token and must never be logged.
+    /// </summary>
+    [Fact]
+    public async Task A_sent_message_is_logged_without_its_body()
+    {
+        var sender = new ScriptedSender();
+        var logger = new RecordingLogger();
+        await using var harness = new DispatcherHarness(sender, logger);
+
+        await harness.StartAsync();
+        harness.Queue.TryWrite(new OutboundMail("someone@example.test", "Reset your password", "<p>the-raw-token</p>"));
+        await sender.WaitForNextAsync();
+
+        var line = await logger.WaitForAsync(m => m.Contains("accepted by the relay"));
+        Assert.Contains("someone@example.test", line);
+        Assert.Contains("Reset your password", line);
+        Assert.DoesNotContain(logger.Messages, m => m.Contains("the-raw-token"));
     }
 
     [Fact]
@@ -229,17 +251,42 @@ public sealed class OutboundMailPipelineTests
     }
 
     /// <summary>Starts a real dispatcher over a real queue, with a retry ladder short enough to test.</summary>
+    private sealed class RecordingLogger : ILogger<OutboundMailDispatcher>
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyCollection<string> Messages => _messages;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            _messages.Enqueue(formatter(state, exception));
+
+        /// <summary>The dispatcher logs after the send returns, so the line can trail the send by a moment.</summary>
+        public async Task<string> WaitForAsync(Func<string, bool> match)
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                if (_messages.FirstOrDefault(match) is { } line) return line;
+                await Task.Delay(10);
+            }
+
+            throw new TimeoutException("The expected log line never arrived.");
+        }
+    }
+
     private sealed class DispatcherHarness : IAsyncDisposable
     {
         private readonly OutboundMailDispatcher _dispatcher;
 
-        public DispatcherHarness(ScriptedSender sender)
+        public DispatcherHarness(ScriptedSender sender, ILogger<OutboundMailDispatcher>? logger = null)
         {
             Queue = new OutboundMailQueue();
             _dispatcher = new OutboundMailDispatcher(
                 Queue,
                 sender,
-                NullLogger<OutboundMailDispatcher>.Instance,
+                logger ?? NullLogger<OutboundMailDispatcher>.Instance,
                 retryDelays: [TimeSpan.Zero, TimeSpan.Zero]);
         }
 
