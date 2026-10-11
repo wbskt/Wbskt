@@ -82,6 +82,7 @@ public static class Program
         builder.Services.AddQueuedEventBus();
         builder.Services.AddScopedWithQueuedEvents<IRegistrationPolicyService, RegistrationPolicyService>();
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
+        builder.Services.AddScoped<ISocketHostProvider, SocketHostProvider>();
         builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
@@ -95,6 +96,12 @@ public static class Program
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<ClientReadingRetentionService>();
+        }
+        // Presence lasts only while the socket host holding it keeps sending heartbeats.
+        builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
+        if (role == HostRole.All)
+        {
+            builder.Services.AddHostedService<StalePresenceSweeper>();
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
