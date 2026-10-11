@@ -109,6 +109,36 @@ public sealed class AccountAuditEventTests
     }
 
     [Fact]
+    public async Task A_reset_link_mailed_to_an_account_is_logged_with_where_the_request_came_from()
+    {
+        var result = await _service.ForgotPasswordAsync(Email, "10.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        var requested = Assert.IsType<PasswordResetRequestedEvent>(Assert.Single(_published));
+        Assert.Equal("10.0.0.1", requested.ClientAddress);
+        Assert.Equal([10, 11], requested.WorkspaceIds);
+    }
+
+    [Fact]
+    public async Task A_reset_request_for_an_unknown_address_is_logged_nowhere()
+    {
+        _provider.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
+
+        await _service.ForgotPasswordAsync("nobody@example.test", "10.0.0.1");
+
+        Assert.Empty(_published);
+    }
+
+    [Fact]
+    public async Task A_reset_request_held_back_by_the_mail_cooldown_is_not_logged_again()
+    {
+        await _service.ForgotPasswordAsync(Email, "10.0.0.1");
+        await _service.ForgotPasswordAsync(Email, "10.0.0.1");
+
+        Assert.Single(_published);
+    }
+
+    [Fact]
     public async Task Signing_out_everywhere_is_logged()
     {
         await _service.LogoutAllAsync(42, "10.0.0.1");

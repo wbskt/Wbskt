@@ -560,9 +560,10 @@ internal sealed class AuthService : IAuthService
         // wants from this endpoint, so the status, the body and the absence of a body are identical
         // for a real address, an unknown one, and a deactivated one.
         //
-        // Timing is not equalised. The hit path does one extra insert, roughly a millisecond against
-        // a lookup that both paths pay - a signal, but a far smaller one than a different response,
-        // and closing it properly means doing fake work rather than less. Recorded rather than fixed.
+        // Timing is not equalised. The hit path does one extra insert, a workspace lookup and a publish
+        // for the audit log, a few milliseconds against a lookup that both paths pay - a signal, but a
+        // far smaller one than a different response, and closing it properly means doing fake work
+        // rather than less. Recorded rather than fixed.
         User user;
         try
         {
@@ -601,6 +602,7 @@ internal sealed class AuthService : IAuthService
 
             // The raw token is not logged here or anywhere else.
             _logger.LogInformation("Password reset issued for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
+            await AnnounceAsync(new PasswordResetRequestedEvent(user.Id, user.RefId), ipAddress, cancellationToken);
         }
         catch (Exception ex)
         {
