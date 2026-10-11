@@ -164,7 +164,6 @@ public sealed class NotificationExecutorTests
         {
             Branch = new BranchContext(1, 2, 3, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr", DateTime.UtcNow, 9),
             Node = node,
-            Providers = new StubProviders(),
             Tick = 1,
             ParentResults = null,
             CancellationToken = CancellationToken.None,
@@ -210,14 +209,4 @@ public sealed class NotificationExecutorTests
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 
-    private sealed class StubProviders : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
-    }
 }

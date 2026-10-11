@@ -34,7 +34,7 @@ internal sealed class RunStarter : IRunStarter
         IRunStartedPublisher runStartedPublisher,
         IClock clock,
         IIdGenerator idGenerator,
-        IOptions<WorkflowEngineOptions>? options = null,
+        IOptions<WorkflowEngineOptions> options,
         WorkflowMetrics? workflowMetrics = null,
         ILogger<RunStarter>? logger = null)
     {
@@ -47,7 +47,7 @@ internal sealed class RunStarter : IRunStarter
         _runStartedPublisher = runStartedPublisher;
         _clock = clock;
         _idGenerator = idGenerator;
-        _defaultCreditBudgetPerRun = options?.Value.DefaultCreditBudgetPerRun ?? new WorkflowEngineOptions().DefaultCreditBudgetPerRun;
+        _defaultCreditBudgetPerRun = options.Value.DefaultCreditBudgetPerRun;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }

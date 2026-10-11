@@ -56,10 +56,9 @@ public sealed class ErrorModelE2ETests
             compensationExecutor
         ]);
         var cache = new StaticWorkflowDefinitionCache(definition);
-        var providers = new NoOpProviderComposite();
-        var orchestrator = new CompensationOrchestrator(runProvider, branchProvider, historyEventProvider, cache, registry, providers, state.Clock);
-        var finalizer = new RunFinalizer(runProvider, branchProvider, historyEventProvider, new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock);
-        var branchLoop = new BranchLoop(branchProvider, runProvider, runCountersProvider, bookmarkProvider, historyEventProvider, cache, registry, runDispatcher, providers, state.Clock, new SequenceIdGenerator(), finalizer, new NoOpRunCancellationService(), orchestrator);
+        var orchestrator = new CompensationOrchestrator(runProvider, branchProvider, historyEventProvider, cache, registry, state.Clock);
+        var finalizer = new RunFinalizer(runProvider, branchProvider, historyEventProvider, new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock, new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), cache);
+        var branchLoop = new BranchLoop(branchProvider, runProvider, runCountersProvider, bookmarkProvider, historyEventProvider, cache, registry, runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, new SequenceIdGenerator(), finalizer, new NoOpRunCancellationService(), orchestrator, new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
 
         await branchLoop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
@@ -368,17 +367,6 @@ public sealed class ErrorModelE2ETests
         }
 
         public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class NoOpProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition { get; } = new NoOpWorkflowDefinitionProvider();
-        public ITriggerRegistrationProvider TriggerRegistration { get; } = new NoOpTriggerRegistrationProvider();
-        public IBookmarkProvider Bookmark { get; } = new NoOpBookmarkProvider();
-        public ISharedVariableProvider SharedVariable { get; } = new NoOpSharedVariableProvider();
-        public IIdempotencyKeyProvider IdempotencyKey { get; } = new NoOpIdempotencyKeyProvider();
-        public IPendingTriggerEventProvider PendingTriggerEvent { get; } = new NoOpPendingTriggerEventProvider();
-        public IScheduledFireProvider ScheduledFire { get; } = new NoOpScheduledFireProvider();
     }
 
     private sealed class NoOpWorkflowDefinitionProvider : IWorkflowDefinitionProvider

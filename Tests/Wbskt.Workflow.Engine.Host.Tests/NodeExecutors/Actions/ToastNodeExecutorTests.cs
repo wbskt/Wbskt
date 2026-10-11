@@ -95,7 +95,6 @@ public sealed class ToastNodeExecutorTests
         {
             Branch = branch,
             Node = node,
-            Providers = new Mock<IProviderComposite>().Object,
             Tick = 1,
             ParentResults = null,
             CancellationToken = CancellationToken.None,

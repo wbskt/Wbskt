@@ -30,7 +30,9 @@ public sealed class RetryExecutorTests
             executor,
             new TestNodeExecutionServices(),
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         var terminal = Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(3, executor.AttemptCount);
@@ -50,7 +52,9 @@ public sealed class RetryExecutorTests
             executor,
             new TestNodeExecutionServices(),
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal(3, executor.AttemptCount);
@@ -70,7 +74,9 @@ public sealed class RetryExecutorTests
             executor,
             new TestNodeExecutionServices(),
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal(1, executor.AttemptCount);
@@ -93,7 +99,9 @@ public sealed class RetryExecutorTests
             executor,
             new TestNodeExecutionServices(),
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(3, executor.AttemptCount);
@@ -142,7 +150,9 @@ public sealed class RetryExecutorTests
             executor,
             new TestNodeExecutionServices(),
             new FixedClock(),
-            cts.Token));
+            cts.Token,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator()));
 
         // And it is not retried: a cancelled run does not want two more attempts.
         Assert.Equal(1, executor.AttemptCount);
@@ -162,7 +172,9 @@ public sealed class RetryExecutorTests
             executor,
             new TestNodeExecutionServices(),
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         Assert.Equal("EXECUTOR_CRASH", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
     }
@@ -223,7 +235,9 @@ public sealed class RetryExecutorTests
             executor,
             services,
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         idempotencyMock.Verify(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -255,7 +269,14 @@ public sealed class RetryExecutorTests
         foreach (string visit in new[] { "00000000000007D1", "00000000000007D9", "00000000000007D1" })
         {
             await RetryExecutor.RunWithRetryAsync(
-                node, CreateContext() with { VisitToken = visit }, executor, services, new FixedClock(), CancellationToken.None);
+                node,
+                CreateContext() with { VisitToken = visit },
+                executor,
+                services,
+                new FixedClock(),
+                CancellationToken.None,
+                new UnlimitedRunCountersProvider(),
+                new DefaultCreditCostCalculator());
         }
 
         Assert.Equal(3, keys.Count);
@@ -286,7 +307,9 @@ public sealed class RetryExecutorTests
             executor,
             services,
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
         idempotencyMock.Verify(p => p.UpsertPendingAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -318,7 +341,9 @@ public sealed class RetryExecutorTests
             executor,
             services,
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         var term = Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(BranchTerminalReason.Completed, term.Reason);
@@ -358,7 +383,9 @@ public sealed class RetryExecutorTests
             executorMock.Object,
             services,
             new FixedClock(),
-            CancellationToken.None);
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
 
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         
@@ -382,7 +409,8 @@ public sealed class RetryExecutorTests
             new TestNodeExecutionServices(),
             new FixedClock(),
             CancellationToken.None,
-            countersMock.Object);
+            countersMock.Object,
+            new DefaultCreditCostCalculator());
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal("OUT_OF_CREDITS", fail.ErrorCode);
@@ -405,7 +433,8 @@ public sealed class RetryExecutorTests
             new TestNodeExecutionServices(),
             new FixedClock(),
             CancellationToken.None,
-            countersMock.Object);
+            countersMock.Object,
+            new DefaultCreditCostCalculator());
 
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(1, executor.AttemptCount);
@@ -413,24 +442,13 @@ public sealed class RetryExecutorTests
         countersMock.Verify(p => p.GetByRunIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private sealed class TestNodeExecutionServices(IIdempotencyKeyProvider? idempotencyKey = null) : INodeExecutionServices
+    private sealed class TestNodeExecutionServices(IIdempotencyKeyProvider? idempotencyKeys = null) : INodeExecutionServices
     {
-        public IProviderComposite Providers => new StubProviderComposite(idempotencyKey);
+        public IIdempotencyKeyProvider IdempotencyKeys { get; } = idempotencyKeys ?? new InMemoryIdempotencyKeyProvider();
 
         public int Tick => 1;
 
         public IReadOnlyDictionary<string, JsonElement>? ParentResults => null;
-    }
-
-    private sealed class StubProviderComposite(IIdempotencyKeyProvider? idempotencyKey = null) : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => idempotencyKey ?? throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
     }
 
     private sealed class FixedClock : IClock

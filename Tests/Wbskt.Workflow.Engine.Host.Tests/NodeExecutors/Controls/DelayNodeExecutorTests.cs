@@ -125,7 +125,6 @@ public sealed class DelayNodeExecutorTests
         {
             Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState, new Dictionary<string, JsonElement>(), "corr-1", T0, 9),
             Node = node,
-            Providers = new StubProviderComposite(),
             Tick = 1,
             ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
@@ -145,14 +144,4 @@ public sealed class DelayNodeExecutorTests
         public DateTime UtcNow { get; set; } = utcNow;
     }
 
-    private sealed class StubProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
-    }
 }

@@ -128,7 +128,6 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutor, EmailNodeExecutor>();
         services.AddScoped<INodeExecutor, TelegramNodeExecutor>();
         services.AddScoped<INodeExecutorRegistry, NodeExecutorRegistry>();
-        services.AddScoped<IProviderComposite, RuntimeProviderComposite>();
         services.AddScoped<IBranchLoop, BranchLoop>();
         services.AddScoped<IBookmarkResumer, BookmarkResumer>();
         services.AddScoped<ITriggerConcurrencyEnforcer, TriggerConcurrencyEnforcer>();
@@ -136,6 +135,8 @@ public static class WorkflowServiceCollectionExtensions
         // The token registry is process-wide - the service that reads it is per-scope.
         services.AddSingleton<RunCancellationTokenRegistry>();
         services.AddScoped<IRunCancellationService, RunCancellationService>();
+        // For the cancellation service, which finalizes a run left idle (see RunCancellationService).
+        services.AddScoped(sp => new Lazy<IRunFinalizer>(sp.GetRequiredService<IRunFinalizer>));
         services.AddScoped<ICompensationOrchestrator, CompensationOrchestrator>();
         services.AddScoped<IRunCompletedPublisher, NullRunCompletedPublisher>();
         services.AddScoped<IRunStartedPublisher, NullRunStartedPublisher>();

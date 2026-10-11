@@ -52,7 +52,11 @@ public sealed class CancelWorkflowRunConsumerTests
             history.Object,
             new MemoryCache(new MemoryCacheOptions()),
             Mock.Of<IClock>(c => c.UtcNow == new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)),
-            Mock.Of<IServiceProvider>());
+            Mock.Of<IBranchProvider>(),
+            Mock.Of<IBookmarkProvider>(),
+            new UnlimitedRunCountersProvider(),
+            new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer()),
+            new RunCancellationTokenRegistry());
         var consumer = new CancelWorkflowRunConsumer(service);
 
         await consumer.Consume(Context(42, "operator"));

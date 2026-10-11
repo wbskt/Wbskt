@@ -156,7 +156,6 @@ public sealed class OutboundWebhookExecutorTests
         {
             Branch = branch,
             Node = node,
-            Providers = Mock.Of<IProviderComposite>(),
             Tick = 1,
             ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key",

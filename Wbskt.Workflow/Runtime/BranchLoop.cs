@@ -32,14 +32,14 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
     private readonly IRunDispatcher _runDispatcher;
-    private readonly IProviderComposite _providerComposite;
+    private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
     private readonly IClock _clock;
     private readonly IIdGenerator _idGenerator;
-    private readonly IRunFinalizer? _runFinalizer;
+    private readonly IRunFinalizer _runFinalizer;
     private readonly IRunCancellationService _runCancellationService;
-    private readonly ICompensationOrchestrator? _compensationOrchestrator;
+    private readonly ICompensationOrchestrator _compensationOrchestrator;
     private readonly ICreditCostCalculator _creditCostCalculator;
-    private readonly IJoinAggregatorProvider? _joinAggregatorProvider;
+    private readonly IJoinAggregatorProvider _joinAggregatorProvider;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<BranchLoop>? _logger;
     private readonly OnFailureHandler _onFailureHandler = new();
@@ -53,16 +53,16 @@ internal sealed class BranchLoop : IBranchLoop
         IWorkflowDefinitionCache workflowDefinitionCache,
         INodeExecutorRegistry nodeExecutorRegistry,
         IRunDispatcher runDispatcher,
-        IProviderComposite providerComposite,
+        IIdempotencyKeyProvider idempotencyKeyProvider,
         IClock clock,
         IIdGenerator idGenerator,
-        IRunFinalizer? runFinalizer = null,
-        IRunCancellationService? runCancellationService = null,
-        ICompensationOrchestrator? compensationOrchestrator = null,
-        ICreditCostCalculator? creditCostCalculator = null,
+        IRunFinalizer runFinalizer,
+        IRunCancellationService runCancellationService,
+        ICompensationOrchestrator compensationOrchestrator,
+        ICreditCostCalculator creditCostCalculator,
+        IJoinAggregatorProvider joinAggregatorProvider,
         WorkflowMetrics? workflowMetrics = null,
-        ILogger<BranchLoop>? logger = null,
-        IJoinAggregatorProvider? joinAggregatorProvider = null)
+        ILogger<BranchLoop>? logger = null)
     {
         _branchProvider = branchProvider;
         _runProvider = runProvider;
@@ -72,14 +72,14 @@ internal sealed class BranchLoop : IBranchLoop
         _workflowDefinitionCache = workflowDefinitionCache;
         _nodeExecutorRegistry = nodeExecutorRegistry;
         _runDispatcher = runDispatcher;
-        _providerComposite = providerComposite;
+        _idempotencyKeyProvider = idempotencyKeyProvider;
         _clock = clock;
         _idGenerator = idGenerator;
         _workflowMetrics = workflowMetrics;
         _runFinalizer = runFinalizer;
-        _runCancellationService = runCancellationService ?? new NoOpRunCancellationService();
+        _runCancellationService = runCancellationService;
         _compensationOrchestrator = compensationOrchestrator;
-        _creditCostCalculator = creditCostCalculator ?? new DefaultCreditCostCalculator();
+        _creditCostCalculator = creditCostCalculator;
         _joinAggregatorProvider = joinAggregatorProvider;
         _logger = logger;
     }
@@ -172,7 +172,7 @@ internal sealed class BranchLoop : IBranchLoop
                         node,
                         branchContext,
                         executor,
-                        new NodeExecutionServices(_providerComposite),
+                        new NodeExecutionServices(_idempotencyKeyProvider),
                         _clock,
                         linkedToken,
                         _runCountersProvider,
@@ -395,10 +395,7 @@ internal sealed class BranchLoop : IBranchLoop
                     else if (shouldCompensate)
                     {
                         branchRow = await _branchProvider.UpdatePointerAsync(branchId, node.NodeId, "Compensating", branchRow.LocalJson, branchRow.LastOutputJson, ct);
-                        if (_compensationOrchestrator is not null)
-                        {
-                            await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
-                        }
+                        await _compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
                         await _branchProvider.SetFailedAsync(branchId, errorJson, ct);
                     }
                     else
@@ -436,7 +433,7 @@ internal sealed class BranchLoop : IBranchLoop
                     await ContributeFailureToJoinAsync(runRow, branchRow, definition, ct);
 
                     int postDecrementCount = await _runCountersProvider.DecrementActiveBranchesAsync(runRow.Id, 1, ct);
-                    if (postDecrementCount == 0 && _runFinalizer is not null)
+                    if (postDecrementCount == 0)
                     {
                         await _runFinalizer.FinalizeAsync(runRow.Id, ct);
                     }
@@ -474,11 +471,6 @@ internal sealed class BranchLoop : IBranchLoop
     /// </summary>
     private async Task ContributeFailureToJoinAsync(RunRow runRow, BranchRow branchRow, WorkflowDefinition definition, CancellationToken ct)
     {
-        if (_joinAggregatorProvider is null)
-        {
-            return;
-        }
-
         IReadOnlyDictionary<string, JsonElement> localState = DeserializeDictionary(branchRow.LocalJson);
         if (!localState.TryGetValue(JoinTokenKey, out JsonElement tokenElement)
             || tokenElement.ValueKind != JsonValueKind.String
@@ -551,7 +543,7 @@ internal sealed class BranchLoop : IBranchLoop
         int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
         await AppendEventAsync(runId, branchRefId, null, HistoryEventKind.BranchCompleted, ct);
 
-        if (postDecrementCount == 0 && _runFinalizer is not null)
+        if (postDecrementCount == 0)
         {
             await _runFinalizer.FinalizeAsync(runId, ct);
         }
@@ -563,7 +555,7 @@ internal sealed class BranchLoop : IBranchLoop
         int postDecrementCount = await _runCountersProvider.IncrementActiveBranchesAsync(runId, -1, ct);
         await AppendEventAsync(runId, branchRow.RefId, null, HistoryEventKind.BranchCancelled, ct);
 
-        if (postDecrementCount == 0 && _runFinalizer is not null)
+        if (postDecrementCount == 0)
         {
             await _runFinalizer.FinalizeAsync(runId, ct);
         }

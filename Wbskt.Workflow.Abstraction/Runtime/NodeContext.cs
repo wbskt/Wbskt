@@ -19,8 +19,6 @@ public sealed record NodeContext
     /// </summary>
     public WorkflowDefinition? Definition { get; init; }
 
-    public required IProviderComposite Providers { get; init; }
-
     public required int Tick { get; init; }
 
     public required IReadOnlyDictionary<string, JsonElement>? ParentResults { get; init; }

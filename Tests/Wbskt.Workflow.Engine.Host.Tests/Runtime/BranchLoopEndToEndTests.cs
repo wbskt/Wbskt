@@ -50,10 +50,14 @@ public sealed class BranchLoopEndToEndTests
                 new LogicPassThroughExecutor()
             ]),
             new ChannelRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
-            finalizer);
+            finalizer,
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -260,17 +264,6 @@ public sealed class BranchLoopEndToEndTests
         public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
         public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    private sealed class StubProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
     }
 
     private sealed class FixedClock : IClock

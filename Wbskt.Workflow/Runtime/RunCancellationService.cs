@@ -13,10 +13,14 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IHistoryEventProvider _historyEventProvider;
     private readonly IMemoryCache _memoryCache;
     private readonly IClock _clock;
-    private readonly IBranchProvider? _branchProvider;
-    private readonly IBookmarkProvider? _bookmarkProvider;
-    private readonly IRunCountersProvider? _runCountersProvider;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IBranchProvider _branchProvider;
+    private readonly IBookmarkProvider _bookmarkProvider;
+    private readonly IRunCountersProvider _runCountersProvider;
+    // Lazy because finishing a run goes back in through the front door: the finalizer drains queued
+    // triggers and wakes a parent run through the inbound hub, the hub's dispatcher can cancel a run
+    // (CancelExisting), and a cancel can finalize. The cycle is real and by design, so it is broken
+    // here, and the finalizer is resolved only when a cancel leaves a run with nothing running.
+    private readonly Lazy<IRunFinalizer> _runFinalizer;
 
     // Singleton, not per-instance: this service is Scoped and the pump runs each branch in its own
     // scope, so a per-instance registry meant the branch loop watched one token source while every
@@ -28,16 +32,13 @@ internal sealed class RunCancellationService : IRunCancellationService
         IHistoryEventProvider historyEventProvider,
         IMemoryCache memoryCache,
         IClock clock,
-        IServiceProvider serviceProvider,
-        IBranchProvider? branchProvider = null,
-        IBookmarkProvider? bookmarkProvider = null,
-        IRunCountersProvider? runCountersProvider = null,
-        RunCancellationTokenRegistry? tokenRegistry = null)
+        IBranchProvider branchProvider,
+        IBookmarkProvider bookmarkProvider,
+        IRunCountersProvider runCountersProvider,
+        Lazy<IRunFinalizer> runFinalizer,
+        RunCancellationTokenRegistry tokenRegistry)
     {
-        // Optional so the many hand-built test instances need no extra argument; the engine always
-        // supplies the singleton, and a hand-built instance gets its own private registry, which is
-        // exactly the isolation a test wants.
-        _tokenRegistry = tokenRegistry ?? new RunCancellationTokenRegistry();
+        _tokenRegistry = tokenRegistry;
         _runProvider = runProvider;
         _historyEventProvider = historyEventProvider;
         _memoryCache = memoryCache;
@@ -45,7 +46,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         _branchProvider = branchProvider;
         _bookmarkProvider = bookmarkProvider;
         _runCountersProvider = runCountersProvider;
-        _serviceProvider = serviceProvider;
+        _runFinalizer = runFinalizer;
     }
 
     public CancellationToken GetToken(long runId)
@@ -117,20 +118,14 @@ internal sealed class RunCancellationService : IRunCancellationService
 
         // Mass-delete bookmarks for this run. Every step below is idempotent, which is what lets the
         // already-Cancelling path above fall through to it safely.
-        if (_bookmarkProvider is not null)
-        {
-            await _bookmarkProvider.DeleteAllByRunIdAsync(checked((int)runId), ct);
-        }
+        await _bookmarkProvider.DeleteAllByRunIdAsync(checked((int)runId), ct);
 
         // Cancel waiting branches
         int? activeBranchCount = null;
-        if (_branchProvider is not null)
+        int cancelledBranches = await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
+        if (cancelledBranches > 0)
         {
-            int cancelledBranches = await _branchProvider.CancelWaitingBranchesAsync(checked((int)runId), ct);
-            if (cancelledBranches > 0 && _runCountersProvider is not null)
-            {
-                activeBranchCount = await _runCountersProvider.IncrementActiveBranchesAsync(checked((int)runId), -cancelledBranches, ct);
-            }
+            activeBranchCount = await _runCountersProvider.IncrementActiveBranchesAsync(checked((int)runId), -cancelledBranches, ct);
         }
 
         // A run with nothing left running has no branch loop to carry it to a terminal status, so
@@ -143,24 +138,15 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     private async Task FinalizeIfIdleAsync(long runId, int? knownActiveBranchCount, CancellationToken ct)
     {
-        // No bare SetTerminalAsync fallback here (2.3): a caller without a finalizer registered (a test
-        // host; the management host no longer cancels at all) relies on the engine host - which always
-        // has one - to finalize. A bare
-        // SetTerminalAsync would skip the pending-trigger drain, run-completed publish, and sub-workflow
-        // completion hook, stranding parents.
-        var runFinalizer = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IRunFinalizer>(_serviceProvider);
-        if (runFinalizer is null || _runCountersProvider is null)
-        {
-            return;
-        }
-
+        // The finalizer, not a bare SetTerminalAsync (2.3): that would skip the pending-trigger drain,
+        // the run-completed publish and the sub-workflow completion hook, stranding parents.
         try
         {
             int activeBranchCount = knownActiveBranchCount
                 ?? (await _runCountersProvider.GetByRunIdAsync(checked((int)runId), ct)).ActiveBranchCount;
             if (activeBranchCount <= 0)
             {
-                await runFinalizer.FinalizeAsync(runId, ct);
+                await _runFinalizer.Value.FinalizeAsync(runId, ct);
             }
         }
         catch (Exception)

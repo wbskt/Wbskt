@@ -37,8 +37,8 @@ internal static class RetryExecutor
         INodeExecutionServices services,
         IClock clock,
         CancellationToken ct,
-        IRunCountersProvider? runCountersProvider = null,
-        ICreditCostCalculator? creditCostCalculator = null,
+        IRunCountersProvider runCountersProvider,
+        ICreditCostCalculator creditCostCalculator,
         WorkflowMetrics? workflowMetrics = null,
         WorkflowDefinition? definition = null,
         RetryNotification? onRetry = null,
@@ -48,18 +48,9 @@ internal static class RetryExecutor
         RetryPolicy policy = GetPolicy(node);
         bool isSideEffectFree = executor.IsSideEffectFree;
 
-        IIdempotencyKeyProvider? idempotencyKeyProvider = null;
-        if (!isSideEffectFree)
-        {
-            try
-            {
-                idempotencyKeyProvider = services.Providers.IdempotencyKey;
-            }
-            catch (NotSupportedException)
-            {
-                // Fallback for test stubs
-            }
-        }
+        // A side-effect-free node is simply run again on a retry or a redelivery; only a node with an
+        // effect outside the engine is deduplicated.
+        IIdempotencyKeyProvider? idempotencyKeyProvider = isSideEffectFree ? null : services.IdempotencyKeys;
 
         for (int attempt = 1; attempt <= policy.MaxAttempts; attempt++)
         {
@@ -186,31 +177,27 @@ internal static class RetryExecutor
                 }
             }
 
-            if (runCountersProvider != null)
+            decimal cost = creditCostCalculator.Calculate(node, null!);
+
+            // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
+            // same row lock as the increment, so this is a single round-trip with no
+            // check-then-act race between concurrent branches on the same run.
+            bool charged = await runCountersProvider.TryChargeAsync((int)context.RunId, cost, ct);
+            if (!charged)
             {
-                var calc = creditCostCalculator ?? new DefaultCreditCostCalculator();
-                decimal cost = calc.Calculate(node, null!);
+                var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
+                string errorJson = JsonSerializer.Serialize(outOfCreditsResult, JsonOptions);
 
-                // Atomic budget-checked charge (2.2): the SP re-validates the budget under the
-                // same row lock as the increment, so this is a single round-trip with no
-                // check-then-act race between concurrent branches on the same run.
-                bool charged = await runCountersProvider.TryChargeAsync((int)context.RunId, cost, ct);
-                if (!charged)
-                {
-                    var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
-                    string errorJson = JsonSerializer.Serialize(outOfCreditsResult, JsonOptions);
+                await RecordOutcomeAsync(false, errorJson);
 
-                    await RecordOutcomeAsync(false, errorJson);
+                return outOfCreditsResult;
+            }
 
-                    return outOfCreditsResult;
-                }
+            onCharge?.Invoke(cost);
 
-                onCharge?.Invoke(cost);
-
-                if (workflowMetrics != null)
-                {
-                    workflowMetrics.RecordCreditsConsumed(context.WorkflowDefinitionRefId.ToString(), (double)cost, context.WorkspaceId);
-                }
+            if (workflowMetrics != null)
+            {
+                workflowMetrics.RecordCreditsConsumed(context.WorkflowDefinitionRefId.ToString(), (double)cost, context.WorkspaceId);
             }
 
             NodeContext nodeContext = new()
@@ -218,7 +205,6 @@ internal static class RetryExecutor
                 Branch = context with { Attempt = attempt },
                 Node = node,
                 Definition = definition,
-                Providers = services.Providers,
                 Tick = services.Tick,
                 ParentResults = services.ParentResults,
                 CancellationToken = ct,

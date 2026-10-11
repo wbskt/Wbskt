@@ -32,7 +32,8 @@ public sealed class RunStarterTests
             new CorrelationKeyResolver(),
             new NullRunStartedPublisher(),
             new FixedClock(),
-            new SequenceIdGenerator());
+            new SequenceIdGenerator(),
+            Options.Create(new WorkflowEngineOptions()));
         InboundEvent triggerEvent = new(
             "client",
             [],

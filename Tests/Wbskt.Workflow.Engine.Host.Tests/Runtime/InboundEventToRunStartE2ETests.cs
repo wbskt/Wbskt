@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
@@ -31,9 +33,10 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator()),
+            new RunStarter(providers, providers, providers, providers, providers, new CorrelationKeyResolver(), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
             runDispatcher,
-            providers);
+            providers,
+            new ExpressionEvaluator(new FixedClock()));
         var inboundHub = new InboundHub(triggerDispatcher, new FixedClock(), new TestLogger<InboundHub>());
         var branchLoop = new BranchLoop(
             providers,
@@ -47,10 +50,14 @@ public sealed class InboundEventToRunStartE2ETests
                 new LogicPassThroughExecutor()
             ]),
             runDispatcher,
-            providers,
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequenceIdGenerator(),
-            new CompletingRunFinalizer(providers));
+            new CompletingRunFinalizer(providers),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
         InboundEvent evt = new(
             "client",
             ["client:client-serial-1:telemetry"],
@@ -161,7 +168,6 @@ public sealed class InboundEventToRunStartE2ETests
         IHistoryEventProvider,
         IWorkflowDefinitionProvider,
         ITriggerRegistrationProvider,
-        IProviderComposite,
         IIdempotencyKeyProvider,
         IPendingTriggerEventProvider,
         IScheduledFireProvider,
@@ -186,14 +192,6 @@ public sealed class InboundEventToRunStartE2ETests
         public List<BookmarkRow> Bookmarks { get; } = [];
         public List<HistoryEventRow> HistoryEvents { get; } = [];
         public List<PendingTriggerEventRow> PendingEvents { get; } = [];
-
-        public IWorkflowDefinitionProvider WorkflowDefinition => this;
-        public ITriggerRegistrationProvider TriggerRegistration => this;
-        public IBookmarkProvider Bookmark => this;
-        public ISharedVariableProvider SharedVariable => this;
-        public IIdempotencyKeyProvider IdempotencyKey => this;
-        public IPendingTriggerEventProvider PendingTriggerEvent => this;
-        public IScheduledFireProvider ScheduledFire => this;
 
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct)
         {

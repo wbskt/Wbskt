@@ -38,9 +38,14 @@ public sealed class BookmarkCompanionTimerTests
                 new SignalWakeCondition("operator-ack", "corr-42") { Ttl = TimeSpan.FromMinutes(5), TtlPort = "timeout" },
                 new Dictionary<string, JsonElement>()))),
             new RecordingRunDispatcher(),
-            new StubProviderComposite(),
+            new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
-            new SequentialIdGenerator());
+            new SequentialIdGenerator(),
+            new NoOpRunFinalizer(),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
 
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
@@ -363,17 +368,6 @@ public sealed class BookmarkCompanionTimerTests
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class StubProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
     }
 
     private sealed class FixedClock : IClock

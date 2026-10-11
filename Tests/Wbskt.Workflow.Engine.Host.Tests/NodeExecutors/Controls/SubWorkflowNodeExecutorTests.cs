@@ -142,7 +142,6 @@ public sealed class SubWorkflowNodeExecutorTests
                 RunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")
             },
             Node = node,
-            Providers = new StubProviderComposite(),
             Tick = 1,
             ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
@@ -162,14 +161,4 @@ public sealed class SubWorkflowNodeExecutorTests
         public DateTime UtcNow => new(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc);
     }
 
-    private sealed class StubProviderComposite : IProviderComposite
-    {
-        public IWorkflowDefinitionProvider WorkflowDefinition => throw new NotSupportedException();
-        public ITriggerRegistrationProvider TriggerRegistration => throw new NotSupportedException();
-        public IBookmarkProvider Bookmark => throw new NotSupportedException();
-        public ISharedVariableProvider SharedVariable => throw new NotSupportedException();
-        public IIdempotencyKeyProvider IdempotencyKey => throw new NotSupportedException();
-        public IPendingTriggerEventProvider PendingTriggerEvent => throw new NotSupportedException();
-        public IScheduledFireProvider ScheduledFire => throw new NotSupportedException();
-    }
 }

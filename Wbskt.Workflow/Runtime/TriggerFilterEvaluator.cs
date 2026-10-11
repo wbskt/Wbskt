@@ -15,9 +15,9 @@ internal sealed class TriggerFilterEvaluator(IExpressionEvaluator expressionEval
     /// Evaluates the registration's filter against the inbound payload, before any run exists. Returns
     /// true when there is no filter.
     /// </summary>
-    internal static async Task<bool> PassesAsync(IExpressionEvaluator? expressionEvaluator, ILogger? logger, TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
+    internal static async Task<bool> PassesAsync(IExpressionEvaluator expressionEvaluator, ILogger? logger, TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(registration.FilterExpression) || expressionEvaluator is null)
+        if (string.IsNullOrWhiteSpace(registration.FilterExpression))
         {
             return true;
         }
