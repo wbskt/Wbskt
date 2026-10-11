@@ -17,14 +17,13 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.False(result.Matched);
         Assert.Null(result.BookmarkId);
         Assert.True(result.Idempotent);
         Assert.Equal("inbound-event:event-1", idempotency.LastKeyValue);
-        Assert.Null(bookmarkProvider.LastMatchKey);
     }
 
     [Fact]
@@ -36,13 +35,47 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.False(result.Matched);
         Assert.Null(result.BookmarkId);
         Assert.False(result.Idempotent);
         Assert.Equal("client-1", bookmarkProvider.LastMatchKey);
+    }
+
+    [Fact]
+    public async Task MatchInbound_writes_no_claim_when_nothing_listens()
+    {
+        // Arrange: no bookmark and no trigger registration, as for most device messages.
+        var bookmarkProvider = new RecordingBookmarkProvider();
+        var idempotency = RecordingIdempotencyKeyProvider.NewClaim();
+        var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
+
+        // Act
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: false, CancellationToken.None);
+
+        // Assert
+        Assert.False(result.Matched);
+        Assert.False(result.Idempotent);
+        Assert.Null(idempotency.LastKeyValue);
+    }
+
+    [Fact]
+    public async Task MatchInbound_still_dedupes_a_matching_event_with_no_registrations()
+    {
+        // Arrange: a bookmark waits on the event, and another host already claimed it.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var idempotency = RecordingIdempotencyKeyProvider.AlreadyClaimed();
+        var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
+
+        // Act
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: false, CancellationToken.None);
+
+        // Assert
+        Assert.True(result.Idempotent);
+        Assert.Equal("inbound-event:event-1", idempotency.LastKeyValue);
     }
 
     [Fact]
@@ -58,7 +91,7 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.True(result.Matched);
@@ -79,7 +112,7 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
 
         // Act
-        await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.Equal([(42L, 1001L, BranchExecutionReason.BookmarkResumed)], dispatcher.Requests);
@@ -99,7 +132,7 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert: the event still counts as "matched" (it was for a bookmark, not a fresh trigger),
         // but since the claim was lost, this caller must not resume the branch itself.
@@ -123,7 +156,7 @@ public sealed class BookmarkResumerTests
         }, new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
         // Act
-        await resumer.MatchInboundAsync(evt, CancellationToken.None);
+        await resumer.MatchInboundAsync(evt, hasRegistrations: true, CancellationToken.None);
 
         // Assert
         (long branchId, string localJson) = Assert.Single(branchProvider.PointerUpdates);
@@ -142,7 +175,7 @@ public sealed class BookmarkResumerTests
         var branchProvider = new RecordingBranchProvider((bookmark.BranchRefId, 1001));
         var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), branchProvider, new RecordingRunDispatcher());
 
-        await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         Assert.Empty(branchProvider.PointerUpdates);
     }
@@ -160,7 +193,7 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.True(result.Matched);
@@ -178,7 +211,7 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, new RecordingBranchProvider(), new RecordingRunDispatcher());
 
         // Act
-        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None);
 
         // Assert
         Assert.False(result.Matched);
@@ -199,7 +232,7 @@ public sealed class BookmarkResumerTests
         var resumer = new BookmarkResumer(bookmarkProvider, idempotency, branchProvider, dispatcher);
 
         // Act / Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => resumer.MatchInboundAsync(CreateInboundEvent(), CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => resumer.MatchInboundAsync(CreateInboundEvent(), hasRegistrations: true, CancellationToken.None));
         Assert.Single(idempotency.MarkFailedCalls);
         Assert.Equal("inbound-event:event-1", idempotency.MarkFailedCalls[0].KeyValue);
     }

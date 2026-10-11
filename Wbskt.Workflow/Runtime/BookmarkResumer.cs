@@ -28,8 +28,17 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         _logger = logger;
     }
 
-    public async Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, CancellationToken ct)
+    public async Task<BookmarkMatchResult> MatchInboundAsync(InboundEvent evt, bool hasRegistrations, CancellationToken ct)
     {
+        // Looked up before the claim, so an event nothing will act on writes nothing. A bookmark parked
+        // after this read was parked after the event arrived, so it was never this event's to resume.
+        IReadOnlyCollection<BookmarkRow> bookmarks = await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct);
+        if (bookmarks.Count == 0 && !hasRegistrations)
+        {
+            _logger?.LogDebug("Event {EventId} matches no bookmark or registration; not claiming it", evt.InboundEventId);
+            return new BookmarkMatchResult(false, null, false);
+        }
+
         string idempotencyKey = $"inbound-event:{evt.InboundEventId}";
         Guid claimToken = Guid.NewGuid();
         
@@ -67,7 +76,6 @@ internal sealed class BookmarkResumer : IBookmarkResumer
 
         try
         {
-            var bookmarks = await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct);
             if (bookmarks.Count == 0)
             {
                 _logger?.LogDebug("No matching bookmark found for event {EventId} using match keys", evt.InboundEventId);

@@ -1,29 +1,19 @@
-using System.Text.Json;
 using MassTransit;
 using Wbskt.Events.Client;
 using Wbskt.Workflow.Abstraction.Enums;
-using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
-public sealed class ClientConnectedConsumer(IInboundHub hub, ClientPresenceParker parker) : IConsumer<ClientConnectedEvent>
+/// <summary>
+/// Parks the online presence checks for a device that just connected. A connect is not dispatched
+/// through the inbound hub: no trigger listens on it, and dispatching it only wrote an idempotency
+/// claim per connect. Presence triggers fire from the parked checks instead.
+/// </summary>
+public sealed class ClientConnectedConsumer(ClientPresenceParker parker) : IConsumer<ClientConnectedEvent>
 {
-    public async Task Consume(ConsumeContext<ClientConnectedEvent> context)
+    public Task Consume(ConsumeContext<ClientConnectedEvent> context)
     {
         ClientConnectedEvent evt = context.Message;
-        InboundEvent inboundEvent = new(
-            "client-connected",
-            [$"client:{evt.ClientRefId}"],
-            $"client-connected:{evt.ClientRefId}:{InboundMessageId.Stable(context)}",
-            new Dictionary<string, JsonElement>
-            {
-                ["clientRefId"] = JsonSerializer.SerializeToElement(evt.ClientRefId),
-                ["clientId"] = JsonSerializer.SerializeToElement(evt.ClientId),
-                ["workspaceId"] = JsonSerializer.SerializeToElement(evt.WorkspaceId)
-            },
-            default);
-
-        await hub.HandleAsync(inboundEvent, context.CancellationToken);
-        await parker.ParkAsync(evt.ClientRefId, evt.WorkspaceId, ClientPresenceState.Online, evt.CreatedAtUtc, context.CancellationToken);
+        return parker.ParkAsync(evt.ClientRefId, evt.WorkspaceId, ClientPresenceState.Online, evt.CreatedAtUtc, context.CancellationToken);
     }
 }

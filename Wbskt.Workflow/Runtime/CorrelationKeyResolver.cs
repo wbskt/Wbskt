@@ -21,7 +21,7 @@ internal sealed class CorrelationKeyResolver : ICorrelationKeyResolver
             "http-wake" => $"http-wake:{GetRequiredString(evt, "wakeToken")}",
 
             // Inbound channels that are valid but currently have no trigger-registration
-            // type (e.g. client-connected, client-registered). Fall back to the
+            // type. Fall back to the
             // correlation key supplied by the inbound adapter so dispatch resolves to
             // NoRegistration gracefully instead of faulting the message.
             _ => evt.CorrelationKey ?? string.Empty

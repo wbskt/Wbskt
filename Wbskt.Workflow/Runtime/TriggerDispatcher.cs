@@ -53,7 +53,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         // interaction looks alarming but is correct; BookmarkResumer explains why.)
         InboundEvent resolvedEvent = evt with { CorrelationKey = defaultCorrelation };
 
-        BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, ct);
+        // Registrations are read before the claim so an event that nothing listens for writes nothing
+        // (see IBookmarkResumer.MatchInboundAsync); the same list is used below.
+        IReadOnlyCollection<TriggerRegistrationRow> registrations = await _triggerRegistrationProvider.GetActiveByChannelKeysAsync(resolvedEvent.ChannelKind, resolvedEvent.MatchKeys, ct);
+        BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, registrations.Count > 0, ct);
         if (bookmarkMatch.Matched)
         {
             _logger?.LogDebug("Event {EventId} resumed bookmark {BookmarkId}", evt.InboundEventId, bookmarkMatch.BookmarkId);
@@ -66,7 +69,6 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return new TriggerDispatchResult(TriggerDispatchOutcome.Idempotent, null, null, defaultCorrelation);
         }
 
-        IReadOnlyCollection<TriggerRegistrationRow> registrations = await _triggerRegistrationProvider.GetActiveByChannelKeysAsync(resolvedEvent.ChannelKind, resolvedEvent.MatchKeys, ct);
         _logger?.LogInformation("Found {Count} active trigger registrations for channel {ChannelKind} and keys {MatchKeys}", registrations.Count, resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
         if (registrations.Count == 0)
         {
