@@ -8,17 +8,18 @@ using Wbskt.Socket.Host.Infrastructure;
 
 namespace Wbskt.Socket.Host.Handlers;
 
-public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
+public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
 {
     internal const string ExpiredReason = "The command expired before it could be delivered.";
+    internal const string SendFailedReason = "The command could not be sent to the device.";
 
     private readonly IConnectionManager _connectionManager;
-    private readonly ILogger<ClientPayloadHandler> _logger;
+    private readonly ILogger<ClientCommandHandler> _logger;
     private readonly IEventBus _eventBus;
     private readonly BusInstanceId _hostId;
     private readonly TimeProvider _timeProvider;
 
-    public ClientPayloadHandler(IConnectionManager connectionManager, ILogger<ClientPayloadHandler> logger, IEventBus eventBus, BusInstanceId hostId, TimeProvider? timeProvider = null)
+    public ClientCommandHandler(IConnectionManager connectionManager, ILogger<ClientCommandHandler> logger, IEventBus eventBus, BusInstanceId hostId, TimeProvider? timeProvider = null)
     {
         _connectionManager = connectionManager;
         _logger = logger;
@@ -69,7 +70,10 @@ public sealed class ClientPayloadHandler : IConsumer<ClientCommandEvent>
         }
         catch (Exception ex)
         {
-            await PublishFailedAsync(command, ex.Message, context.CancellationToken);
+            // The exception's text is internal ("Cannot access a disposed object"); the event log and
+            // the console get a fixed reason, and the detail stays in this host's log.
+            _logger.LogWarning(ex, "Command {CommandId} for {ClientRefId} could not be sent.", command.CommandId, command.ClientRefId);
+            await PublishFailedAsync(command, SendFailedReason, context.CancellationToken);
         }
     }
 

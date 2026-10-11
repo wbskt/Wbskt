@@ -17,7 +17,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.SocketHost;
 /// Every socket host receives every command. A missing connection must be reported exactly once (by
 /// the host the sender saw holding it), and an expired command must never reach the device.
 /// </summary>
-public sealed class ClientPayloadHandlerTests
+public sealed class ClientCommandHandlerTests
 {
     private const string ThisHost = "socket-a";
     private static readonly Guid ClientRefId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -28,9 +28,9 @@ public sealed class ClientPayloadHandlerTests
     private readonly Mock<IEventBus> _bus = new();
     private readonly List<string> _sentFrames = [];
 
-    private ClientPayloadHandler CreateHandler()
+    private ClientCommandHandler CreateHandler()
     {
-        return new ClientPayloadHandler(_connections.Object, NullLogger<ClientPayloadHandler>.Instance, _bus.Object, new BusInstanceId(ThisHost), new FixedTime(Now));
+        return new ClientCommandHandler(_connections.Object, NullLogger<ClientCommandHandler>.Instance, _bus.Object, new BusInstanceId(ThisHost), new FixedTime(Now));
     }
 
     private void Connected()
@@ -103,7 +103,7 @@ public sealed class ClientPayloadHandlerTests
 
         _sentFrames.Should().BeEmpty();
         _bus.Verify(x => x.PublishAsync(
-            It.Is<ClientCommandFailedEvent>(e => e.CommandId == CommandId && e.Reason == ClientPayloadHandler.ExpiredReason),
+            It.Is<ClientCommandFailedEvent>(e => e.CommandId == CommandId && e.Reason == ClientCommandHandler.ExpiredReason),
             It.IsAny<CancellationToken>()), Times.Once);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandDeliveredEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -121,6 +121,23 @@ public sealed class ClientPayloadHandlerTests
         frame.GetProperty("expiresAt").GetDateTimeOffset().Should().Be(new DateTimeOffset(expiresAt, TimeSpan.Zero));
         _bus.Verify(x => x.PublishAsync(It.Is<ClientCommandDeliveredEvent>(e => e.CommandId == CommandId), It.IsAny<CancellationToken>()), Times.Once);
         _bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandFailedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_send_that_throws_is_reported_with_a_fixed_reason_not_the_exception_text()
+    {
+        var socket = new Mock<WebSocket>();
+        socket.SetupGet(x => x.State).Returns(WebSocketState.Open);
+        socket.Setup(x => x.SendAsync(It.IsAny<ArraySegment<byte>>(), It.IsAny<WebSocketMessageType>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ObjectDisposedException("System.Net.WebSockets.ManagedWebSocket"));
+        _connections.Setup(x => x.GetConnection(ClientRefId))
+            .Returns(new ClientConnection { Socket = socket.Object, ClientId = 42, WorkspaceId = 7 });
+
+        await CreateHandler().Consume(Context());
+
+        _bus.Verify(x => x.PublishAsync(
+            It.Is<ClientCommandFailedEvent>(e => e.CommandId == CommandId && e.Reason == ClientCommandHandler.SendFailedReason),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
