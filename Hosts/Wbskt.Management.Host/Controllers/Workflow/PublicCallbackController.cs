@@ -11,9 +11,9 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 // Public callback front door for the engine's external-facing inbound channels (WaitForHttp wakes
 // and webhook triggers). Deliberately anonymous: authorization is possession of the token/path,
 // which the workflow author defines at design time and hands to whoever is meant to call back -
-// exactly like a webhook URL. The engine's own /api/inbound/* stays backend-network-only and
-// api-key gated; these relay inward through IWorkflowEngineGateway (WorkflowEngineApiKeyHandler adds
-// the shared key), so the engine is never exposed publicly and manual/signal never get a public route.
+// exactly like a webhook URL. A callback is checked here and sent to the engine's durable callback
+// queue (IWorkflowEngineGateway), so 202 means it is safely held: one that arrives while the engine
+// restarts or fails over is handled once it is back. The engine is never exposed publicly.
 //
 // Hardening for the anonymous edge:
 //   - rate limiting (PublicCallbackRateLimits): a webhook's budget is its workspace and path, so
@@ -21,8 +21,8 @@ namespace Wbskt.Management.Host.Controllers.Workflow;
 //     across every callback throttles enumeration of tokens/paths and blunts request floods;
 //   - a request-body cap (RequestSizeLimit) bounds how much attacker-controlled data one call can
 //     push into persisted workflow state;
-//   - responses are uniform and opaque (202 Accepted, no Matched/RunId), so the response cannot be
-//     used as an oracle to distinguish a live token/path from a dead one.
+//   - responses are uniform and opaque (202 Accepted, decided before the engine looks at the
+//     callback), so the response cannot be used as an oracle to tell a live token/path from a dead one.
 [ApiController]
 [AllowAnonymous]
 [EnableRateLimiting(PublicCallbackPolicy.RateLimitPolicy)]
@@ -53,10 +53,7 @@ public sealed class PublicCallbackController : ControllerBase
 
         try
         {
-            WakeResponse response = await _engine.WakeAsync(token, payload, ct);
-            // Match result is logged for operators but never returned to the anonymous caller - a
-            // uniform 202 keeps the endpoint from confirming whether the token matched a parked run.
-            _logger.LogInformation("Public http-wake callback outcome {Outcome} (matched={Matched}).", response.Outcome, response.Matched);
+            await _engine.SendWakeAsync(token, payload, ct);
             return Accepted();
         }
         catch (Exception ex) when (IsEngineUnavailable(ex, ct))
@@ -78,9 +75,8 @@ public sealed class PublicCallbackController : ControllerBase
                 ? presented.ToString()
                 : null;
 
-            // A sender's name for this delivery, so its retries start one run. Checked here as well as
-            // in the engine (WebhookEventIds.IsValidKey): the engine's 400 would reach this caller as a
-            // relay failure, and a malformed header is the sender's mistake, not a reason to retry.
+            // A sender's name for this delivery, so its retries start one run. Checked here, while the
+            // sender can still be told: a malformed header is its mistake, not a reason to retry.
             string? idempotencyKey = Request.Headers.TryGetValue(IdempotencyKeyHeader, out Microsoft.Extensions.Primitives.StringValues key)
                 ? key.ToString()
                 : null;
@@ -89,10 +85,7 @@ public sealed class PublicCallbackController : ControllerBase
                 return BadRequest(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{MaxIdempotencyKeyLength} printable characters."));
             }
 
-            WebhookResponse response = await _engine.WebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);
-            // Outcome/RunId logged for operators only; the anonymous caller gets an opaque 202 so the
-            // response reveals nothing about whether the path matched a registered trigger.
-            _logger.LogInformation("Public webhook callback outcome {Outcome} (runId={RunId}).", response.Outcome, response.RunId);
+            await _engine.SendWebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);
             return Accepted();
         }
         catch (Exception ex) when (IsEngineUnavailable(ex, ct))
@@ -101,16 +94,15 @@ public sealed class PublicCallbackController : ControllerBase
         }
     }
 
-    // The engine is unreachable or rejected the relay (e.g. 503 during leader failover). Surface a
-    // retryable status without leaking internal detail to the anonymous caller.
-    // A refused or failed call, or one that hit the client's timeout (a TaskCanceledException the
-    // caller's own token did not cause): either way the sender should retry later.
+    // The broker refused the callback or did not take it in time (a cancellation the caller's own
+    // token did not cause). Surface a retryable status without leaking internal detail to the
+    // anonymous caller: nothing was queued, so the sender should try again.
     private static bool IsEngineUnavailable(Exception ex, CancellationToken ct) =>
-        ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested);
+        ex is not OperationCanceledException || !ct.IsCancellationRequested;
 
     private ActionResult EngineUnavailable(Exception ex)
     {
-        _logger.LogWarning("Relaying callback to the engine failed: {Message}", ex.Message);
+        _logger.LogWarning("Queueing a callback for the engine failed: {Message}", ex.Message);
         Response.Headers.RetryAfter = "5";
         return StatusCode(StatusCodes.Status503ServiceUnavailable);
     }

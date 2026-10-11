@@ -385,6 +385,11 @@ exactly like a webhook URL.
 | `POST api/callbacks/wake/{token}` | Wakes a run parked on a `WaitForHttp` node. |
 | `POST api/callbacks/webhook/{workspaceRef}/{path}` | Fires a webhook trigger, which may start a run. An optional `Idempotency-Key` header (1–255 printable characters, else **400**) names the delivery: a retry with the same key, path and secret within 24 hours starts nothing new. Without it every request is a new delivery. |
 
+**202 means safely received.** Management does not call the engine: it checks the request and sends
+it to the engine's durable `workflow-inbound-callback` queue, answering once the broker holds it. A
+callback that arrives while the engine is restarting or failing over is handled when it is back. Only
+when the broker itself does not take it is the answer **503** with `Retry-After: 5`.
+
 Hardened for an anonymous edge, on three axes:
 
 - **Rate limited per target.** A webhook's budget is its workspace and path (600 requests/minute,
@@ -449,15 +454,13 @@ and every `/api/inbound/*` route additionally requires the shared key in `X-Wbsk
 |---|---|
 | `POST api/inbound/manual/{workflowRefId}` | Starts a run. Takes an optional `idempotencyKey` so a retried call does not start a second run. Reached only via the management host's authenticated `POST …/workflows/{refId}/runs`. |
 | `POST api/inbound/signal/{scopeRunRefId}/{signalName}` | Delivers a signal to a parked run. Reached only via the management host's authenticated signal route — it has no public front door. |
-| `POST api/inbound/wake/{token}` | Wakes a run parked on `WaitForHttp`. Fronted publicly by `api/callbacks/wake/{token}`. |
-| `POST api/inbound/webhook/{workspaceRef}/{channelKind}` | Fires a webhook trigger. Fronted publicly by `api/callbacks/webhook/{workspaceRef}/{path}`. |
 
 Unlike the public front door, these return their real outcome (`Outcome`, `Matched`, `RunRefId`) —
 the caller is a trusted service, so there is no oracle to protect against.
 
 A webhook trigger may carry a **secret**. When it does, the caller must present it in the
-`X-Wbskt-Secret` header — on the public callback, which relays it inward as a header (never in the
-body, which becomes the run's persisted trigger payload). The comparison is fixed-time, and the public
+`X-Wbskt-Secret` header — on the public callback, which passes it to the engine beside the body (never
+in it, since the body becomes the run's persisted trigger payload). The comparison is fixed-time, and the public
 response stays an opaque 202 either way, so a wrong secret is indistinguishable from a right one. A
 trigger with no secret configured is open, as every webhook published before secrets existed is.
 
@@ -466,10 +469,10 @@ a non-matching event reports `Filtered` for that registration and starts nothing
 
 One event can match several trigger registrations — two workflows sharing a webhook path, or one
 workflow with two manual triggers — and each of them independently starts, queues or drops a run. The
-manual and webhook responses therefore carry a `Registrations` array (`registrationId`,
+manual response therefore carries a `Registrations` array (`registrationId`,
 `workflowRefId`, `outcome`, `runRefId`, `runId`, `correlationKey`) alongside the top-level `Outcome`
 and `RunRefId`, which summarise the *first* started run and stay for callers written against the
-single-run shape. The signal and wake endpoints have no such array: those channels only resolve
+single-run shape. The signal endpoint has no such array: those channels only resolve
 bookmarks, so they cannot fan out.
 
 | Endpoint | What it does |

@@ -15,10 +15,11 @@ public sealed class HttpWakeChannel : TriggerChannel
 
     public static string Key(string token) => $"{Name}:{token}";
 
-    public static InboundEvent Event(string token, JsonElement body) => new(
+    /// <param name="deliveryId">What names this call, so a redelivery of it is the same event; a fresh id when omitted.</param>
+    public static InboundEvent Event(string token, JsonElement body, string? deliveryId = null) => new(
         Name,
         [Key(token)],
-        $"{Name}:{token}:{Guid.NewGuid()}",
+        $"{Name}:{token}:{deliveryId ?? Guid.NewGuid().ToString()}",
         new Dictionary<string, JsonElement>
         {
             ["wakeToken"] = Json(token),

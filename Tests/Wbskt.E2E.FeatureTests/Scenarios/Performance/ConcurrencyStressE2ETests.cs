@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
@@ -52,12 +51,6 @@ public class ConcurrencyStressE2ETests
         int webhooksPerTask = 10;
         int totalRunsExpected = numTasks * webhooksPerTask;
 
-        var handler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        };
-        var client = new HttpClient(handler) { BaseAddress = new Uri(E2EConfig.WorkflowBaseUrl) };
-
         var tasks = new List<Task>();
 
         for (int i = 0; i < numTasks; i++)
@@ -68,12 +61,7 @@ public class ConcurrencyStressE2ETests
                 for (int j = 0; j < webhooksPerTask; j++)
                 {
                     var payload = new { task = taskIndex, iter = j };
-                    using var resp = await client.PostAsJsonAsync("/api/inbound/webhook/stress", payload);
-                    if (!resp.IsSuccessStatusCode)
-                    {
-                        string body = await resp.Content.ReadAsStringAsync();
-                        throw new Exception($"Webhook returned {resp.StatusCode}: {body}");
-                    }
+                    await _fixture.SendWebhookAsync(workspaceRef, "stress", payload);
                 }
             }));
         }
