@@ -14,7 +14,7 @@ internal sealed class HeartbeatPublisher : BackgroundService
     private readonly string _hostId;
     private readonly TimeSpan _interval;
 
-    public HeartbeatPublisher(IPublishEndpoint publishEndpoint, BusInstanceId busInstanceId, IConfiguration configuration, ILogger<HeartbeatPublisher> logger)
+    public HeartbeatPublisher(IBus publishEndpoint, BusInstanceId busInstanceId, IConfiguration configuration, ILogger<HeartbeatPublisher> logger)
     {
         _publishEndpoint = publishEndpoint;
         _logger = logger;
