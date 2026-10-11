@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.Socket.Host.Services;
+using Wbskt.Socket.Host.Services.Inbound;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ClientSdk;
 
@@ -45,8 +46,8 @@ public sealed class SocketMessageSentAtTests
     {
         var hourAgo = new DateTimeOffset(Now.AddHours(-1));
 
-        Assert.Equal(Now.AddHours(-1), SocketHandler.PlausibleSentAt(hourAgo, Now));
-        Assert.Equal(DateTimeKind.Utc, SocketHandler.PlausibleSentAt(hourAgo, Now)!.Value.Kind);
+        Assert.Equal(Now.AddHours(-1), DeviceMessageHandler.PlausibleSentAt(hourAgo, Now));
+        Assert.Equal(DateTimeKind.Utc, DeviceMessageHandler.PlausibleSentAt(hourAgo, Now)!.Value.Kind);
     }
 
     [Fact]
@@ -54,13 +55,13 @@ public sealed class SocketMessageSentAtTests
     {
         var local = new DateTimeOffset(2026, 10, 3, 16, 30, 0, TimeSpan.FromHours(5.5));
 
-        Assert.Equal(new DateTime(2026, 10, 3, 11, 0, 0, DateTimeKind.Utc), SocketHandler.PlausibleSentAt(local, Now));
+        Assert.Equal(new DateTime(2026, 10, 3, 11, 0, 0, DateTimeKind.Utc), DeviceMessageHandler.PlausibleSentAt(local, Now));
     }
 
     [Fact]
     public void The_socket_host_treats_a_slightly_fast_device_clock_as_now()
     {
-        Assert.Equal(Now, SocketHandler.PlausibleSentAt(new DateTimeOffset(Now.AddSeconds(20)), Now));
+        Assert.Equal(Now, DeviceMessageHandler.PlausibleSentAt(new DateTimeOffset(Now.AddSeconds(20)), Now));
     }
 
     [Theory]
@@ -68,12 +69,12 @@ public sealed class SocketMessageSentAtTests
     [InlineData(-8 * 24 * 60)] // more than a week old
     public void The_socket_host_ignores_an_implausible_device_time(int minutesFromNow)
     {
-        Assert.Null(SocketHandler.PlausibleSentAt(new DateTimeOffset(Now.AddMinutes(minutesFromNow)), Now));
+        Assert.Null(DeviceMessageHandler.PlausibleSentAt(new DateTimeOffset(Now.AddMinutes(minutesFromNow)), Now));
     }
 
     [Fact]
     public void The_socket_host_ignores_a_missing_device_time()
     {
-        Assert.Null(SocketHandler.PlausibleSentAt(null, Now));
+        Assert.Null(DeviceMessageHandler.PlausibleSentAt(null, Now));
     }
 }

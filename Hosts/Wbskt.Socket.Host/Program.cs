@@ -14,6 +14,7 @@ using Wbskt.Infrastructure.Hosting;
 using Wbskt.Socket.Host.HostedServices;
 using Wbskt.Socket.Host.Infrastructure;
 using Wbskt.Socket.Host.Services;
+using Wbskt.Socket.Host.Services.Inbound;
 using Wbskt.Infrastructure.Telemetry;
 using Wbskt.Socket.Host.Telemetry;
 
@@ -49,6 +50,11 @@ public static class Program
         // Signs nothing; accepts client tokens signed by the management host (Jwt:TrustedJwksUrl).
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Management, JwtAudiences.Socket);
         builder.Services.AddScoped<ISocketHandler, SocketHandler>();
+        // What a device sends: one handler per protocol message type, and the device's own messages.
+        builder.Services.AddSingleton<IInboundMessageHandler, PongHandler>();
+        builder.Services.AddSingleton<IInboundMessageHandler, AckHandler>();
+        builder.Services.AddSingleton<DeviceMessageHandler>();
+        builder.Services.AddSingleton<InboundMessageDispatcher>();
         builder.Services.Configure<MessageBudgetOptions>(builder.Configuration.GetSection(MessageBudgetOptions.SectionName));
 
         // Event Bus — per-instance fan-out so every socket instance sees every client event
