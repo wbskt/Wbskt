@@ -8,12 +8,11 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class HistoryRetentionGc : BackgroundService
 {
-    private const string LeaseName = "history-retention-gc";
     private const int BatchSize = 5000;
     // Each run takes its branches and history with it, so a run batch is much heavier than a row batch.
     internal const int RunBatchSize = 100;
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HistoryRetentionGc> _logger;
     private readonly TimeSpan _pollInterval;
@@ -23,30 +22,30 @@ public sealed class HistoryRetentionGc : BackgroundService
     [ActivatorUtilitiesConstructor]
     public HistoryRetentionGc(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<HistoryRetentionGc> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(clock, leaseHolder, scopeFactory, logger, options.Value.HistoryRetentionInterval, options.Value.HistoryRetentionWindow, options.Value.HistoryRetentionWindowElevated)
+        : this(clock, leadership, scopeFactory, logger, options.Value.HistoryRetentionInterval, options.Value.HistoryRetentionWindow, options.Value.HistoryRetentionWindowElevated)
     {
     }
 
     internal HistoryRetentionGc(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IHistoryEventProvider historyEventProvider,
         ILogger<HistoryRetentionGc> logger,
         TimeSpan? pollInterval = null,
         TimeSpan? retentionWindow = null,
         TimeSpan? elevatedRetentionWindow = null,
         IRunRetentionProvider? runRetentionProvider = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(historyEventProvider, runRetentionProvider), logger, pollInterval, retentionWindow, elevatedRetentionWindow)
+        : this(clock, leadership, new StaticScopeFactory(historyEventProvider, runRetentionProvider), logger, pollInterval, retentionWindow, elevatedRetentionWindow)
     {
     }
 
     private HistoryRetentionGc(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<HistoryRetentionGc> logger,
         TimeSpan? pollInterval,
@@ -54,7 +53,7 @@ public sealed class HistoryRetentionGc : BackgroundService
         TimeSpan? elevatedRetentionWindow = null)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromHours(1);
@@ -64,7 +63,7 @@ public sealed class HistoryRetentionGc : BackgroundService
 
     public async Task ProcessRetentionAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

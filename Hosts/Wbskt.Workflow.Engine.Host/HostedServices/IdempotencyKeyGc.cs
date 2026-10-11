@@ -14,10 +14,9 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// </summary>
 public sealed class IdempotencyKeyGc : BackgroundService
 {
-    private const string LeaseName = "idempotency-gc";
     private const int BatchSize = 5000;
     private readonly IClock _clock;
-    private readonly ILeaseHolder _leaseHolder;
+    private readonly ILeadershipGate _leadership;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IdempotencyKeyGc> _logger;
     private readonly TimeSpan _pollInterval;
@@ -26,35 +25,35 @@ public sealed class IdempotencyKeyGc : BackgroundService
     [ActivatorUtilitiesConstructor]
     public IdempotencyKeyGc(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<IdempotencyKeyGc> logger,
         IOptions<WorkflowEngineOptions> options)
-        : this(clock, leaseHolder, scopeFactory, logger, options.Value.IdempotencyRetentionInterval, options.Value.IdempotencyRetentionWindow)
+        : this(clock, leadership, scopeFactory, logger, options.Value.IdempotencyRetentionInterval, options.Value.IdempotencyRetentionWindow)
     {
     }
 
     internal IdempotencyKeyGc(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IIdempotencyKeyProvider idempotencyKeyProvider,
         ILogger<IdempotencyKeyGc> logger,
         TimeSpan? pollInterval = null,
         TimeSpan? retentionWindow = null)
-        : this(clock, leaseHolder, new StaticScopeFactory(idempotencyKeyProvider), logger, pollInterval, retentionWindow)
+        : this(clock, leadership, new StaticScopeFactory(idempotencyKeyProvider), logger, pollInterval, retentionWindow)
     {
     }
 
     private IdempotencyKeyGc(
         IClock clock,
-        ILeaseHolder leaseHolder,
+        ILeadershipGate leadership,
         IServiceScopeFactory scopeFactory,
         ILogger<IdempotencyKeyGc> logger,
         TimeSpan? pollInterval,
         TimeSpan? retentionWindow)
     {
         _clock = clock;
-        _leaseHolder = leaseHolder;
+        _leadership = leadership;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _pollInterval = pollInterval ?? TimeSpan.FromHours(1);
@@ -63,7 +62,7 @@ public sealed class IdempotencyKeyGc : BackgroundService
 
     public async Task ProcessRetentionAsync(CancellationToken ct)
     {
-        if (!await _leaseHolder.IsHeldAsync(LeaseName, ct))
+        if (!_leadership.IsActive)
         {
             return;
         }

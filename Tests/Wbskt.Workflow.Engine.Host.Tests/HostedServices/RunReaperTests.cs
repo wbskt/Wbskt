@@ -13,17 +13,17 @@ public sealed class RunReaperTests
     public async Task Tick_skips_when_lease_not_held()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: false);
+        var leadership = new FixedLeadershipGate(false);
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
+        var reaper = new RunReaper(new FixedClock(), leadership, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
 
         // Act
         await reaper.ProcessStuckRunsAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(["run-reaper"], leaseHolder.IsHeldCalls);
+        Assert.Equal(1, leadership.Checks);
         Assert.Equal(0, runProvider.GetStuckRunsCalls);
         Assert.Empty(cancellationService.Requests);
         Assert.Empty(finalizer.FinalizedRunIds);
@@ -38,11 +38,11 @@ public sealed class RunReaperTests
             CreateRun(51),
             CreateRun(52)
         };
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var runProvider = new RecordingRunProvider(runs);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
+        var reaper = new RunReaper(new FixedClock(), leadership, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
 
         // Act
         await reaper.ProcessStuckRunsAsync(CancellationToken.None);
@@ -58,11 +58,11 @@ public sealed class RunReaperTests
     public async Task Tick_does_nothing_when_no_stuck_runs()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var runProvider = new RecordingRunProvider([]);
         var cancellationService = new RecordingRunCancellationService();
         var finalizer = new RecordingRunFinalizer();
-        var reaper = new RunReaper(new FixedClock(), leaseHolder, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
+        var reaper = new RunReaper(new FixedClock(), leadership, runProvider, cancellationService, finalizer, NullLogger<RunReaper>.Instance);
 
         // Act
         await reaper.ProcessStuckRunsAsync(CancellationToken.None);
@@ -98,18 +98,17 @@ public sealed class RunReaperTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 
-    private sealed class RecordingLeaseHolder(bool isHeld) : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public List<string> IsHeldCalls { get; } = [];
+        public int Checks { get; private set; }
 
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
-
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct)
+        public bool IsActive
         {
-            IsHeldCalls.Add(leaseName);
-            return Task.FromResult(isHeld);
+            get
+            {
+                Checks++;
+                return isActive;
+            }
         }
     }
 

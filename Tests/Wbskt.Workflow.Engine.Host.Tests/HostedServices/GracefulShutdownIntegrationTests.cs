@@ -26,7 +26,7 @@ public sealed class GracefulShutdownIntegrationTests
             {
                 services.AddLogging();
                 services.AddWorkflowRuntime(context.Configuration);
-                services.AddSingleton<ILeaseHolder, AlwaysHoldsLeaseHolder>();
+                services.AddSingleton<ILeadershipGate, AlwaysActiveLeadershipGate>();
                 services.AddSingleton<WorkflowMetrics>();
 
                 services.AddScoped(_ => CreateBookmarkProvider());

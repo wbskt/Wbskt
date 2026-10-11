@@ -12,9 +12,9 @@ public sealed class IdempotencyKeyGcTests
     [Fact]
     public async Task Tick_deletes_in_batches_until_caught_up()
     {
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingIdempotencyKeyProvider([5000, 42]);
-        var gc = new IdempotencyKeyGc(new FixedClock(), leaseHolder, provider, NullLogger<IdempotencyKeyGc>.Instance);
+        var gc = new IdempotencyKeyGc(new FixedClock(), leadership, provider, NullLogger<IdempotencyKeyGc>.Instance);
 
         await gc.ProcessRetentionAsync(CancellationToken.None);
 
@@ -26,13 +26,13 @@ public sealed class IdempotencyKeyGcTests
     [Fact]
     public async Task Tick_skips_when_lease_not_held()
     {
-        var leaseHolder = new RecordingLeaseHolder(isHeld: false);
+        var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingIdempotencyKeyProvider([5000]);
-        var gc = new IdempotencyKeyGc(new FixedClock(), leaseHolder, provider, NullLogger<IdempotencyKeyGc>.Instance);
+        var gc = new IdempotencyKeyGc(new FixedClock(), leadership, provider, NullLogger<IdempotencyKeyGc>.Instance);
 
         await gc.ProcessRetentionAsync(CancellationToken.None);
 
-        Assert.Equal(["idempotency-gc"], leaseHolder.IsHeldCalls);
+        Assert.Equal(1, leadership.Checks);
         Assert.Empty(provider.DeleteCalls);
     }
 
@@ -41,17 +41,17 @@ public sealed class IdempotencyKeyGcTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 
-    private sealed class RecordingLeaseHolder(bool isHeld) : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public List<string> IsHeldCalls { get; } = [];
+        public int Checks { get; private set; }
 
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct)
+        public bool IsActive
         {
-            IsHeldCalls.Add(leaseName);
-            return Task.FromResult(isHeld);
+            get
+            {
+                Checks++;
+                return isActive;
+            }
         }
     }
 

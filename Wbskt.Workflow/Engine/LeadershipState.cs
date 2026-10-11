@@ -1,6 +1,6 @@
 namespace Wbskt.Workflow.Engine;
 
-// Singleton, updated only by LeaderElectionService (single writer) and read by SqlLeaseHolder,
+// Singleton, updated only by LeaderElectionService (single writer) and read by LeadershipGate,
 // EngineLeadershipCoordinator, LeaderOnlyMiddleware and the /healthz/ready endpoint. Keeping
 // leadership as in-memory state means those readers never need a DB round trip per check.
 public sealed class LeadershipState

@@ -17,7 +17,7 @@ public sealed class BookmarkSchedulerOrphanGcTests
         var scheduler = new BookmarkScheduler(
             new FixedClock(),
             new FixedHostIdentity(),
-            new AlwaysHeldLeaseHolder(),
+            new FixedLeadershipGate(true),
             new RecordingBranchProvider(),
             provider,
             new RecordingRunDispatcher(),
@@ -45,11 +45,18 @@ public sealed class BookmarkSchedulerOrphanGcTests
         public string HostId => "host-1";
     }
 
-    private sealed class AlwaysHeldLeaseHolder : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(true);
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct) => Task.FromResult(true);
+        public int Checks { get; private set; }
+
+        public bool IsActive
+        {
+            get
+            {
+                Checks++;
+                return isActive;
+            }
+        }
     }
 
     private sealed class RecordingBranchProvider : IBranchProvider

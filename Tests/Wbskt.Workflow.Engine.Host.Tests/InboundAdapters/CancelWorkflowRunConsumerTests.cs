@@ -43,18 +43,16 @@ public sealed class CancelWorkflowRunConsumerTests
     public async Task A_redelivered_command_cancels_the_run_once()
     {
         // The real cancellation service over a run row that changes as the engine works: the first
-        // delivery moves it to 'Cancelling', records it and announces it; a redelivery while it is still
-        // cancelling, and another after it reached 'Cancelled', record and announce nothing more.
+        // delivery moves it to 'Cancelling' and records it; a redelivery while it is still cancelling, and
+        // another after it reached 'Cancelled', record nothing more.
         var run = new StatefulRun("Running");
         var history = new Mock<IHistoryEventProvider>();
-        var bus = new Mock<IEventBus>();
         var service = new RunCancellationService(
             run.Provider.Object,
             history.Object,
             new MemoryCache(new MemoryCacheOptions()),
             Mock.Of<IClock>(c => c.UtcNow == new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)),
-            Mock.Of<IServiceProvider>(),
-            eventBus: bus.Object);
+            Mock.Of<IServiceProvider>());
         var consumer = new CancelWorkflowRunConsumer(service);
 
         await consumer.Consume(Context(42, "operator"));
@@ -68,7 +66,6 @@ public sealed class CancelWorkflowRunConsumerTests
         Assert.Equal("Cancelled", run.Status);
 
         history.Verify(h => h.InsertBatchAsync(It.IsAny<IReadOnlyCollection<HistoryEventRow>>(), It.IsAny<CancellationToken>()), Times.Once);
-        bus.Verify(b => b.PublishAsync(It.IsAny<WorkflowRunCancellationRequestedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -88,8 +88,8 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
         services.AddSingleton<IHostIdentity, HostIdentity>();
-        services.AddSingleton<ILeaseHolder, AlwaysHoldsLeaseHolder>();
-        // The engine host re-registers ILeaseHolder as SqlLeaseHolder (last registration wins);
+        services.AddSingleton<ILeadershipGate, AlwaysActiveLeadershipGate>();
+        // The engine host re-registers ILeadershipGate as LeadershipGate (last registration wins);
         // Management/tests keep the always-true default since they never run engine hosted services.
         services.AddSingleton<LeadershipState>();
         services.AddSingleton<WorkflowMetrics>();

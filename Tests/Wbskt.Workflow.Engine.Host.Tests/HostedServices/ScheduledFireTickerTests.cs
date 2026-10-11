@@ -13,16 +13,16 @@ public sealed class ScheduledFireTickerTests
     public async Task Tick_no_lease_skips()
     {
         // Arrange
-        var leaseHolder = new RecordingLeaseHolder(isHeld: false);
+        var leadership = new FixedLeadershipGate(false);
         var provider = new RecordingScheduledFireProvider([]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
 
         // Act
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(["schedule-tick"], leaseHolder.IsHeldCalls);
+        Assert.Equal(1, leadership.Checks);
         Assert.Equal(0, provider.LeaseDueCalls);
         Assert.Empty(inboundHub.Events);
     }
@@ -32,10 +32,10 @@ public sealed class ScheduledFireTickerTests
     {
         // Arrange
         var fire = CreateFire(41, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
 
         // Act
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
@@ -63,9 +63,9 @@ public sealed class ScheduledFireTickerTests
         var at = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc);
         var first = new RecordingInboundHub();
         var second = new RecordingInboundHub();
-        await new ScheduledFireTicker(new FixedClock(), new RecordingLeaseHolder(isHeld: true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), first, NullLogger<ScheduledFireTicker>.Instance)
+        await new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), first, NullLogger<ScheduledFireTicker>.Instance)
             .ProcessScheduledFiresAsync(CancellationToken.None);
-        await new ScheduledFireTicker(new FixedClock(), new RecordingLeaseHolder(isHeld: true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), second, NullLogger<ScheduledFireTicker>.Instance)
+        await new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), new RecordingScheduledFireProvider([CreateFire(45, "0 */5 * * * *", at)]), second, NullLogger<ScheduledFireTicker>.Instance)
             .ProcessScheduledFiresAsync(CancellationToken.None);
 
         Assert.Equal(Assert.Single(first.Events).InboundEventId, Assert.Single(second.Events).InboundEventId);
@@ -79,10 +79,10 @@ public sealed class ScheduledFireTickerTests
     {
         // Arrange
         var fire = CreateFire(42, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
 
         // Act
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
@@ -99,7 +99,7 @@ public sealed class ScheduledFireTickerTests
         // stop a recurring schedule after its first fire.
         var fire = CreateFire(46, "0 */5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Unspecified));
         var provider = new RecordingScheduledFireProvider([fire]);
-        var ticker = new ScheduledFireTicker(new FixedClock(), new RecordingLeaseHolder(isHeld: true), provider, new RecordingInboundHub(), NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), new FixedLeadershipGate(true), provider, new RecordingInboundHub(), NullLogger<ScheduledFireTicker>.Instance);
 
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
 
@@ -112,10 +112,10 @@ public sealed class ScheduledFireTickerTests
         // Arrange: a standard 5-field cron (no seconds) must keep firing after the first tick,
         // not be treated as unparseable and deleted.
         var fire = CreateFire(44, "*/5 * * * *", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
 
         // Act
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
@@ -131,10 +131,10 @@ public sealed class ScheduledFireTickerTests
         // Arrange: a genuinely malformed cron must not be silently deleted (that hides the bug) —
         // it should be left alone so it's visible and recoverable.
         var fire = CreateFire(45, "not a cron expression", new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
 
         // Act
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
@@ -149,10 +149,10 @@ public sealed class ScheduledFireTickerTests
     {
         // Arrange
         var fire = CreateFire(43, string.Empty, new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
-        var leaseHolder = new RecordingLeaseHolder(isHeld: true);
+        var leadership = new FixedLeadershipGate(true);
         var provider = new RecordingScheduledFireProvider([fire]);
         var inboundHub = new RecordingInboundHub();
-        var ticker = new ScheduledFireTicker(new FixedClock(), leaseHolder, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
+        var ticker = new ScheduledFireTicker(new FixedClock(), leadership, provider, inboundHub, NullLogger<ScheduledFireTicker>.Instance);
 
         // Act
         await ticker.ProcessScheduledFiresAsync(CancellationToken.None);
@@ -182,18 +182,17 @@ public sealed class ScheduledFireTickerTests
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 
-    private sealed class RecordingLeaseHolder(bool isHeld) : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public List<string> IsHeldCalls { get; } = [];
+        public int Checks { get; private set; }
 
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
-
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct)
+        public bool IsActive
         {
-            IsHeldCalls.Add(leaseName);
-            return Task.FromResult(isHeld);
+            get
+            {
+                Checks++;
+                return isActive;
+            }
         }
     }
 

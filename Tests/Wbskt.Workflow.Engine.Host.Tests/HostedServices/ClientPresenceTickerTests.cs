@@ -170,7 +170,7 @@ public sealed class ClientPresenceTickerTests
 
         return new ClientPresenceTicker(
             new FixedClock(Now),
-            new FixedLeaseHolder(isLeader),
+            new FixedLeadershipGate(isLeader),
             services.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<ClientPresenceTicker>.Instance,
             Options.Create(new WorkflowEngineOptions()));
@@ -202,11 +202,18 @@ public sealed class ClientPresenceTickerTests
         public DateTime UtcNow => now;
     }
 
-    private sealed class FixedLeaseHolder(bool isHeld) : ILeaseHolder
+    private sealed class FixedLeadershipGate(bool isActive) : ILeadershipGate
     {
-        public Task<bool> TryAcquireAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
-        public Task ReleaseAsync(string leaseName, CancellationToken ct) => Task.CompletedTask;
-        public Task<bool> IsHeldAsync(string leaseName, CancellationToken ct) => Task.FromResult(isHeld);
+        public int Checks { get; private set; }
+
+        public bool IsActive
+        {
+            get
+            {
+                Checks++;
+                return isActive;
+            }
+        }
     }
 
     private sealed class RecordingInboundHub : IInboundHub

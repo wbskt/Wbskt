@@ -55,9 +55,9 @@ public static class Program
         builder.Services.AddHttpClient("workflow-telegram", client => client.Timeout = TimeSpan.FromSeconds(30));
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddWorkflowEngine(builder.Configuration);
-        // Re-registers ILeaseHolder (AddWorkflowEngine defaults to AlwaysHoldsLeaseHolder for
+        // Re-registers ILeadershipGate (AddWorkflowEngine defaults to always-active for
         // tests/Management) - last registration wins, so the engine host resolves the real one.
-        builder.Services.AddSingleton<ILeaseHolder, SqlLeaseHolder>();
+        builder.Services.AddSingleton<ILeadershipGate, LeadershipGate>();
         builder.Services.AddScoped<IClientReferenceProvider, ClientReferenceProvider>();
         builder.Services.AddScoped<IClientCommandTargetProvider, ClientCommandTargetProvider>();
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IClientReferenceProvider>>(ReferenceType.Client);
@@ -73,7 +73,7 @@ public static class Program
         builder.Services.AddSingleton<RunRecoveryService>();
         builder.Services.AddSingleton<IEngineStartupTracker>(sp => sp.GetRequiredService<RunRecoveryService>());
         // LeaderElectionService is registered first so LeadershipState is meaningful before any
-        // other hosted service starts checking ILeaseHolder.IsHeldAsync. RunRecoveryService is
+        // other hosted service starts checking ILeadershipGate.IsActive. RunRecoveryService is
         // deliberately NOT a hosted service here - EngineLeadershipCoordinator calls its
         // RecoverAsync directly, only once this instance becomes leader.
         builder.Services.AddHostedService<LeaderElectionService>();

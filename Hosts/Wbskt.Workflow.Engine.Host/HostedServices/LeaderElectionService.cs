@@ -7,7 +7,7 @@ using Wbskt.Workflow.Engine;
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 // Registered first (see Program.cs) so LeadershipState is meaningful before any other hosted
-// service starts checking ILeaseHolder.IsHeldAsync. Renews the engine-leader lease on a fixed
+// service starts checking ILeadershipGate.IsActive. Renews the engine-leader lease on a fixed
 // interval; a leader that fails to renew stops the process rather than risk two engines running
 // active work at once - `restart: unless-stopped` brings it back as a standby.
 public sealed class LeaderElectionService : BackgroundService
