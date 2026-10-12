@@ -2,6 +2,10 @@
 -- keeps the stored one. A change to the settings or the secret makes the last test describe
 -- something that is no longer saved, so it is cleared; a new secret also clears what that test
 -- learned and stamps SecretRotatedAt.
+--
+-- @ExpectedUpdatedAt is the UpdatedAt the caller read. The new secret was sealed from the secret
+-- saved then, so if another edit landed in between, writing would silently undo it: nothing is
+-- written and the row count (0) says so.
 CREATE PROCEDURE dbo.Integration_Update
     @Id               INT,
     @WorkspaceId      INT,
@@ -11,7 +15,8 @@ CREATE PROCEDURE dbo.Integration_Update
     @SecretCiphertext VARBINARY(MAX) = NULL,
     @KeyId            TINYINT = NULL,
     @SecretHint       NVARCHAR(100) = NULL,
-    @SecretRotated    BIT
+    @SecretRotated    BIT,
+    @ExpectedUpdatedAt DATETIME2(3)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -30,6 +35,9 @@ BEGIN
         LastTestError    = CASE WHEN @ConfigChanged = 1 OR @SecretRotated = 1 THEN NULL ELSE LastTestError END,
         UpdatedAt        = SYSUTCDATETIME()
     WHERE Id = @Id
-      AND WorkspaceId = @WorkspaceId;
+      AND WorkspaceId = @WorkspaceId
+      AND UpdatedAt = @ExpectedUpdatedAt;
+
+    SELECT @@ROWCOUNT;
 END
 GO

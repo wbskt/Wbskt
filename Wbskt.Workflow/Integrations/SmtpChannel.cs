@@ -7,6 +7,7 @@ using MimeKit;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Runtime;
+using static Wbskt.Workflow.Integrations.IntegrationErrors;
 
 namespace Wbskt.Workflow.Integrations;
 
@@ -76,7 +77,8 @@ internal sealed class SmtpChannel(IOutboundAddressGuard addressGuard, IOptions<I
         var settings = (SmtpSettings)integration.Settings;
 
         // The guard vets http(s) URLs; the relay's host and port are put in one only to be resolved.
-        var decision = await addressGuard.EvaluateAsync(new Uri($"http://{settings.Host}:{settings.Port}/"), ct);
+        // UriBuilder, not interpolation: a bare IPv6 literal (which the settings accept) needs brackets.
+        var decision = await addressGuard.EvaluateAsync(new UriBuilder(Uri.UriSchemeHttp, settings.Host, settings.Port!.Value).Uri, ct);
         if (!decision.Allowed)
         {
             return new ChannelFailure(ChannelFailureKind.BlockedTarget, $"The mail relay is at an address this engine may not call ({decision.Reason}).", false);
@@ -132,7 +134,4 @@ internal sealed class SmtpChannel(IOutboundAddressGuard addressGuard, IOptions<I
             return new ChannelFailure(ChannelFailureKind.NetworkError, $"Could not reach the mail relay at {settings.Host}:{settings.Port}.", true);
         }
     }
-
-    private static ChannelResult Scrubbed(ChannelResult result, ResolvedIntegration integration) =>
-        result with { Message = IntegrationErrors.Scrub(result.Message, integration.Secrets) };
 }

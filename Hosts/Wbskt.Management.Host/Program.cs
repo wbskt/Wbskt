@@ -202,7 +202,9 @@ public static class Program
             var testWindow = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:IntegrationTest:WindowMinutes", 1));
             options.AddPolicy(RateLimitPolicies.IntegrationTest, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.GetRouteValue("workspaceRef")?.ToString() ?? "unknown",
+                    // Normalised: the route accepts any GUID spelling (case, braces, no dashes), and
+                    // each raw spelling would otherwise get a window of its own.
+                    partitionKey: Guid.TryParse(httpContext.GetRouteValue("workspaceRef")?.ToString(), out var workspaceRef) ? workspaceRef.ToString("N") : "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = testPermitLimit, Window = testWindow, QueueLimit = 0 }));
         });
 

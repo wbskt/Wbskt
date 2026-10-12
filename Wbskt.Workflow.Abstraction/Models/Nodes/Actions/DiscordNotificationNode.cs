@@ -8,7 +8,7 @@ public sealed record DiscordNotificationNode : BaseActionNode, IIntegrationStep
     public required DiscordConfig Config { get; init; }
 
     [JsonIgnore]
-    public Guid? IntegrationRef => Config?.IntegrationRef;
+    public Guid? IntegrationRef => Config?.IntegrationRef is { } r && r != Guid.Empty ? r : null;
 
     [JsonIgnore]
     public override string Kind => NodeKind.ActionDiscord;

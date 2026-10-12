@@ -23,6 +23,10 @@ internal static class IntegrationErrors
 
         return text.Length <= MaxLength ? text : text[..(MaxLength - 1)] + "…";
     }
+
+    /// <summary><paramref name="result"/> with its message scrubbed of <paramref name="integration"/>'s secrets.</summary>
+    public static ChannelResult Scrubbed(ChannelResult result, ResolvedIntegration integration) =>
+        result with { Message = Scrub(result.Message, integration.Secrets) };
 }
 
 /// <summary>

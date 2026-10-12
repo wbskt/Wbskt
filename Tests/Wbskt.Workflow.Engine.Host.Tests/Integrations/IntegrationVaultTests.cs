@@ -219,6 +219,83 @@ public sealed class IntegrationVaultTests
         Assert.Null(channel.Tested);
     }
 
+    [Theory]
+    [InlineData("https://ha.example.test", "https://attacker.example.test")]
+    [InlineData("https://ha.example.test", "http://ha.example.test")]
+    [InlineData("https://ha.example.test", "https://ha.example.test:8443")]
+    public void Moving_an_http_auth_integration_to_another_origin_needs_its_secret_again(string savedUrl, string newUrl)
+    {
+        var vault = Vault(Options(insecure: true));
+        var saved = ToJson(new { baseUrl = savedUrl, mode = "bearer" });
+        var created = vault.Seal(Request("httpAuth", saved, ToJson(new { token = "saved-token-123456" }))).Value;
+
+        var moved = vault.Seal(Moved("httpAuth", ToJson(new { baseUrl = newUrl, mode = "bearer" }), null, created.Secret, saved));
+
+        Assert.Equal(IntegrationShape.SecretInvalid, moved.Error.Code);
+        Assert.Contains("not carried over", moved.Error.Message);
+        Assert.DoesNotContain("saved-token-123456", moved.Error.Message);
+    }
+
+    [Fact]
+    public void Moving_with_the_secret_given_again_seals_only_the_new_one()
+    {
+        var vault = Vault();
+        var saved = ToJson(new { serverUrl = "https://ntfy.sh" });
+        var created = vault.Seal(Request("ntfy", saved, ToJson(new { topic = "alerts", accessToken = "tk_saved_000000" }))).Value;
+
+        var moved = vault.Seal(Moved("ntfy", ToJson(new { serverUrl = "https://ntfy.example.test" }), ToJson(new { topic = "alerts" }), created.Secret, saved)).Value;
+
+        Assert.True(moved.SecretChanged);
+        Assert.Equal(new IntegrationSecrets { Topic = "alerts" }, vault.Open(WorkspaceId, RefId, IntegrationType.Ntfy, moved.Secret).Value);
+    }
+
+    [Fact]
+    public void A_new_path_on_the_same_origin_keeps_the_secret()
+    {
+        var vault = Vault();
+        var saved = ToJson(new { baseUrl = "https://api.example.test/v1", mode = "bearer" });
+        var created = vault.Seal(Request("httpAuth", saved, ToJson(new { token = "saved-token-123456" }))).Value;
+
+        var resealed = vault.Seal(Moved("httpAuth", ToJson(new { baseUrl = "https://API.example.test:443/v2", mode = "bearer" }), null, created.Secret, saved)).Value;
+
+        Assert.False(resealed.SecretChanged);
+        Assert.Equal("saved-token-123456", vault.Open(WorkspaceId, RefId, IntegrationType.HttpAuth, resealed.Secret).Value.Token);
+    }
+
+    [Fact]
+    public void Moving_a_mail_relay_to_another_host_or_port_needs_its_password_again()
+    {
+        var vault = Vault();
+        var saved = ToJson(new { host = "smtp.example.test", userName = "svc", fromAddress = "a@example.test" });
+        var created = vault.Seal(Request("smtp", saved, ToJson(new { password = "relay-password-123" }))).Value;
+
+        var otherHost = vault.Seal(Moved("smtp", ToJson(new { host = "evil.example.test", userName = "svc", fromAddress = "a@example.test" }), null, created.Secret, saved));
+        var otherPort = vault.Seal(Moved("smtp", ToJson(new { host = "smtp.example.test", port = 465, userName = "svc", fromAddress = "a@example.test" }), null, created.Secret, saved));
+        var sameRelay = vault.Seal(Moved("smtp", ToJson(new { host = "SMTP.example.test", userName = "svc", fromAddress = "b@example.test" }), null, created.Secret, saved));
+
+        Assert.Equal(IntegrationShape.SecretInvalid, otherHost.Error.Code);
+        Assert.Equal(IntegrationShape.SecretInvalid, otherPort.Error.Code);
+        Assert.True(sameRelay.IsSuccess);
+    }
+
+    [Fact]
+    public async Task A_test_against_another_server_never_sends_the_saved_secret()
+    {
+        var vault = Vault();
+        var saved = ToJson(new { baseUrl = "https://ha.example.test", mode = "bearer" });
+        var sealedSecret = vault.Seal(Request("httpAuth", saved, ToJson(new { token = "saved-token-123456" }))).Value.Secret;
+        var channel = new RecordingChannel(IntegrationType.HttpAuth, ChannelResult.Success());
+        var probe = new IntegrationProbeRequest(WorkspaceId, RefId, "httpAuth", null, ToJson(new { baseUrl = "https://attacker.example.test", mode = "bearer" }), null, sealedSecret, null, saved);
+
+        var result = await Vault(Options(), channel).TestAsync(probe, CancellationToken.None);
+
+        Assert.Equal(IntegrationShape.SecretInvalid, result.Error.Code);
+        Assert.Null(channel.Tested);
+    }
+
+    private static IntegrationSealRequest Moved(string type, JsonElement? config, JsonElement? secrets, SealedSecret existing, JsonElement existingConfig) =>
+        new(WorkspaceId, RefId, type, null, config, secrets, existing, existingConfig);
+
     // ----------------------------------------------------------------- glue
 
     private static IntegrationVault Vault(IntegrationOptions? options = null, params IIntegrationChannel[] channels)

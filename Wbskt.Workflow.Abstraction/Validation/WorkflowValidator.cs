@@ -360,7 +360,7 @@ public sealed class WorkflowValidator
     {
         foreach (var node in def.Nodes)
         {
-            if (node is IIntegrationStep step && IntegrationTypes.IsRequiredFor(node.Kind) && (step.IntegrationRef ?? Guid.Empty) == Guid.Empty)
+            if (node is IIntegrationStep step && IntegrationTypes.IsRequiredFor(node.Kind) && step.IntegrationRef is null)
             {
                 issues.Add(new ValidationIssue(
                     ValidationSeverity.Error,
@@ -409,7 +409,7 @@ public sealed class WorkflowValidator
 
         // Relative to what? Only an integration's base URL can answer that. A leading '/' is relative
         // too, though on Unix Uri reads it as an absolute file path.
-        if (config.IntegrationRef is null && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
+        if (node.IntegrationRef is null && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
         {
             issues.Add(new ValidationIssue(
                 ValidationSeverity.Error,

@@ -39,8 +39,9 @@ internal sealed class IntegrationProvider(IConfiguration configuration) : BaseSq
             p.AddWithValue("@MaxPerWorkspace", maxPerWorkspace);
         }, ct);
 
-    public Task UpdateAsync(int workspaceId, int id, string name, string configJson, bool configChanged, byte[]? ciphertext, byte? keyId, string? secretHint, bool secretRotated, CancellationToken ct) =>
-        ExecuteNonQueryAsync("dbo.Integration_Update", p =>
+    public async Task<bool> UpdateAsync(int workspaceId, int id, string name, string configJson, bool configChanged, byte[]? ciphertext, byte? keyId, string? secretHint, bool secretRotated, DateTime expectedUpdatedAt, CancellationToken ct)
+    {
+        var updated = await ExecuteScalarAsync<object>("dbo.Integration_Update", p =>
         {
             p.AddWithValue("@Id", id);
             p.AddWithValue("@WorkspaceId", workspaceId);
@@ -51,7 +52,11 @@ internal sealed class IntegrationProvider(IConfiguration configuration) : BaseSq
             p.AddWithValue("@KeyId", keyId is null ? DBNull.Value : keyId.Value);
             p.AddWithValue("@SecretHint", (object?)secretHint ?? DBNull.Value);
             p.AddWithValue("@SecretRotated", secretRotated);
+            p.Add("@ExpectedUpdatedAt", SqlDbType.DateTime2).Value = expectedUpdatedAt;
         }, ct);
+
+        return updated is not null && Convert.ToInt32(updated) > 0;
+    }
 
     public async Task<bool> RecordTestAsync(int id, DateTime expectedUpdatedAt, bool ok, string? code, string? error, string? metadata, CancellationToken ct)
     {

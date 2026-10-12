@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Engine.Contracts;
+using static Wbskt.Workflow.Integrations.IntegrationErrors;
 
 namespace Wbskt.Workflow.Integrations;
 
@@ -107,7 +108,4 @@ internal sealed class TelegramChannel(IHttpClientFactory httpClientFactory, IOpt
     private HttpClient Client() => httpClientFactory.CreateClient(HttpChannelSupport.ClientName);
 
     private string Url(string token, string method) => $"{options.Value.TelegramApiBaseUrl.TrimEnd('/')}/bot{token}/{method}";
-
-    private static ChannelResult Scrubbed(ChannelResult result, ResolvedIntegration integration) =>
-        result with { Message = IntegrationErrors.Scrub(result.Message, integration.Secrets) };
 }

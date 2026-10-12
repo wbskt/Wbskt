@@ -35,6 +35,10 @@ internal sealed class IntegrationService(
 
     private static readonly Error NameTaken = Error.Conflict("INTEGRATION_NAME_TAKEN", "Another integration in this workspace already has that name.");
 
+    private static readonly Error Changed = Error.Conflict(
+        "INTEGRATION_CHANGED",
+        "This integration was changed by someone else while you were saving. Reload it and try again.");
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private int MaxPerWorkspace => configuration.GetValue("Integrations:MaxPerWorkspace", DefaultMaxPerWorkspace);
@@ -173,7 +177,8 @@ internal sealed class IntegrationService(
                 existing.Preset is { } preset ? IntegrationTypes.NameOf(preset) : null,
                 config,
                 request.Secrets,
-                new SealedSecret(existing.SecretCiphertext, existing.KeyId)), ct);
+                new SealedSecret(existing.SecretCiphertext, existing.KeyId),
+                JsonSerializer.Deserialize<JsonElement>(existing.ConfigJson)), ct);
             if (sealedResult.IsFailure)
             {
                 return Result<IntegrationResponse>.Failure(sealedResult.Error);
@@ -183,11 +188,17 @@ internal sealed class IntegrationService(
             configJson = resealed.Config.GetRawText();
         }
 
+        // Nothing to save: writing anyway would move UpdatedAt and drop a test result still in flight.
+        if (newName == existing.Name && resealed is null)
+        {
+            return Result<IntegrationResponse>.Success(Map(existing));
+        }
+
         bool configChanged = configJson != existing.ConfigJson;
         bool secretRotated = resealed?.SecretChanged == true;
         try
         {
-            await provider.UpdateAsync(
+            bool updated = await provider.UpdateAsync(
                 workspaceId,
                 existing.Id,
                 newName,
@@ -197,7 +208,12 @@ internal sealed class IntegrationService(
                 resealed?.Secret.KeyId,
                 resealed?.SecretHint,
                 secretRotated,
+                existing.UpdatedAt,
                 ct);
+            if (!updated)
+            {
+                return Result<IntegrationResponse>.Failure(Changed);
+            }
         }
         catch (SqlException ex) when (ex.Number is UniqueViolation or UniqueIndexViolation)
         {
@@ -309,7 +325,8 @@ internal sealed class IntegrationService(
             config,
             request.Secrets,
             saved is null ? null : new SealedSecret(saved.SecretCiphertext, saved.KeyId),
-            request.Options is null ? null : new IntegrationTestOptions(request.Options.ChatId, request.Options.SendTo)), ct);
+            request.Options is null ? null : new IntegrationTestOptions(request.Options.ChatId, request.Options.SendTo),
+            saved is null ? null : JsonSerializer.Deserialize<JsonElement>(saved.ConfigJson)), ct);
         if (probe.IsFailure)
         {
             return Result<IntegrationTestResponse>.Failure(probe.Error);

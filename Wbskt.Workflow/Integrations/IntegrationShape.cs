@@ -240,6 +240,22 @@ internal static partial class IntegrationShape
         return primary.Length >= 12 ? "••••" + primary[^4..] : "••••";
     }
 
+    /// <summary>
+    /// Where the settings send the credential: the HTTP origin of an API or ntfy server, or an SMTP
+    /// relay's host and port. Null for types whose destination is the secret itself (a Telegram token
+    /// only goes to Telegram, a Discord webhook URL is the credential).
+    /// </summary>
+    public static string? Destination(IntegrationSettings settings) => settings switch
+    {
+        HttpAuthSettings http => Origin(http.BaseUrl),
+        NtfySettings ntfy => Origin(ntfy.ServerUrl),
+        SmtpSettings smtp => $"{smtp.Host?.ToLowerInvariant()}:{smtp.Port}",
+        _ => null
+    };
+
+    private static string? Origin(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.GetLeftPart(UriPartial.Authority).ToLowerInvariant() : url;
+
     private static Result<IntegrationSettings> Smtp(SmtpSettings smtp, IntegrationOptions options)
     {
         string? host = smtp.Host?.Trim();
