@@ -7,6 +7,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
@@ -282,24 +283,12 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         try
         {
-            await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, cancellationToken);
-            _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
-
             // The workspace's policies, devices and workflows live in the main database, which the
-            // management host retires on this event. Without it they would keep running for a
-            // workspace nobody can see or administer any more.
-            //
-            // Caught separately: the workspace is already gone, so reporting the request as failed
-            // would only invite a retry that 404s. The error log is the signal to retire it by hand
-            // (EXEC dbo.Workspace_Retire on the main database).
-            try
-            {
-                await _eventBus.PublishAsync(new WorkspaceDeletedEvent(workspaceId, callerId), cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Deleted workspace ID {WorkspaceId} but could not publish WorkspaceDeletedEvent; its devices, policies and workflows are still live until it is retired.", workspaceId);
-            }
+            // management host retires on this event. It is written to the outbox in the delete's own
+            // transaction (see OutboxDispatcher), so a broker outage or a restart right after the
+            // delete delays the retirement instead of leaving them running.
+            await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, OutboxMessage.Create(new WorkspaceDeletedEvent(workspaceId, callerId)), cancellationToken);
+            _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
             return Result.Success();
         }
         catch (Exception ex)
