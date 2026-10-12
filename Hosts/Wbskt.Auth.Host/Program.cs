@@ -1,12 +1,5 @@
-using System.Net;
-using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using StackExchange.Redis;
 using Microsoft.Extensions.Options;
 using Wbskt.Auth.Host.Controllers;
@@ -24,32 +17,17 @@ using Wbskt.Infrastructure.Email;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Mappers;
-using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Infrastructure.Telemetry;
 using Wbskt.Primitives;
-using Wbskt.Primitives.Constants;
 
 namespace Wbskt.Auth.Host;
 
 public static class Program
 {
-    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
-
     public static async Task Main(string[] args)
     {
-        Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
-
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-        {
-            Args = args,
-            ContentRootPath = Directory.GetCurrentDirectory()
-        });
-        
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "email.json");
-
-        builder.Host.UseSerilog(builder.CreateSerilog());
+        var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json", "email.json");
 
         // Add services to the container.
         builder.Services.AddSingleton<AuthMetrics>();
@@ -120,36 +98,15 @@ public static class Program
         })
         .AddWbsktJwtBearer();
 
-        builder.Services.AddAuthorization(options =>
-        {
-            // Default-deny, matching the management host. Every controller here is already correctly
-            // attributed - AuthController's four public methods carry [AllowAnonymous] individually,
-            // logout-all carries [Authorize], and the other three controllers are class-level
-            // [Authorize] - so this changes no existing behaviour. It exists for the next endpoint
-            // added to the host that owns tenants, roles and permissions, which would otherwise ship
-            // anonymous by default.
-            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
-        });
+        // Default-deny: the host that owns tenants, roles and permissions must not ship an endpoint
+        // anonymous by accident. Sign-in and the other public calls say [AllowAnonymous].
+        builder.Services.AddDefaultDenyAuthorization();
 
-        builder.Services.AddCors(options =>
-        {
-            options.AddDefaultPolicy(policy =>
-            {
-                var allowedOrigins = builder.Configuration.GetCorsAllowedOrigins();
-                // Credentials, so a console on another origin can send and receive the refresh cookie
-                // (see RefreshTokenCookie). That rules out a literal "*", hence the predicate below.
-                if (allowedOrigins is { Length: > 0 })
-                {
-                    policy.SetIsOriginAllowed(allowedOrigins.IsCorsOriginAllowed).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-                }
-                else if (builder.Environment.IsDevelopment())
-                {
-                    policy.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-                }
-            });
-        });
+        // With credentials, so a console on another origin can send the refresh cookie (see RefreshTokenCookie).
+        builder.Services.AddWbsktCors(builder.Configuration, builder.Environment);
+        builder.Services.AddWbsktForwardedHeaders(builder.Configuration);
 
-        // Partitioned on the caller's IP, which UseForwardedHeaders has already resolved to the real
+        // Partitioned on the caller's IP, which the forwarded headers have already resolved to the real
         // client address rather than Traefik's. Unauthenticated endpoints have no better partition
         // key available, so this is a brake on bulk attempts rather than per-account lockout.
         //
@@ -176,17 +133,17 @@ public static class Program
                     }));
 
             // Everything that checks or sets a password, and register, which creates an account.
-            AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.Authentication, "Authentication", defaultPermitLimit: 10);
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.Authentication, "Authentication", defaultPermitLimit: 10);
 
             // Refresh and logout. Access tokens last minutes, so every signed-in console refreshes
             // several times an hour, and a shared office address would otherwise spend the login
             // budget on routine refreshes. Neither costs a password hash and both need a 64-byte
             // random token, so there is nothing for a tighter limit to protect.
-            AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.TokenRefresh, "TokenRefresh", defaultPermitLimit: 120);
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.TokenRefresh, "TokenRefresh", defaultPermitLimit: 120);
 
             // Verify-email and resend-verification. Resend sends mail, so it stays tight; the
             // per-address cooldown (MailCooldown) is what protects the recipient.
-            AddPerIpPolicy(options, builder.Configuration, RateLimitPolicies.EmailVerification, "EmailVerification", defaultPermitLimit: 10);
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.EmailVerification, "EmailVerification", defaultPermitLimit: 10);
         });
 
         // Readiness probes. The bus check is registered by AddMassTransit itself (masstransit-bus,
@@ -211,24 +168,7 @@ public static class Program
 
         await app.RunStartupTasksAsync();
 
-        // A nested `KnownProxies = { }` initializer is a no-op (it Adds nothing, the loopback
-        // defaults survive) - the lists must be populated explicitly or Traefik's X-Forwarded-*
-        // headers get silently ignored. Trust Traefik's own pinned addresses specifically rather
-        // than clearing the lists (which would trust X-Forwarded-* from any container reachable
-        // on the docker network, not just Traefik). These addresses must match the static
-        // ipv4_address pinned to the traefik service on the edge/backend networks in
-        // deploy/compose/docker-compose.yml.
-        var forwardedHeadersOptions = new ForwardedHeadersOptions
-        {
-            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-        };
-        forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("172.28.0.2"));
-        forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("172.28.1.2"));
-        app.UseForwardedHeaders(forwardedHeadersOptions);
-
-        app.UseMiddleware<GlobalExceptionMiddleware>();
-
-        app.UseCors();
+        app.UseWbsktPipeline();
 
         if (app.Configuration.IsApiDocsEnabled(app.Environment))
         {
@@ -239,34 +179,10 @@ public static class Program
             app.MapCustomScalarApiReference();
         }
 
-        app.UseAuthentication();
-        app.UseMiddleware<IdentityMiddleware>();
-        app.UseAuthorization();
-
-        // After UseForwardedHeaders so the partition key is the real client IP, not the proxy's.
-        app.UseRateLimiter();
-
         app.MapWbsktHealthChecks();
         app.MapWbsktJwks();
         app.MapControllers();
 
         await app.RunAsync();
-    }
-
-    /// <summary>A fixed window per client IP, read from <c>RateLimiting:{section}</c>.</summary>
-    private static void AddPerIpPolicy(RateLimiterOptions options, IConfiguration configuration, string policy, string section, int defaultPermitLimit)
-    {
-        var permitLimit = configuration.GetValue($"RateLimiting:{section}:PermitLimit", defaultPermitLimit);
-        var window = TimeSpan.FromMinutes(configuration.GetValue($"RateLimiting:{section}:WindowMinutes", 1));
-
-        options.AddPolicy(policy, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = permitLimit,
-                    Window = window,
-                    QueueLimit = 0
-                }));
     }
 }

@@ -1,15 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Serilog;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
-using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
-using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives;
-using Wbskt.Primitives.Constants;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Socket.Host.HostedServices;
 using Wbskt.Socket.Host.Infrastructure;
@@ -22,22 +17,9 @@ namespace Wbskt.Socket.Host;
 
 public static class Program
 {
-    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
-
     public static async Task Main(string[] args)
     {
-        Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
-
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-        {
-            Args = args,
-            ContentRootPath = Directory.GetCurrentDirectory()
-        });
-        
-        builder.AddSharedConfiguration("serilog.json", "rabbitmq.json");
-
-        builder.Host.UseSerilog(builder.CreateSerilog());
+        var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "rabbitmq.json");
         builder.Services.AddSingleton<SocketMetrics>();
         builder.AddWbsktTelemetry(SocketMetrics.MeterName);
         
@@ -74,12 +56,9 @@ public static class Program
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddWbsktJwtBearer(x => x.Events = new JwtBearerEvents().AcceptQueryToken("/ws"));
 
-        builder.Services.AddAuthorization(options =>
+        // Default-deny, so that a controller added later cannot ship anonymous by accident.
+        builder.Services.AddDefaultDenyAuthorization(options =>
         {
-            // Default-deny, matching the management host, so that a controller added later cannot
-            // ship anonymous by accident.
-            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
-
             // Issuer and audience already rule out a user token (only the management host signs for
             // wbskt-socket); the type claim stays as a second, independent guard.
             options.AddPolicy(ClientClaims.ClientOnlyPolicy, policy => policy
@@ -98,7 +77,7 @@ public static class Program
 
         await app.RunStartupTasksAsync();
 
-        app.UseMiddleware<GlobalExceptionMiddleware>();
+        app.UseWbsktPipeline();
 
         // The server pings every interval and drops a connection that has not answered within the
         // timeout. Without the timeout, a device that loses power or Wi-Fi leaves a half-open socket
@@ -110,9 +89,6 @@ public static class Program
             KeepAliveInterval = TimeSpan.FromSeconds(app.Configuration.GetValue("WebSockets:KeepAliveIntervalSeconds", 30)),
             KeepAliveTimeout = TimeSpan.FromSeconds(app.Configuration.GetValue("WebSockets:KeepAliveTimeoutSeconds", 30))
         });
-
-        app.UseAuthentication();
-        app.UseAuthorization();
 
         app.Map("/ws", async (HttpContext context, ISocketHandler handler) =>
         {
