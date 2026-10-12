@@ -16,15 +16,6 @@ public static class JwtServiceCollectionExtensions
     public const string JwksPath = "/.well-known/jwks.json";
 
     /// <summary>
-    /// The access token claim naming the sign-in session it belongs to (the refresh token chain), so
-    /// ending one session can end its access token too.
-    /// </summary>
-    public const string JwtSessionClaim = "sid";
-
-    /// <summary>The user's public reference on an access token, for attributing actions (audit), not for authorization.</summary>
-    public const string JwtUserRefClaim = "uref";
-
-    /// <summary>
     /// This host signs tokens as <paramref name="issuer"/>: loads its key pair (<c>Jwt:SigningKey</c>)
     /// and registers <see cref="IJwtService"/>. Pair with <see cref="MapWbsktJwks"/>.
     /// </summary>
@@ -140,15 +131,16 @@ public static class JwtServiceCollectionExtensions
         }
 
         // Read from the token itself rather than the principal, so inbound claim mapping cannot rename it.
-        if (token.TryGetPayloadValue<string>(JwtSessionClaim, out var sid)
+        if (token.TryGetPayloadValue<string>(WbsktClaims.Session, out var sid)
             && Guid.TryParse(sid, out var sessionId)
             && revocation.IsSessionRevoked(sessionId))
         {
             return true;
         }
 
-        var subject = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(subject, out var userId) && revocation.IsRevoked(userId, token.IssuedAt);
+        return context.Principal is { } principal
+            && WbsktClaims.TryReadUser(principal, out Guid userRef, out _)
+            && revocation.IsRevoked(userRef, token.IssuedAt);
     }
 
     /// <summary>Publishes this host's public keys, anonymously, for every host that validates its tokens.</summary>

@@ -19,9 +19,26 @@ public sealed class ClientIdentityTests
         Assert.Equal(new ClientIdentity(ClientRefId, 42, 7, DateTimeOffset.FromUnixTimeSeconds(1_760_000_000).UtcDateTime), identity);
     }
 
+    [Fact]
+    public void A_device_token_from_before_the_claims_contract_is_still_read()
+    {
+        // #306: sub under its mapped name and the old "type" claim, for one token lifetime.
+        Claim[] legacy =
+        [
+            new(ClaimTypes.NameIdentifier, ClientRefId.ToString()),
+            new(ClientClaims.Id, "42"),
+            new(ClientClaims.WorkspaceId, "7"),
+            new("type", WbsktClaims.ClientType),
+            new(ClientClaims.IssuedAt, "1760000000")
+        ];
+
+        Assert.True(ClientIdentity.TryRead(Principal(legacy), out var identity));
+        Assert.Equal(ClientRefId, identity.ClientRefId);
+    }
+
     [Theory]
-    [InlineData(ClientClaims.Type)]
-    [InlineData(ClaimTypes.NameIdentifier)]
+    [InlineData(WbsktClaims.Type)]
+    [InlineData(WbsktClaims.Subject)]
     [InlineData(ClientClaims.Id)]
     [InlineData(ClientClaims.WorkspaceId)]
     public void A_token_missing_a_claim_is_refused_rather_than_failing_later(string missing)
@@ -32,7 +49,7 @@ public sealed class ClientIdentityTests
     [Fact]
     public void A_user_token_is_not_a_device()
     {
-        var claims = Claims().Select(c => c.Type == ClientClaims.Type ? new Claim(ClientClaims.Type, "user") : c);
+        var claims = Claims().Select(c => c.Type == WbsktClaims.Type ? new Claim(WbsktClaims.Type, WbsktClaims.UserType) : c);
 
         Assert.False(ClientIdentity.TryRead(Principal(claims), out _));
     }
@@ -68,10 +85,7 @@ public sealed class ClientIdentityTests
 
     private static IEnumerable<Claim> Claims() =>
     [
-        new(ClaimTypes.NameIdentifier, ClientRefId.ToString()),
-        new(ClientClaims.Id, "42"),
-        new(ClientClaims.WorkspaceId, "7"),
-        new(ClientClaims.Type, ClientClaims.ClientType),
+        .. ClientClaims.For(ClientRefId, "pump", Guid.NewGuid(), clientId: 42, workspaceId: 7),
         new(ClientClaims.IssuedAt, "1760000000")
     ];
 

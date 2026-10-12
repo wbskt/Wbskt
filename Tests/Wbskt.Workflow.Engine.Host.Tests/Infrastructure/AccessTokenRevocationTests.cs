@@ -7,16 +7,18 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 public sealed class AccessTokenRevocationTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
+    private static readonly Guid Ada = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid Bob = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     [Fact]
     public async Task A_token_issued_before_the_revocation_is_refused()
     {
         var (revocation, _) = Create();
 
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
-        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-5)));
-        Assert.True(revocation.IsRevoked(7, Now.AddSeconds(-1)));
+        Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(-5)));
+        Assert.True(revocation.IsRevoked(Ada, Now.AddSeconds(-1)));
     }
 
     [Fact]
@@ -24,9 +26,9 @@ public sealed class AccessTokenRevocationTests
     {
         var (revocation, _) = Create();
 
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
-        Assert.False(revocation.IsRevoked(7, Now.AddSeconds(1)));
+        Assert.False(revocation.IsRevoked(Ada, Now.AddSeconds(1)));
     }
 
     [Fact]
@@ -35,9 +37,9 @@ public sealed class AccessTokenRevocationTests
         // iat cannot tell "just before" from "just after" within a second; the later login wins.
         var (revocation, _) = Create();
 
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
-        Assert.False(revocation.IsRevoked(7, Now));
+        Assert.False(revocation.IsRevoked(Ada, Now));
     }
 
     [Fact]
@@ -45,46 +47,46 @@ public sealed class AccessTokenRevocationTests
     {
         var (revocation, _) = Create();
 
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
-        Assert.False(revocation.IsRevoked(8, Now.AddMinutes(-5)));
+        Assert.False(revocation.IsRevoked(Bob, Now.AddMinutes(-5)));
     }
 
     [Fact]
     public async Task A_later_revocation_moves_the_watermark_forward()
     {
         var (revocation, time) = Create();
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
         time.Advance(TimeSpan.FromMinutes(2));
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
-        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(1)));
+        Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(1)));
     }
 
     [Fact]
     public async Task An_entry_is_dropped_once_no_token_it_could_refuse_is_still_alive()
     {
         var (revocation, time) = Create(TimeSpan.FromMinutes(15));
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
         time.Advance(TimeSpan.FromMinutes(17));
         await revocation.ResyncAsync();
 
         // Anything issued before the revocation has expired by now, so the entry has nothing left to do.
-        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.False(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     [Fact]
     public async Task An_entry_is_kept_while_tokens_it_refuses_could_still_be_alive()
     {
         var (revocation, time) = Create(TimeSpan.FromMinutes(15));
-        await revocation.RevokeUserAsync(7);
+        await revocation.RevokeUserAsync(Ada);
 
         time.Advance(TimeSpan.FromMinutes(14));
         await revocation.ResyncAsync();
 
-        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     [Fact]
@@ -93,12 +95,12 @@ public sealed class AccessTokenRevocationTests
         // The issuer's tokens live an hour; this validating host is configured for five minutes.
         var (revocation, time) = Create(TimeSpan.FromMinutes(5));
         long revokedAt = Now.ToUnixTimeSeconds();
-        revocation.OnMessage($"7:{revokedAt}:{revokedAt + (long)TimeSpan.FromMinutes(62).TotalSeconds}");
+        revocation.OnMessage($"{Ada:N}:{revokedAt}:{revokedAt + (long)TimeSpan.FromMinutes(62).TotalSeconds}");
 
         time.Advance(TimeSpan.FromMinutes(30));
         await revocation.ResyncAsync();
 
-        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     [Fact]
@@ -106,13 +108,13 @@ public sealed class AccessTokenRevocationTests
     {
         var (revocation, time) = Create(TimeSpan.FromMinutes(5));
         long revokedAt = Now.ToUnixTimeSeconds();
-        revocation.OnMessage($"7:{revokedAt}:{revokedAt + 3600}");
-        revocation.OnMessage($"7:{revokedAt + 1}:{revokedAt + 60}");
+        revocation.OnMessage($"{Ada:N}:{revokedAt}:{revokedAt + 3600}");
+        revocation.OnMessage($"{Ada:N}:{revokedAt + 1}:{revokedAt + 60}");
 
         time.Advance(TimeSpan.FromMinutes(30));
         await revocation.ResyncAsync();
 
-        Assert.True(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.True(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     [Fact]
@@ -120,10 +122,12 @@ public sealed class AccessTokenRevocationTests
     {
         var (revocation, _) = Create();
 
-        revocation.OnMessage("7:not-a-number:1");
+        revocation.OnMessage($"{Ada:N}:not-a-number:1");
         revocation.OnMessage("garbage");
+        // An entry from before #306 named the internal id; it is ignored and lapses on its own.
+        revocation.OnMessage($"7:{Now.ToUnixTimeSeconds()}:{Now.ToUnixTimeSeconds() + 600}");
 
-        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.False(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     // ---------------------------------------------------------------- sessions
@@ -139,7 +143,7 @@ public sealed class AccessTokenRevocationTests
         Assert.True(revocation.IsSessionRevoked(ended));
         Assert.False(revocation.IsSessionRevoked(Guid.NewGuid()));
         // A session is not a user: their other sessions keep working.
-        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.False(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     [Fact]
@@ -177,7 +181,7 @@ public sealed class AccessTokenRevocationTests
         revocation.OnMessage("s:not-a-guid:1");
         revocation.OnMessage($"s:{Guid.NewGuid():N}:soon");
 
-        Assert.False(revocation.IsRevoked(7, Now.AddMinutes(-1)));
+        Assert.False(revocation.IsRevoked(Ada, Now.AddMinutes(-1)));
     }
 
     private static (AccessTokenRevocation Revocation, ManualTime Time) Create(TimeSpan? lifetime = null)

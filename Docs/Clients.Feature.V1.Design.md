@@ -34,7 +34,7 @@ A codebase review (2026-07-20) found the platform covers roughly half of this. T
 | Presence | `Management.Host/Handlers/ClientPresenceHandler` ← connect/disconnect events → `Client_UpdatePresence` (`IsConnected`, `LastActivityAt`) |
 | Browser realtime | `Hubs/NotificationHub` at `/hubs/notifications`; every `[SignalRNotify]` event auto-forwarded to group `ws:{WorkspaceId}` (`SignalRForwardingHandler`) |
 | Durable history | `EventLogs` table ← `EventLoggerHandler` (every `IEvent`, batched); `GET …/event-logs?clientRefId=…` |
-| Registration + client auth | `POST api/client-registrations/initiate` (PIN), `POST api/client-auth/login` (1 h JWT), `Socket.Host` `/ws` (`ClientOnly` policy: bearer token with the `type == client` claim) |
+| Registration + client auth | `POST api/client-registrations/initiate` (PIN), `POST api/client-auth/login` (1 h JWT), `Socket.Host` `/ws` (`ClientOnly` policy: bearer token with the `typ == client` claim) |
 
 ### 2.2 Gaps (mock element → status)
 

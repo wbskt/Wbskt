@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
@@ -258,7 +257,7 @@ internal sealed class AuthService : IAuthService
                     // their access tokens too.
                     var userId = rotation.UserId!.Value;
                     _logger.LogWarning("Token refresh failed: Replay of a revoked token for user ID {UserId}. All sessions revoked. IP: {IpAddress}", userId, ipAddress);
-                    await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+                    await RevokeAccessTokensAsync(userId, cancellationToken);
                     _metrics.RecordRefresh("token_replayed");
 
                     await _eventBus.PublishAsync(new SecurityAlertEvent(
@@ -338,7 +337,7 @@ internal sealed class AuthService : IAuthService
         _logger.LogInformation("Attempting to revoke all sessions for user ID: {UserId} from IP: {IpAddress}", userId, ipAddress);
 
         var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
-        await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+        await RevokeAccessTokensAsync(userId, cancellationToken);
         _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
         await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "all"), ipAddress, cancellationToken);
         return Result.Success();
@@ -369,7 +368,7 @@ internal sealed class AuthService : IAuthService
             }
 
             await _provider.ChangePasswordAsync(userId, _passwordHasher.HashPassword(user, newPassword), ipAddress, cancellationToken);
-            await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+            await RevokeAccessTokensAsync(userId, cancellationToken);
 
             // Every session ended with the old password, including this one. The caller gets a new
             // pair so changing a password does not also sign them out.
@@ -599,7 +598,7 @@ internal sealed class AuthService : IAuthService
         // Outside the transaction above, and best effort: the password and the refresh tokens are what
         // the reset is for, and they are already done. This only shortens the life of access tokens
         // that were already issued.
-        await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+        await RevokeAccessTokensAsync(userId, cancellationToken);
         _logger.LogInformation("Password reset completed for user {UserId}; all sessions revoked. IP: {IpAddress}", userId, ipAddress);
         await AnnounceAsync(new PasswordChangedEvent(userId, await RefOfAsync(userId, cancellationToken), "reset"), ipAddress, cancellationToken);
         return Result.Success();
@@ -820,17 +819,7 @@ internal sealed class AuthService : IAuthService
 
     private string GenerateAccessToken(User user, Guid sessionId)
     {
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim("type", "user"),
-            new Claim(JwtServiceCollectionExtensions.JwtSessionClaim, sessionId.ToString()),
-            new Claim(JwtServiceCollectionExtensions.JwtUserRefClaim, user.RefId.ToString())
-        };
-
-        return _jwtService.GenerateToken(claims, JwtAudiences.Api, _accessTokenLifetime);
+        return _jwtService.GenerateToken(WbsktClaims.ForUser(user.RefId, user.Username, user.Email, sessionId), JwtAudiences.Api, _accessTokenLifetime);
     }
 
     private RefreshToken GenerateRefreshToken(int userId)
@@ -869,6 +858,14 @@ internal sealed class AuthService : IAuthService
     }
 
     /// <summary>The user's reference, or <see cref="Guid.Empty"/> when it cannot be read; only the audit log uses it.</summary>
+    /// <summary>
+    /// Ends the user's access tokens on every host. Revocations are keyed by the RefId a token names;
+    /// unlike <see cref="RefOfAsync"/> a failed read is not swallowed, since a revocation that silently
+    /// named nobody would leave the tokens working.
+    /// </summary>
+    private async Task RevokeAccessTokensAsync(int userId, CancellationToken cancellationToken) =>
+        await _accessTokens.RevokeUserAsync((await _provider.GetByIdAsync(userId, cancellationToken)).RefId, cancellationToken);
+
     private async Task<Guid> RefOfAsync(int userId, CancellationToken cancellationToken)
     {
         try

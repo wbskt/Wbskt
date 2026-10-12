@@ -213,7 +213,7 @@ public sealed class AccountRecoveryTests
 
         await harness.Service.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
 
-        harness.AccessTokens.Verify(r => r.RevokeUserAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+        harness.AccessTokens.Verify(r => r.RevokeUserAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class AccountRecoveryTests
 
         await harness.Service.ResetPasswordAsync("token", "a new long password", "10.0.0.1");
 
-        harness.AccessTokens.Verify(r => r.RevokeUserAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.AccessTokens.Verify(r => r.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- verification
@@ -428,6 +428,10 @@ public sealed class AccountRecoveryTests
         {
             var jwt = new Mock<IJwtService>();
             jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns("access-token");
+
+            // Revoking a user's access tokens names them by RefId. WithUser and the sign-up setup
+            // replace this for tests that read the account.
+            Provider.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(Verified(true));
 
             Service = new AuthService(
                 Provider.Object,

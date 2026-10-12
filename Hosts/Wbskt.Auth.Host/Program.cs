@@ -38,6 +38,7 @@ public static class Program
         builder.Services.AddWbsktJwtTrust(JwtIssuers.Auth, JwtAudiences.Api);
         builder.Services.AddAccessTokenRevocation(builder.Configuration);
         builder.Services.AddScoped<IAuthProvider, SqlAuthProvider>();
+        builder.Services.AddUserIdLookup(sp => new AuthUserIdLookup(sp.GetRequiredService<IAuthProvider>()));
         // AuthService publishes through the queued bus, so sign-in never waits on RabbitMQ; see
         // QueuedEventBus. Every other service here keeps the real bus.
         builder.Services.AddQueuedEventBus();

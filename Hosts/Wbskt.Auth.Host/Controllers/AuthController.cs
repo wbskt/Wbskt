@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -230,12 +229,8 @@ public class AuthController : ApiControllerBase
 
     private string CallerIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
-    // The default inbound claim map renames sid, so look under both names. Absent on tokens issued
-    // before sessions had ids.
-    private Guid? CurrentSessionId() =>
-        Guid.TryParse(User.FindFirst(JwtServiceCollectionExtensions.JwtSessionClaim)?.Value ?? User.FindFirst(ClaimTypes.Sid)?.Value, out var id)
-            ? id
-            : null;
+    // Absent on tokens issued before sessions had ids.
+    private Guid? CurrentSessionId() => WbsktClaims.SessionOf(User);
 
     /// <summary>
     /// Requests a password-reset link.

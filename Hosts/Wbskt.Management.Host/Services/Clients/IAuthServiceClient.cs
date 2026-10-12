@@ -1,9 +1,10 @@
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives.Models;
 
 namespace Wbskt.Management.Host.Services.Clients;
 
-public interface IAuthServiceClient
+public interface IAuthServiceClient : IUserIdLookup
 {
     /// <summary>
     /// Resolves a workspace reference to its internal ID together with the caller's
@@ -34,3 +35,4 @@ public sealed record WorkspaceAccess(int WorkspaceId, IReadOnlySet<string> Permi
 
 public record ResolvedWorkspaceResponse(int WorkspaceId, string[] Permissions);
 public record ResolveWorkspaceRequest(Guid WorkspaceRef);
+public record CurrentUserResponse(int UserId);

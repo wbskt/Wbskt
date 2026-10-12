@@ -49,7 +49,7 @@ public sealed class RefreshRotationTests
         Assert.NotNull(stored);
         Assert.Equal(stored!.Token, result.Value.RefreshToken);
         Assert.True(stored.Expires > DateTime.UtcNow.AddDays(6));
-        harness.AccessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.AccessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public sealed class RefreshRotationTests
         var result = await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
 
         Assert.Equal("AUTH_TOKEN_INACTIVE", result.Error.Code);
-        harness.AccessTokens.Verify(a => a.RevokeUserAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+        harness.AccessTokens.Verify(a => a.RevokeUserAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(It.Is<SecurityAlertEvent>(e => e.AlertType == "RefreshTokenReplay"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -120,7 +120,7 @@ public sealed class RefreshRotationTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(expectedCode, result.Error.Code);
-        harness.AccessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.AccessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         harness.Provider.Verify(p => p.RevokeAllRefreshTokensForUserAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -133,6 +133,7 @@ public sealed class RefreshRotationTests
                 .Callback<IEnumerable<Claim>, string, TimeSpan>((claims, _, _) => LastClaims = claims.ToList())
                 .Returns("access-token");
 
+            Provider.Setup(p => p.GetByIdAsync(TheUser.Id, It.IsAny<CancellationToken>())).ReturnsAsync(TheUser);
             Service = Create(jwt.Object, Bus.Object);
             QueuedService = Create(jwt.Object, new Wbskt.Infrastructure.Events.QueuedEventBus(NullLogger<Wbskt.Infrastructure.Events.QueuedEventBus>.Instance));
         }

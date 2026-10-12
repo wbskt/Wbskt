@@ -89,6 +89,25 @@ internal sealed class AuthServiceClient : IAuthServiceClient
         }
     }
 
+    /// <summary>
+    /// The auth host answers for whoever the forwarded token names, which is the user the token's
+    /// <c>sub</c> names, so <paramref name="userRef"/> is only the cache's key (see
+    /// <see cref="CachedUserIdLookup"/>). A token it cannot identify is no user; any other failure
+    /// throws, and the request is answered 503.
+    /// </summary>
+    public async Task<int?> FindUserIdAsync(Guid userRef, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.GetAsync("/" + InternalRoutes.CurrentUser, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var user = await response.Content.ReadFromJsonAsync<CurrentUserResponse>(cancellationToken: cancellationToken);
+        return user?.UserId;
+    }
+
     public Task<Result<int>> ResolveWorkspaceAsync(Guid workspaceRef, PermissionSlug requiredPermission, CancellationToken cancellationToken = default)
         => ResolveWorkspaceAsync(workspaceRef, [requiredPermission], cancellationToken);
 
