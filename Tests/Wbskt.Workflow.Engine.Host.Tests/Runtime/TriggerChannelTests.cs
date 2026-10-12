@@ -143,8 +143,8 @@ public sealed class TriggerChannelTests
         };
 
         TriggerRegistrationSpec spec = await RegisterAsync(new WebhookChannel(), trigger);
-        InboundEvent evt = WebhookChannel.Event(WorkspaceRef, "orders", Body, "id-1", "s3cret");
-        InboundEvent otherWorkspace = WebhookChannel.Event(Guid.NewGuid(), "orders", Body, "id-2", "s3cret");
+        InboundEvent evt = WebhookChannel.Event(WorkspaceRef, "orders", Body, "id-1", WebhookSecretHash.Of("s3cret"));
+        InboundEvent otherWorkspace = WebhookChannel.Event(Guid.NewGuid(), "orders", Body, "id-2", WebhookSecretHash.Of("s3cret"));
 
         Assert.Contains(spec.TriggerKey, evt.MatchKeys);
         Assert.DoesNotContain(spec.TriggerKey, otherWorkspace.MatchKeys);

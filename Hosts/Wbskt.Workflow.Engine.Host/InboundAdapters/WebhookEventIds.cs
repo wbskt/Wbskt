@@ -13,7 +13,7 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// </summary>
 internal static class WebhookEventIds
 {
-    public static string For(Guid workspaceRef, string path, string? idempotencyKey, string? secret, string messageId)
+    public static string For(Guid workspaceRef, string path, string? idempotencyKey, string? secretHash, string messageId)
     {
         if (idempotencyKey is null)
         {
@@ -21,10 +21,10 @@ internal static class WebhookEventIds
         }
 
         // Hashed so a caller-chosen key of any length fits the 200-character claim column. The path
-        // keeps one key from colliding across a workspace's webhooks, and the presented secret keeps
+        // keeps one key from colliding across a workspace's webhooks, and the presented secret's hash keeps
         // a caller who does not know it from claiming a key ahead of the real sender: the claim is
         // taken before the secret is checked, so without it a guessed key would block the delivery.
-        byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{path}\n{secret}\n{idempotencyKey}"));
+        byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{path}\n{secretHash}\n{idempotencyKey}"));
         return $"webhook:{workspaceRef}:key:{Convert.ToHexStringLower(digest)}";
     }
 }

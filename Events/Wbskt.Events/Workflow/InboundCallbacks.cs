@@ -10,7 +10,8 @@ namespace Wbskt.Events.Workflow;
 /// <remarks>
 /// These are commands sent to one queue, not events published to everyone: they are not
 /// <c>IEvent</c>s, so they never reach the event log. A webhook's body is whatever an anonymous caller
-/// sent, and its secret must not be kept anywhere it could be read back.
+/// sent, and its secret travels only as a hash: a call that keeps failing is kept on the queue's
+/// _error queue, where anyone who can read the broker could otherwise read a working secret.
 /// </remarks>
 public static class InboundCallbackQueue
 {
@@ -20,11 +21,12 @@ public static class InboundCallbackQueue
 }
 
 /// <summary>
-/// A call to a workspace's public webhook URL. <c>Body</c> is the caller's JSON as sent. <c>Secret</c>
-/// is whatever it presented in <c>X-Wbskt-Secret</c>, compared by the engine against the trigger's;
-/// <c>IdempotencyKey</c> is its <c>Idempotency-Key</c> header, already checked by the management host.
+/// A call to a workspace's public webhook URL. <c>Body</c> is the caller's JSON as sent.
+/// <c>SecretHash</c> is the hash (<c>WebhookSecretHash</c>) of whatever it presented in
+/// <c>X-Wbskt-Secret</c>, compared by the engine against the trigger's; <c>IdempotencyKey</c> is its
+/// <c>Idempotency-Key</c> header, already checked by the management host.
 /// </summary>
-public sealed record InboundWebhook(Guid WorkspaceRef, string Path, string Body, string? Secret, string? IdempotencyKey);
+public sealed record InboundWebhook(Guid WorkspaceRef, string Path, string Body, string? SecretHash, string? IdempotencyKey);
 
 /// <summary>A call to a Wait For HTTP step's public wake URL. <c>Body</c> is the caller's JSON as sent.</summary>
 public sealed record InboundWake(string Token, string Body);

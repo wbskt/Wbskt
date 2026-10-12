@@ -192,10 +192,11 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return true;
         }
 
-        // Fixed-time so the comparison cannot be used to recover the secret a character at a time.
+        // The caller's secret arrives hashed, so the configured one is hashed the same way. Fixed-time so
+        // the comparison cannot be used to recover the hash a character at a time.
         return CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(registration.WebhookSecret),
-            System.Text.Encoding.UTF8.GetBytes(evt.Secret ?? string.Empty));
+            System.Text.Encoding.UTF8.GetBytes(WebhookSecretHash.Of(registration.WebhookSecret)!),
+            System.Text.Encoding.UTF8.GetBytes(evt.SecretHash ?? string.Empty));
     }
 
     private Task<bool> FilterPassesAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct) =>

@@ -461,7 +461,7 @@ and there is no oracle to protect against. Both answer in one shape, `InboundRes
 `registrations`. Runs are named by RefId only; the engine's row ids never leave it.
 
 A webhook trigger may carry a **secret**. When it does, the caller must present it in the
-`X-Wbskt-Secret` header — on the public callback, which passes it to the engine beside the body (never
+`X-Wbskt-Secret` header — on the public callback, which passes only its hash to the engine, beside the body (never
 in it, since the body becomes the run's persisted trigger payload). The comparison is fixed-time, and the public
 response stays an opaque 202 either way, so a wrong secret is indistinguishable from a right one. A
 trigger with no secret configured is open, as every webhook published before secrets existed is.
