@@ -19,17 +19,13 @@ namespace Wbskt.Workflow.Engine.Host.Tests.AuthHost;
 /// </summary>
 public sealed class AuthFaultTests
 {
-    private const int CallerId = 1;
     private const int TenantId = 5;
-    private static readonly Guid TenantRef = Guid.NewGuid();
 
     private readonly Mock<IAuthProvider> _provider = new();
     private readonly ManagementService _service;
 
     public AuthFaultTests()
     {
-        _provider.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
-        _provider.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _service = new ManagementService(
             _provider.Object, Mock.Of<IWorkspaceProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
             NullLogger<ManagementService>.Instance, Mock.Of<IAccessTokenRevocation>(), Mock.Of<IAuditWorkspaces>());
@@ -41,7 +37,7 @@ public sealed class AuthFaultTests
         _provider.Setup(p => p.UpdateTenantAsync(TenantId, "Acme", null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50008, "Cannot remove the last administrator."));
 
-        var result = await _service.UpdateTenantAsync(CallerId, TenantRef, new UpdateTenantRequest("Acme", null), CancellationToken.None);
+        var result = await _service.UpdateTenantAsync(TenantId, new UpdateTenantRequest("Acme", null), CancellationToken.None);
 
         Assert.Equal(ErrorType.Validation, result.Error.Type);
         Assert.Equal("AUTH_OPERATION_REJECTED", result.Error.Code);
@@ -53,16 +49,7 @@ public sealed class AuthFaultTests
         _provider.Setup(p => p.UpdateTenantAsync(TenantId, "Acme", null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(-2, "Execution Timeout Expired."));
 
-        await Assert.ThrowsAsync<SqlException>(() => _service.UpdateTenantAsync(CallerId, TenantRef, new UpdateTenantRequest("Acme", null), CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task A_fault_while_authorizing_propagates()
-    {
-        _provider.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("connection pool exhausted"));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.UpdateTenantAsync(CallerId, TenantRef, new UpdateTenantRequest("Acme", null), CancellationToken.None));
+        await Assert.ThrowsAsync<SqlException>(() => _service.UpdateTenantAsync(TenantId, new UpdateTenantRequest("Acme", null), CancellationToken.None));
     }
 
     [Theory]

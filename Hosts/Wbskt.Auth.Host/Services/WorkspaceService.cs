@@ -69,22 +69,9 @@ internal sealed class WorkspaceService : IWorkspaceService
         return Result<IReadOnlyCollection<WorkspaceResponse>>.Success(items);
     }
 
-    public async Task<Result> AddUserToWorkspaceAsync(int callerId, int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> AddUserToWorkspaceAsync(int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Adding user {UserEmail} to workspace ID: {WorkspaceId}", request.Email, workspaceId);
-
-        // Caller must hold users.manage in this workspace
-        var accessResult = await ResolveAccessAsync(callerId, workspaceId, cancellationToken);
-        if (accessResult.IsFailure)
-        {
-            return Result.Failure(accessResult.Error);
-        }
-
-        if (!accessResult.Value.Contains(Permissions.UsersManage))
-        {
-            _logger.LogWarning("Add member denied: caller lacks '{Permission}' in workspace ID: {WorkspaceId}", Permissions.UsersManage, workspaceId);
-            return Result.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {Permissions.UsersManage}"));
-        }
 
         try
         {
@@ -116,15 +103,9 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
     }
 
-    public async Task<Result> RemoveUserFromWorkspaceAsync(int callerId, int workspaceId, Guid userRef, CancellationToken cancellationToken = default)
+    public async Task<Result> RemoveUserFromWorkspaceAsync(int workspaceId, Guid userRef, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Removing user {UserRef} from workspace ID: {WorkspaceId}", userRef, workspaceId);
-
-        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return gate;
-        }
 
         try
         {
@@ -148,26 +129,14 @@ internal sealed class WorkspaceService : IWorkspaceService
         }
     }
 
-    public async Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int callerId, int workspaceId, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int workspaceId, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersRead, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return Result<IPagedList<TenantMemberResponse>>.Failure(gate.Error);
-        }
-
         var members = await _workspaceProvider.GetWorkspaceMembersAsync(workspaceId, skip, take, cancellationToken);
         return Result<IPagedList<TenantMemberResponse>>.Success(members);
     }
 
-    public async Task<Result> UpdateWorkspaceAsync(int callerId, int workspaceId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> UpdateWorkspaceAsync(int workspaceId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
     {
-        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return gate;
-        }
-
         var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
         await _workspaceProvider.UpdateWorkspaceAsync(workspaceId, request.Name, request.Description, cancellationToken);
         _logger.LogInformation("Updated workspace ID: {WorkspaceId}", workspaceId);
@@ -192,12 +161,6 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> TransferOwnershipAsync(int callerId, int workspaceId, Guid newOwnerRef, CancellationToken cancellationToken = default)
     {
-        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return gate;
-        }
-
         try
         {
             var newOwnerId = await ResolveUserIdAsync(newOwnerRef, cancellationToken);
@@ -222,38 +185,12 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
     {
-        var gate = await RequirePermissionAsync(callerId, workspaceId, Permissions.UsersManage, cancellationToken);
-        if (gate.IsFailure)
-        {
-            return gate;
-        }
-
         // The workspace's policies, devices and workflows live in the main database, which the
         // management host retires on this event. It is written to the outbox in the delete's own
         // transaction (see OutboxDispatcher), so a broker outage or a restart right after the
         // delete delays the retirement instead of leaving them running.
         await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, OutboxMessage.Create(new WorkspaceDeletedEvent(workspaceId, callerId)), cancellationToken);
         _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
-        return Result.Success();
-    }
-
-    /// <summary>
-    /// Membership gate plus a single permission check, for operations on an existing workspace.
-    /// </summary>
-    private async Task<Result> RequirePermissionAsync(int callerId, int workspaceId, PermissionSlug permission, CancellationToken cancellationToken)
-    {
-        var accessResult = await ResolveAccessAsync(callerId, workspaceId, cancellationToken);
-        if (accessResult.IsFailure)
-        {
-            return Result.Failure(accessResult.Error);
-        }
-
-        if (!accessResult.Value.Contains(permission))
-        {
-            _logger.LogWarning("Operation denied: caller lacks '{Permission}' in workspace ID: {WorkspaceId}", permission, workspaceId);
-            return Result.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {permission}"));
-        }
-
         return Result.Success();
     }
 

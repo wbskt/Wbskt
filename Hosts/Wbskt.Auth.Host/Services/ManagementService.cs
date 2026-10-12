@@ -78,20 +78,14 @@ internal sealed class ManagementService : IManagementService
         });
     }
 
-    public async Task<Result> UpdateTenantAsync(int callerId, Guid tenantRef, UpdateTenantRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> UpdateTenantAsync(int tenantId, UpdateTenantRequest request, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result.Failure(scope.Error);
-        }
-
-        return await GuardAsync("UpdateTenant", () => _provider.UpdateTenantAsync(scope.Value, request.Name, request.Description, cancellationToken));
+        return await GuardAsync("UpdateTenant", () => _provider.UpdateTenantAsync(tenantId, request.Name, request.Description, cancellationToken));
     }
 
-    public async Task<Result> RemoveTenantMemberAsync(int callerId, Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default)
+    public async Task<Result> RemoveTenantMemberAsync(int callerId, int tenantId, Guid userRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.UsersManage, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -115,18 +109,12 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Invitations -------------------------------------------------------------------------
 
-    public async Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, Guid tenantRef, CreateInvitationRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<CreatedInvitationResponse>> CreateInvitationAsync(int callerId, int tenantId, CreateInvitationRequest request, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<CreatedInvitationResponse>.Failure(scope.Error);
-        }
-
         int? roleId = null;
         if (request.RoleRef.HasValue)
         {
-            var resolvedRoleId = await _provider.FindRoleIdByRefIdAsync(request.RoleRef.Value, scope.Value, cancellationToken);
+            var resolvedRoleId = await _provider.FindRoleIdByRefIdAsync(request.RoleRef.Value, tenantId, cancellationToken);
             if (resolvedRoleId <= 0)
             {
                 return Result<CreatedInvitationResponse>.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
@@ -153,48 +141,36 @@ internal sealed class ManagementService : IManagementService
 
         return await GuardAsync("CreateInvitation", async () =>
         {
-            var created = await _provider.CreateInvitationAsync(scope.Value, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, cancellationToken);
-            _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, scope.Value, callerId);
+            var created = await _provider.CreateInvitationAsync(tenantId, request.Email, roleId, SecurityTokens.Hash(token), expiresAt, callerId, workspaceIds, cancellationToken);
+            _logger.LogInformation("Invitation {RefId} issued for tenant {TenantId} by user ID {CallerId}", created.RefId, tenantId, callerId);
 
             // Queued, not awaited: an unreachable relay must not fail an invitation that has already
             // been recorded. The administrator still gets the raw token back below and can deliver it
             // by hand, which is how every invitation worked before this host could send mail at all.
             await _mailer.QueueInvitationAsync(request.Email, created.TenantName, token, expiresAt, cancellationToken);
-            await PublishToTenantAsync(new InvitationSentEvent(created.RefId, request.Email, request.RoleRef, expiresAt), scope.Value, cancellationToken);
+            await PublishToTenantAsync(new InvitationSentEvent(created.RefId, request.Email, request.RoleRef, expiresAt), tenantId, cancellationToken);
 
             // The raw token appears here and nowhere else — not in the store, and not in this log line.
             return new CreatedInvitationResponse(created.RefId, request.Email, expiresAt, token);
         });
     }
 
-    public async Task<Result<IPagedList<InvitationResponse>>> GetInvitationsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<IPagedList<InvitationResponse>>> GetInvitationsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersRead, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<IPagedList<InvitationResponse>>.Failure(scope.Error);
-        }
-
-        return await GuardAsync("GetInvitations", () => _provider.GetInvitationsAsync(scope.Value, skip, take, cancellationToken));
+        return await GuardAsync("GetInvitations", () => _provider.GetInvitationsAsync(tenantId, skip, take, cancellationToken));
     }
 
-    public async Task<Result> RevokeInvitationAsync(int callerId, Guid tenantRef, Guid invitationRef, CancellationToken cancellationToken = default)
+    public async Task<Result> RevokeInvitationAsync(int tenantId, Guid invitationRef, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result.Failure(scope.Error);
-        }
-
         // Scoped by tenant in the procedure, so an invitation belonging to another tenant simply
         // matches nothing. Revoking an already-spent invitation is a no-op rather than an error:
         // the caller's intent — that this invitation cannot be redeemed — already holds.
         return await GuardAsync("RevokeInvitation", async () =>
         {
-            var email = await _provider.RevokeInvitationAsync(invitationRef, scope.Value, cancellationToken);
+            var email = await _provider.RevokeInvitationAsync(invitationRef, tenantId, cancellationToken);
             if (email is not null)
             {
-                await PublishToTenantAsync(new InvitationRevokedEvent(invitationRef, email), scope.Value, cancellationToken);
+                await PublishToTenantAsync(new InvitationRevokedEvent(invitationRef, email), tenantId, cancellationToken);
             }
         });
     }
@@ -229,36 +205,24 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Roles -------------------------------------------------------------------------------
 
-    public async Task<Result<IPagedList<RoleResponse>>> GetRolesAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<IPagedList<RoleResponse>>> GetRolesAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.RolesRead, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<IPagedList<RoleResponse>>.Failure(scope.Error);
-        }
-
-        return await GuardAsync("GetRoles", () => _provider.GetRolesAsync(scope.Value, skip, take, cancellationToken));
+        return await GuardAsync("GetRoles", () => _provider.GetRolesAsync(tenantId, skip, take, cancellationToken));
     }
 
-    public async Task<Result<RoleResponse>> CreateRoleAsync(int callerId, Guid tenantRef, CreateRoleRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<RoleResponse>> CreateRoleAsync(int tenantId, CreateRoleRequest request, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.RolesManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<RoleResponse>.Failure(scope.Error);
-        }
-
         return await GuardAsync("CreateRole", async () =>
         {
-            var refId = await _provider.InsertRoleAsync(request.Name, request.Description, scope.Value, cancellationToken);
-            _logger.LogInformation("Role '{RoleName}' created in tenant {TenantId} with RefId {RefId}", request.Name, scope.Value, refId);
+            var refId = await _provider.InsertRoleAsync(request.Name, request.Description, tenantId, cancellationToken);
+            _logger.LogInformation("Role '{RoleName}' created in tenant {TenantId} with RefId {RefId}", request.Name, tenantId, refId);
             return new RoleResponse(refId, request.Name, request.Description);
         }, Error.Conflict("AUTH_ROLE_CONFLICT", "A role with that name already exists in this tenant."));
     }
 
-    public async Task<Result> UpdateRoleAsync(int callerId, Guid tenantRef, Guid roleRef, UpdateRoleRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> UpdateRoleAsync(int tenantId, Guid roleRef, UpdateRoleRequest request, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveRoleAsync(callerId, tenantRef, roleRef, Permissions.RolesManage, cancellationToken);
+        var resolved = await ResolveRoleAsync(tenantId, roleRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -268,9 +232,9 @@ internal sealed class ManagementService : IManagementService
             Error.Conflict("AUTH_ROLE_CONFLICT", "A role with that name already exists in this tenant."));
     }
 
-    public async Task<Result> DeleteRoleAsync(int callerId, Guid tenantRef, Guid roleRef, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteRoleAsync(int tenantId, Guid roleRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveRoleAsync(callerId, tenantRef, roleRef, Permissions.RolesManage, cancellationToken);
+        var resolved = await ResolveRoleAsync(tenantId, roleRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -287,29 +251,17 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Groups ------------------------------------------------------------------------------
 
-    public async Task<Result<IPagedList<GroupResponse>>> GetGroupsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<IPagedList<GroupResponse>>> GetGroupsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersRead, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<IPagedList<GroupResponse>>.Failure(scope.Error);
-        }
-
-        return await GuardAsync("GetGroups", () => _provider.GetGroupsAsync(scope.Value, skip, take, cancellationToken));
+        return await GuardAsync("GetGroups", () => _provider.GetGroupsAsync(tenantId, skip, take, cancellationToken));
     }
 
-    public async Task<Result<GroupResponse>> CreateGroupAsync(int callerId, Guid tenantRef, CreateGroupRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<GroupResponse>> CreateGroupAsync(int tenantId, CreateGroupRequest request, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<GroupResponse>.Failure(scope.Error);
-        }
-
         int? parentGroupId = null;
         if (request.ParentGroupRef.HasValue)
         {
-            var parentId = await _provider.FindGroupIdByRefIdAsync(request.ParentGroupRef.Value, scope.Value, cancellationToken);
+            var parentId = await _provider.FindGroupIdByRefIdAsync(request.ParentGroupRef.Value, tenantId, cancellationToken);
             if (parentId <= 0)
             {
                 return Result<GroupResponse>.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Parent group not found in this tenant."));
@@ -320,15 +272,15 @@ internal sealed class ManagementService : IManagementService
 
         return await GuardAsync("CreateGroup", async () =>
         {
-            var refId = await _provider.InsertGroupAsync(request.Name, parentGroupId, scope.Value, cancellationToken);
-            _logger.LogInformation("Group '{GroupName}' created in tenant {TenantId} with RefId {RefId}", request.Name, scope.Value, refId);
+            var refId = await _provider.InsertGroupAsync(request.Name, parentGroupId, tenantId, cancellationToken);
+            _logger.LogInformation("Group '{GroupName}' created in tenant {TenantId} with RefId {RefId}", request.Name, tenantId, refId);
             return new GroupResponse(refId, request.Name, request.ParentGroupRef);
         }, Error.Conflict("AUTH_GROUP_CONFLICT", "A group with that name already exists in this tenant."));
     }
 
-    public async Task<Result> UpdateGroupAsync(int callerId, Guid tenantRef, Guid groupRef, UpdateGroupRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> UpdateGroupAsync(int tenantId, Guid groupRef, UpdateGroupRequest request, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveGroupAsync(callerId, tenantRef, groupRef, Permissions.UsersManage, cancellationToken);
+        var resolved = await ResolveGroupAsync(tenantId, groupRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -338,9 +290,9 @@ internal sealed class ManagementService : IManagementService
             Error.Conflict("AUTH_GROUP_CONFLICT", "A group with that name already exists in this tenant."));
     }
 
-    public async Task<Result> DeleteGroupAsync(int callerId, Guid tenantRef, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteGroupAsync(int tenantId, Guid groupRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveGroupAsync(callerId, tenantRef, groupRef, Permissions.UsersManage, cancellationToken);
+        var resolved = await ResolveGroupAsync(tenantId, groupRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -351,40 +303,28 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Permission catalogue ----------------------------------------------------------------
 
-    public async Task<Result<IPagedList<PermissionResponse>>> GetPermissionsAsync(int callerId, Guid tenantRef, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<IPagedList<PermissionResponse>>> GetPermissionsAsync(int tenantId, int skip, int take, CancellationToken cancellationToken = default)
     {
         // The catalogue itself is global; the tenant only scopes the permission check.
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.RolesRead, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<IPagedList<PermissionResponse>>.Failure(scope.Error);
-        }
-
         return await GuardAsync("GetPermissions", () => _provider.GetPermissionsAsync(skip, take, cancellationToken));
     }
 
     // ----- Membership --------------------------------------------------------------------------
 
-    public async Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int callerId, Guid tenantRef, string? search, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int tenantId, string? search, int skip, int take, CancellationToken cancellationToken = default)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.UsersRead, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<IPagedList<TenantMemberResponse>>.Failure(scope.Error);
-        }
-
-        return await GuardAsync("GetMembers", () => _provider.GetTenantMembersAsync(scope.Value, search, skip, take, cancellationToken));
+        return await GuardAsync("GetMembers", () => _provider.GetTenantMembersAsync(tenantId, search, skip, take, cancellationToken));
     }
 
-    public async Task<Result> AddUserToGroupAsync(int callerId, Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result> AddUserToGroupAsync(int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAndGroupAsync(callerId, tenantRef, userRef, groupRef, Permissions.UsersManage, cancellationToken);
+        var resolved = await ResolveUserAndGroupAsync(tenantId, userRef, groupRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
         }
 
-        var (tenantId, userId, groupId) = resolved.Value;
+        var (_, userId, groupId) = resolved.Value;
         return await GuardAsync("AddUserToGroup", async () =>
         {
             await _provider.InsertUserGroupAsync(userId, groupId, tenantId, cancellationToken);
@@ -392,15 +332,15 @@ internal sealed class ManagementService : IManagementService
         });
     }
 
-    public async Task<Result> RemoveUserFromGroupAsync(int callerId, Guid tenantRef, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result> RemoveUserFromGroupAsync(int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAndGroupAsync(callerId, tenantRef, userRef, groupRef, Permissions.UsersManage, cancellationToken);
+        var resolved = await ResolveUserAndGroupAsync(tenantId, userRef, groupRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
         }
 
-        var (tenantId, userId, groupId) = resolved.Value;
+        var (_, userId, groupId) = resolved.Value;
         return await GuardAsync("RemoveUserFromGroup", async () =>
         {
             await _provider.RemoveUserGroupAsync(userId, groupId, tenantId, cancellationToken);
@@ -408,16 +348,15 @@ internal sealed class ManagementService : IManagementService
         });
     }
 
-    public async Task<Result> SetMemberSuspendedAsync(int callerId, Guid tenantRef, Guid userRef, bool isSuspended, string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<Result> SetMemberSuspendedAsync(int callerId, int tenantId, Guid userRef, bool isSuspended, string ipAddress, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.UsersManage, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
         }
 
         var userId = resolved.Value.EntityId;
-        var tenantId = resolved.Value.TenantId;
 
         // Nobody could lift it: a suspended member holds no users.manage in the tenant.
         if (isSuspended && userId == callerId)
@@ -448,9 +387,9 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Permission assignments --------------------------------------------------------------
 
-    public async Task<Result> GrantRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> GrantRolePermissionAsync(int tenantId, Guid roleRef, GrantRolePermissionRequest request, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveRoleAsync(callerId, tenantRef, roleRef, Permissions.RolesManage, cancellationToken);
+        var resolved = await ResolveRoleAsync(tenantId, roleRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -460,9 +399,9 @@ internal sealed class ManagementService : IManagementService
             _provider.GrantRolePermissionAsync(resolved.Value.EntityId, request.Slug, request.IsDeny, resolved.Value.TenantId, cancellationToken), cancellationToken));
     }
 
-    public async Task<Result> RemoveRolePermissionAsync(int callerId, Guid tenantRef, Guid roleRef, string slug, CancellationToken cancellationToken = default)
+    public async Task<Result> RemoveRolePermissionAsync(int tenantId, Guid roleRef, string slug, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveRoleAsync(callerId, tenantRef, roleRef, Permissions.RolesManage, cancellationToken);
+        var resolved = await ResolveRoleAsync(tenantId, roleRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -472,9 +411,9 @@ internal sealed class ManagementService : IManagementService
             _provider.RemoveRolePermissionAsync(resolved.Value.EntityId, slug, resolved.Value.TenantId, cancellationToken), cancellationToken));
     }
 
-    public async Task<Result> GrantUserPermissionAsync(int callerId, Guid tenantRef, Guid userRef, GrantPermissionRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> GrantUserPermissionAsync(int tenantId, Guid userRef, GrantPermissionRequest request, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.RolesManage, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -493,9 +432,9 @@ internal sealed class ManagementService : IManagementService
         });
     }
 
-    public async Task<Result> RemoveUserPermissionAsync(int callerId, Guid tenantRef, Guid userRef, string slug, Guid? workspaceRef, CancellationToken cancellationToken = default)
+    public async Task<Result> RemoveUserPermissionAsync(int tenantId, Guid userRef, string slug, Guid? workspaceRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.RolesManage, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result.Failure(resolved.Error);
@@ -516,33 +455,27 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Role assignments --------------------------------------------------------------------
 
-    public Task<Result> AssignUserRoleAsync(int callerId, Guid tenantRef, Guid userRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
-        => ChangeUserRoleAsync(callerId, tenantRef, userRef, roleRef, workspaceRef, assign: true, cancellationToken);
+    public Task<Result> AssignUserRoleAsync(int tenantId, Guid userRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
+        => ChangeUserRoleAsync(tenantId, userRef, roleRef, workspaceRef, assign: true, cancellationToken);
 
-    public Task<Result> RemoveUserRoleAsync(int callerId, Guid tenantRef, Guid userRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
-        => ChangeUserRoleAsync(callerId, tenantRef, userRef, roleRef, workspaceRef, assign: false, cancellationToken);
+    public Task<Result> RemoveUserRoleAsync(int tenantId, Guid userRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
+        => ChangeUserRoleAsync(tenantId, userRef, roleRef, workspaceRef, assign: false, cancellationToken);
 
-    public Task<Result> AssignGroupRoleAsync(int callerId, Guid tenantRef, Guid groupRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
-        => ChangeGroupRoleAsync(callerId, tenantRef, groupRef, roleRef, workspaceRef, assign: true, cancellationToken);
+    public Task<Result> AssignGroupRoleAsync(int tenantId, Guid groupRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
+        => ChangeGroupRoleAsync(tenantId, groupRef, roleRef, workspaceRef, assign: true, cancellationToken);
 
-    public Task<Result> RemoveGroupRoleAsync(int callerId, Guid tenantRef, Guid groupRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
-        => ChangeGroupRoleAsync(callerId, tenantRef, groupRef, roleRef, workspaceRef, assign: false, cancellationToken);
+    public Task<Result> RemoveGroupRoleAsync(int tenantId, Guid groupRef, Guid roleRef, Guid? workspaceRef, CancellationToken cancellationToken = default)
+        => ChangeGroupRoleAsync(tenantId, groupRef, roleRef, workspaceRef, assign: false, cancellationToken);
 
-    private async Task<Result> ChangeUserRoleAsync(int callerId, Guid tenantRef, Guid userRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
+    private async Task<Result> ChangeUserRoleAsync(int tenantId, Guid userRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.RolesManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result.Failure(scope.Error);
-        }
-
-        var userId = await _provider.FindUserIdByRefIdInTenantAsync(userRef, scope.Value, cancellationToken);
+        var userId = await _provider.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken);
         if (userId <= 0)
         {
             return Result.Failure(Error.Forbidden("USER_NOT_FOUND", "User not found in this tenant."));
         }
 
-        var roleId = await _provider.FindRoleIdByRefIdAsync(roleRef, scope.Value, cancellationToken);
+        var roleId = await _provider.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
         if (roleId <= 0)
         {
             return Result.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
@@ -558,35 +491,29 @@ internal sealed class ManagementService : IManagementService
         {
             if (assign)
             {
-                await _provider.AssignUserRoleAsync(userId, roleId, scope.Value, workspace.Value, cancellationToken);
+                await _provider.AssignUserRoleAsync(userId, roleId, tenantId, workspace.Value, cancellationToken);
             }
             else
             {
-                await _provider.RemoveUserRoleAsync(userId, roleId, scope.Value, workspace.Value, cancellationToken);
+                await _provider.RemoveUserRoleAsync(userId, roleId, tenantId, workspace.Value, cancellationToken);
             }
 
             await PublishUserPermissionsChangedAsync(userId, cancellationToken);
             await PublishToTenantAsync(
                 assign ? new MemberRoleAssignedEvent(userRef, roleRef, workspaceRef) : new MemberRoleRemovedEvent(userRef, roleRef, workspaceRef),
-                scope.Value, cancellationToken);
+                tenantId, cancellationToken);
         });
     }
 
-    private async Task<Result> ChangeGroupRoleAsync(int callerId, Guid tenantRef, Guid groupRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
+    private async Task<Result> ChangeGroupRoleAsync(int tenantId, Guid groupRef, Guid roleRef, Guid? workspaceRef, bool assign, CancellationToken cancellationToken)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, Permissions.RolesManage, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result.Failure(scope.Error);
-        }
-
-        var groupId = await _provider.FindGroupIdByRefIdAsync(groupRef, scope.Value, cancellationToken);
+        var groupId = await _provider.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
         if (groupId <= 0)
         {
             return Result.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Group not found in this tenant."));
         }
 
-        var roleId = await _provider.FindRoleIdByRefIdAsync(roleRef, scope.Value, cancellationToken);
+        var roleId = await _provider.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
         if (roleId <= 0)
         {
             return Result.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
@@ -602,11 +529,11 @@ internal sealed class ManagementService : IManagementService
         {
             if (assign)
             {
-                await _provider.AssignGroupRoleAsync(groupId, roleId, scope.Value, workspace.Value, cancellationToken);
+                await _provider.AssignGroupRoleAsync(groupId, roleId, tenantId, workspace.Value, cancellationToken);
             }
             else
             {
-                await _provider.RemoveGroupRoleAsync(groupId, roleId, scope.Value, workspace.Value, cancellationToken);
+                await _provider.RemoveGroupRoleAsync(groupId, roleId, tenantId, workspace.Value, cancellationToken);
             }
 
             await _eventBus.PublishAsync(new RolePermissionsChangedEvent(roleId), cancellationToken);
@@ -615,9 +542,9 @@ internal sealed class ManagementService : IManagementService
 
     // ----- Assignment read-back ----------------------------------------------------------------
 
-    public async Task<Result<IReadOnlyCollection<RoleAssignmentResponse>>> GetUserRolesAsync(int callerId, Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<RoleAssignmentResponse>>> GetUserRolesAsync(int tenantId, Guid userRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.RolesRead, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result<IReadOnlyCollection<RoleAssignmentResponse>>.Failure(resolved.Error);
@@ -626,9 +553,9 @@ internal sealed class ManagementService : IManagementService
         return await GuardAsync("GetUserRoles", () => _provider.GetUserRolesAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken));
     }
 
-    public async Task<Result<IReadOnlyCollection<UserPermissionAssignmentResponse>>> GetUserPermissionsAsync(int callerId, Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<UserPermissionAssignmentResponse>>> GetUserPermissionsAsync(int tenantId, Guid userRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.RolesRead, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result<IReadOnlyCollection<UserPermissionAssignmentResponse>>.Failure(resolved.Error);
@@ -637,9 +564,9 @@ internal sealed class ManagementService : IManagementService
         return await GuardAsync("GetUserPermissions", () => _provider.GetUserPermissionsAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken));
     }
 
-    public async Task<Result<IReadOnlyCollection<GroupMembershipResponse>>> GetUserGroupsAsync(int callerId, Guid tenantRef, Guid userRef, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<GroupMembershipResponse>>> GetUserGroupsAsync(int tenantId, Guid userRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveUserAsync(callerId, tenantRef, userRef, Permissions.UsersRead, cancellationToken);
+        var resolved = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result<IReadOnlyCollection<GroupMembershipResponse>>.Failure(resolved.Error);
@@ -648,9 +575,9 @@ internal sealed class ManagementService : IManagementService
         return await GuardAsync("GetUserGroups", () => _provider.GetUserGroupsAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken));
     }
 
-    public async Task<Result<IReadOnlyCollection<RoleAssignmentResponse>>> GetGroupRolesAsync(int callerId, Guid tenantRef, Guid groupRef, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<RoleAssignmentResponse>>> GetGroupRolesAsync(int tenantId, Guid groupRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveGroupAsync(callerId, tenantRef, groupRef, Permissions.RolesRead, cancellationToken);
+        var resolved = await ResolveGroupAsync(tenantId, groupRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result<IReadOnlyCollection<RoleAssignmentResponse>>.Failure(resolved.Error);
@@ -659,9 +586,9 @@ internal sealed class ManagementService : IManagementService
         return await GuardAsync("GetGroupRoles", () => _provider.GetGroupRolesAsync(resolved.Value.EntityId, resolved.Value.TenantId, cancellationToken));
     }
 
-    public async Task<Result<IReadOnlyCollection<RolePermissionAssignmentResponse>>> GetRolePermissionsAsync(int callerId, Guid tenantRef, Guid roleRef, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<RolePermissionAssignmentResponse>>> GetRolePermissionsAsync(int tenantId, Guid roleRef, CancellationToken cancellationToken = default)
     {
-        var resolved = await ResolveRoleAsync(callerId, tenantRef, roleRef, Permissions.RolesRead, cancellationToken);
+        var resolved = await ResolveRoleAsync(tenantId, roleRef, cancellationToken);
         if (resolved.IsFailure)
         {
             return Result<IReadOnlyCollection<RolePermissionAssignmentResponse>>.Failure(resolved.Error);
@@ -674,105 +601,59 @@ internal sealed class ManagementService : IManagementService
 
     private readonly record struct ResolvedEntity(int TenantId, int EntityId);
 
-    /// <summary>
-    /// Resolves the tenant reference for the caller and checks they hold <paramref name="permission"/>
-    /// tenant-wide within it. A tenant the caller is not a member of does not resolve, so it is
-    /// reported identically to one that does not exist.
-    /// </summary>
-    private async Task<Result<int>> AuthorizeAsync(int callerId, Guid tenantRef, PermissionSlug permission, CancellationToken cancellationToken)
+    // The tenant itself is resolved, and the caller's permission in it checked, by
+    // TenantPermissionFilter before the action runs; these find the entity named inside it.
+
+    private async Task<Result<ResolvedEntity>> ResolveRoleAsync(int tenantId, Guid roleRef, CancellationToken cancellationToken)
     {
-        int tenantId;
-        tenantId = await _provider.FindTenantIdByRefIdForUserAsync(tenantRef, callerId, cancellationToken);
-
-        if (tenantId <= 0)
-        {
-            _logger.LogWarning("Tenant {TenantRef} did not resolve for user ID {UserId}", tenantRef, callerId);
-            return Result<int>.Failure(Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found."));
-        }
-
-        bool allowed;
-        // WorkspaceId null: management operations require the permission tenant-wide, so a
-        // workspace-scoped grant deliberately does not satisfy this gate.
-        allowed = await _provider.VerifyPermissionAsync(callerId, tenantId, null, permission, cancellationToken);
-
-        if (!allowed)
-        {
-            _logger.LogWarning("Management operation denied: UserId {UserId} lacks tenant-wide '{Permission}' in TenantId {TenantId}", callerId, permission, tenantId);
-            return Result<int>.Failure(Error.Forbidden("PERMISSION_UNAUTHORIZED", $"user does not have permission(s) {permission}"));
-        }
-
-        return Result<int>.Success(tenantId);
-    }
-
-    private async Task<Result<ResolvedEntity>> ResolveRoleAsync(int callerId, Guid tenantRef, Guid roleRef, PermissionSlug permission, CancellationToken cancellationToken)
-    {
-        var scope = await AuthorizeAsync(callerId, tenantRef, permission, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<ResolvedEntity>.Failure(scope.Error);
-        }
-
-        var roleId = await _provider.FindRoleIdByRefIdAsync(roleRef, scope.Value, cancellationToken);
+        var roleId = await _provider.FindRoleIdByRefIdAsync(roleRef, tenantId, cancellationToken);
         if (roleId <= 0)
         {
             return Result<ResolvedEntity>.Failure(Error.Forbidden("ROLE_NOT_FOUND", "Role not found in this tenant."));
         }
 
-        return Result<ResolvedEntity>.Success(new ResolvedEntity(scope.Value, roleId));
+        return Result<ResolvedEntity>.Success(new ResolvedEntity(tenantId, roleId));
     }
 
-    private async Task<Result<ResolvedEntity>> ResolveGroupAsync(int callerId, Guid tenantRef, Guid groupRef, PermissionSlug permission, CancellationToken cancellationToken)
+    private async Task<Result<ResolvedEntity>> ResolveGroupAsync(int tenantId, Guid groupRef, CancellationToken cancellationToken)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, permission, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<ResolvedEntity>.Failure(scope.Error);
-        }
-
-        var groupId = await _provider.FindGroupIdByRefIdAsync(groupRef, scope.Value, cancellationToken);
+        var groupId = await _provider.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
         if (groupId <= 0)
         {
             return Result<ResolvedEntity>.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Group not found in this tenant."));
         }
 
-        return Result<ResolvedEntity>.Success(new ResolvedEntity(scope.Value, groupId));
+        return Result<ResolvedEntity>.Success(new ResolvedEntity(tenantId, groupId));
     }
 
-    private async Task<Result<ResolvedEntity>> ResolveUserAsync(int callerId, Guid tenantRef, Guid userRef, PermissionSlug permission, CancellationToken cancellationToken)
+    private async Task<Result<ResolvedEntity>> ResolveUserAsync(int tenantId, Guid userRef, CancellationToken cancellationToken)
     {
-        var scope = await AuthorizeAsync(callerId, tenantRef, permission, cancellationToken);
-        if (scope.IsFailure)
-        {
-            return Result<ResolvedEntity>.Failure(scope.Error);
-        }
-
         // Scoped to tenant membership: an administrator cannot reach a user outside their own tenant
         // and pull them into its permission graph.
-        var userId = await _provider.FindUserIdByRefIdInTenantAsync(userRef, scope.Value, cancellationToken);
+        var userId = await _provider.FindUserIdByRefIdInTenantAsync(userRef, tenantId, cancellationToken);
         if (userId <= 0)
         {
             return Result<ResolvedEntity>.Failure(Error.Forbidden("USER_NOT_FOUND", "User not found in this tenant."));
         }
 
-        return Result<ResolvedEntity>.Success(new ResolvedEntity(scope.Value, userId));
+        return Result<ResolvedEntity>.Success(new ResolvedEntity(tenantId, userId));
     }
 
-    private async Task<Result<(int TenantId, int UserId, int GroupId)>> ResolveUserAndGroupAsync(
-        int callerId, Guid tenantRef, Guid userRef, Guid groupRef, PermissionSlug permission, CancellationToken cancellationToken)
+    private async Task<Result<(int TenantId, int UserId, int GroupId)>> ResolveUserAndGroupAsync(int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
     {
-        var user = await ResolveUserAsync(callerId, tenantRef, userRef, permission, cancellationToken);
+        var user = await ResolveUserAsync(tenantId, userRef, cancellationToken);
         if (user.IsFailure)
         {
             return Result<(int, int, int)>.Failure(user.Error);
         }
 
-        var groupId = await _provider.FindGroupIdByRefIdAsync(groupRef, user.Value.TenantId, cancellationToken);
+        var groupId = await _provider.FindGroupIdByRefIdAsync(groupRef, tenantId, cancellationToken);
         if (groupId <= 0)
         {
             return Result<(int, int, int)>.Failure(Error.Forbidden("GROUP_NOT_FOUND", "Group not found in this tenant."));
         }
 
-        return Result<(int, int, int)>.Success((user.Value.TenantId, user.Value.EntityId, groupId));
+        return Result<(int, int, int)>.Success((tenantId, user.Value.EntityId, groupId));
     }
 
     /// <summary>

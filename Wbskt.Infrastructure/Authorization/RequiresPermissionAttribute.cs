@@ -1,6 +1,6 @@
-namespace Wbskt.Management.Host.Authorization;
+namespace Wbskt.Infrastructure.Authorization;
 
-/// <summary>How the permissions named on one <see cref="RequiresPermissionAttribute"/> combine.</summary>
+/// <summary>How the permissions named on one requirement combine.</summary>
 public enum PermissionMatch
 {
     /// <summary>The caller needs every permission named.</summary>
@@ -11,27 +11,24 @@ public enum PermissionMatch
 }
 
 /// <summary>
-/// Declares what a workspace-scoped action needs: the caller must be a member of the workspace named
-/// by the <c>workspaceRef</c> route value, and hold the permissions named here.
-/// <see cref="WorkspacePermissionFilter"/> resolves the workspace once, before model binding, refuses
-/// the request if the check fails, and hands the action its internal ID through
-/// <see cref="FromWorkspaceAttribute"/>.
+/// What an action needs in the scope its route names (a workspace, a tenant). A filter derived from
+/// <see cref="ScopedPermissionFilter{TAttribute}"/> resolves the scope once, before model binding,
+/// refuses the request if a requirement fails, and hands the action the scope's internal id.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Several permissions on one attribute need all of them unless <see cref="Mode"/> is
 /// <see cref="PermissionMatch.Any"/>. Several attributes on one action must all pass, so "A and (B
-/// or C)" is <c>[RequiresPermission(A)] [RequiresPermission(B, C, Mode = PermissionMatch.Any)]</c>.
+/// or C)" is <c>[Requires…(A)] [Requires…(B, C, Mode = PermissionMatch.Any)]</c>.
 /// </para>
 /// <para>
 /// On a controller the attributes are the default for its actions; an action that carries any of
 /// its own replaces the controller's rather than adding to them.
 /// </para>
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
-public sealed class RequiresPermissionAttribute : Attribute
+public abstract class PermissionRequirementAttribute : Attribute
 {
-    public RequiresPermissionAttribute(params string[] permissions)
+    protected PermissionRequirementAttribute(string[] permissions)
     {
         if (permissions is null || permissions.Length == 0)
         {
@@ -54,3 +51,11 @@ public sealed class RequiresPermissionAttribute : Attribute
         return Mode == PermissionMatch.Any && missing.Count < Permissions.Count ? [] : missing;
     }
 }
+
+/// <summary>
+/// A workspace-scoped action: the caller must be a member of the workspace named by the
+/// <c>workspaceRef</c> route value, and hold these permissions in it. The action receives the
+/// workspace's internal id through <see cref="FromWorkspaceAttribute"/>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
+public sealed class RequiresPermissionAttribute(params string[] permissions) : PermissionRequirementAttribute(permissions);

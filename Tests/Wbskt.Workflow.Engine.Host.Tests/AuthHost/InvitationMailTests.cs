@@ -17,15 +17,13 @@ namespace Wbskt.Workflow.Engine.Host.Tests.AuthHost;
 /// </summary>
 public sealed class InvitationMailTests
 {
-    private static readonly Guid TenantRef = Guid.Parse("33333333-3333-3333-3333-333333333333");
-
     [Fact]
     public async Task Issuing_an_invitation_mails_the_invitee()
     {
         var harness = new Harness();
 
         var result = await harness.Service.CreateInvitationAsync(
-            callerId: 1, TenantRef, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
+            callerId: 1, tenantId: 5, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(["invite:invitee@example.test|Acme Ltd"], harness.Mailer.Sent);
@@ -41,7 +39,7 @@ public sealed class InvitationMailTests
         var harness = new Harness(tenantName: "Northwind Robotics");
 
         await harness.Service.CreateInvitationAsync(
-            callerId: 1, TenantRef, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
+            callerId: 1, tenantId: 5, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
 
         Assert.Equal(["invite:invitee@example.test|Northwind Robotics"], harness.Mailer.Sent);
     }
@@ -52,7 +50,7 @@ public sealed class InvitationMailTests
         var harness = new Harness();
 
         var result = await harness.Service.CreateInvitationAsync(
-            callerId: 1, TenantRef, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
+            callerId: 1, tenantId: 5, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.False(string.IsNullOrWhiteSpace(result.Value.Token));
@@ -67,32 +65,10 @@ public sealed class InvitationMailTests
             Times.Once);
     }
 
-    /// <summary>
-    /// A caller without <c>users.manage</c> gets nothing — and, in particular, no mail is sent to an
-    /// address they chose. An unauthorised invitation that still mailed someone would make this
-    /// endpoint a way to send mail through the platform.
-    /// </summary>
-    [Fact]
-    public async Task An_unauthorised_caller_causes_no_mail()
-    {
-        var harness = new Harness(permitted: false);
-
-        var result = await harness.Service.CreateInvitationAsync(
-            callerId: 1, TenantRef, new CreateInvitationRequest("invitee@example.test", null), CancellationToken.None);
-
-        Assert.True(result.IsFailure);
-        Assert.Empty(harness.Mailer.Sent);
-        harness.Provider.Verify(
-            p => p.CreateInvitationAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
     private sealed class Harness
     {
-        public Harness(string tenantName = "Acme Ltd", bool permitted = true)
+        public Harness(string tenantName = "Acme Ltd")
         {
-            Provider.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, 1, It.IsAny<CancellationToken>())).ReturnsAsync(5);
-            Provider.Setup(p => p.VerifyPermissionAsync(1, 5, null, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(permitted);
             Provider.Setup(p => p.CreateInvitationAsync(
                     It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), tenantName));

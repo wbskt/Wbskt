@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Wbskt.EventBus.Abstractions;
-using Wbskt.Management.Host.Authorization;
+using Wbskt.Infrastructure.Authorization;
+using Wbskt.Auth.Host.Authorization;
 using Wbskt.Models;
 using Wbskt.Primitives;
 using Wbskt.Workflow.Engine.Host.Middleware;
@@ -31,11 +32,8 @@ public sealed partial class HostArchitectureTests
     private static readonly Assembly[] PublicHosts = [AuthHost, ManagementHost, SocketHost];
     private static readonly Assembly[] AllHosts = [AuthHost, ManagementHost, SocketHost, EngineHost];
 
-    /// <summary>Controllers that still reach a provider, the bus or a mapper themselves (#301).</summary>
-    private static readonly HashSet<string> LayeringExceptions =
-    [
-        "WorkspacesController",
-    ];
+    /// <summary>Controllers that still reach a provider, the bus or a mapper themselves.</summary>
+    private static readonly HashSet<string> LayeringExceptions = [];
 
     /// <summary>Route parameters that predate the naming rule (#301).</summary>
     private static readonly HashSet<string> RouteParameterExceptions =
@@ -142,11 +140,16 @@ public sealed partial class HostArchitectureTests
         {
             var arguments = action.Method.GetParameters().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
 
-            // The management host resolves {workspaceRef} in WorkspacePermissionFilter, for any action
-            // that declares a permission, and binds it as [FromWorkspace] int workspaceId if asked.
-            if (WorkspacePermissionFilter.RequirementsFor(action.Method, action.Controller).Count > 0)
+            // The permission filters resolve {workspaceRef} and {tenantRef} for any action that
+            // declares a permission, and bind the internal id as [FromWorkspace] / [FromTenant] if asked.
+            if (ScopedPermissionFilter<RequiresPermissionAttribute>.RequirementsFor(action.Method, action.Controller).Count > 0)
             {
                 arguments.Add("workspaceRef");
+            }
+
+            if (ScopedPermissionFilter<RequiresTenantPermissionAttribute>.RequirementsFor(action.Method, action.Controller).Count > 0)
+            {
+                arguments.Add("tenantRef");
             }
 
             foreach (string parameter in RouteParameters(action.Route))

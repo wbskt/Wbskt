@@ -14,6 +14,7 @@ using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
