@@ -11,7 +11,7 @@
     *   `Unavailable` is for a dependency that is down when nothing was done, so the caller can simply retry (a command whose publish *is* the action, with the broker down). Never hand-build a 503 in a controller.
     *   `Unauthorized` means "we cannot identify the caller". A caller who is known but lacks a permission is `Forbidden`. Using 401 there makes clients that redirect to login on 401 sign the user out over a missing permission.
     *   A `Failure` message is assumed to be internal detail (exception text). It is logged and replaced with a generic message before it reaches the client, so never rely on it being visible.
-*   **Thin controllers:** A controller binds the request, calls one service and maps its `Result`. Validation, ownership, publishing events and talking to the engine belong to services, where they can be unit-tested and reused. A controller never injects `IEventBus`, a provider or `IReferenceMapper`; `ControllerLayeringTests` enforces it. The only status a controller picks itself is between two successes (`200` vs `202`).
+*   **Thin controllers:** A controller binds the request, calls one service and maps its `Result`. Validation, ownership, publishing events and talking to the engine belong to services, where they can be unit-tested and reused. A controller never injects `IEventBus`, a provider or `IReferenceMapper`; `HostArchitectureTests` enforces it on every host. The only status a controller picks itself is between two successes (`200` vs `202`).
 
 ---
 

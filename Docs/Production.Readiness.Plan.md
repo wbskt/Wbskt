@@ -131,7 +131,7 @@ Merged to `master`. Relevant because later items build on it.
 | **F2** | `/healthz` is liveness (probes nothing, so a dependency failure cannot cause a restart loop); `/healthz/ready` runs real probes. Auth probes SQL + bus, Management SQL + bus, Socket bus only (it has no database), Engine SQL + bus + leadership. Compose healthchecks point at readiness for auth/management/socket; the engine deliberately stays on liveness so standby replicas do not hang `deploy.sh`. |
 | **F3** | Device secrets are SHA-256 in `Clients.SecretHash`, compared in C# with `FixedTimeEquals`. `Client_Verify` replaced by `Client_GetCredentialBy_RefId`. |
 | **F4** | `deploy/scripts/backup.sh` (backup → verify → mandatory off-box upload) and `restore.sh` (defaults to a scratch DB; `--force` for real recovery). |
-| **F7** | Default-deny `FallbackPolicy` on Auth and Socket. `/ws` opts out explicitly because it authenticates in middleware before `UseAuthentication`. `EndpointAuthorizationTests` enforces that every controller action states its posture. |
+| **F7** | Default-deny `FallbackPolicy` on Auth and Socket. `/ws` opts out explicitly because it authenticates in middleware before `UseAuthentication`. `HostArchitectureTests` enforces that every controller action states its posture. |
 
 **Two Phase 0 items are still open and belong to the owner, not to a coding session:**
 
