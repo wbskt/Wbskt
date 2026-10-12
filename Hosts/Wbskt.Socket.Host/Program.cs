@@ -61,10 +61,10 @@ public static class Program
         builder.Services.AddDefaultDenyAuthorization(options =>
         {
             // Issuer and audience already rule out a user token (only the management host signs for
-            // wbskt-socket); the type claim stays as a second, independent guard.
+            // wbskt-socket); the typ claim stays as a second, independent guard.
             options.AddPolicy(ClientClaims.ClientOnlyPolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireClaim(ClientClaims.Type, ClientClaims.ClientType));
+                .RequireAssertion(context => ClientClaims.IsClient(context.User)));
         });
 
         // Bus only: this host holds no database connection. The check itself comes from

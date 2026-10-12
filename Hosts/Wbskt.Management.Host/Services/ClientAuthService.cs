@@ -1,5 +1,4 @@
 using Wbskt.Protocol;
-using System.Security.Claims;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
@@ -49,15 +48,7 @@ internal sealed class ClientAuthService : IClientAuthService
             return Result<ClientLoginResponse>.Failure(Error.Unauthorized("CLIENT_NOT_REGISTERED", $"Client registration is {client.Status}. Access denied."));
         }
 
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, client.RefId.ToString()),
-            new Claim(ClaimTypes.Name, client.Name),
-            new Claim(ClientClaims.Id, client.Id.ToString()),
-            new Claim(ClientClaims.PolicyRef, client.PolicyRefId.ToString()),
-            new Claim(ClientClaims.WorkspaceId, client.WorkspaceId.ToString()),
-            new Claim(ClientClaims.Type, ClientClaims.ClientType)
-        };
+        var claims = ClientClaims.For(client.RefId, client.Name, client.PolicyRefId, client.Id, client.WorkspaceId);
 
         var token = _jwtService.GenerateToken(claims, JwtAudiences.Socket, ClientTokenCutoffs.TokenLifetime);
         _logger.LogDebug("Client logged in successfully. ClientRefId: {ClientRefId}, ClientId: {ClientId}", request.ClientRefId, client.Id);

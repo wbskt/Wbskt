@@ -296,7 +296,7 @@ public sealed class ServicesFixture : IDisposable
             : "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
 
         var expires = DateTimeOffset.UtcNow.Add(lifetime).ToUnixTimeSeconds();
-        var payload = "{\"nameid\":\"" + subject + "\",\"type\":\"user\",\"exp\":" + expires + "}";
+        var payload = "{\"sub\":\"" + subject + "\",\"typ\":\"user\",\"exp\":" + expires + "}";
 
         var signingInput = $"{Base64Url(Encoding.UTF8.GetBytes(header))}.{Base64Url(Encoding.UTF8.GetBytes(payload))}";
         if (signingKey is null)

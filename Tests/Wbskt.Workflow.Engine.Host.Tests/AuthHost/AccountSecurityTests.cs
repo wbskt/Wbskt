@@ -138,7 +138,7 @@ public sealed class AccountSecurityTests
         Assert.NotEqual(
             PasswordVerificationResult.Failed,
             new PasswordHasher<User>().VerifyHashedPassword(new User(), storedHash!, "a brand new passphrase"));
-        harness.AccessTokens.Verify(a => a.RevokeUserAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+        harness.AccessTokens.Verify(a => a.RevokeUserAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), It.IsAny<CancellationToken>()), Times.Once);
         harness.Provider.Verify(p => p.InsertRefreshTokenAsync(It.Is<RefreshToken>(t => t.UserId == 42), "10.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 

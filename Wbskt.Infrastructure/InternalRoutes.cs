@@ -12,4 +12,7 @@ public static class InternalRoutes
 
     /// <summary>Auth host: a workspace's internal id and the caller's permissions in it, for the management host.</summary>
     public const string ResolveWorkspace = Prefix + "/workspaces/resolve";
+
+    /// <summary>Auth host: the caller's internal user id, for a host whose records are keyed by it (see <c>WbsktClaims</c>).</summary>
+    public const string CurrentUser = Prefix + "/users/me";
 }

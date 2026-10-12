@@ -140,7 +140,7 @@ Highest priority: these encode defects that shipped, so they must fail against t
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
 | `AUTH_LOG_01` | + | Correct credentials | **200**, non-empty `accessToken` + `refreshToken` |
-| `AUTH_LOG_02` | + | Access token is a JWT carrying `nameid`, `unique_name`, `email`, `type: "user"` | Decodes; `type` is `user` |
+| `AUTH_LOG_02` | + | Access token is a JWT carrying `sub` (the user's RefId), `typ: "user"`, `name`, `email`, `sid` and no internal id | Decodes; `typ` is `user` |
 | `AUTH_LOG_03` | + | Two consecutive logins issue **different** refresh tokens | Both usable independently (multi-device) |
 | `AUTH_LOG_04` | − | Correct email, wrong password | **401** `AUTH_INVALID_CREDENTIALS` |
 | `AUTH_LOG_05` | − | Unregistered email | **401** `AUTH_INVALID_CREDENTIALS` — **identical code and message to `04`**; asserting they match is the point, it prevents account enumeration |

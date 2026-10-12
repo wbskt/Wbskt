@@ -113,6 +113,8 @@ public static class Program
             client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:AuthTimeoutSeconds", 5));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
+        // A user token names its user by RefId; the id this host's records use comes from the auth host.
+        builder.Services.AddUserIdLookup(sp => sp.GetRequiredService<IAuthServiceClient>());
         builder.Services.AddHttpClient<IWorkflowEngineClient, WorkflowEngineClient>(client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"]

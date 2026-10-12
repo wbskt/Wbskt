@@ -35,12 +35,12 @@ public sealed class EventLogActorTests(ServicesFixture fixture)
         created!.UserRefId.Should().Be(userRef, "the log records who created the policy");
     }
 
-    /// <summary>The user's reference, from the access token's <c>uref</c> claim.</summary>
+    /// <summary>The user's reference, from the access token's <c>sub</c> claim (#306).</summary>
     private static Guid UserRefFrom(string accessToken)
     {
         var payload = accessToken.Split('.')[1].Replace('-', '+').Replace('_', '/');
         payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
         using var json = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
-        return json.RootElement.GetProperty("uref").GetGuid();
+        return json.RootElement.GetProperty("sub").GetGuid();
     }
 }

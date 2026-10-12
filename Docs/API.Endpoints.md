@@ -73,6 +73,21 @@ with two extensions:
 - `message` repeats `detail` for one release, for callers that read the body this replaced
   (`{ code, message, type }`).
 
+## Tokens
+
+Every token follows one claims contract (`WbsktClaims`): `sub` is the principal's RefId and `typ`
+says what it is, `user` or `client`.
+
+- **User access token** (auth host, audience `wbskt-api`): `sub`, `typ: "user"`, `name`, `email`,
+  `sid` (the session). No internal id: a host that keys records by the user's internal id resolves it
+  from `sub` (the auth host from its database, the management host from
+  `GET /api/internal/users/me`), cached.
+- **Device token** (management host, audience `wbskt-socket`): `sub`, `typ: "client"`, `name`,
+  `policy_ref`, and for now the device's internal `id` and `workspace_id`, which the socket host
+  stamps on every event it publishes and has no database to read from.
+- Tokens issued before this contract (`sub` the internal id, `uref`, `type`) are still accepted until
+  they expire. Revocation ("sign out everywhere", a password change) is keyed by the user's RefId.
+
 ## 1. Auth host
 
 ### 1.1 Credentials — `api/auth`

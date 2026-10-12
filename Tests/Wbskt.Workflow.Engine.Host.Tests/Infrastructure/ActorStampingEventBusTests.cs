@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -8,7 +7,6 @@ using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure.Events;
-using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
@@ -147,31 +145,6 @@ public sealed class ActorStampingEventBusTests
 
         viaDirect.ActorUserId.Should().Be(5);
         viaQueue.ActorUserId.Should().Be(5, "the queue is drained later, after the request's identity is gone");
-    }
-
-    [Fact]
-    public async Task The_identity_carries_the_user_reference_from_the_token()
-    {
-        UserIdentity? seen = null;
-        var middleware = new IdentityMiddleware(_ =>
-        {
-            _identity.TryGetUserIdentity(out seen);
-            return Task.CompletedTask;
-        });
-        var context = new DefaultHttpContext
-        {
-            User = new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, "5"),
-                new Claim(JwtServiceCollectionExtensions.JwtUserRefClaim, UserRef.ToString())
-            ], "test"))
-        };
-
-        await middleware.InvokeAsync(context, _identity);
-
-        seen.Should().NotBeNull();
-        seen!.UserId.Should().Be(5);
-        seen.UserRefId.Should().Be(UserRef);
     }
 
     private sealed class RecordingBus : IEventBus

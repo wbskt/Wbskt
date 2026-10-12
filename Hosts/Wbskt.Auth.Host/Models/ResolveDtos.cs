@@ -8,3 +8,6 @@ public record ResolvedWorkspaceResponse(int WorkspaceId, string[] Permissions);
 /// enter it, and their effective permissions there (always empty when they may not).
 /// </summary>
 public sealed record WorkspaceAccessResolution(int WorkspaceId, bool IsMember, IReadOnlyCollection<string> Permissions);
+
+/// <summary>The caller's internal user id, for the management host (see <c>InternalRoutes.CurrentUser</c>).</summary>
+public record CurrentUserResponse(int UserId);

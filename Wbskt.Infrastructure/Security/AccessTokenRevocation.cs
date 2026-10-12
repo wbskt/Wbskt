@@ -31,8 +31,8 @@ public sealed class AccessTokenOptions
 /// <summary>Ends a user's access tokens before they expire.</summary>
 public interface IAccessTokenRevocation
 {
-    /// <summary>Every access token issued to <paramref name="userId"/> up to now stops validating, on every host.</summary>
-    Task RevokeUserAsync(int userId, CancellationToken cancellationToken = default);
+    /// <summary>Every access token issued to <paramref name="userRef"/> up to now stops validating, on every host.</summary>
+    Task RevokeUserAsync(Guid userRef, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Every access token carrying <paramref name="sessionId"/> as its <c>sid</c> stops validating, on
@@ -40,7 +40,7 @@ public interface IAccessTokenRevocation
     /// </summary>
     Task RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
-    bool IsRevoked(int userId, DateTimeOffset issuedAt);
+    bool IsRevoked(Guid userRef, DateTimeOffset issuedAt);
 
     bool IsSessionRevoked(Guid sessionId);
 }
@@ -64,7 +64,8 @@ public interface IAccessTokenRevocation
 /// that merely validates them may be configured differently, or not at all. So the host recording a
 /// revocation (always the issuer: the auth host) stamps it with an expiry of its own token lifetime
 /// plus clock skew, and every host, here and in Redis, prunes by that stamp rather than by its own
-/// configuration. In the set the member is <c>userId:watermark</c>, or <c>s:sessionId</c> for an
+/// configuration. In the set the member is <c>userRef:watermark</c> (the user's RefId, which is what a
+/// token's <c>sub</c> names), or <c>s:sessionId</c> for an
 /// ended session, and the score is the expiry.
 /// Revocation is best effort: if Redis is unreachable the refresh tokens are still revoked in the
 /// database, and the cost is that already-issued access tokens live out their (short) lifetime.
@@ -89,7 +90,7 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     private readonly TimeSpan _retention;
     private const string SessionPrefix = "s:";
 
-    private readonly ConcurrentDictionary<int, Watermark> _watermarks = new();
+    private readonly ConcurrentDictionary<Guid, Watermark> _watermarks = new();
 
     // Ended session -> when the entry can go (unix seconds), by the same rule as a watermark.
     private readonly ConcurrentDictionary<Guid, long> _sessions = new();
@@ -104,11 +105,11 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         _retention = options.Value.AccessTokenLifetime + JwtTrust.ClockSkew + TimeSpan.FromMinutes(1);
     }
 
-    public async Task RevokeUserAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task RevokeUserAsync(Guid userRef, CancellationToken cancellationToken = default)
     {
         long now = _time.GetUtcNow().ToUnixTimeSeconds();
         long expiresAt = now + (long)_retention.TotalSeconds;
-        Apply(userId, new Watermark(now, expiresAt));
+        Apply(userRef, new Watermark(now, expiresAt));
 
         if (_redis is null)
         {
@@ -118,12 +119,12 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
         try
         {
             IDatabase db = _redis.GetDatabase();
-            await db.SortedSetAddAsync(SetKey, $"{userId}:{now}", expiresAt);
-            await db.PublishAsync(RedisChannel.Literal(Channel), $"{userId}:{now}:{expiresAt}");
+            await db.SortedSetAddAsync(SetKey, $"{userRef:N}:{now}", expiresAt);
+            await db.PublishAsync(RedisChannel.Literal(Channel), $"{userRef:N}:{now}:{expiresAt}");
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)
         {
-            _logger.LogError(ex, "Could not publish the access-token revocation for user {UserId}; other hosts will accept that user's current access tokens until they expire", userId);
+            _logger.LogError(ex, "Could not publish the access-token revocation for user {UserRef}; other hosts will accept that user's current access tokens until they expire", userRef);
         }
     }
 
@@ -151,9 +152,9 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
 
     public bool IsSessionRevoked(Guid sessionId) => _sessions.ContainsKey(sessionId);
 
-    public bool IsRevoked(int userId, DateTimeOffset issuedAt)
+    public bool IsRevoked(Guid userRef, DateTimeOffset issuedAt)
     {
-        if (!_watermarks.TryGetValue(userId, out Watermark? watermark))
+        if (!_watermarks.TryGetValue(userRef, out Watermark? watermark))
         {
             return false;
         }
@@ -200,11 +201,11 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
     {
         long now = _time.GetUtcNow().ToUnixTimeSeconds();
 
-        foreach ((int userId, Watermark watermark) in _watermarks)
+        foreach ((Guid userRef, Watermark watermark) in _watermarks)
         {
             if (watermark.ExpiresAt < now)
             {
-                _watermarks.TryRemove(new KeyValuePair<int, Watermark>(userId, watermark));
+                _watermarks.TryRemove(new KeyValuePair<Guid, Watermark>(userRef, watermark));
             }
         }
 
@@ -233,9 +234,9 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
                     ApplySession(sessionId, (long)entry.Score);
                 }
             }
-            else if (TryParse(member, out int userId, out long revokedAt))
+            else if (TryParse(member, out Guid userRef, out long revokedAt))
             {
-                Apply(userId, new Watermark(revokedAt, (long)entry.Score));
+                Apply(userRef, new Watermark(revokedAt, (long)entry.Score));
             }
         }
     }
@@ -277,26 +278,29 @@ public sealed class AccessTokenRevocation : IAccessTokenRevocation, IHostedServi
             }
         }
         else if (last > 0
-            && TryParse(text.AsSpan(0, last), out int userId, out long revokedAt)
+            && TryParse(text.AsSpan(0, last), out Guid userRef, out long revokedAt)
             && long.TryParse(text.AsSpan(last + 1), out long expiresAt))
         {
-            Apply(userId, new Watermark(revokedAt, expiresAt));
+            Apply(userRef, new Watermark(revokedAt, expiresAt));
         }
     }
 
-    /// <summary>Parses <c>userId:revokedAt</c>.</summary>
-    private static bool TryParse(ReadOnlySpan<char> text, out int userId, out long revokedAt)
+    /// <summary>
+    /// Parses <c>userRef:revokedAt</c>. An entry from before #306 names the internal id instead and
+    /// does not parse; it lapses within one token lifetime.
+    /// </summary>
+    private static bool TryParse(ReadOnlySpan<char> text, out Guid userRef, out long revokedAt)
     {
         int separator = text.IndexOf(':');
         revokedAt = 0;
-        userId = 0;
+        userRef = Guid.Empty;
         return separator > 0
-            && int.TryParse(text[..separator], out userId)
+            && Guid.TryParse(text[..separator], out userRef)
             && long.TryParse(text[(separator + 1)..], out revokedAt);
     }
 
-    private void Apply(int userId, Watermark watermark) =>
-        _watermarks.AddOrUpdate(userId, watermark, (_, existing) => new Watermark(
+    private void Apply(Guid userRef, Watermark watermark) =>
+        _watermarks.AddOrUpdate(userRef, watermark, (_, existing) => new Watermark(
             Math.Max(existing.RevokedAt, watermark.RevokedAt),
             Math.Max(existing.ExpiresAt, watermark.ExpiresAt)));
 
