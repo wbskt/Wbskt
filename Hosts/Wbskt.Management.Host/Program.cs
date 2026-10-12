@@ -7,6 +7,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Devices;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Events;
@@ -90,6 +91,7 @@ public static class Program
         builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();
+        builder.Services.AddDeviceCommandSender();
         builder.Services.AddScoped<IClientCommandService, ClientCommandService>();
         builder.Services.AddScoped<IWorkflowHistoryService, WorkflowHistoryService>();
         builder.Services.AddScopedWithQueuedEvents<ISharedVariableService, SharedVariableService>();

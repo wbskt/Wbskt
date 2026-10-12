@@ -1,6 +1,6 @@
-using Wbskt.Infrastructure;
+using Microsoft.Extensions.Configuration;
 
-namespace Wbskt.Workflow.Engine.Host.Providers;
+namespace Wbskt.Infrastructure.Devices;
 
 /// <summary>A client as a command sees it: whose it is, and which socket host holds its connection.</summary>
 public sealed record ClientCommandTarget(int ClientId, int WorkspaceId, bool IsConnected, string? HostId);

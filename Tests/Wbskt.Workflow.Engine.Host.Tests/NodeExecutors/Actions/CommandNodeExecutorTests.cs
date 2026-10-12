@@ -17,7 +17,7 @@ public sealed class CommandNodeExecutorTests
     public async Task ExecuteAsync_publishes_command_and_returns_Continue()
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
@@ -34,6 +34,8 @@ public sealed class CommandNodeExecutorTests
             WorkspaceId,
             "OpenVent",
             payload.GetRawText(),
+            // Without a wait of its own, a command expires when a step would stop waiting by default.
+            SendClientMessageConfig.DefaultAckTimeout,
             It.Is<CommandSender?>(sender => sender == new CommandSender(ctx.Branch.WorkflowDefinitionRefId, ctx.Branch.RunRefId)),
             CancellationToken.None), Times.Once);
     }
@@ -42,7 +44,7 @@ public sealed class CommandNodeExecutorTests
     public async Task ExecuteAsync_returns_Continue_with_empty_patch()
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
@@ -54,7 +56,7 @@ public sealed class CommandNodeExecutorTests
         Assert.Empty(cont.LocalStatePatch);
         publisher.Verify(p => p.PublishCommandAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(),
-            "CloseVent", "{}", It.IsAny<CommandSender?>(), CancellationToken.None), Times.Once);
+            "CloseVent", "{}", It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -69,7 +71,7 @@ public sealed class CommandNodeExecutorTests
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal("CLIENT_MESSAGE_NO_TARGET", fail.ErrorCode);
         Assert.False(fail.Retryable);
-        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()), Times.Never);
+        publisher.Verify(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -77,7 +79,7 @@ public sealed class CommandNodeExecutorTests
     {
         var publisher = new Mock<IDeviceCommandPublisher>();
         var exception = new InvalidOperationException("broker down");
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(exception);
 
         var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
@@ -109,7 +111,7 @@ public sealed class CommandNodeExecutorTests
 
         Assert.NotNull(wait.AfterParked);
         await wait.AfterParked(CancellationToken.None);
-        publisher.Verify(p => p.PublishCommandAsync(condition.CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", It.IsAny<CommandSender?>(), CancellationToken.None), Times.Once);
+        publisher.Verify(p => p.PublishCommandAsync(condition.CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -119,7 +121,7 @@ public sealed class CommandNodeExecutorTests
         // device had not answered.
         var publisher = new Mock<IDeviceCommandPublisher>();
         var sendFailure = new InvalidOperationException("broker down");
-        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
+        publisher.Setup(p => p.PublishCommandAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CommandSender?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(sendFailure);
         var resumer = new Mock<IBookmarkResumer>();
         var executor = new CommandNodeExecutor(publisher.Object, resumer.Object);

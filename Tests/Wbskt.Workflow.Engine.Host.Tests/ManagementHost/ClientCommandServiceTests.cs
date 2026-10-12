@@ -7,6 +7,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Devices;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 
@@ -22,15 +23,16 @@ public sealed class ClientCommandServiceTests
     private static readonly Guid ClientRef = Guid.NewGuid();
 
     private readonly Mock<IClientQueryService> _clients = new();
+    private readonly Mock<IClientCommandTargetProvider> _targets = new();
     private readonly Mock<IEventBus> _bus = new();
 
-    private ClientCommandService Service => new(_clients.Object, _bus.Object, NullLogger<ClientCommandService>.Instance);
+    private ClientCommandService Service =>
+        new(_clients.Object, new DeviceCommandSender(_targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance), _bus.Object, NullLogger<ClientCommandService>.Instance);
 
     [Fact]
     public async Task A_command_to_an_offline_device_is_a_conflict_and_sends_nothing()
     {
-        _clients.Setup(c => c.ResolveCommandTargetAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<ClientCommandTarget>.Failure(Error.Conflict("DEVICE_OFFLINE", "offline")));
+        _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, false, null));
 
         var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest("reboot", "{}"));
 
@@ -41,8 +43,7 @@ public sealed class ClientCommandServiceTests
     [Fact]
     public async Task A_command_with_the_broker_down_is_unavailable()
     {
-        _clients.Setup(c => c.ResolveCommandTargetAsync(WorkspaceId, ClientRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<ClientCommandTarget>.Success(new ClientCommandTarget(42, "socket-a")));
+        _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, true, "socket-a"));
         _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("broker down"));
 
         var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest("reboot", "{}"));
@@ -67,7 +68,7 @@ public sealed class ClientCommandServiceTests
         var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest(MessageTypes.StateReport, "{}"));
 
         result.Error.Code.Should().Be("COMMAND_TYPE_RESERVED");
-        _clients.VerifyNoOtherCalls();
+        _targets.VerifyNoOtherCalls();
     }
 
     [Fact]

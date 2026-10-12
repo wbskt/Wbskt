@@ -1,64 +1,53 @@
-using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
-using Wbskt.Models;
+using Wbskt.Infrastructure.Devices;
 using Wbskt.Workflow.Abstraction.Runtime;
-using Wbskt.Workflow.Engine.Host.Providers;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
 /// <summary>
-/// Sends a workflow's command the way the console does: addressed to the socket host holding the
-/// device, and reported as failed at once when nothing holds it, rather than dropped unseen.
+/// A workflow's command, sent by the same <see cref="IDeviceCommandSender"/> as the console's. A
+/// command that is not sent is reported at once as a <see cref="ClientCommandFailedEvent"/>, which
+/// takes a waiting step out by its "failed" port, rather than dropped unseen. A broker that is down
+/// is thrown, for the step to fail and the run to retry.
 /// </summary>
 public sealed class DeviceCommandPublisher(
+    IDeviceCommandSender sender,
     IEventBus eventBus,
-    IClientCommandTargetProvider targets,
-    ILogger<DeviceCommandPublisher> logger) : IDeviceCommandPublisher
+    TimeProvider clock) : IDeviceCommandPublisher
 {
     internal const string UnknownClientReason = "The device does not exist in this workspace.";
 
-    public async Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct)
+    public async Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)
     {
-        var target = await targets.FindAsync(clientRefId, ct);
+        var request = new DeviceCommand(commandId, clientRefId, workspaceId, command, payload, clock.GetUtcNow().UtcDateTime + expiresIn);
+        var result = await sender.SendAsync(request, e => Attribute(e, sentBy), ct);
 
-        // A device of another workspace is answered like a missing one: a workflow addresses only its own.
-        if (target is null || target.WorkspaceId != workspaceId)
+        string? reason = result.Outcome switch
         {
-            logger.LogWarning("No client '{ClientRefId}' in workspace {WorkspaceId}; command '{Command}' not sent.", clientRefId, workspaceId, command);
-            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, 0, workspaceId, command, UnknownClientReason, commandId), sentBy), ct);
-            return;
-        }
+            DeviceCommandOutcome.Sent => null,
+            DeviceCommandOutcome.UnknownClient => UnknownClientReason,
+            // The validator refuses these at publish time; this catches a definition saved before it did.
+            DeviceCommandOutcome.Invalid => result.Violation!.Message,
+            DeviceCommandOutcome.Offline => ClientCommandFailedEvent.NotConnectedReason,
+            DeviceCommandOutcome.BrokerUnavailable => throw new InvalidOperationException("The event bus is unavailable; the command was not sent."),
+            _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
+        };
 
-        // The validator refuses these at publish time; this catches a definition saved before it did.
-        if (DeviceMessageRules.FindViolation(command, payload) is { } violation)
+        if (reason is not null)
         {
-            logger.LogWarning("Command '{Command}' to client '{ClientRefId}' refused: {Reason}", command, clientRefId, violation);
-            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, violation, commandId), sentBy), ct);
-            return;
+            await eventBus.PublishAsync(new ClientCommandFailedEvent(clientRefId, result.ClientId, workspaceId, command, reason, commandId), ct);
         }
-
-        if (!target.IsConnected || string.IsNullOrEmpty(target.HostId))
-        {
-            logger.LogInformation("Client '{ClientRefId}' is offline; command '{Command}' reported as failed.", clientRefId, command);
-            await eventBus.PublishAsync(Attributed(new ClientCommandFailedEvent(clientRefId, target.ClientId, workspaceId, command, ClientCommandFailedEvent.NotConnectedReason, commandId), sentBy), ct);
-            return;
-        }
-
-        var @event = new ClientCommandEvent(clientRefId, target.ClientId, workspaceId, command, payload, commandId, TargetHostId: target.HostId);
-        await eventBus.PublishAsync(Attributed(@event, sentBy), ct);
     }
 
-    private static TEvent Attributed<TEvent>(TEvent @event, CommandSender? sentBy) where TEvent : BaseEvent
+    private static void Attribute(ClientCommandEvent @event, CommandSender? sentBy)
     {
-        if (sentBy is not null && @event is ActorEvent actor)
+        if (sentBy is not null)
         {
-            actor.ActorSource = EventSource.Workflow;
-            actor.ActorWorkflowRefId = sentBy.WorkflowRefId;
-            actor.ActorRunRefId = sentBy.RunRefId;
+            @event.ActorSource = EventSource.Workflow;
+            @event.ActorWorkflowRefId = sentBy.WorkflowRefId;
+            @event.ActorRunRefId = sentBy.RunRefId;
         }
-
-        return @event;
     }
 }

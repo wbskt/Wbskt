@@ -80,12 +80,13 @@ public sealed class BrokerOutageTests
     {
         var clientRef = Guid.NewGuid();
         var clientService = new Mock<IClientQueryService>();
-        clientService.Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, clientRef, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<Wbskt.Management.Host.Models.ClientCommandTarget>.Success(new Wbskt.Management.Host.Models.ClientCommandTarget(42, "socket-a")));
+        var targets = new Mock<Wbskt.Infrastructure.Devices.IClientCommandTargetProvider>();
+        targets.Setup(x => x.FindAsync(clientRef, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Wbskt.Infrastructure.Devices.ClientCommandTarget(42, WorkspaceId, true, "socket-a"));
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new Wbskt.Infrastructure.Devices.DeviceCommandSender(targets.Object, bus.Object, NullLogger<Wbskt.Infrastructure.Devices.DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };

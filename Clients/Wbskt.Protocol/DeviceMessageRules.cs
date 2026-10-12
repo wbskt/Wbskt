@@ -19,23 +19,35 @@ public static class DeviceMessageRules
         !string.IsNullOrWhiteSpace(messageType) && messageType.Length <= MaxTypeLength;
 
     /// <summary>Why a message of this type and payload may not be sent, or null when it may.</summary>
-    public static string? FindViolation(string? messageType, string? payload)
+    public static string? FindViolation(string? messageType, string? payload) => Check(messageType, payload)?.Message;
+
+    /// <summary>The rule a message of this type and payload breaks, or null when it may be sent.</summary>
+    public static DeviceMessageViolation? Check(string? messageType, string? payload)
     {
         if (!IsValidType(messageType))
         {
-            return $"Message type must be 1-{MaxTypeLength} characters.";
+            return new DeviceMessageViolation(DeviceMessageRule.TypeLength, $"Message type must be 1-{MaxTypeLength} characters.");
         }
 
         if (IsReserved(messageType))
         {
-            return $"Message type '{messageType}' is reserved for the platform protocol.";
+            return new DeviceMessageViolation(DeviceMessageRule.TypeReserved, $"Message type '{messageType}' is reserved for the platform protocol.");
         }
 
         if (payload is { Length: > MaxPayloadChars })
         {
-            return $"Message payload is limited to {MaxPayloadChars} characters.";
+            return new DeviceMessageViolation(DeviceMessageRule.PayloadSize, $"Message payload is limited to {MaxPayloadChars} characters.");
         }
 
         return null;
     }
 }
+
+public enum DeviceMessageRule
+{
+    TypeLength,
+    TypeReserved,
+    PayloadSize
+}
+
+public sealed record DeviceMessageViolation(DeviceMessageRule Rule, string Message);
