@@ -6,6 +6,9 @@ namespace Wbskt.Management.Host.Handlers.Events;
 
 public sealed class EventLoggerHandlerDefinition : ConsumerDefinition<EventLoggerHandler>
 {
+    /// <summary>The shared audit-log queue. Its retry is its own, so the bus-wide default skips it.</summary>
+    public const string QueueName = "event-audit-log";
+
     private readonly EventLoggingOptions _options;
 
     public EventLoggerHandlerDefinition(IOptions<EventLoggingOptions> options)
@@ -13,7 +16,7 @@ public sealed class EventLoggerHandlerDefinition : ConsumerDefinition<EventLogge
         _options = options.Value;
 
         // Name the shared queue explicitly to enable Competing Consumers
-        EndpointName = "event-audit-log";
+        EndpointName = QueueName;
     }
 
     protected override void ConfigureConsumer(IReceiveEndpointConfigurator endpointConfigurator, IConsumerConfigurator<EventLoggerHandler> consumerConfigurator, IRegistrationContext context)

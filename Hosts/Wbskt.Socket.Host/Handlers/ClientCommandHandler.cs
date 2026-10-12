@@ -66,7 +66,6 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
         try
         {
             await HandleCommandAsync(connection, command, context.CancellationToken);
-            await _eventBus.PublishAsync(new ClientCommandDeliveredEvent(command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, command.Payload, command.CommandId), context.CancellationToken);
         }
         catch (Exception ex)
         {
@@ -74,6 +73,19 @@ public sealed class ClientCommandHandler : IConsumer<ClientCommandEvent>
             // the console get a fixed reason, and the detail stays in this host's log.
             _logger.LogWarning(ex, "Command {CommandId} for {ClientRefId} could not be sent.", command.CommandId, command.ClientRefId);
             await PublishFailedAsync(command, SendFailedReason, context.CancellationToken);
+            return;
+        }
+
+        // The device has the command now. Failing here would retry the message (ConsumerRetry.Default)
+        // and send the command a second time, which a device acting on it (a relay toggle) cannot tell
+        // from a new one. Losing the delivery record is the smaller harm: the device's ack still arrives.
+        try
+        {
+            await _eventBus.PublishAsync(new ClientCommandDeliveredEvent(command.ClientRefId, command.ClientId, command.WorkspaceId, command.Type, command.Payload, command.CommandId), context.CancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Command {CommandId} for {ClientRefId} was sent, but its delivery could not be announced.", command.CommandId, command.ClientRefId);
         }
     }
 

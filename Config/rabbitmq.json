@@ -2,7 +2,6 @@
   "RabbitMQ": {
     "HostName": "localhost",
     "UserName": "guest",
-    "Password": "guest",
-    "ExchangeName": "wbskt.events"
+    "Password": "guest"
   }
 }

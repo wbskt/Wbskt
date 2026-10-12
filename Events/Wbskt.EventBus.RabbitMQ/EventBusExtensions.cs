@@ -31,7 +31,8 @@ public static class EventBusExtensions
         Action<IBusRegistrationConfigurator>? configureBus = null,
         Action<RabbitMQOptions>? configureOptions = null,
         Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureEndpoints = null,
-        bool perInstanceEndpoints = false)
+        bool perInstanceEndpoints = false,
+        IReadOnlyCollection<string>? endpointsWithOwnRetry = null)
         {
 
         var options = new RabbitMQOptions();
@@ -65,6 +66,8 @@ public static class EventBusExtensions
                 });
             }
 
+            x.AddDefaultConsumerRetry(endpointsWithOwnRetry);
+
             // 2. Discover and Register Consumers from Host Assemblies
             var entryAssembly = Assembly.GetEntryAssembly();
             if (entryAssembly != null)
@@ -92,5 +95,26 @@ public static class EventBusExtensions
         });
 
         services.AddSingleton<IEventBus, MassTransitEventBus>();
+    }
+
+    /// <summary>
+    /// Gives every receive endpoint <see cref="ConsumerRetry.Default"/>, except those named in
+    /// <paramref name="endpointsWithOwnRetry"/>, whose definitions configure a policy of their own (two
+    /// retry filters on one endpoint would nest and multiply the attempts).
+    /// </summary>
+    /// <remarks>
+    /// MassTransit does not retry unless asked: without this, one SQL timeout in a consumer moves the
+    /// message straight to its _error queue, where it waits for someone to move it back.
+    /// </remarks>
+    public static void AddDefaultConsumerRetry(this IBusRegistrationConfigurator configurator, IReadOnlyCollection<string>? endpointsWithOwnRetry = null)
+    {
+        var excluded = new HashSet<string>(endpointsWithOwnRetry ?? [], StringComparer.Ordinal);
+        configurator.AddConfigureEndpointsCallback((_, name, endpointConfigurator) =>
+        {
+            if (!excluded.Contains(name))
+            {
+                endpointConfigurator.UseMessageRetry(ConsumerRetry.Default);
+            }
+        });
     }
 }

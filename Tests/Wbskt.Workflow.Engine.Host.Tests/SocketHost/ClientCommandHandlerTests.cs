@@ -141,6 +141,20 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
+    public async Task A_sent_command_whose_delivery_cannot_be_announced_is_not_failed_or_retried()
+    {
+        // Throwing here would make the bus retry the message and send the command to the device twice.
+        Connected();
+        _bus.Setup(x => x.PublishAsync(It.IsAny<ClientCommandDeliveredEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broker unavailable"));
+
+        await CreateHandler().Consume(Context());
+
+        _sentFrames.Should().ContainSingle();
+        _bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandFailedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task A_command_without_an_expiry_omits_the_field()
     {
         Connected();

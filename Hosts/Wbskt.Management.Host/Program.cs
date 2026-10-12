@@ -25,6 +25,7 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Extensions;
+using Wbskt.Management.Host.Handlers.Events;
 using Wbskt.Management.Host.Hosting;
 using Wbskt.Management.Host.Hubs;
 using Wbskt.Management.Host.Models;
@@ -163,7 +164,9 @@ public static class Program
                 {
                     configurator.AddAutoSignalRForwarding();
                 }
-            });
+            },
+            // The audit log retries whole batches on a longer schedule of its own.
+            endpointsWithOwnRetry: [EventLoggerHandlerDefinition.QueueName]);
 
         // Commands and pings go straight to the bus, so they are attributed to their sender there; the
         // queued bus does the same for everything else (see ActorStampingEventBus).
