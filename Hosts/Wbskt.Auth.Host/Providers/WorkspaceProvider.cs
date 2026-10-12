@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models;
 
 namespace Wbskt.Auth.Host.Providers;
@@ -101,11 +102,13 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         }, cancellationToken);
     }
 
-    public async Task DeleteWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default)
+    public async Task DeleteWorkspaceAsync(int workspaceId, OutboxMessage deletedEvent, CancellationToken cancellationToken = default)
     {
         await ExecuteNonQueryAsync("dbo.Workspace_Delete", p =>
         {
             p.AddWithValue("@Id", workspaceId);
+            p.AddWithValue("@OutboxMessageType", deletedEvent.MessageType);
+            p.AddWithValue("@OutboxPayload", deletedEvent.Payload);
         }, cancellationToken);
     }
 

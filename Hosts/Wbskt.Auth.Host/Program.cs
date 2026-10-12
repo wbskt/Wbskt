@@ -14,6 +14,7 @@ using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Infrastructure.Events;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
@@ -104,6 +105,10 @@ public static class Program
 
         // Registered after the bus so it stops first, and can still send what is queued while stopping.
         builder.Services.AddHostedService<QueuedEventDispatcher>();
+
+        // Events written to the auth database in the same transaction as the change they announce
+        // (a workspace delete); also after the bus, for the same reason.
+        builder.Services.AddEventOutbox("AuthDBConnection");
 
         // Startup Tasks
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();

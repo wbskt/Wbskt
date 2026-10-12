@@ -1,4 +1,5 @@
 using Wbskt.Auth.Host.Models;
+using Wbskt.Infrastructure.Events.Outbox;
 using Wbskt.Models;
 using Wbskt.Primitives;
 
@@ -19,7 +20,8 @@ internal interface IWorkspaceProvider : IReferenceProvider
     /// </summary>
     Task<WorkspaceAccessResolution?> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default);
     Task UpdateWorkspaceAsync(int workspaceId, string name, string? description, CancellationToken cancellationToken = default);
-    Task DeleteWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default);
+    /// <summary>Deletes the workspace and, in the same transaction, queues <paramref name="deletedEvent"/> in the outbox.</summary>
+    Task DeleteWorkspaceAsync(int workspaceId, OutboxMessage deletedEvent, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Makes <paramref name="userId"/> the owner, adding them as a member if needed. Throws 50009 when
