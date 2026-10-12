@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using StackExchange.Redis;
 using Microsoft.Extensions.Options;
+using Wbskt.Auth.Host.Authorization;
 using Wbskt.Auth.Host.Controllers;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
@@ -150,7 +151,13 @@ public static class Program
         // tagged "ready"), so only SQL needs adding here.
         builder.Services.AddHealthChecks().AddSqlServerCheck("AuthDBConnection");
 
-        builder.Services.AddControllers();
+        // Tenant and workspace actions declare their permissions; these filters resolve the scope once
+        // and refuse the request before it reaches the action.
+        builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<TenantPermissionFilter>();
+            options.Filters.Add<WorkspacePermissionFilter>();
+        });
         builder.Services.AddWbsktJson();
 
         builder.Services.AddCustomOpenApi();

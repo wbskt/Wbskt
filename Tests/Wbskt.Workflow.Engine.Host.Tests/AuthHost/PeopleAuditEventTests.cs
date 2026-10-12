@@ -19,7 +19,6 @@ public sealed class PeopleAuditEventTests
 {
     private const int CallerId = 1;
     private const int TenantId = 5;
-    private static readonly Guid TenantRef = Guid.NewGuid();
     private static readonly IReadOnlyList<int> TenantWorkspaces = [10, 11];
 
     private readonly Mock<IAuthProvider> _provider = new();
@@ -29,8 +28,6 @@ public sealed class PeopleAuditEventTests
 
     public PeopleAuditEventTests()
     {
-        _provider.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
-        _provider.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _audit.Setup(a => a.OfTenantAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantWorkspaces);
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<IEvent>(), It.IsAny<CancellationToken>()))
@@ -55,7 +52,7 @@ public sealed class PeopleAuditEventTests
         _provider.Setup(p => p.CreateInvitationAsync(TenantId, "amal@example.test", null, It.IsAny<byte[]>(), It.IsAny<DateTime>(), CallerId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CreatedInvitation(invitationRef, "Acme"));
 
-        await _service.CreateInvitationAsync(CallerId, TenantRef, new CreateInvitationRequest("amal@example.test", null), CancellationToken.None);
+        await _service.CreateInvitationAsync(CallerId, TenantId, new CreateInvitationRequest("amal@example.test", null), CancellationToken.None);
 
         var sent = Assert.IsType<InvitationSentEvent>(Assert.Single(_published));
         Assert.Equal((invitationRef, "amal@example.test"), (sent.InvitationRefId, sent.Email));
@@ -70,8 +67,8 @@ public sealed class PeopleAuditEventTests
         _provider.Setup(p => p.RevokeInvitationAsync(outstanding, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync("amal@example.test");
         _provider.Setup(p => p.RevokeInvitationAsync(spent, TenantId, It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
 
-        await _service.RevokeInvitationAsync(CallerId, TenantRef, outstanding, CancellationToken.None);
-        await _service.RevokeInvitationAsync(CallerId, TenantRef, spent, CancellationToken.None);
+        await _service.RevokeInvitationAsync(TenantId, outstanding, CancellationToken.None);
+        await _service.RevokeInvitationAsync(TenantId, spent, CancellationToken.None);
 
         var revoked = Assert.IsType<InvitationRevokedEvent>(Assert.Single(_published));
         Assert.Equal((outstanding, "amal@example.test"), (revoked.InvitationRefId, revoked.Email));
@@ -86,7 +83,7 @@ public sealed class PeopleAuditEventTests
             .ReturnsAsync([new RolePermissionAssignmentResponse("devices.read", false)])
             .ReturnsAsync([new RolePermissionAssignmentResponse("users.manage", true), new RolePermissionAssignmentResponse("devices.read", false)]);
 
-        await _service.GrantRolePermissionAsync(CallerId, TenantRef, roleRef, new GrantRolePermissionRequest("users.manage", true), CancellationToken.None);
+        await _service.GrantRolePermissionAsync(TenantId, roleRef, new GrantRolePermissionRequest("users.manage", true), CancellationToken.None);
 
         // The permission caches hear of it as before; the audit log gets the before and after.
         Assert.Contains(_published, e => e is RolePermissionsChangedEvent { RoleId: 42 });

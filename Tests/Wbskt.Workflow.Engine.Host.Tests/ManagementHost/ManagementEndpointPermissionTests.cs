@@ -2,6 +2,7 @@ using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Primitives.Constants;
 

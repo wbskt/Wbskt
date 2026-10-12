@@ -7,10 +7,9 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
@@ -215,7 +214,7 @@ public sealed class WorkspacePermissionFilterTests
 
         var services = new ServiceCollection()
             .AddSingleton(auth.Object)
-            .AddSingleton<ILogger<WorkspacePermissionFilter>>(NullLogger<WorkspacePermissionFilter>.Instance)
+            .AddLogging()
             .BuildServiceProvider();
         var http = new DefaultHttpContext { RequestServices = services };
         var routeData = new RouteData();
