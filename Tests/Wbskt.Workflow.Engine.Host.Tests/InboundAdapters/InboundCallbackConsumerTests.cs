@@ -23,14 +23,14 @@ public sealed class InboundCallbackConsumerTests
         var hub = RecordingHub(out List<InboundEvent> events);
         var messageId = Guid.NewGuid();
 
-        await new InboundCallbackConsumer(hub.Object).Consume(Context(new InboundWebhook(WorkspaceRef, "alerts", "{\"value\":1}", "s3cret", null), messageId));
+        await new InboundCallbackConsumer(hub.Object).Consume(Context(new InboundWebhook(WorkspaceRef, "alerts", "{\"value\":1}", WebhookSecretHash.Of("s3cret"), null), messageId));
 
         InboundEvent e = Assert.Single(events);
         Assert.Equal("webhook", e.ChannelKind);
         Assert.Contains($"webhook:{WorkspaceRef}:alerts", e.MatchKeys);
         Assert.Equal($"webhook:{WorkspaceRef}:alerts:{messageId}", e.InboundEventId);
         Assert.Equal(1, e.Payload["body"].GetProperty("value").GetInt32());
-        Assert.Equal("s3cret", e.Secret);
+        Assert.Equal(WebhookSecretHash.Of("s3cret"), e.SecretHash);
         Assert.False(e.Payload.ContainsKey("secret"));
     }
 
@@ -59,7 +59,7 @@ public sealed class InboundCallbackConsumerTests
         var consumer = new InboundCallbackConsumer(hub.Object);
 
         Task SendAsync(string? key, string? secret, string path = "alerts") =>
-            consumer.Consume(Context(new InboundWebhook(WorkspaceRef, path, "{}", secret, key), Guid.NewGuid()));
+            consumer.Consume(Context(new InboundWebhook(WorkspaceRef, path, "{}", WebhookSecretHash.Of(secret), key), Guid.NewGuid()));
 
         await SendAsync("delivery-1", "s3cret");
         await SendAsync("delivery-1", "s3cret");
@@ -97,7 +97,7 @@ public sealed class InboundCallbackConsumerTests
     {
         // The gateway sends to an address and the engine reads from a queue named by its consumer
         // definition: this is the test that they are the same queue, and that a webhook's body and
-        // secret survive the trip.
+        // secret hash survive the trip.
         var received = new TaskCompletionSource<InboundEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
@@ -125,7 +125,8 @@ public sealed class InboundCallbackConsumerTests
             InboundEvent e = await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Contains($"webhook:{WorkspaceRef}:alerts", e.MatchKeys);
             Assert.Equal(1, e.Payload["body"].GetProperty("value").GetInt32());
-            Assert.Equal("s3cret", e.Secret);
+            // Only the hash travelled; the secret itself was never written to the broker.
+            Assert.Equal(WebhookSecretHash.Of("s3cret"), e.SecretHash);
         }
         finally
         {

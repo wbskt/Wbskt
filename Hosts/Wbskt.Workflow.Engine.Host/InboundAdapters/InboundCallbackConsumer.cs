@@ -26,8 +26,8 @@ public sealed class InboundCallbackConsumer(IInboundHub hub, ILogger<InboundCall
             webhook.WorkspaceRef,
             webhook.Path,
             ParseBody(webhook.Body),
-            WebhookEventIds.For(webhook.WorkspaceRef, webhook.Path, webhook.IdempotencyKey, webhook.Secret, InboundMessageId.Stable(context)),
-            webhook.Secret);
+            WebhookEventIds.For(webhook.WorkspaceRef, webhook.Path, webhook.IdempotencyKey, webhook.SecretHash, InboundMessageId.Stable(context)),
+            webhook.SecretHash);
 
         TriggerDispatchResult result = await hub.HandleAsync(inboundEvent, context.CancellationToken);
         logger?.LogInformation("Webhook {Path} in workspace {WorkspaceRef}: {Outcome} across {Count} registration(s).",

@@ -4,6 +4,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Management.Host.Services.Clients;
 
@@ -46,8 +47,9 @@ internal sealed class WorkflowEngineGateway : IWorkflowEngineGateway
 
     public Task SendWebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, string? idempotencyKey, CancellationToken ct)
     {
-        // An empty header is no secret, as when it was relayed over HTTP.
-        return SendCallbackAsync(new InboundWebhook(workspaceRef, path, payload.GetRawText(), string.IsNullOrEmpty(secret) ? null : secret, idempotencyKey), ct);
+        // Hashed before it is queued, so the secret is never written to the broker. An empty header is
+        // no secret.
+        return SendCallbackAsync(new InboundWebhook(workspaceRef, path, payload.GetRawText(), WebhookSecretHash.Of(secret), idempotencyKey), ct);
     }
 
     private async Task SendCallbackAsync<T>(T callback, CancellationToken ct) where T : class

@@ -18,7 +18,7 @@ public sealed class WebhookChannel : TriggerChannel
 
     public static string Key(string workspaceRef, string path) => $"{Name}:{workspaceRef}:{path}";
 
-    public static InboundEvent Event(Guid workspaceRef, string path, JsonElement body, string inboundEventId, string? secret) => new(
+    public static InboundEvent Event(Guid workspaceRef, string path, JsonElement body, string inboundEventId, string? secretHash) => new(
         Name,
         [Key(workspaceRef.ToString(), path)],
         inboundEventId,
@@ -32,7 +32,7 @@ public sealed class WebhookChannel : TriggerChannel
     {
         // Carried beside the payload, never inside it: the payload is persisted as the run's trigger
         // data, and a secret written there would be readable from the run's history forever.
-        Secret = secret
+        SecretHash = secretHash
     };
 
     public override string CorrelationKey(InboundEvent evt) =>

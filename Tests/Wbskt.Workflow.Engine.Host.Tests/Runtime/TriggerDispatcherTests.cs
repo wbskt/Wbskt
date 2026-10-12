@@ -299,7 +299,7 @@ public sealed class TriggerDispatcherTests
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
             runStarter: new RecordingRunStarter(operations));
 
-        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { Secret = "wrong" }, CancellationToken.None);
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { SecretHash = WebhookSecretHash.Of("wrong") }, CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.SecretMismatch, result.Outcome);
         Assert.Empty(operations);
@@ -324,7 +324,7 @@ public sealed class TriggerDispatcherTests
         var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
 
-        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { Secret = "expected" }, CancellationToken.None);
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { SecretHash = WebhookSecretHash.Of("expected") }, CancellationToken.None);
 
         Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
     }

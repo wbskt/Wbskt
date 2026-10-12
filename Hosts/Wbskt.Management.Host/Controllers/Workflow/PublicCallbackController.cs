@@ -98,7 +98,9 @@ public sealed class PublicCallbackController : ControllerBase
 
     private ActionResult EngineUnavailable(Exception ex)
     {
-        _logger.LogWarning("Queueing a callback for the engine failed: {Message}", ex.Message);
+        // Logged as an error with the exception: every failure lands here, including a bug in this host
+        // rather than a broker outage, and the sender only ever sees the 503.
+        _logger.LogError(ex, "Queueing a callback for the engine failed.");
         Response.Headers.RetryAfter = "5";
         return StatusCode(StatusCodes.Status503ServiceUnavailable);
     }
