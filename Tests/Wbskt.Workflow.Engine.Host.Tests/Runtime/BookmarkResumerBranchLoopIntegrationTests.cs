@@ -195,7 +195,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
 
         public Exception? FailWith { get; set; }
 
-        public Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct)
+        public Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)
         {
             if (FailWith is not null)
             {

@@ -136,6 +136,8 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
             ctx.Branch.WorkspaceId,
             config.Type,
             payload,
+            // A command is worth acting on only while its step would still be waiting for the answer.
+            config.AckTimeout ?? SendClientMessageConfig.DefaultAckTimeout,
             new CommandSender(ctx.Branch.WorkflowDefinitionRefId, ctx.Branch.RunRefId),
             ct);
     }

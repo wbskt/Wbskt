@@ -15,8 +15,3 @@ public class ClientDetail : Client
     public string? CapabilitiesJson { get; set; }
     public DateTime? CapabilitiesUpdatedAt { get; set; }
 }
-
-
-// Where a command goes: the client's internal id and the socket-host instance holding its
-// connection (Clients.ConnectedHostId).
-public sealed record ClientCommandTarget(int ClientId, string HostId);

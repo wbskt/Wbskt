@@ -1,6 +1,7 @@
 using MassTransit;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Devices;
 using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
@@ -78,7 +79,7 @@ public static class Program
         // Re-registers ILeadershipGate (AddWorkflowEngine defaults to always-active for
         // tests/Management) - last registration wins, so the engine host resolves the real one.
         services.AddSingleton<ILeadershipGate, LeadershipGate>();
-        services.AddScoped<IClientCommandTargetProvider, ClientCommandTargetProvider>();
+        services.AddDeviceCommandSender();
         services.AddScoped<IClientPresenceCheckProvider, ClientPresenceCheckProvider>();
         services.AddScoped<ClientPresenceParker>();
         services.AddScoped<IClientHoldStateProvider, ClientHoldStateProvider>();

@@ -60,6 +60,7 @@ internal sealed class NoopDeviceCommandPublisher : IDeviceCommandPublisher
         int workspaceId,
         string command,
         string payload,
+        TimeSpan expiresIn,
         CommandSender? sentBy,
         CancellationToken ct) => Task.CompletedTask;
 }

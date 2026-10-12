@@ -5,7 +5,7 @@ using Wbskt.Events.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.InboundAdapters;
-using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Infrastructure.Devices;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.InboundAdapters;
 
@@ -17,7 +17,10 @@ public sealed class DeviceCommandPublisherTests
     private const int WorkspaceId = 3;
     private const string HostId = "socket-a";
 
+    private static readonly TimeSpan ExpiresIn = TimeSpan.FromSeconds(30);
+
     private readonly Mock<IEventBus> _bus = new();
+    private readonly FixedClock _clock = new(new DateTimeOffset(2026, 10, 12, 9, 0, 0, TimeSpan.Zero));
     private ClientCommandEvent? _sent;
     private ClientCommandFailedEvent? _failed;
 
@@ -35,14 +38,15 @@ public sealed class DeviceCommandPublisherTests
     {
         var targets = new Mock<IClientCommandTargetProvider>();
         targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(target);
-        return new DeviceCommandPublisher(_bus.Object, targets.Object, NullLogger<DeviceCommandPublisher>.Instance);
+        var sender = new DeviceCommandSender(targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance);
+        return new DeviceCommandPublisher(sender, _bus.Object, _clock);
     }
 
     [Fact]
     public async Task A_command_to_a_connected_device_is_addressed_to_the_host_holding_it()
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
         Assert.NotNull(_sent);
         Assert.Equal(ClientRefId, _sent!.ClientRefId);
@@ -52,6 +56,18 @@ public sealed class DeviceCommandPublisherTests
         Assert.Equal("{}", _sent.Payload);
         Assert.Equal(HostId, _sent.TargetHostId);
         Assert.Equal(CommandId, _sent.CommandId);
+        Assert.Equal(_clock.GetUtcNow().UtcDateTime + ExpiresIn, _sent.ExpiresAtUtc);
+        Assert.Null(_failed);
+    }
+
+    [Fact]
+    public async Task A_broker_that_is_down_fails_the_step_instead_of_reporting_a_device_failure()
+    {
+        _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("broker down"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None));
+
         Assert.Null(_failed);
     }
 
@@ -59,7 +75,7 @@ public sealed class DeviceCommandPublisherTests
     public async Task A_command_to_an_offline_device_is_reported_as_failed_at_once()
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
-            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.NotNull(_failed);
@@ -76,7 +92,7 @@ public sealed class DeviceCommandPublisherTests
     public async Task A_reserved_command_type_is_refused_and_reported(string type)
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, type, "{}", null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, type, "{}", ExpiresIn, null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.NotNull(_failed);
@@ -90,7 +106,7 @@ public sealed class DeviceCommandPublisherTests
         string payload = new('x', 32 * 1024 + 1);
 
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", payload, null, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", payload, ExpiresIn, null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.NotNull(_failed);
@@ -103,7 +119,7 @@ public sealed class DeviceCommandPublisherTests
     {
         var target = otherWorkspace ? new ClientCommandTarget(ClientId, WorkspaceId + 1, true, HostId) : null;
 
-        await Publisher(target).PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", null, CancellationToken.None);
+        await Publisher(target).PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
         Assert.Null(_sent);
         Assert.Equal(DeviceCommandPublisher.UnknownClientReason, _failed!.Reason);
@@ -116,11 +132,16 @@ public sealed class DeviceCommandPublisherTests
         var sender = new CommandSender(Guid.NewGuid(), Guid.NewGuid());
 
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId))
-            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", sender, CancellationToken.None);
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, sender, CancellationToken.None);
 
         Assert.Equal(EventSource.Workflow, _sent!.ActorSource);
         Assert.Equal(sender.WorkflowRefId, _sent.ActorWorkflowRefId);
         Assert.Equal(sender.RunRefId, _sent.ActorRunRefId);
         Assert.Null(_sent.ActorUserId);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

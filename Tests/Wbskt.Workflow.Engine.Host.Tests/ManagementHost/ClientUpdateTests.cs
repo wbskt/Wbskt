@@ -30,7 +30,7 @@ public sealed class ClientUpdateTests
         var controller = new ClientsController(
             queries.Object,
             clients.Object,
-            new ClientCommandService(queries.Object, Mock.Of<IEventBus>(), NullLogger<ClientCommandService>.Instance),
+            new ClientCommandService(queries.Object, Mock.Of<Wbskt.Infrastructure.Devices.IDeviceCommandSender>(), Mock.Of<IEventBus>(), NullLogger<ClientCommandService>.Instance),
             Mock.Of<IRegistrationPolicyService>(),
             Mock.Of<IEventLogService>())
         {

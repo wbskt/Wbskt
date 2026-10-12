@@ -122,26 +122,6 @@ internal sealed class ClientQueryService : IClientQueryService
             : Result<int>.Failure(clientResult.Error);
     }
 
-    public async Task<Result<ClientCommandTarget>> ResolveCommandTargetAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
-    {
-        var clientResult = await FindInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
-        if (clientResult.IsFailure)
-        {
-            return Result<ClientCommandTarget>.Failure(clientResult.Error);
-        }
-
-        var client = clientResult.Value;
-        if (!client.IsConnected || string.IsNullOrEmpty(client.ConnectedHostId))
-        {
-            _logger.LogInformation("Command refused: client RefId {ClientRefId} is offline", clientRefId);
-            return Result<ClientCommandTarget>.Failure(DeviceOffline);
-        }
-
-        return Result<ClientCommandTarget>.Success(new ClientCommandTarget(client.Id, client.ConnectedHostId));
-    }
-
-    private static readonly Error DeviceOffline = Error.Conflict("DEVICE_OFFLINE", "The device is offline. Commands are only delivered to connected devices.");
-
     private static ClientResponse MapToResponse(Client c)
     {
         return new ClientResponse(

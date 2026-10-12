@@ -6,6 +6,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
+using Wbskt.Infrastructure.Devices;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
@@ -30,13 +31,15 @@ public sealed class ClientsControllerScopingTests
 
     // The workspace and the caller's permission are settled by WorkspacePermissionFilter before the
     // action runs (see WorkspacePermissionFilterTests), so the actions are handed the resolved ID.
-    private static (ClientsController Controller, Mock<IClientQueryService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController()
+    private readonly Mock<IClientCommandTargetProvider> _targets = new();
+
+    private (ClientsController Controller, Mock<IClientQueryService> ClientService, Mock<IEventBus> Bus, Mock<IEventLogService> EventLogService) CreateController()
     {
         var clientService = new Mock<IClientQueryService>();
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new DeviceCommandSender(_targets.Object, bus.Object, NullLogger<DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -46,11 +49,9 @@ public sealed class ClientsControllerScopingTests
         return (controller, clientService, bus, eventLogService);
     }
 
-    private static void SetupTarget(Mock<IClientQueryService> clientService, Result<ClientCommandTarget> outcome)
+    private void SetupTarget(ClientCommandTarget? target)
     {
-        clientService
-            .Setup(x => x.ResolveCommandTargetAsync(WorkspaceId, ClientRefId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(outcome);
+        _targets.Setup(x => x.FindAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(target);
     }
 
     private static void SetupOwnership(Mock<IClientQueryService> clientService, Result<int> outcome)
@@ -64,7 +65,7 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_does_not_publish_for_a_client_in_another_workspace()
     {
         var (controller, clientService, bus, _) = CreateController();
-        SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Foreign));
+        SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId + 1, true, HostId));
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
@@ -76,7 +77,7 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_publishes_with_the_resolved_client_id_when_owned()
     {
         var (controller, clientService, bus, _) = CreateController();
-        SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
+        SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId));
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
@@ -91,7 +92,7 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_to_an_offline_device_is_a_409_and_publishes_nothing()
     {
         var (controller, clientService, bus, _) = CreateController();
-        SetupTarget(clientService, Result<ClientCommandTarget>.Failure(Error.Conflict("DEVICE_OFFLINE", "offline")));
+        SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId, false, null));
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
@@ -104,7 +105,7 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_carries_expiresAt_to_the_socket_host()
     {
         var (controller, clientService, bus, _) = CreateController();
-        SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
+        SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId));
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(2);
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}", expiresAt), CancellationToken.None)).Result;
@@ -121,7 +122,7 @@ public sealed class ClientsControllerScopingTests
     public async Task SendCommand_rejects_an_expiresAt_in_the_past_or_over_a_day_away(int minutesAhead)
     {
         var (controller, clientService, bus, _) = CreateController();
-        SetupTarget(clientService, Result<ClientCommandTarget>.Success(new ClientCommandTarget(ClientId, HostId)));
+        SetupTarget(new ClientCommandTarget(ClientId, WorkspaceId, true, HostId));
 
         var request = new ClientCommandRequest("reboot", "{}", DateTimeOffset.UtcNow.AddMinutes(minutesAhead));
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, request, CancellationToken.None)).Result;
