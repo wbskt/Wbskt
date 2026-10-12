@@ -138,6 +138,7 @@ public static class QueuedEventBusExtensions
     public static IServiceCollection AddQueuedEventBus(this IServiceCollection services)
     {
         services.AddSingleton<QueuedEventBus>();
+        services.AddKeyedSingleton<ICommandSender>(QueuedKey, (sp, _) => new QueuedCommandSender(sp.GetRequiredService<QueuedEventBus>(), sp.GetRequiredService<ICommandSender>()));
         services.AddKeyedScoped<IEventBus>(QueuedKey, (sp, _) => WithActor(sp, sp.GetRequiredService<QueuedEventBus>()));
         return services;
     }

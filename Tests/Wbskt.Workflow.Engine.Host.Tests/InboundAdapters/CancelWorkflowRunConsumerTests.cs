@@ -90,7 +90,7 @@ public sealed class CancelWorkflowRunConsumerTests
         string endpoints = JsonSerializer.Serialize(bus.GetProbeResult());
         await bus.StopAsync();
 
-        Assert.Contains(CancelWorkflowRunConsumerDefinition.QueueName, endpoints);
+        Assert.Contains(CancelWorkflowRun.QueueName, endpoints);
     }
 
     private static ConsumeContext<CancelWorkflowRun> Context(long runId, string reason)

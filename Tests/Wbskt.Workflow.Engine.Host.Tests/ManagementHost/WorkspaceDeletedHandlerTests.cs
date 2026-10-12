@@ -60,8 +60,9 @@ public sealed class WorkspaceDeletedHandlerTests
         provider.Setup(p => p.RetireAsync(WorkspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkspaceRetirement([], [201L, 202L, 203L], []));
         var bus = new Mock<IEventBus>();
-        var queued = new Mock<IEventBus>(MockBehavior.Strict);
-        var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), bus.Object, queued.Object, Mock.Of<ISendEndpointProvider>());
+        var commands = new Mock<ICommandSender>();
+        var queued = new Mock<ICommandSender>(MockBehavior.Strict);
+        var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), commands.Object, queued.Object);
 
         var handler = new WorkspaceDeletedHandler(
             provider.Object, bus.Object, gateway, Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceDeletedHandler>.Instance);
@@ -70,12 +71,12 @@ public sealed class WorkspaceDeletedHandlerTests
 
         foreach (long runId in new[] { 201L, 202L, 203L })
         {
-            bus.Verify(b => b.PublishAsync(
+            commands.Verify(b => b.SendAsync(
                 It.Is<CancelWorkflowRun>(c => c.RunId == runId && c.Reason == "Workspace deleted."),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
 
-        bus.Verify(b => b.PublishAsync(It.IsAny<CancelWorkflowRun>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+        commands.Verify(b => b.SendAsync(It.IsAny<CancelWorkflowRun>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events.Workflow;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -23,7 +24,7 @@ public sealed class InboundCallbackConsumerTests
         var hub = RecordingHub(out List<InboundEvent> events);
         var messageId = Guid.NewGuid();
 
-        await new InboundCallbackConsumer(hub.Object).Consume(Context(new InboundWebhook(WorkspaceRef, "alerts", "{\"value\":1}", WebhookSecretHash.Of("s3cret"), null), messageId));
+        await new InboundCallbackConsumer(hub.Object).Consume(Context(new TriggerWebhook(WorkspaceRef, "alerts", "{\"value\":1}", WebhookSecretHash.Of("s3cret"), null), messageId));
 
         InboundEvent e = Assert.Single(events);
         Assert.Equal("webhook", e.ChannelKind);
@@ -39,7 +40,7 @@ public sealed class InboundCallbackConsumerTests
     {
         var hub = RecordingHub(out List<InboundEvent> events);
         var consumer = new InboundCallbackConsumer(hub.Object);
-        var webhook = new InboundWebhook(WorkspaceRef, "alerts", "{}", null, null);
+        var webhook = new TriggerWebhook(WorkspaceRef, "alerts", "{}", null, null);
         var messageId = Guid.NewGuid();
 
         await consumer.Consume(Context(webhook, messageId));
@@ -59,7 +60,7 @@ public sealed class InboundCallbackConsumerTests
         var consumer = new InboundCallbackConsumer(hub.Object);
 
         Task SendAsync(string? key, string? secret, string path = "alerts") =>
-            consumer.Consume(Context(new InboundWebhook(WorkspaceRef, path, "{}", WebhookSecretHash.Of(secret), key), Guid.NewGuid()));
+            consumer.Consume(Context(new TriggerWebhook(WorkspaceRef, path, "{}", WebhookSecretHash.Of(secret), key), Guid.NewGuid()));
 
         await SendAsync("delivery-1", "s3cret");
         await SendAsync("delivery-1", "s3cret");
@@ -82,7 +83,7 @@ public sealed class InboundCallbackConsumerTests
         var hub = RecordingHub(out List<InboundEvent> events);
         var messageId = Guid.NewGuid();
 
-        await new InboundCallbackConsumer(hub.Object).Consume(Context(new InboundWake("tok-1", "{\"approved\":true}"), messageId));
+        await new InboundCallbackConsumer(hub.Object).Consume(Context(new WakeWaitingStep("tok-1", "{\"approved\":true}"), messageId));
 
         InboundEvent e = Assert.Single(events);
         Assert.Equal("http-wake", e.ChannelKind);
@@ -118,7 +119,7 @@ public sealed class InboundCallbackConsumerTests
         await bus.StartAsync();
         try
         {
-            var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Mock.Of<IEventBus>(), Mock.Of<IEventBus>(), bus);
+            var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), new MassTransitCommandSender(bus), Mock.Of<ICommandSender>());
 
             await gateway.SendWebhookAsync(WorkspaceRef, "alerts", JsonDocument.Parse("{\"value\":1}").RootElement, "s3cret", null, CancellationToken.None);
 

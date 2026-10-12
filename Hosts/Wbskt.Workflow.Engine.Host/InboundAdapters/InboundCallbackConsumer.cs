@@ -17,11 +17,11 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// resumes a bookmark that the first delivery already consumed, so the second finds nothing.
 /// </remarks>
 public sealed class InboundCallbackConsumer(IInboundHub hub, ILogger<InboundCallbackConsumer>? logger = null)
-    : IConsumer<InboundWebhook>, IConsumer<InboundWake>
+    : IConsumer<TriggerWebhook>, IConsumer<WakeWaitingStep>
 {
-    public async Task Consume(ConsumeContext<InboundWebhook> context)
+    public async Task Consume(ConsumeContext<TriggerWebhook> context)
     {
-        InboundWebhook webhook = context.Message;
+        TriggerWebhook webhook = context.Message;
         InboundEvent inboundEvent = WebhookChannel.Event(
             webhook.WorkspaceRef,
             webhook.Path,
@@ -34,7 +34,7 @@ public sealed class InboundCallbackConsumer(IInboundHub hub, ILogger<InboundCall
             webhook.Path, webhook.WorkspaceRef, result.Outcome, result.Registrations.Count);
     }
 
-    public async Task Consume(ConsumeContext<InboundWake> context)
+    public async Task Consume(ConsumeContext<WakeWaitingStep> context)
     {
         InboundEvent inboundEvent = HttpWakeChannel.Event(context.Message.Token, ParseBody(context.Message.Body), InboundMessageId.Stable(context));
 

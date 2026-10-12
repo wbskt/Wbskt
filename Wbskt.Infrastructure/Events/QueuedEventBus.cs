@@ -51,13 +51,19 @@ public sealed class QueuedEventBus : IEventBus
     /// <summary>Queues the event. Never blocks, never throws, and ignores <paramref name="ct"/>: the request may end before the event is sent.</summary>
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default) where TEvent : IEvent
     {
-        var queued = new QueuedEvent(typeof(TEvent).Name, (bus, token) => bus.PublishAsync(@event, token));
+        Queue(new QueuedEvent(typeof(TEvent).Name, (bus, token) => bus.PublishAsync(@event, token)));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Queues a send that does not go through the event bus (a command), to go out in order with the events.</summary>
+    internal void Queue(string name, Func<CancellationToken, Task> send) => Queue(new QueuedEvent(name, (_, token) => send(token)));
+
+    private void Queue(QueuedEvent queued)
+    {
         if (!_channel.Writer.TryWrite(queued))
         {
             _logger.LogError("The event queue is full; {EventType} was dropped. The event bus is not keeping up.", queued.Name);
         }
-
-        return Task.CompletedTask;
     }
 
     internal IAsyncEnumerable<QueuedEvent> ReadAllAsync(CancellationToken ct) => _channel.Reader.ReadAllAsync(ct);

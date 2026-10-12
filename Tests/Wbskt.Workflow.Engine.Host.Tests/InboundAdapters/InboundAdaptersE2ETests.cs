@@ -38,8 +38,8 @@ public sealed class InboundAdaptersE2ETests
     {
         var hub = CreateHub();
         var consumer = new InboundCallbackConsumer(hub.Object);
-        var context = new Mock<ConsumeContext<InboundWebhook>>();
-        context.SetupGet(c => c.Message).Returns(new InboundWebhook(Guid.NewGuid(), "alerts", "{\"value\":1}", null, null));
+        var context = new Mock<ConsumeContext<TriggerWebhook>>();
+        context.SetupGet(c => c.Message).Returns(new TriggerWebhook(Guid.NewGuid(), "alerts", "{\"value\":1}", null, null));
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
         await consumer.Consume(context.Object);
