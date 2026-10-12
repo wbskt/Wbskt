@@ -63,6 +63,8 @@ public sealed class BaseNodeJsonConverter : JsonConverter<BaseNode>
         NodeKind.ActionWebhook => typeof(WebhookNotificationNode),
         NodeKind.ActionTelegram => typeof(TelegramNotificationNode),
         NodeKind.ActionToast => typeof(ToastNotificationNode),
+        NodeKind.ActionDiscord => typeof(DiscordNotificationNode),
+        NodeKind.ActionNtfy => typeof(NtfyNotificationNode),
         _ => throw new JsonException($"Unsupported node kind '{kind}'.")
     };
 }

@@ -183,42 +183,46 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    /// <remarks>
-    /// No credentials here: the SMTP relay is host configuration (<c>WorkflowEngine:Email</c>), because a
-    /// definition is readable by the whole workspace and frozen into every published version.
-    /// </remarks>
-    public WorkflowBuilder AddEmail(string to, string subject, string body, string? name = null)
-    {
-        var id = Guid.NewGuid();
-        _nodes.Add(new EmailNotificationNode {
-            NodeId = id,
+    /// <summary>Sends an email through an SMTP integration, which holds the server and the sender.</summary>
+    public WorkflowBuilder AddEmail(Guid integrationRef, string to, string subject, string body, string? name = null) =>
+        AddSimpleAction(new EmailNotificationNode {
+            NodeId = Guid.NewGuid(),
             Name = name ?? subject,
-            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new EmailConfig { To = to, Subject = subject, Body = body },
-            Retry = null,
-            OnFailure = null,
-            Compensation = null });
+            Ports = SimplePorts(),
+            Config = new EmailConfig { IntegrationRef = integrationRef, To = to, Subject = subject, Body = body } });
 
-        ConnectToHead(id, PortNames.In);
-        _head = (id, PortNames.Default);
-        return this;
-    }
-
-    /// <remarks>The bot token is host configuration (<c>WorkflowEngine:Telegram</c>), not node config.</remarks>
-    public WorkflowBuilder AddTelegram(string chatId, string message, string? name = null)
-    {
-        var id = Guid.NewGuid();
-        _nodes.Add(new TelegramNotificationNode {
-            NodeId = id,
+    /// <summary>Sends a Telegram message through a bot integration, which holds the bot token.</summary>
+    public WorkflowBuilder AddTelegram(Guid integrationRef, string chatId, string message, string? name = null) =>
+        AddSimpleAction(new TelegramNotificationNode {
+            NodeId = Guid.NewGuid(),
             Name = name ?? "Telegram",
-            Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
-            Config = new TelegramConfig { ChatId = chatId, Message = message },
-            Retry = null,
-            OnFailure = null,
-            Compensation = null });
+            Ports = SimplePorts(),
+            Config = new TelegramConfig { IntegrationRef = integrationRef, ChatId = chatId, Message = message } });
 
-        ConnectToHead(id, PortNames.In);
-        _head = (id, PortNames.Default);
+    /// <summary>Posts to a Discord channel through a Discord webhook integration.</summary>
+    public WorkflowBuilder AddDiscord(Guid integrationRef, string message, string? username = null, string? name = null) =>
+        AddSimpleAction(new DiscordNotificationNode {
+            NodeId = Guid.NewGuid(),
+            Name = name ?? "Discord",
+            Ports = SimplePorts(),
+            Config = new DiscordConfig { IntegrationRef = integrationRef, Message = message, Username = username } });
+
+    /// <summary>Publishes to an ntfy topic through an ntfy integration, which names the server and the topic.</summary>
+    public WorkflowBuilder AddNtfy(Guid integrationRef, string message, string? title = null, int? priority = null, IReadOnlyList<string>? tags = null, string? name = null) =>
+        AddSimpleAction(new NtfyNotificationNode {
+            NodeId = Guid.NewGuid(),
+            Name = name ?? "ntfy",
+            Ports = SimplePorts(),
+            Config = new NtfyConfig { IntegrationRef = integrationRef, Message = message, Title = title, Priority = priority, Tags = tags } });
+
+    private static List<PortDefinition> SimplePorts() =>
+        [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }];
+
+    private WorkflowBuilder AddSimpleAction(BaseNode node)
+    {
+        _nodes.Add(node);
+        ConnectToHead(node.NodeId, PortNames.In);
+        _head = (node.NodeId, PortNames.Default);
         return this;
     }
 
@@ -287,7 +291,11 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, out Guid nodeId)
+    /// <remarks>
+    /// With <paramref name="integrationRef"/>, the request carries that HTTP-auth integration's
+    /// credential and <paramref name="url"/> may be relative to its base URL.
+    /// </remarks>
+    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, out Guid nodeId, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -299,7 +307,7 @@ public sealed class WorkflowBuilder
                 new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" },
                 new PortDefinition { PortId = PortNames.Error, Direction = PortDirection.Output, Label = "Error" }
             ],
-            Config = new WebhookNotificationConfig { Url = url, Method = method, Body = body },
+            Config = new WebhookNotificationConfig { Url = url, Method = method, Body = body, IntegrationRef = integrationRef, Headers = headers },
             Retry = new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromMilliseconds(500), Factor = null, MaxDelay = null, MaxAttempts = 5, JitterPct = 0, RetryOn = [] } });
 
         ConnectToHead(id, PortNames.In);
@@ -609,9 +617,9 @@ public sealed class WorkflowBuilder
         return def;
     }
 
-    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, Action<WebhookScope> webhookBranches, JoinMode? joinMode = null)
+    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, Action<WebhookScope> webhookBranches, JoinMode? joinMode = null, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null)
     {
-        AddWebhook(method, url, body, out var webhookId);
+        AddWebhook(method, url, body, out var webhookId, integrationRef, headers);
         var scope = new WebhookScope(this, webhookId);
         webhookBranches(scope);
         

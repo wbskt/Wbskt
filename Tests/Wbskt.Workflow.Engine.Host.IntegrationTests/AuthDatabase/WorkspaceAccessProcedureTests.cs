@@ -111,7 +111,7 @@ public sealed class WorkspaceAccessProcedureTests(AuthSqlFixture fixture)
             WHERE R.TenantId = @p0 AND R.Name = 'User' AND RP.IsDeny = 0
             """, tenantId);
 
-        Assert.Equal("clients.read,logs.read,policies.read,templates.read,workflows.read", granted);
+        Assert.Equal("clients.read,integrations.read,logs.read,policies.read,templates.read,workflows.read", granted);
     }
 
     // ---------------------------------------------------------------- helpers

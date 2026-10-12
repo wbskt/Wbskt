@@ -7,9 +7,11 @@ using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -26,11 +28,13 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private const int WorkflowOwnedElsewhereError = 50021; // THROW in dbo.WorkflowDefinition_Publish
     private const int WorkflowDeletedError = 50022; // THROW in dbo.WorkflowDefinition_Publish
+    private const int IntegrationMissingError = 50023; // THROW in dbo.WorkflowDefinition_Publish
     private const string DeletedCancellationReason = "Workflow deleted.";
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ITriggerRegistrationService _triggerRegistrationService;
     private readonly WorkflowValidator _validator;
+    private readonly IntegrationReferenceCheck _integrationCheck;
     private readonly IIdentityService _identityService;
     private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
@@ -40,6 +44,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ITriggerRegistrationService triggerRegistrationService,
         WorkflowValidator validator,
+        IntegrationReferenceCheck integrationCheck,
         IIdentityService identityService,
         IWorkflowEngineGateway engine,
         IEventBus eventBus,
@@ -50,6 +55,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _triggerRegistrationService = triggerRegistrationService;
         _validator = validator;
+        _integrationCheck = integrationCheck;
         _identityService = identityService;
         _logger = logger;
     }
@@ -66,15 +72,15 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         ValidationResult validation = _validator.Validate(request.Definition);
         if (!validation.IsValid)
         {
-            // Each error names its node, so the message points at what to fix rather than being a
-            // bare sentence. The structured form is available from the validate endpoint.
-            string message = string.Join("; ", validation.Issues
-                .Where(issue => issue.Severity == ValidationSeverity.Error)
-                .Select(issue => issue.NodeId is Guid nodeId
-                    ? $"[{issue.Code}] {issue.Message} (node {nodeId})"
-                    : $"[{issue.Code}] {issue.Message}"));
-            _logger.LogWarning("Workflow publish failed: Validation issues: {Issues}", message);
-            return Result<WorkflowPublishResponse>.Failure(Error.Validation("WORKFLOW_VALIDATION_FAILED", message));
+            return Result<WorkflowPublishResponse>.Failure(ValidationFailed(validation.Issues));
+        }
+
+        // The integrations its steps name must be this workspace's, of the right type. Only then are
+        // they recorded with the version, which is what makes them read as used.
+        IntegrationReferences integrationRefs = await _integrationCheck.CheckAsync(workspaceId, request.Definition, ct);
+        if (integrationRefs.Issues.Count > 0)
+        {
+            return Result<WorkflowPublishResponse>.Failure(ValidationFailed(integrationRefs.Issues));
         }
 
         // Only a genuine "no such workflow" means this is the first version. A database fault
@@ -105,7 +111,15 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
                 PublishedBy = _identityService.GetUserIdentity().UserId,
                 CreatedAt = request.Definition.CreatedAt
-            }, ct);
+            }, integrationRefs.Refs, ct);
+        }
+        catch (SqlException ex) when (ex.Number == IntegrationMissingError)
+        {
+            // An integration a step names was deleted between the check above and the insert.
+            _logger.LogWarning("Workflow publish rejected: an integration of workflow '{RefId}' was deleted while publishing", request.RefId);
+            return Result<WorkflowPublishResponse>.Failure(Error.Validation(
+                "WORKFLOW_VALIDATION_FAILED",
+                "[INTEGRATION_NOT_FOUND] An integration a step sends through was just deleted. Choose another and publish again."));
         }
         catch (SqlException ex) when (ex.Number == WorkflowDeletedError)
         {
@@ -161,6 +175,15 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         if (row.IsEnabled)
         {
             return Result.Failure(Error.Conflict("WORKFLOW_ALREADY_ENABLED", $"Workflow '{refId}' is already enabled."));
+        }
+
+        // An integration deleted while the workflow was deprecated would leave its steps failing on
+        // every run; refuse here, where the author can still choose another and publish.
+        WorkflowDefinition? stored = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions);
+        IntegrationReferences integrationRefs = await _integrationCheck.CheckAsync(workspaceId, stored, ct);
+        if (integrationRefs.Issues.Count > 0)
+        {
+            return Result.Failure(ValidationFailed(integrationRefs.Issues));
         }
 
         // Deprecating deregisters the triggers, so re-enabling has to put them back - otherwise the
@@ -233,6 +256,21 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             new WorkflowPublishRequest(refId, source.Name, source.Description, definition),
             restoredFromVersion: version,
             ct);
+    }
+
+    /// <summary>
+    /// Each error names its node, so the message points at what to fix rather than being a bare
+    /// sentence. The structured form is available from the validate endpoint.
+    /// </summary>
+    private Error ValidationFailed(IEnumerable<ValidationIssue> issues)
+    {
+        string message = string.Join("; ", issues
+            .Where(issue => issue.Severity == ValidationSeverity.Error)
+            .Select(issue => issue.NodeId is Guid nodeId
+                ? $"[{issue.Code}] {issue.Message} (node {nodeId})"
+                : $"[{issue.Code}] {issue.Message}"));
+        _logger.LogWarning("Workflow publish failed: Validation issues: {Issues}", message);
+        return Error.Validation("WORKFLOW_VALIDATION_FAILED", message);
     }
 
     private async Task TryDeregisterAsync(int definitionId, CancellationToken ct)

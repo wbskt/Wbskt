@@ -55,6 +55,8 @@ dotnet test Tests/Wbskt.E2E.FeatureTests
 
 When hosts are not reachable the tests **skip** automatically — they will never fail due to infrastructure being down.
 
+The integration scenarios (`Scenarios/Integrations`) stand in for Telegram, Discord, ntfy, mail relays and HTTP APIs with local fakes on 127.0.0.1. The engine's Development settings (`WorkflowEngine:Integrations`) give it a fixed master key, allow plain http and any SMTP port, and point Telegram at `http://127.0.0.1:5098/telegram`, so port 5098 must be free while they run. The other fakes take a free port each.
+
 ### 5. Rate-limit scenarios (opt-in)
 
 `RateLimitingTests` exhaust the per-IP budget on purpose, so they skip unless `E2E_RATE_LIMIT_TESTS=1`. The budget one scenario spends is still spent when the next starts (it cannot even register its user), so run them one at a time, each against an auth host freshly restarted with the production limit. The limiter is in memory, so a restart is a fresh window:

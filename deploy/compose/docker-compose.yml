@@ -373,6 +373,9 @@ services:
       # Its own login, limited to running the core database's procedures; the migrator creates it.
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=wbskt_engine;Password=${SQL_ENGINE_PASSWORD:?SQL_ENGINE_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       Engine__InboundApiKey: ${ENGINE_INBOUND_API_KEY}
+      # Seals the secrets saved with integrations (bot tokens, relay passwords). Only the engine holds
+      # it. Without it, saving or testing an integration answers 503 INTEGRATIONS_NOT_CONFIGURED.
+      WorkflowEngine__Integrations__Keys__1: ${INTEGRATIONS_KEY_1:-}
     volumes:
       - ../config:/Config:ro
     # Liveness, not readiness - the exception among the four hosts. A standby engine is a healthy

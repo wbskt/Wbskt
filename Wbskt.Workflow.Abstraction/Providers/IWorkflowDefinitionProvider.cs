@@ -1,3 +1,4 @@
+using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 
@@ -9,7 +10,13 @@ public interface IWorkflowDefinitionProvider
     Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct);
     Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct);
     Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct);
-    Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct);
+    Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => InsertAsync(row, [], ct);
+
+    /// <summary>
+    /// Publishes a version together with the steps of it that send through an integration. Throws
+    /// <c>SqlException</c> 50023 when one of those integrations is not the workspace's (any more).
+    /// </summary>
+    Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, CancellationToken ct);
     Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task DeprecateAsync(int id, CancellationToken ct);
 

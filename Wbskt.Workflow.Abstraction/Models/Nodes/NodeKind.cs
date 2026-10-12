@@ -24,6 +24,8 @@ public static class NodeKind
     public const string ActionWebhook = "action:webhook";
     public const string ActionTelegram = "action:telegram";
     public const string ActionToast = "action:toast";
+    public const string ActionDiscord = "action:discord";
+    public const string ActionNtfy = "action:ntfy";
 
     /// <summary>Every kind the definition model can express.</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
@@ -32,7 +34,7 @@ public static class NodeKind
         ControlLogic, ControlForEach, ControlParallelForEach, ControlJoin, ControlFork,
         ControlDelay, ControlVariable, ControlSubWorkflow, ControlWaitForHttp, ControlAwaitSignal,
         ControlFailRun, ControlEnd,
-        ActionClientMessage, ActionEmail, ActionWebhook, ActionTelegram, ActionToast
+        ActionClientMessage, ActionEmail, ActionWebhook, ActionTelegram, ActionToast, ActionDiscord, ActionNtfy
     };
 
     /// <summary>

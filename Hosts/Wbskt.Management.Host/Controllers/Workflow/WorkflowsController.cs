@@ -43,11 +43,11 @@ public sealed class WorkflowsController : ApiControllerBase
     // Same permission as publishing: this is an authoring operation, and it reveals which rules a
     // definition breaks.
     [RequiresPermission(PermissionNames.WorkflowsCreate)]
-    public ActionResult<WorkflowValidationResponse> ValidateDefinition([FromBody] WorkflowPublishRequest request)
+    public async Task<ActionResult<WorkflowValidationResponse>> ValidateDefinition([FromWorkspace] int workspaceId, [FromBody] WorkflowPublishRequest request, CancellationToken ct)
     {
         // An invalid definition is a successful answer to "is this valid?" - 200 with IsValid false,
         // not an HTTP error.
-        return Ok(_queryService.Validate(request.Definition));
+        return Ok(await _queryService.ValidateAsync(workspaceId, request.Definition, ct));
     }
 
     [HttpGet]

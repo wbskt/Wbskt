@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Wbskt.Infrastructure.Email;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -10,6 +9,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Channels;
 using Wbskt.Workflow.Engine;
+using Wbskt.Workflow.Integrations;
 using Wbskt.Workflow.NodeExecutors.Actions;
 using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.NodeExecutors.Triggers;
@@ -85,10 +85,9 @@ public static class WorkflowServiceCollectionExtensions
         CreditCostOptions creditCosts = configuration.GetSection("WorkflowEngine:CreditCosts").Get<CreditCostOptions>() ?? new CreditCostOptions();
         services.AddSingleton(Options.Create(creditCosts));
 
-        // Credentials for the notification channels. Bound here, never carried on a node - a definition
-        // is readable by the whole workspace and frozen into every published version.
-        services.AddSingleton(Options.Create(configuration.GetSection("WorkflowEngine:Email").Get<EmailOptions>() ?? new EmailOptions()));
-        services.AddSingleton(Options.Create(configuration.GetSection("WorkflowEngine:Telegram").Get<TelegramOptions>() ?? new TelegramOptions()));
+        // The master keys and transport rules for integrations. The credentials themselves are each
+        // workspace's own, sealed in dbo.Integrations - never host configuration, never on a node.
+        services.AddSingleton(Options.Create(configuration.GetSection(IntegrationOptions.SectionName).Get<IntegrationOptions>() ?? new IntegrationOptions()));
 
         return AddWorkflowRuntime(services);
     }
@@ -115,7 +114,22 @@ public static class WorkflowServiceCollectionExtensions
         // executors) is itself Scoped, so this does not widen anything's lifetime.
         services.AddScoped<IExpressionEvaluator, ExpressionEvaluator>();
         services.AddSingleton<IOutboundAddressGuard, OutboundAddressGuard>();
-        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.TryAddSingleton(Options.Create(new IntegrationOptions()));
+        services.AddSingleton<IntegrationCipher>();
+        services.AddSingleton<TelegramChannel>();
+        services.AddSingleton<DiscordChannel>();
+        services.AddSingleton<SmtpChannel>();
+        services.AddSingleton<NtfyChannel>();
+        services.AddSingleton<HttpAuthChannel>();
+        services.AddSingleton<IIntegrationChannel>(sp => sp.GetRequiredService<TelegramChannel>());
+        services.AddSingleton<IIntegrationChannel>(sp => sp.GetRequiredService<DiscordChannel>());
+        services.AddSingleton<IIntegrationChannel>(sp => sp.GetRequiredService<SmtpChannel>());
+        services.AddSingleton<IIntegrationChannel>(sp => sp.GetRequiredService<NtfyChannel>());
+        services.AddSingleton<IIntegrationChannel>(sp => sp.GetRequiredService<HttpAuthChannel>());
+        services.AddSingleton<IntegrationVault>();
+        services.AddSingleton<IIntegrationVault>(sp => sp.GetRequiredService<IntegrationVault>());
+        services.AddSingleton<IIntegrationStore, IntegrationStore>();
+        services.AddScoped<IIntegrationResolver, IntegrationResolver>();
         // The client/schedule/webhook/manual triggers all just record the payload and continue via
         // "default", so a single PassthroughTriggerExecutor serves them - one instance per kind.
         services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClient, sp.GetRequiredService<TimeProvider>()));
@@ -140,6 +154,8 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutor, ToastNodeExecutor>();
         services.AddScoped<INodeExecutor, EmailNodeExecutor>();
         services.AddScoped<INodeExecutor, TelegramNodeExecutor>();
+        services.AddScoped<INodeExecutor, DiscordNodeExecutor>();
+        services.AddScoped<INodeExecutor, NtfyNodeExecutor>();
         services.AddScoped<INodeExecutorRegistry, NodeExecutorRegistry>();
         services.AddScoped<IBranchLoop, BranchLoop>();
         services.AddScoped<IBookmarkResumer, BookmarkResumer>();

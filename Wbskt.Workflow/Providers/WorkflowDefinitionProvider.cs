@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
@@ -62,8 +63,20 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
         );
     }
 
-    public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)
+    public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => InsertAsync(row, [], ct);
+
+    public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, CancellationToken ct)
     {
+        var refs = new DataTable();
+        refs.Columns.Add("NodeId", typeof(Guid));
+        refs.Columns.Add("NodeName", typeof(string));
+        refs.Columns.Add("IntegrationRefId", typeof(Guid));
+        foreach (var r in integrationRefs)
+        {
+            string name = r.NodeName.Length <= WorkflowIntegrationRef.MaxNodeNameLength ? r.NodeName : r.NodeName[..WorkflowIntegrationRef.MaxNodeNameLength];
+            refs.Rows.Add(r.NodeId, name, r.IntegrationRefId);
+        }
+
         return await ExecuteSingleAsync(
             "dbo.WorkflowDefinition_Publish",
             p =>
@@ -75,6 +88,9 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 p.AddWithValue("@IsEnabled", row.IsEnabled);
                 p.AddWithValue("@DefinitionJson", row.DefinitionJson);
                 p.AddWithValue("@PublishedBy", row.PublishedBy);
+                var refsParameter = p.AddWithValue("@IntegrationRefs", refs);
+                refsParameter.SqlDbType = SqlDbType.Structured;
+                refsParameter.TypeName = "dbo.IntegrationRefTableType";
             },
             Map,
             new InvalidOperationException("WorkflowDefinition_Publish did not return a row."),

@@ -35,4 +35,11 @@ public static class RateLimitPolicies
     /// generous: it stops a runaway loop or a flood, not a fleet. Partitioned per IP.
     /// </summary>
     public const string DeviceLogin = "device-login";
+
+    /// <summary>
+    /// Testing an integration. Each test reaches out to someone else's service (a bot API, a mail
+    /// relay) with a workspace's credential, so a runaway console or script must not turn the engine
+    /// into a flood against it. Partitioned per workspace.
+    /// </summary>
+    public const string IntegrationTest = "integration-test";
 }

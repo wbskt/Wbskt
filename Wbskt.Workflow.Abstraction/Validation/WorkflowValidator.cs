@@ -1,6 +1,7 @@
 using Wbskt.Protocol;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
@@ -35,6 +36,7 @@ public sealed class WorkflowValidator
         ValidatePorts(definition, issues);
         ValidateNodeKinds(definition, issues);
         ValidateNodeConfigs(definition, issues);
+        ValidateIntegrationSteps(definition, issues);
         ValidateOnFailure(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
@@ -337,6 +339,115 @@ public sealed class WorkflowValidator
             }
         }
     }
+
+    /// <summary>
+    /// Request headers a step may not set: ones the HTTP stack owns, and credentials, which belong in
+    /// an integration (a header written into a definition is readable by the whole workspace and
+    /// frozen into every published version).
+    /// </summary>
+    private static readonly HashSet<string> ForbiddenWebhookHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Host", "Content-Length", "Transfer-Encoding", "Connection", "Keep-Alive", "Upgrade", "TE", "Trailer",
+        "Proxy-Connection", "Expect", "Authorization", "Proxy-Authorization", "Cookie"
+    };
+
+    /// <summary>
+    /// What can be checked about integration steps from the definition alone: a step that needs an
+    /// integration names one, and Call a URL's headers and relative URL make sense. Whether the named
+    /// integration exists, and is of the right type, is the workspace's to answer, at publish.
+    /// </summary>
+    private static void ValidateIntegrationSteps(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            if (node is IIntegrationStep step && IntegrationTypes.IsRequiredFor(node.Kind) && (step.IntegrationRef ?? Guid.Empty) == Guid.Empty)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "INTEGRATION_REF_MISSING",
+                    $"Step '{node.Name}' must name the {IntegrationTypes.NameOf(IntegrationTypes.ForStepKind(node.Kind)!.Value)} integration it sends through (integrationRef).",
+                    node.NodeId));
+            }
+
+            switch (node)
+            {
+                case WebhookNotificationNode webhook:
+                    ValidateWebhookStep(webhook, issues);
+                    break;
+                case TelegramNotificationNode telegram when string.IsNullOrWhiteSpace(telegram.Config?.ChatId):
+                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "TELEGRAM_CHAT_MISSING", $"Step '{node.Name}' has no chat to send to (chatId).", node.NodeId));
+                    break;
+                case DiscordNotificationNode discord when string.IsNullOrWhiteSpace(discord.Config?.Message) || discord.Config.Message.Length > DiscordMaxMessageLength:
+                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "DISCORD_MESSAGE_INVALID", $"Step '{node.Name}': the message must be 1-{DiscordMaxMessageLength} characters.", node.NodeId));
+                    break;
+                case NtfyNotificationNode ntfy:
+                    if (string.IsNullOrWhiteSpace(ntfy.Config?.Message))
+                    {
+                        issues.Add(new ValidationIssue(ValidationSeverity.Error, "NTFY_MESSAGE_MISSING", $"Step '{node.Name}' has no message.", node.NodeId));
+                    }
+
+                    if (ntfy.Config?.Priority is < 1 or > 5)
+                    {
+                        issues.Add(new ValidationIssue(ValidationSeverity.Error, "NTFY_PRIORITY_INVALID", $"Step '{node.Name}': priority must be 1 to 5.", node.NodeId));
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Discord refuses a message longer than this.</summary>
+    private const int DiscordMaxMessageLength = 2000;
+
+    private static void ValidateWebhookStep(WebhookNotificationNode node, List<ValidationIssue> issues)
+    {
+        var config = node.Config;
+        if (config is null)
+        {
+            return;
+        }
+
+        // Relative to what? Only an integration's base URL can answer that. A leading '/' is relative
+        // too, though on Unix Uri reads it as an absolute file path.
+        if (config.IntegrationRef is null && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "WEBHOOK_URL_RELATIVE",
+                $"Step '{node.Name}': '{config.Url}' is not an absolute URL. A relative URL needs an HTTP auth integration to be relative to.",
+                node.NodeId));
+        }
+
+        if (config.Headers is null)
+        {
+            return;
+        }
+
+        if (config.Headers.Count > WebhookNotificationConfig.MaxHeaders)
+        {
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, "WEBHOOK_HEADERS_TOO_MANY", $"Step '{node.Name}' sets more than {WebhookNotificationConfig.MaxHeaders} headers.", node.NodeId));
+        }
+
+        foreach (var (name, value) in config.Headers)
+        {
+            if (!IsHeaderToken(name) || value is null || value.Any(c => c is '\r' or '\n' or '\0'))
+            {
+                issues.Add(new ValidationIssue(ValidationSeverity.Error, "WEBHOOK_HEADER_INVALID", $"Step '{node.Name}': header '{name}' is not a valid header name and value.", node.NodeId));
+            }
+            else if (ForbiddenWebhookHeaders.Contains(name))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "WEBHOOK_HEADER_FORBIDDEN",
+                    $"Step '{node.Name}' may not set '{name}'. A credential belongs in an HTTP auth integration, and the rest are set by the request itself.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    // RFC 9110 token characters.
+    private static bool IsHeaderToken(string name) =>
+        name.Length is > 0 and <= 100 && name.All(c => c < 127 && (char.IsAsciiLetterOrDigit(c) || "!#$%&'*+-.^_`|~".Contains(c)));
 
     private static void ValidateShape(WorkflowDefinition def, List<ValidationIssue> issues)
     {

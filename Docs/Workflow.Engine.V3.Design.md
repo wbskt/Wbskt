@@ -117,7 +117,7 @@ Structural metadata for designer UX, validation, and policy defaults. **Not** a 
 |---|---|---|---|
 | **Trigger** | Starts a Run. Output ports only. | `trigger:client`, `trigger:clientPresence`, `trigger:schedule`, `trigger:webhook`, `trigger:manual` | Soft warning if a definition has none |
 | **Control** | Influences flow without external side effects (mostly). | `control:logic`, `control:foreach`, `control:parallelForEach`, `control:join`, `control:delay`, `control:variable`, `control:subWorkflow` | Pure w.r.t. outside world (except `variable`/`subWorkflow`) |
-| **Action** | Performs external side effects. | `action:clientMessage`, `action:email`, `action:webhook`, `action:telegram`, `action:toast` | Carries `RetryPolicy` and `OnFailure` (Section 5) |
+| **Action** | Performs external side effects. | `action:clientMessage`, `action:email`, `action:webhook`, `action:telegram`, `action:discord`, `action:ntfy`, `action:toast` | Carries `RetryPolicy` and `OnFailure` (Section 5) |
 
 ### 1.7 SharedVariableSchema
 

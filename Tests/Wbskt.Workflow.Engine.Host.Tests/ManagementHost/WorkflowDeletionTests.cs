@@ -1,3 +1,5 @@
+using Wbskt.Management.Host.Services.Integrations;
+using Wbskt.Management.Host.Providers;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -103,7 +105,7 @@ public sealed class WorkflowDeletionTests
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
             Service = new WorkflowLifecycleService(
                 Provider.Object, Mock.Of<ITriggerRegistrationService>(),
-                new WorkflowValidator(), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
+                new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Engine.Object, Bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
         }
 
         public Mock<IWorkflowDefinitionProvider> Provider { get; } = new();
@@ -114,6 +116,6 @@ public sealed class WorkflowDeletionTests
 
         public WorkflowLifecycleService Service { get; }
 
-        public WorkflowQueryService Queries => new WorkflowQueryService(Provider.Object, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>());
+        public WorkflowQueryService Queries => new WorkflowQueryService(Provider.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), Mock.Of<ILogger<WorkflowQueryService>>());
     }
 }

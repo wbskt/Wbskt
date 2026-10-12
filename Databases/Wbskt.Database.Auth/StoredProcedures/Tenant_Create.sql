@@ -55,7 +55,7 @@ BEGIN
     INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
     SELECT R.Id, P.Id, 0
     FROM dbo.Roles R
-    INNER JOIN dbo.Permissions P ON P.Slug IN ('clients.read', 'policies.read', 'templates.read', 'workflows.read', 'logs.read')
+    INNER JOIN dbo.Permissions P ON P.Slug IN ('clients.read', 'policies.read', 'templates.read', 'workflows.read', 'logs.read', 'integrations.read')
     WHERE R.TenantId = @TenantId AND R.Kind = 'User';
 
     INSERT INTO dbo.TenantMembers (TenantId, UserId)

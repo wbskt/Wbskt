@@ -33,6 +33,12 @@ public sealed partial class HostArchitectureTests
     private static readonly Assembly[] PublicHosts = [AuthHost, ManagementHost, SocketHost];
     private static readonly Assembly[] AllHosts = [AuthHost, ManagementHost, SocketHost, EngineHost];
 
+    /// <summary>
+    /// Engine controllers any replica may answer, leader or not, because nothing they do touches runs.
+    /// Each still needs the inbound API key.
+    /// </summary>
+    private static readonly HashSet<string> LeaderAgnosticEngineControllers = ["IntegrationsController"];
+
     /// <summary>Controllers that still reach a provider, the bus or a mapper themselves.</summary>
     private static readonly HashSet<string> LayeringExceptions = [];
 
@@ -101,10 +107,9 @@ public sealed partial class HostArchitectureTests
         // served by a standby.
         var unmarked = ControllersIn(EngineHost)
             .Where(c => c.GetCustomAttribute<InboundEndpointAttribute>() is null)
-            .Select(c => c.Name)
-            .ToList();
+            .Select(c => c.Name);
 
-        Assert.Empty(unmarked);
+        AssertOnlyKnown(unmarked, LeaderAgnosticEngineControllers);
     }
 
     [Fact]
