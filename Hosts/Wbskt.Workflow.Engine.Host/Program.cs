@@ -53,6 +53,7 @@ public static class Program
             .AddCheck<LeadershipHealthCheck>("engine-leadership", tags: [HealthCheckExtensions.ReadyTag]);
 
         builder.Services.AddAuthorization();
+        builder.Services.AddWbsktProblemDetails();
         builder.Services.AddControllers();
         builder.Services.AddWbsktJson();
 

@@ -8,6 +8,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -59,8 +60,7 @@ public sealed class ClientUpdateTests
 
         var result = await controller.Update(WorkspaceId, ClientRef, new UpdateClientRequest(null, null), CancellationToken.None);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal("CLIENT_UPDATE_EMPTY", Assert.IsType<Error>(bad.Value).Code);
+        Assert.Equal("CLIENT_UPDATE_EMPTY", ProblemAssert.Is(result, StatusCodes.Status400BadRequest));
         clients.VerifyNoOtherCalls();
     }
 
@@ -71,8 +71,7 @@ public sealed class ClientUpdateTests
 
         var result = await controller.Update(WorkspaceId, ClientRef, new UpdateClientRequest("   ", ClientStatus.Revoked), CancellationToken.None);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal("CLIENT_NAME_INVALID", Assert.IsType<Error>(bad.Value).Code);
+        Assert.Equal("CLIENT_NAME_INVALID", ProblemAssert.Is(result, StatusCodes.Status400BadRequest));
         clients.VerifyNoOtherCalls();
     }
 
@@ -85,7 +84,7 @@ public sealed class ClientUpdateTests
 
         var result = await controller.Update(WorkspaceId, ClientRef, new UpdateClientRequest("porch", ClientStatus.Registered), CancellationToken.None);
 
-        Assert.IsType<ConflictObjectResult>(result);
+        ProblemAssert.Is(result, StatusCodes.Status409Conflict);
         clients.Verify(x => x.RenameAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -109,6 +108,6 @@ public sealed class ClientUpdateTests
 
         var result = await controller.Rename(WorkspaceId, ClientRef, new UpdateClientNameRequest(" "), CancellationToken.None);
 
-        Assert.Equal("CLIENT_NAME_INVALID", Assert.IsType<Error>(Assert.IsType<BadRequestObjectResult>(result).Value).Code);
+        Assert.Equal("CLIENT_NAME_INVALID", ProblemAssert.Is(result, StatusCodes.Status400BadRequest));
     }
 }

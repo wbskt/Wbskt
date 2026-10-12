@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.Management.Host.Controllers.Workflow;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -49,7 +50,7 @@ public sealed class PublicCallbackControllerTests
 
         var result = await controller.Webhook(Guid.NewGuid(), "door", Payload, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        ProblemAssert.Is(result, StatusCodes.Status400BadRequest);
     }
 
     [Fact]

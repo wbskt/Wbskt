@@ -343,7 +343,7 @@ public sealed class ServicesFixture : IDisposable
         return ($"e2e-{suffix}", $"e2e-{suffix}@test.local", $"P@ssw0rd-{suffix}");
     }
 
-    /// <summary>Reads the <c>code</c> off an <c>Error</c> response body, or null when the body is not one.</summary>
+    /// <summary>Reads the <c>code</c> off a Problem Details error body, or null when the body is not one.</summary>
     public static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
     {
         try
@@ -353,8 +353,8 @@ public sealed class ServicesFixture : IDisposable
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            // Model-validation failures return ProblemDetails, which has no code. Not an error here:
-            // the caller is asking "what code, if any", and the status assertion carries the weight.
+            // An empty or non-JSON body has no code. Not an error here: the caller is asking "what
+            // code, if any", and the status assertion carries the weight.
             return null;
         }
     }
@@ -1090,7 +1090,7 @@ public sealed class ServicesFixture : IDisposable
 
     private record LoginDto(string AccessToken, string RefreshToken);
     private record WorkspaceDto(Guid RefId, string Name, string? Description, DateTime CreatedAt);
-    private record ErrorDto(string Code, string Message, int Type);
+    private record ErrorDto(string Code, string Detail, string TraceId);
     private record ListDto<T>(List<T> Items);
     private record TenantDto(Guid RefId, string Name);
     private record RoleDto(Guid RefId, string Name, string? Description);

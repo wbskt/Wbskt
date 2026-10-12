@@ -18,6 +18,7 @@ using Wbskt.Primitives.Exceptions;
 using Wbskt.Primitives.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -129,7 +130,7 @@ public sealed class SharedVariablesControllerTests
 
         var result = await controller.Get(WorkspaceId, workflowRefId, "counter", CancellationToken.None);
         
-        Assert.IsType<NotFoundObjectResult>(result.Result);
+        ProblemAssert.Is(result.Result, StatusCodes.Status404NotFound);
         provider.Verify(x => x.FindByWorkflowRefIdNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -146,7 +147,7 @@ public sealed class SharedVariablesControllerTests
 
         var result = await controller.Get(WorkspaceId, workflowRefId, "missing", CancellationToken.None);
         
-        Assert.IsType<NotFoundObjectResult>(result.Result);
+        ProblemAssert.Is(result.Result, StatusCodes.Status404NotFound);
     }
 
     [Fact]

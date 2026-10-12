@@ -145,12 +145,12 @@ public class ClientsController : ApiControllerBase
     {
         if (request.Name is null && request.Status is null)
         {
-            return BadRequest(Error.Validation("CLIENT_UPDATE_EMPTY", "Name a field to change: 'name', 'status', or both."));
+            return MapError(Error.Validation("CLIENT_UPDATE_EMPTY", "Name a field to change: 'name', 'status', or both."));
         }
 
         if (request.Name is not null && !IsValidName(request.Name))
         {
-            return BadRequest(InvalidName);
+            return MapError(InvalidName);
         }
 
         if (request.Status is { } status)
@@ -192,7 +192,7 @@ public class ClientsController : ApiControllerBase
     {
         if (request.ClientRefIds is null || request.ClientRefIds.Count == 0 || request.ClientRefIds.Count > BulkClientStatusRequest.MaxClients)
         {
-            return BadRequest(Error.Validation("CLIENT_REFS_INVALID", $"Name between 1 and {BulkClientStatusRequest.MaxClients} clients."));
+            return MapError(Error.Validation("CLIENT_REFS_INVALID", $"Name between 1 and {BulkClientStatusRequest.MaxClients} clients."));
         }
 
         var result = await _lifecycleService.UpdateStatusesAsync(workspaceId, request.ClientRefIds, request.Status, cancellationToken);
@@ -319,7 +319,7 @@ public class ClientsController : ApiControllerBase
     {
         if (direction is not (null or "in" or "out"))
         {
-            return BadRequest(Error.Validation("DIRECTION_INVALID", "Direction must be 'in', 'out', or omitted."));
+            return MapError(Error.Validation("DIRECTION_INVALID", "Direction must be 'in', 'out', or omitted."));
         }
 
         var cursor = page.AfterKey();

@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
@@ -119,7 +120,7 @@ public static class WbsktHost
 
     /// <summary>
     /// The middleware every host runs, in one order: forwarded headers (so everything after sees the
-    /// real client address), exception handling, CORS, the rate limiter (before authentication, so a
+    /// real client address), exception handling, Problem Details for bare error statuses, CORS, the rate limiter (before authentication, so a
     /// flood is refused before a token is validated), authentication, the identity middleware, and
     /// authorization. A step whose services the host did not register is skipped.
     /// </summary>
@@ -132,6 +133,13 @@ public static class WbsktHost
         }
 
         app.UseMiddleware<GlobalExceptionMiddleware>();
+
+        // After the exception handler, before everything that can answer with a bare status (the
+        // limiter, the bearer challenge, routing), so those get a Problem Details body too.
+        if (app.Services.GetService<IProblemDetailsService>() is not null)
+        {
+            app.UseStatusCodePages();
+        }
 
         if (app.Services.GetService<ICorsService>() is not null)
         {

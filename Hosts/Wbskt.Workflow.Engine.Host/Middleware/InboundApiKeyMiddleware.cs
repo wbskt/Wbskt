@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
+using Wbskt.Infrastructure;
 using Wbskt.Workflow.Engine.Contracts;
 
 namespace Wbskt.Workflow.Engine.Host.Middleware;
@@ -38,8 +39,7 @@ public sealed class InboundApiKeyMiddleware
         {
             if (_isProduction)
             {
-                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-                await context.Response.WriteAsync("Engine:InboundApiKey is not configured.");
+                await Problems.WriteAsync(context, StatusCodes.Status503ServiceUnavailable, "ENGINE_API_KEY_NOT_CONFIGURED", "Engine:InboundApiKey is not configured.");
                 return;
             }
 
@@ -50,7 +50,7 @@ public sealed class InboundApiKeyMiddleware
         byte[] providedKey = Encoding.UTF8.GetBytes(context.Request.Headers[EngineInboundApi.ApiKeyHeader].ToString());
         if (!CryptographicOperations.FixedTimeEquals(providedKey, _expectedApiKey))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "ENGINE_API_KEY_INVALID", $"The {EngineInboundApi.ApiKeyHeader} header is missing or wrong.");
             return;
         }
 

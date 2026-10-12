@@ -13,6 +13,7 @@ using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -152,7 +153,7 @@ public sealed class WorkspacePermissionFilterTests
 
         await new WorkspacePermissionFilter().OnAuthorizationAsync(context);
 
-        context.Result.Should().BeOfType<UnauthorizedObjectResult>();
+        ProblemAssert.Is(context.Result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -187,9 +188,8 @@ public sealed class WorkspacePermissionFilterTests
 
     private static Error Forbidden(AuthorizationFilterContext context)
     {
-        var result = context.Result.Should().BeOfType<ObjectResult>().Subject;
-        result.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
-        return result.Value.Should().BeOfType<Error>().Subject;
+        string code = ProblemAssert.Is(context.Result, StatusCodes.Status403Forbidden);
+        return Error.Forbidden(code, ProblemAssert.Detail(context.Result));
     }
 
     private static (AuthorizationFilterContext Context, HttpContext Http) Context(

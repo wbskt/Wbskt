@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure;
 using Wbskt.Workflow.Engine;
 
 namespace Wbskt.Workflow.Engine.Host.Middleware;
@@ -16,9 +17,8 @@ public sealed class LeaderOnlyMiddleware(RequestDelegate next)
         bool isInboundEndpoint = context.GetEndpoint()?.Metadata.GetMetadata<InboundEndpointAttribute>() != null;
         if (isInboundEndpoint && !canServeInbound)
         {
-            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            context.Response.Headers.RetryAfter = "5";
-            await context.Response.WriteAsync("This instance is not the workflow-engine leader.");
+            context.Response.Headers.RetryAfter = ApiErrorResults.RetryAfterSeconds;
+            await Problems.WriteAsync(context, StatusCodes.Status503ServiceUnavailable, "ENGINE_NOT_LEADER", "This instance is not the workflow-engine leader.");
             return;
         }
 

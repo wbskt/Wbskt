@@ -21,6 +21,7 @@ using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives;
 using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -94,8 +95,7 @@ public sealed class BrokerOutageTests
         var result = (await controller.SendCommand(WorkspaceId, clientRef, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
         var objectResult = Assert.IsType<ApiErrorResults.RetryLaterResult>(result);
-        objectResult.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
-        objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("EVENT_BUS_UNAVAILABLE");
+        ProblemAssert.Is(objectResult, StatusCodes.Status503ServiceUnavailable).Should().Be("EVENT_BUS_UNAVAILABLE");
         objectResult.OnFormatting(new ActionContext(controller.HttpContext, new RouteData(), new ActionDescriptor()));
         controller.Response.Headers.RetryAfter.ToString().Should().Be("5");
     }

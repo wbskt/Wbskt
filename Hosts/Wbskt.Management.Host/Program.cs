@@ -170,6 +170,7 @@ public static class Program
 
         // Default-deny: the anonymous surface (health checks, client login and registration, the
         // public workflow callbacks) is an explicit [AllowAnonymous] on each.
+        builder.Services.AddWbsktProblemDetails();
         builder.Services.AddDefaultDenyAuthorization();
 
         // Throttles for the anonymous edges: the public callback (see PublicCallbackRateLimits),
@@ -177,7 +178,7 @@ public static class Program
         var callbackLimits = new PublicCallbackRateLimits(builder.Configuration);
         builder.Services.AddRateLimiter(options =>
         {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.RejectWithProblem();
             options.AddPolicy(PublicCallbackPolicy.RateLimitPolicy, callbackLimits.ForTarget);
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(callbackLimits.ForAddress);
 

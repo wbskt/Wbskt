@@ -18,6 +18,7 @@ using Wbskt.Primitives.Exceptions;
 using Wbskt.Primitives.Models;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -98,8 +99,7 @@ public sealed class WorkflowRunsControllerTests
 
         var response = await harness.Controller.Cancel(WorkspaceId, runRefId, new CancelRunRequest("too late"), CancellationToken.None);
 
-        var conflict = Assert.IsType<ConflictObjectResult>(response);
-        Assert.Equal("RUN_NOT_CANCELLABLE", Assert.IsType<Error>(conflict.Value).Code);
+        Assert.Equal("RUN_NOT_CANCELLABLE", ProblemAssert.Is(response, StatusCodes.Status409Conflict));
         harness.Commands.VerifyNoOtherCalls();
         harness.QueuedBus.VerifyNoOtherCalls();
     }
@@ -113,8 +113,7 @@ public sealed class WorkflowRunsControllerTests
 
         var response = await harness.Controller.Cancel(WorkspaceId, runRefId, new CancelRunRequest("not mine"), CancellationToken.None);
 
-        var notFound = Assert.IsType<NotFoundObjectResult>(response);
-        Assert.Equal("RUN_NOT_FOUND", Assert.IsType<Error>(notFound.Value).Code);
+        Assert.Equal("RUN_NOT_FOUND", ProblemAssert.Is(response, StatusCodes.Status404NotFound));
         harness.Commands.VerifyNoOtherCalls();
         harness.QueuedBus.VerifyNoOtherCalls();
     }
@@ -126,8 +125,7 @@ public sealed class WorkflowRunsControllerTests
 
         var response = await harness.Controller.Cancel(WorkspaceId, Guid.NewGuid(), new CancelRunRequest("who?"), CancellationToken.None);
 
-        var notFound = Assert.IsType<NotFoundObjectResult>(response);
-        Assert.Equal("RUN_NOT_FOUND", Assert.IsType<Error>(notFound.Value).Code);
+        Assert.Equal("RUN_NOT_FOUND", ProblemAssert.Is(response, StatusCodes.Status404NotFound));
         harness.Commands.VerifyNoOtherCalls();
     }
 
@@ -144,8 +142,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await harness.Controller.Cancel(WorkspaceId, runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
 
         var objectResult = Assert.IsType<ApiErrorResults.RetryLaterResult>(response);
-        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
-        Assert.Equal("EVENT_BUS_UNAVAILABLE", Assert.IsType<Error>(objectResult.Value).Code);
+        Assert.Equal("EVENT_BUS_UNAVAILABLE", ProblemAssert.Is(objectResult, StatusCodes.Status503ServiceUnavailable));
         objectResult.OnFormatting(new ActionContext(harness.Controller.HttpContext, new RouteData(), new ActionDescriptor()));
         Assert.Equal("5", harness.Controller.Response.Headers.RetryAfter.ToString());
         harness.QueuedBus.VerifyNoOtherCalls();

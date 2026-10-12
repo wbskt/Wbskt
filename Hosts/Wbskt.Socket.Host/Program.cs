@@ -57,6 +57,7 @@ public static class Program
             .AddWbsktJwtBearer(x => x.Events = new JwtBearerEvents().AcceptQueryToken("/ws"));
 
         // Default-deny, so that a controller added later cannot ship anonymous by accident.
+        builder.Services.AddWbsktProblemDetails();
         builder.Services.AddDefaultDenyAuthorization(options =>
         {
             // Issuer and audience already rule out a user token (only the management host signs for
