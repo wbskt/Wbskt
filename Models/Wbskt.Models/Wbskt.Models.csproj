@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\Clients\Wbskt.Protocol\Wbskt.Protocol.csproj" />
+    </ItemGroup>
+
 </Project>

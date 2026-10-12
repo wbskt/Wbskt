@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;

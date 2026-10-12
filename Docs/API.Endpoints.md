@@ -429,8 +429,11 @@ The device data plane. One long-lived WebSocket per client; everything else is a
 
 The protocol is versioned by WebSocket subprotocol: a client offers `Sec-WebSocket-Protocol: wbskt.v1`
 and the host accepts it. A client that offers none is spoken to as v1; one that offers only other
-versions is refused with 400 before the upgrade. The message types, payloads and limits live in
-`Clients/Wbskt.Protocol`, which the socket host and the .NET SDK both build against.
+versions is refused with 400 before the upgrade. Everything a device speaks lives in
+`Clients/Wbskt.Protocol`: the message types and which of them are reserved (compared ignoring case,
+so `SYS.ping` is as reserved as `sys.ping`), the payloads including `capabilities`, the limits, and
+the register and login records of the two HTTP calls before the socket opens. Every host and the
+.NET SDK build against it, so there is one copy of the contract.
 
 Once open, the connection carries the platform protocol — `sys.ping { timestamp, id }`/`sys.pong
 { originalTimestamp, id }` (the host times the round trip on its own clock and matches the pong by

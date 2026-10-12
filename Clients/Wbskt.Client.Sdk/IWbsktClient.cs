@@ -1,4 +1,5 @@
 using Wbskt.Client.Sdk.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.Client.Sdk;
 

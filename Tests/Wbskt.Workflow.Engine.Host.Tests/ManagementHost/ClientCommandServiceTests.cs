@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using Wbskt.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
@@ -63,7 +64,7 @@ public sealed class ClientCommandServiceTests
     [Fact]
     public async Task A_reserved_command_type_is_refused_before_the_device_is_looked_up()
     {
-        var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest(DeviceMessageRules.StateReport, "{}"));
+        var result = await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest(MessageTypes.StateReport, "{}"));
 
         result.Error.Code.Should().Be("COMMAND_TYPE_RESERVED");
         _clients.VerifyNoOtherCalls();

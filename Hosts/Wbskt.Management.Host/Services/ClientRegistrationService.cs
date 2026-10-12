@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using Microsoft.Data.SqlClient;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Management;

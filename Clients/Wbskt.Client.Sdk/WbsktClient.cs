@@ -84,7 +84,7 @@ public sealed class WbsktClient : IWbsktClient
         try
         {
             // Capabilities describe the connection, so they go out first and are never buffered.
-            await _socket.SendAsync(new SocketMessage("capabilities", BuildEffectiveCapabilities()));
+            await _socket.SendAsync(new SocketMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
         }
         catch (Exception)
         {
@@ -144,7 +144,7 @@ public sealed class WbsktClient : IWbsktClient
 
         if (_socket.IsConnected)
         {
-            await _socket.SendAsync(new SocketMessage("capabilities", BuildEffectiveCapabilities()));
+            await _socket.SendAsync(new SocketMessage(MessageTypes.Capabilities, BuildEffectiveCapabilities()));
         }
     }
 
@@ -192,7 +192,7 @@ public sealed class WbsktClient : IWbsktClient
     public async Task ReportStateAsync(IReadOnlyDictionary<string, object?> patch)
     {
         // Partial update: only the reported variables change; the platform keeps the rest.
-        await SendAsync("state.report", patch);
+        await SendAsync(MessageTypes.StateReport, patch);
     }
 
     private async Task<(Guid RefId, string Secret)> ResolveCredentialsAsync()

@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Infrastructure;
