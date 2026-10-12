@@ -24,8 +24,7 @@ internal sealed class AuthService : IAuthService
     /// One answer for every way an invitation can fail. Registration is anonymous, so distinguishing
     /// "no such token" from "wrong address" would turn it into an oracle for probing invitations.
     /// </summary>
-    private static readonly Error InvalidInvitation =
-        Error.Validation("INVITATION_INVALID", "This invitation is not valid. It may have expired, been revoked, already been used, or been sent to a different email address.");
+    private static readonly Error InvalidInvitation = SqlGuardErrors.InvalidInvitation;
 
     /// <summary>
     /// One answer for an unknown, spent or expired recovery token, matching how the procedure that
@@ -214,10 +213,8 @@ internal sealed class AuthService : IAuthService
             _metrics.RecordLogin("success");
             return Result<LoginResponse>.Success(new LoginResponse(accessToken, refreshToken.Token));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError("Unexpected error during login for email: {Email}. IP: {IpAddress}. Error: {Message}", email, ipAddress, ex.Message);
-            _logger.LogTrace(ex, "Login exception stack trace for {Email}", email);
             _metrics.RecordLogin("error");
             await _eventBus.PublishAsync(new SecurityAlertEvent(
                 "LoginFailure", 
@@ -225,7 +222,7 @@ internal sealed class AuthService : IAuthService
                 ipAddress,
                 $"Email: {email}"), cancellationToken);
             
-            return Result<LoginResponse>.Failure(Error.Failure("AUTH_LOGIN_ERROR", ex.Message));
+            throw;
         }
     }
 
@@ -312,12 +309,10 @@ internal sealed class AuthService : IAuthService
             _metrics.RecordRefresh("success");
             return Result<LoginResponse>.Success(new LoginResponse(newAccessToken, newRefreshToken.Token));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError("Unexpected error during token refresh from IP: {IpAddress}. Error: {Message}", ipAddress, ex.Message);
-            _logger.LogTrace(ex, "Token refresh exception stack trace");
             _metrics.RecordRefresh("error");
-            return Result<LoginResponse>.Failure(Error.Failure("AUTH_REFRESH_ERROR", ex.Message));
+            throw;
         }
     }
 
@@ -325,46 +320,28 @@ internal sealed class AuthService : IAuthService
     {
         _logger.LogDebug("Attempting logout from IP: {IpAddress}", ipAddress);
 
-        try
+        // Deliberately not reporting whether the token existed: logout is unauthenticated by
+        // necessity, and a distinguishable response would turn it into a token oracle.
+        var sessionId = await _provider.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
+        if (sessionId is not null)
         {
-            // Deliberately not reporting whether the token existed: logout is unauthenticated by
-            // necessity, and a distinguishable response would turn it into a token oracle.
-            var sessionId = await _provider.RevokeRefreshTokenAsync(token, ipAddress, null, cancellationToken);
-            if (sessionId is not null)
-            {
-                // The refresh token is gone, so this ends the access token the device still holds.
-                await _accessTokens.RevokeSessionAsync(sessionId.Value, cancellationToken);
-            }
+            // The refresh token is gone, so this ends the access token the device still holds.
+            await _accessTokens.RevokeSessionAsync(sessionId.Value, cancellationToken);
+        }
 
-            _logger.LogInformation("Logout {Outcome}. IP: {IpAddress}", sessionId is null ? "found no live token" : "ended a session", ipAddress);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error during logout from IP: {IpAddress}. Error: {Message}", ipAddress, ex.Message);
-            _logger.LogTrace(ex, "Logout exception stack trace");
-            return Result.Failure(Error.Failure("AUTH_LOGOUT_ERROR", ex.Message));
-        }
+        _logger.LogInformation("Logout {Outcome}. IP: {IpAddress}", sessionId is null ? "found no live token" : "ended a session", ipAddress);
+        return Result.Success();
     }
 
     public async Task<Result> LogoutAllAsync(int userId, string ipAddress, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Attempting to revoke all sessions for user ID: {UserId} from IP: {IpAddress}", userId, ipAddress);
 
-        try
-        {
-            var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
-            await _accessTokens.RevokeUserAsync(userId, cancellationToken);
-            _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
-            await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "all"), ipAddress, cancellationToken);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Unexpected error revoking sessions for user ID: {UserId}. Error: {Message}", userId, ex.Message);
-            _logger.LogTrace(ex, "LogoutAll exception stack trace for user {UserId}", userId);
-            return Result.Failure(Error.Failure("AUTH_LOGOUT_ERROR", ex.Message));
-        }
+        var revoked = await _provider.RevokeAllRefreshTokensForUserAsync(userId, ipAddress, cancellationToken);
+        await _accessTokens.RevokeUserAsync(userId, cancellationToken);
+        _logger.LogInformation("Revoked {RevokedCount} refresh token(s) for user ID: {UserId}", revoked, userId);
+        await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "all"), ipAddress, cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<LoginResponse>> ChangePasswordAsync(int userId, string currentPassword, string newPassword, string ipAddress, CancellationToken cancellationToken = default)
@@ -407,51 +384,30 @@ internal sealed class AuthService : IAuthService
         {
             return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_NOT_FOUND", "User not found."));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error changing the password for user {UserId}", userId);
-            return Result<LoginResponse>.Failure(Error.Failure("AUTH_CHANGE_PASSWORD_ERROR", ex.Message));
-        }
     }
 
     public async Task<Result<IReadOnlyCollection<SessionResponse>>> GetSessionsAsync(int userId, Guid? currentSessionId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var sessions = await _provider.GetActiveSessionsAsync(userId, cancellationToken);
-            return Result<IReadOnlyCollection<SessionResponse>>.Success(
-                sessions.Select(s => s with { IsCurrent = s.Id == currentSessionId }).ToList());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error listing sessions for user {UserId}", userId);
-            return Result<IReadOnlyCollection<SessionResponse>>.Failure(Error.Failure("AUTH_SESSIONS_ERROR", ex.Message));
-        }
+        var sessions = await _provider.GetActiveSessionsAsync(userId, cancellationToken);
+        return Result<IReadOnlyCollection<SessionResponse>>.Success(
+            sessions.Select(s => s with { IsCurrent = s.Id == currentSessionId }).ToList());
     }
 
     public async Task<Result> RevokeSessionAsync(int userId, Guid sessionId, string ipAddress, CancellationToken cancellationToken = default)
     {
-        try
+        var revoked = await _provider.RevokeSessionAsync(sessionId, userId, ipAddress, cancellationToken);
+        if (revoked == 0)
         {
-            var revoked = await _provider.RevokeSessionAsync(sessionId, userId, ipAddress, cancellationToken);
-            if (revoked == 0)
-            {
-                // Someone else's session reads exactly like one that does not exist.
-                return Result.Failure(Error.NotFound("AUTH_SESSION_NOT_FOUND", "Session not found."));
-            }
-
-            // After the refresh token, so the device cannot mint an access token the revocation misses.
-            await _accessTokens.RevokeSessionAsync(sessionId, cancellationToken);
-
-            _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
-            await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "one"), ipAddress, cancellationToken);
-            return Result.Success();
+            // Someone else's session reads exactly like one that does not exist.
+            return Result.Failure(Error.NotFound("AUTH_SESSION_NOT_FOUND", "Session not found."));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error ending session {SessionId} for user {UserId}", sessionId, userId);
-            return Result.Failure(Error.Failure("AUTH_SESSIONS_ERROR", ex.Message));
-        }
+
+        // After the refresh token, so the device cannot mint an access token the revocation misses.
+        await _accessTokens.RevokeSessionAsync(sessionId, cancellationToken);
+
+        _logger.LogInformation("User {UserId} ended session {SessionId}. IP: {IpAddress}", userId, sessionId, ipAddress);
+        await AnnounceAsync(new SessionsRevokedEvent(userId, await RefOfAsync(userId, cancellationToken), "one"), ipAddress, cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result> RegisterUserAsync(string username, string email, string password, string? invitationToken = null, CancellationToken cancellationToken = default)
@@ -547,10 +503,14 @@ internal sealed class AuthService : IAuthService
             {
                 return await HandleRegistrationConflictAsync(username, email, ex, cancellationToken);
             }
-            _logger.LogError("Failed to register user: {Username} ({Email}). Error: {Message}", username, email, ex.Message);
-            _logger.LogTrace(ex, "User registration failure stack trace for {Username}", username);
-            _metrics.RecordRegistration("error");
-            return Result.Failure(Error.Failure("AUTH_REGISTRATION_ERROR", ex.Message));
+
+            // A fault: counted here, logged and answered by GlobalExceptionMiddleware.
+            if (ex is not OperationCanceledException)
+            {
+                _metrics.RecordRegistration("error");
+            }
+
+            throw;
         }
     }
 
@@ -635,11 +595,6 @@ internal sealed class AuthService : IAuthService
             _logger.LogWarning("Password reset rejected: the presented token is not valid. IP: {IpAddress}", ipAddress);
             return Result.Failure(InvalidResetToken);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error consuming a password reset token. IP: {IpAddress}", ipAddress);
-            return Result.Failure(Error.Failure("AUTH_RESET_ERROR", ex.Message));
-        }
 
         // Outside the transaction above, and best effort: the password and the refresh tokens are what
         // the reset is for, and they are already done. This only shortens the life of access tokens
@@ -663,11 +618,6 @@ internal sealed class AuthService : IAuthService
         {
             _logger.LogWarning("Email verification rejected: the presented token is not valid.");
             return Result.Failure(InvalidVerificationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error consuming an email verification token.");
-            return Result.Failure(Error.Failure("AUTH_VERIFICATION_ERROR", ex.Message));
         }
     }
 
@@ -801,16 +751,13 @@ internal sealed class AuthService : IAuthService
             // No account on this address, so the collision was on the username.
             existing = null;
         }
-        catch (Exception lookupEx)
+        catch (Exception lookupEx) when (lookupEx is not OperationCanceledException)
         {
             // The lookup itself failed, so which field collided is unknown. Reporting a username
             // conflict here would be a guess, and reporting 204 would tell the caller an account was
-            // created when none was. This is our fault and is answered as such - the method runs
-            // inside RegisterUserAsync's catch block, so returning rather than throwing keeps the
-            // metric and the error shape consistent with every other failure there.
-            _logger.LogError(lookupEx, "Could not determine which field collided while registering {Username}", username);
+            // created when none was. This is our fault and reaches the caller as a 500.
             _metrics.RecordRegistration("error");
-            return Result.Failure(Error.Failure("AUTH_REGISTRATION_ERROR", lookupEx.Message));
+            throw;
         }
 
         if (existing is null)

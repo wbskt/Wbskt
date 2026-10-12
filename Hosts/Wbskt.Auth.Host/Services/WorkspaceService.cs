@@ -41,50 +41,32 @@ internal sealed class WorkspaceService : IWorkspaceService
     {
         _logger.LogInformation("Attempting to create workspace '{WorkspaceName}' for owner ID: {OwnerId}", request.Name, ownerId);
 
-        try
+        // TODO(arch): multi-tenant users will need an explicit tenant choice; today a user has exactly one tenant.
+        var tenants = await _authProvider.GetTenantsForUserAsync(ownerId, cancellationToken);
+        var tenant = tenants.FirstOrDefault();
+        if (tenant is null)
         {
-            // TODO(arch): multi-tenant users will need an explicit tenant choice; today a user has exactly one tenant.
-            var tenants = await _authProvider.GetTenantsForUserAsync(ownerId, cancellationToken);
-            var tenant = tenants.FirstOrDefault();
-            if (tenant is null)
-            {
-                _logger.LogWarning("Workspace creation failed: User ID {OwnerId} does not belong to any tenant", ownerId);
-                return Result<WorkspaceResponse>.Failure(Error.Validation("TENANT_REQUIRED", "User does not belong to any tenant."));
-            }
-
-            var refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, cancellationToken);
-            _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);
-
-            var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);
-            await AnnounceAsync(new WorkspaceCreatedEvent(workspaceId, refId, request.Name), cancellationToken);
-            return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow));
+            _logger.LogWarning("Workspace creation failed: User ID {OwnerId} does not belong to any tenant", ownerId);
+            return Result<WorkspaceResponse>.Failure(Error.Validation("TENANT_REQUIRED", "User does not belong to any tenant."));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to create workspace '{WorkspaceName}' for owner ID: {OwnerId}. Error: {Message}", request.Name, ownerId, ex.Message);
-            _logger.LogTrace(ex, "CreateWorkspace failure stack trace for owner ID {OwnerId}", ownerId);
-            return Result<WorkspaceResponse>.Failure(Error.Failure("WORKSPACE_CREATE_ERROR", ex.Message));
-        }
+
+        var refId = await _workspaceProvider.CreateWorkspaceAsync(request.Name, request.Description ?? string.Empty, ownerId, tenant.Id, cancellationToken);
+        _logger.LogInformation("Workspace '{WorkspaceName}' created successfully with RefId: {RefId}", request.Name, refId);
+
+        var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);
+        await AnnounceAsync(new WorkspaceCreatedEvent(workspaceId, refId, request.Name), cancellationToken);
+        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow));
     }
 
     public async Task<Result<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying workspaces for user ID: {UserId}", userId);
 
-        try
-        {
-            var workspaces = await _workspaceProvider.GetWorkspacesForUserAsync(userId, cancellationToken);
-            _logger.LogTrace("Retrieved {Count} workspaces for user ID: {UserId}", workspaces.Count, userId);
-            
-            var items = workspaces.Select(w => new WorkspaceResponse(w.RefId, w.Name, w.Description, w.CreatedAt)).ToList() as IReadOnlyCollection<WorkspaceResponse>;
-            return Result<IReadOnlyCollection<WorkspaceResponse>>.Success(items);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to query workspaces for user ID: {UserId}. Error: {Message}", userId, ex.Message);
-            _logger.LogTrace(ex, "GetWorkspacesForUser failure stack trace for user ID {UserId}", userId);
-            return Result<IReadOnlyCollection<WorkspaceResponse>>.Failure(Error.Failure("WORKSPACE_QUERY_ERROR", ex.Message));
-        }
+        var workspaces = await _workspaceProvider.GetWorkspacesForUserAsync(userId, cancellationToken);
+        _logger.LogTrace("Retrieved {Count} workspaces for user ID: {UserId}", workspaces.Count, userId);
+        
+        var items = workspaces.Select(w => new WorkspaceResponse(w.RefId, w.Name, w.Description, w.CreatedAt)).ToList() as IReadOnlyCollection<WorkspaceResponse>;
+        return Result<IReadOnlyCollection<WorkspaceResponse>>.Success(items);
     }
 
     public async Task<Result> AddUserToWorkspaceAsync(int callerId, int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
@@ -132,12 +114,6 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogWarning("Add member denied: user {UserEmail} is not a member of the tenant owning workspace ID {WorkspaceId}", request.Email, workspaceId);
             return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to add user {UserEmail} to workspace ID: {WorkspaceId}. Error: {Message}", request.Email, workspaceId, ex.Message);
-            _logger.LogTrace(ex, "AddUserToWorkspace failure stack trace for email {UserEmail} in workspace ID {WorkspaceId}", request.Email, workspaceId);
-            return Result.Failure(Error.Failure("WORKSPACE_MEMBER_ERROR", ex.Message));
-        }
     }
 
     public async Task<Result> RemoveUserFromWorkspaceAsync(int callerId, int workspaceId, Guid userRef, CancellationToken cancellationToken = default)
@@ -170,12 +146,6 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogWarning("Remove member rejected for workspace ID {WorkspaceId}: {Message}", workspaceId, ex.Message);
             return Result.Failure(Error.Validation("WORKSPACE_OWNER_PROTECTED", ex.Message));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to remove user {UserRef} from workspace ID: {WorkspaceId}. Error: {Message}", userRef, workspaceId, ex.Message);
-            _logger.LogTrace(ex, "RemoveUserFromWorkspace failure stack trace for workspace {WorkspaceId}", workspaceId);
-            return Result.Failure(Error.Failure("WORKSPACE_MEMBER_ERROR", ex.Message));
-        }
     }
 
     public async Task<Result<IPagedList<TenantMemberResponse>>> GetMembersAsync(int callerId, int workspaceId, int skip, int take, CancellationToken cancellationToken = default)
@@ -186,17 +156,8 @@ internal sealed class WorkspaceService : IWorkspaceService
             return Result<IPagedList<TenantMemberResponse>>.Failure(gate.Error);
         }
 
-        try
-        {
-            var members = await _workspaceProvider.GetWorkspaceMembersAsync(workspaceId, skip, take, cancellationToken);
-            return Result<IPagedList<TenantMemberResponse>>.Success(members);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to list members of workspace ID: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
-            _logger.LogTrace(ex, "GetMembers failure stack trace for workspace {WorkspaceId}", workspaceId);
-            return Result<IPagedList<TenantMemberResponse>>.Failure(Error.Failure("WORKSPACE_QUERY_ERROR", ex.Message));
-        }
+        var members = await _workspaceProvider.GetWorkspaceMembersAsync(workspaceId, skip, take, cancellationToken);
+        return Result<IPagedList<TenantMemberResponse>>.Success(members);
     }
 
     public async Task<Result> UpdateWorkspaceAsync(int callerId, int workspaceId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
@@ -207,35 +168,26 @@ internal sealed class WorkspaceService : IWorkspaceService
             return gate;
         }
 
-        try
+        var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
+        await _workspaceProvider.UpdateWorkspaceAsync(workspaceId, request.Name, request.Description, cancellationToken);
+        _logger.LogInformation("Updated workspace ID: {WorkspaceId}", workspaceId);
+
+        var changes = new List<FieldChange>(2);
+        if (!string.Equals(before?.Name, request.Name, StringComparison.Ordinal))
         {
-            var before = await _workspaceProvider.FindByIdAsync(workspaceId, cancellationToken);
-            await _workspaceProvider.UpdateWorkspaceAsync(workspaceId, request.Name, request.Description, cancellationToken);
-            _logger.LogInformation("Updated workspace ID: {WorkspaceId}", workspaceId);
-
-            var changes = new List<FieldChange>(2);
-            if (!string.Equals(before?.Name, request.Name, StringComparison.Ordinal))
-            {
-                changes.Add(new FieldChange("name", before?.Name, request.Name));
-            }
-
-            if (!string.Equals(before?.Description ?? string.Empty, request.Description ?? string.Empty, StringComparison.Ordinal))
-            {
-                changes.Add(new FieldChange("description", before?.Description, request.Description));
-            }
-
-            if (changes.Count > 0)
-            {
-                await AnnounceAsync(new WorkspaceUpdatedEvent(workspaceId) { Changes = changes }, cancellationToken);
-            }
-            return Result.Success();
+            changes.Add(new FieldChange("name", before?.Name, request.Name));
         }
-        catch (Exception ex)
+
+        if (!string.Equals(before?.Description ?? string.Empty, request.Description ?? string.Empty, StringComparison.Ordinal))
         {
-            _logger.LogError("Failed to update workspace ID: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
-            _logger.LogTrace(ex, "UpdateWorkspace failure stack trace for workspace {WorkspaceId}", workspaceId);
-            return Result.Failure(Error.Failure("WORKSPACE_UPDATE_ERROR", ex.Message));
+            changes.Add(new FieldChange("description", before?.Description, request.Description));
         }
+
+        if (changes.Count > 0)
+        {
+            await AnnounceAsync(new WorkspaceUpdatedEvent(workspaceId) { Changes = changes }, cancellationToken);
+        }
+        return Result.Success();
     }
 
     public async Task<Result> TransferOwnershipAsync(int callerId, int workspaceId, Guid newOwnerRef, CancellationToken cancellationToken = default)
@@ -266,11 +218,6 @@ internal sealed class WorkspaceService : IWorkspaceService
             _logger.LogWarning("Ownership transfer of workspace ID {WorkspaceId} refused: user {UserRef} is not in its tenant", workspaceId, newOwnerRef);
             return Result.Failure(Error.NotFound("USER_NOT_FOUND", "User not found."));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to transfer workspace ID {WorkspaceId} to user {UserRef}", workspaceId, newOwnerRef);
-            return Result.Failure(Error.Failure("WORKSPACE_UPDATE_ERROR", ex.Message));
-        }
     }
 
     public async Task<Result> DeleteWorkspaceAsync(int callerId, int workspaceId, CancellationToken cancellationToken = default)
@@ -281,22 +228,13 @@ internal sealed class WorkspaceService : IWorkspaceService
             return gate;
         }
 
-        try
-        {
-            // The workspace's policies, devices and workflows live in the main database, which the
-            // management host retires on this event. It is written to the outbox in the delete's own
-            // transaction (see OutboxDispatcher), so a broker outage or a restart right after the
-            // delete delays the retirement instead of leaving them running.
-            await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, OutboxMessage.Create(new WorkspaceDeletedEvent(workspaceId, callerId)), cancellationToken);
-            _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to delete workspace ID: {WorkspaceId}. Error: {Message}", workspaceId, ex.Message);
-            _logger.LogTrace(ex, "DeleteWorkspace failure stack trace for workspace {WorkspaceId}", workspaceId);
-            return Result.Failure(Error.Failure("WORKSPACE_DELETE_ERROR", ex.Message));
-        }
+        // The workspace's policies, devices and workflows live in the main database, which the
+        // management host retires on this event. It is written to the outbox in the delete's own
+        // transaction (see OutboxDispatcher), so a broker outage or a restart right after the
+        // delete delays the retirement instead of leaving them running.
+        await _workspaceProvider.DeleteWorkspaceAsync(workspaceId, OutboxMessage.Create(new WorkspaceDeletedEvent(workspaceId, callerId)), cancellationToken);
+        _logger.LogInformation("Deleted workspace ID: {WorkspaceId}", workspaceId);
+        return Result.Success();
     }
 
     /// <summary>
@@ -352,12 +290,10 @@ internal sealed class WorkspaceService : IWorkspaceService
             _metrics.RecordPermissionCheck("effective-set", "resolved");
             return Result<IReadOnlyCollection<string>>.Success(permissions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError("Failed to resolve access for user ID {UserId} in workspace ID: {WorkspaceId}. Error: {Message}", userId, workspaceId, ex.Message);
-            _logger.LogTrace(ex, "ResolveAccess failure stack trace for user ID {UserId} in workspace ID {WorkspaceId}", userId, workspaceId);
             _metrics.RecordPermissionCheck("effective-set", "error");
-            return Result<IReadOnlyCollection<string>>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
+            throw;
         }
     }
 
@@ -384,12 +320,10 @@ internal sealed class WorkspaceService : IWorkspaceService
             _metrics.RecordPermissionCheck("effective-set", "resolved");
             return Result<WorkspaceAccessResolution>.Success(resolution);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError("Failed to resolve access for user ID {UserId} in workspace {WorkspaceRef}. Error: {Message}", userId, workspaceRef, ex.Message);
-            _logger.LogTrace(ex, "ResolveAccess failure stack trace for user ID {UserId} in workspace {WorkspaceRef}", userId, workspaceRef);
             _metrics.RecordPermissionCheck("effective-set", "error");
-            return Result<WorkspaceAccessResolution>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", ex.Message));
+            throw;
         }
     }
 
