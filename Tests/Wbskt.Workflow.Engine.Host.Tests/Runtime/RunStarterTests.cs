@@ -237,8 +237,10 @@ public sealed class RunStarterTests
         public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
     }
 
-    private sealed class FixedClock : IClock
+    private sealed class FixedClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 

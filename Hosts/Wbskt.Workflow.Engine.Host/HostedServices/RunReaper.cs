@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class RunReaper(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<RunReaper> logger,
@@ -26,7 +26,7 @@ public sealed class RunReaper(
         var runProvider = services.GetRequiredService<IRunProvider>();
         var runCancellationService = services.GetRequiredService<IRunCancellationService>();
         var runFinalizer = services.GetRequiredService<IRunFinalizer>();
-        DateTime cutoffUtc = clock.UtcNow - _stuckThreshold;
+        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _stuckThreshold;
         IReadOnlyCollection<RunRow> stuckRuns = await runProvider.GetStuckRunsAsync(cutoffUtc, BatchSize, ct);
         foreach (RunRow run in stuckRuns)
         {

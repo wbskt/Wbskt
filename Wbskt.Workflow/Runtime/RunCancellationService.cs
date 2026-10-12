@@ -10,7 +10,7 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
     private readonly IMemoryCache _memoryCache;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly IBranchProvider _branchProvider;
     private readonly IBookmarkProvider _bookmarkProvider;
     private readonly IBranchTerminator _branchTerminator;
@@ -24,7 +24,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         IRunProvider runProvider,
         IRunJournal journal,
         IMemoryCache memoryCache,
-        IClock clock,
+        TimeProvider clock,
         IBranchProvider branchProvider,
         IBookmarkProvider bookmarkProvider,
         IBranchTerminator branchTerminator,
@@ -72,8 +72,8 @@ internal sealed class RunCancellationService : IRunCancellationService
         // silent and inexplicable from the outside. (A parked run is still 'Running'; only its branch is
         // 'Waiting'.) Single status write (2.3): the reason/timestamp ride along with the transition
         // itself, so there's no follow-up UpdateStatusAsync call.
-        bool transitioned = await _runProvider.TransitionStatusAsync(runId, RunStatus.Running, RunStatus.Cancelling, _clock.UtcNow, reason, ct)
-            || await _runProvider.TransitionStatusAsync(runId, RunStatus.Failing, RunStatus.Cancelling, _clock.UtcNow, reason, ct);
+        bool transitioned = await _runProvider.TransitionStatusAsync(runId, RunStatus.Running, RunStatus.Cancelling, _clock.GetUtcNow().UtcDateTime, reason, ct)
+            || await _runProvider.TransitionStatusAsync(runId, RunStatus.Failing, RunStatus.Cancelling, _clock.GetUtcNow().UtcDateTime, reason, ct);
 
         if (!transitioned)
         {

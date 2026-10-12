@@ -29,7 +29,7 @@ public interface ITriggerChannel
 }
 
 /// <summary>The workflow version being published, and what a channel may need to register its triggers.</summary>
-public sealed record TriggerPublication(WorkflowDefinitionRow Definition, Guid WorkspaceRef, IScheduledFireProvider ScheduledFires, IClock Clock);
+public sealed record TriggerPublication(WorkflowDefinitionRow Definition, Guid WorkspaceRef, IScheduledFireProvider ScheduledFires, TimeProvider Clock);
 
 public sealed record TriggerRegistrationSpec(string TriggerKey, string ConcurrencyPolicy, string? CorrelationExpression)
 {

@@ -4,6 +4,8 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using System.Diagnostics.Metrics;
+using Wbskt.Management.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
@@ -27,8 +29,31 @@ public sealed class ClientCommandServiceTests
     private readonly Mock<IClientCommandTargetProvider> _targets = new();
     private readonly Mock<IEventBus> _bus = new();
 
+    private readonly ManagementMetrics _metrics = new();
+
     private ClientCommandService Service =>
-        new(_clients.Object, new DeviceCommandSender(_targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance), _bus.Object, NullLogger<ClientCommandService>.Instance);
+        new(_clients.Object, new DeviceCommandSender(_targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance), _bus.Object, NullLogger<ClientCommandService>.Instance, _metrics);
+
+    [Fact]
+    public async Task Every_command_is_counted_by_its_outcome()
+    {
+        _targets.Setup(t => t.FindAsync(ClientRef, It.IsAny<CancellationToken>())).ReturnsAsync(new ClientCommandTarget(42, WorkspaceId, false, null));
+        var outcomes = new List<string?>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (ReferenceEquals(instrument, _metrics.Commands))
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) => outcomes.Add(tags[0].Value as string));
+        listener.Start();
+
+        await Service.SendAsync(WorkspaceId, ClientRef, new ClientCommandRequest("reboot", "{}"));
+
+        outcomes.Should().Equal("DEVICE_OFFLINE");
+    }
 
     [Fact]
     public async Task A_command_to_an_offline_device_is_a_conflict_and_sends_nothing()

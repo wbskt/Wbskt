@@ -19,7 +19,7 @@ public sealed class LeaderElectionService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHostIdentity _hostIdentity;
     private readonly LeadershipState _leadershipState;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly ILogger<LeaderElectionService> _logger;
     private readonly TimeSpan _renewInterval;
@@ -29,7 +29,7 @@ public sealed class LeaderElectionService : BackgroundService
         IServiceScopeFactory scopeFactory,
         IHostIdentity hostIdentity,
         LeadershipState leadershipState,
-        IClock clock,
+        TimeProvider clock,
         IHostApplicationLifetime appLifetime,
         ILogger<LeaderElectionService> logger,
         IOptions<WorkflowEngineOptions> options)
@@ -64,7 +64,7 @@ public sealed class LeaderElectionService : BackgroundService
             bool acquired = await leaseProvider.TryAcquireAsync(EngineLeaderLease, _hostIdentity.HostId, _leaseTtl, ct);
             if (acquired)
             {
-                _leadershipState.SetLeader(_clock.UtcNow.Add(_leaseTtl));
+                _leadershipState.SetLeader(_clock.GetUtcNow().UtcDateTime.Add(_leaseTtl));
                 return;
             }
 

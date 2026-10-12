@@ -24,7 +24,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// configures inputs; without one, an input-carrying node fails with a clear message rather than
 /// quietly starting the child with an empty payload.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, IClock clock, IExpressionEvaluator? evaluator = null) : INodeExecutor
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null) : INodeExecutor
 {
     internal const string ParkedKey = "__subworkflow";
     internal const string WakeKey = "__wake";
@@ -68,7 +68,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                 null);
         }
 
-        InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.UtcNow);
+        InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.GetUtcNow().UtcDateTime);
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
         if (!result.RunId.HasValue)

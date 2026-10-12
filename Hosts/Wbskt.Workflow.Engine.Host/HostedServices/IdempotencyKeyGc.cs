@@ -13,7 +13,7 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// Runs on the active engine only.
 /// </summary>
 public sealed class IdempotencyKeyGc(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<IdempotencyKeyGc> logger,
@@ -29,7 +29,7 @@ public sealed class IdempotencyKeyGc(
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         var idempotencyKeyProvider = services.GetRequiredService<IIdempotencyKeyProvider>();
-        DateTime cutoffUtc = clock.UtcNow - _retentionWindow;
+        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _retentionWindow;
         while (true)
         {
             int deleted = await idempotencyKeyProvider.DeleteExpiredAsync(cutoffUtc, BatchSize, ct);

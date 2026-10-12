@@ -13,9 +13,9 @@ namespace Wbskt.Workflow.NodeExecutors.Triggers;
 /// </summary>
 internal sealed class PassthroughTriggerExecutor : INodeExecutor
 {
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
 
-    public PassthroughTriggerExecutor(string kind, IClock clock)
+    public PassthroughTriggerExecutor(string kind, TimeProvider clock)
     {
         Kind = kind;
         _clock = clock;
@@ -30,7 +30,7 @@ internal sealed class PassthroughTriggerExecutor : INodeExecutor
         IReadOnlyDictionary<string, JsonElement> patch = new Dictionary<string, JsonElement>
         {
             ["trigger"] = JsonSerializer.SerializeToElement(ctx.Branch.TriggerPayload),
-            ["triggeredAt"] = JsonSerializer.SerializeToElement(_clock.UtcNow)
+            ["triggeredAt"] = JsonSerializer.SerializeToElement(_clock.GetUtcNow().UtcDateTime)
         };
 
         return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("default", patch));

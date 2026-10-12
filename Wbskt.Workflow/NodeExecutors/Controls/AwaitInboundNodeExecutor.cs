@@ -22,12 +22,12 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
     private const string DefaultPort = "default";
     protected const string DefaultTimeoutPort = "timeout"; // edges map the port to the target node
 
-    protected AwaitInboundNodeExecutor(IClock clock)
+    protected AwaitInboundNodeExecutor(TimeProvider clock)
     {
         Clock = clock;
     }
 
-    protected IClock Clock { get; }
+    protected TimeProvider Clock { get; }
 
     public abstract string Kind { get; }
 
@@ -66,7 +66,7 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
             if (ctx.Branch.LocalState.TryGetValue(DeadlineKey, out JsonElement deadlineElement)
                 && deadlineElement.ValueKind == JsonValueKind.String
                 && DateTime.TryParse(deadlineElement.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime deadline)
-                && Clock.UtcNow >= deadline)
+                && Clock.GetUtcNow().UtcDateTime >= deadline)
             {
                 return Continue(DefaultTimeoutPort);
             }

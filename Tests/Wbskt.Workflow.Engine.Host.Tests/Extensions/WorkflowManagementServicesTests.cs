@@ -119,4 +119,19 @@ public sealed class WorkflowManagementServicesTests
 
         Assert.DoesNotContain(services, d => d.ServiceType == typeof(INodeExecutor));
     }
+
+    [Theory]
+    [InlineData(typeof(IBookmarkProvider))]
+    [InlineData(typeof(IIdempotencyKeyProvider))]
+    [InlineData(typeof(IPendingTriggerEventProvider))]
+    [InlineData(typeof(IJoinAggregatorProvider))]
+    [InlineData(typeof(ILeaseProvider))]
+    [InlineData(typeof(IRunCountersProvider))]
+    [InlineData(typeof(IRunRetentionProvider))]
+    public void AddWorkflowManagementServices_does_not_register_engine_only_providers(Type engineOnly)
+    {
+        IServiceCollection services = BuildServices();
+
+        Assert.DoesNotContain(services, d => d.ServiceType == engineOnly);
+    }
 }

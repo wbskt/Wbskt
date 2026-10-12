@@ -53,6 +53,6 @@ public sealed class RunJournalTests
             .Setup(h => h.InsertBatchAsync(It.IsAny<IReadOnlyCollection<HistoryEventRow>>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyCollection<HistoryEventRow>, CancellationToken>((rows, _) => written.AddRange(rows))
             .Returns(Task.CompletedTask);
-        return (new RunJournal(history.Object, Mock.Of<IClock>(c => c.UtcNow == Now)), written);
+        return (new RunJournal(history.Object, Mock.Of<TimeProvider>(c => c.GetUtcNow() == new DateTimeOffset(Now))), written);
     }
 }

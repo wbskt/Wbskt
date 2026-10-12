@@ -261,7 +261,7 @@ member's roles, groups and permissions) are unchanged until the console reads pa
 |---|---|---|
 | `GET /healthz` | anonymous | Liveness — the process is up. Probes nothing, so a dependency failure cannot trigger a restart loop. |
 | `GET /healthz/ready` | anonymous | Readiness — dependencies reachable. 503 when not. This is what the compose healthcheck consumes, so it also drives Traefik's routing table and `deploy.sh`'s health wait. |
-| `GET /openapi`, Scalar reference | anonymous, **development only** unless `ApiDocs:Enabled` (`API_DOCS_ENABLED`) is true | API docs. Anonymous by consequence rather than by declaration — this host has no fallback policy, so an unmarked endpoint is already open. |
+| `GET /openapi`, Scalar reference | anonymous, **development only** unless `ApiDocs:Enabled` (`API_DOCS_ENABLED`) is true | API docs. Explicitly exempted from the default-deny fallback policy. |
 
 ---
 

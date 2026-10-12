@@ -41,7 +41,7 @@ public sealed class ClientsControllerScopingTests
         var bus = new Mock<IEventBus>();
         var eventLogService = new Mock<IEventLogService>();
 
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new DeviceCommandSender(_targets.Object, bus.Object, NullLogger<DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new DeviceCommandSender(_targets.Object, bus.Object, NullLogger<DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), eventLogService.Object);
 
         controller.ControllerContext = new ControllerContext
         {

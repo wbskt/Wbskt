@@ -6,13 +6,13 @@ namespace Wbskt.Workflow.Runtime;
 internal sealed class InboundHub : IInboundHub
 {
     private readonly ITriggerDispatcher _triggerDispatcher;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly IEngineStartupTracker _startupTracker;
     private readonly ILogger<InboundHub> _logger;
 
     public InboundHub(
         ITriggerDispatcher triggerDispatcher,
-        IClock clock,
+        TimeProvider clock,
         ILogger<InboundHub>? logger = null,
         IEngineStartupTracker? startupTracker = null)
     {
@@ -29,7 +29,7 @@ internal sealed class InboundHub : IInboundHub
         InboundEvent normalizedEvent = evt;
         if (normalizedEvent.ReceivedAt == default)
         {
-            normalizedEvent = normalizedEvent with { ReceivedAt = _clock.UtcNow };
+            normalizedEvent = normalizedEvent with { ReceivedAt = _clock.GetUtcNow().UtcDateTime };
         }
 
         try

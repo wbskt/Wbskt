@@ -37,7 +37,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
 {
     private static readonly JsonElement JsonNull = JsonSerializer.SerializeToElement((string?)null);
 
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly ISharedVariableProvider? _sharedVariableProvider;
 
     /// <param name="sharedVariableProvider">
@@ -45,7 +45,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
     /// The engine always supplies one; without it, a <c>$shared</c> reference fails with a clear
     /// message rather than silently reading as null.
     /// </param>
-    public ExpressionEvaluator(IClock clock, ISharedVariableProvider? sharedVariableProvider = null)
+    public ExpressionEvaluator(TimeProvider clock, ISharedVariableProvider? sharedVariableProvider = null)
     {
         _clock = clock;
         _sharedVariableProvider = sharedVariableProvider;
@@ -229,7 +229,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
             case FunctionName.Now:
             case FunctionName.UtcNow:
                 RequireArgumentCount(function, arguments, 0);
-                return ToJsonElement(_clock.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                return ToJsonElement(_clock.GetUtcNow().UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
 
             case FunctionName.ToString:
                 RequireArgumentCount(function, arguments, 1);

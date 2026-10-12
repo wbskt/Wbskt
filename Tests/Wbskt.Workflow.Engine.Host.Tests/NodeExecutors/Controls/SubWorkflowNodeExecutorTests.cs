@@ -156,8 +156,10 @@ public sealed class SubWorkflowNodeExecutorTests
         CreditBudget = 0m, CreatedAt = DateTime.UtcNow
     };
 
-    private sealed class FixedClock : IClock
+    private sealed class FixedClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc);
     }
 

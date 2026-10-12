@@ -70,7 +70,7 @@ public static class Program
         builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:RefreshCookie").Get<RefreshCookieOptions>() ?? new RefreshCookieOptions()));
         builder.Services.AddSingleton<RefreshTokenCookie>();
 
-        builder.AddWbsktTelemetry(AuthMetrics.MeterName);
+        builder.AddWbsktTelemetry(AuthMetrics.MeterName, QueuedEventBus.MeterName);
 
         // Register Keyed ReferenceMappers
         builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>(ReferenceType.Workspace);

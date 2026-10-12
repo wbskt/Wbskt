@@ -17,7 +17,7 @@ internal sealed class RunFinalizer : IRunFinalizer
     private readonly IJoinAggregatorProvider _joinAggregatorProvider;
     private readonly IWorkflowDefinitionCache _definitionCache;
     private readonly ISubWorkflowCompletionHook _completionHook;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     // The registry, not IRunCancellationService: the cancellation service finalizes a run left idle by
     // a cancel, so depending on it here would make the two depend on each other.
     private readonly RunCancellationTokenRegistry _tokenRegistry;
@@ -32,7 +32,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         IRunCompletedPublisher runCompletedPublisher,
         IBookmarkProvider bookmarkProvider,
         ISubWorkflowCompletionHook completionHook,
-        IClock clock,
+        TimeProvider clock,
         RunCancellationTokenRegistry tokenRegistry,
         IJoinAggregatorProvider joinAggregatorProvider,
         IWorkflowDefinitionCache definitionCache,
@@ -77,7 +77,7 @@ internal sealed class RunFinalizer : IRunFinalizer
         RunRow run = await _runProvider.GetByIdAsync(runId, ct);
         IReadOnlyCollection<BranchRow> branches = await _branchProvider.GetAllByRunIdAsync(run.Id, ct);
         string terminalStatus = DetermineTerminalStatus(run, branches);
-        DateTime completedAt = _clock.UtcNow;
+        DateTime completedAt = _clock.GetUtcNow().UtcDateTime;
 
         (bool transitioned, RunRow updatedRun) = await _runProvider.SetTerminalAsync(runId, terminalStatus, completedAt, ct);
         if (!transitioned)

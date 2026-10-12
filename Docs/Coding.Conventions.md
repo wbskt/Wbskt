@@ -25,18 +25,19 @@
 *   **Modern Disposables:** Use the `await using var` syntax for all objects implementing `IAsyncDisposable` (e.g., `SqlConnection`, `SqlDataReader`) to ensure efficient, non-blocking cleanup.
 
 ### Naming Patterns
-*   **`FindBy...`**: Returns strictly an **internal integer ID**.
-*   **`GetBy...`**: Returns a **full record, entity, or DTO**.
+*   **`Find...`**: A lookup that may miss. Returns `T?` (`int?` when it looks up an internal id, as `FindByReferenceIdAsync` does) and never throws for "not found".
+*   **`Get...`**: Returns a **full record, entity, or DTO** that is expected to exist.
 *   **Async Suffix:** Any method returning a `Task` or `ValueTask`, or marked as `async`, must end with the `Async` suffix.
 *   **Events and commands:** An event (`IEvent`) records what happened, is named in the past tense with an `Event` suffix (`WorkflowRunCancelRequestedEvent`), is published with `IEventBus` to whoever listens, and lands in the audit log. A command (`ICommand`) asks one service to do something, is named in the imperative without the suffix (`CancelWorkflowRun`), declares its queue as `static QueueName`, and is sent with `ICommandSender`; it never reaches the audit log. `MessageNamingTests` enforces both.
 
 ### Method Signatures & Returns
-*   **No Null Returns:** Public functions must never return `null`. Use descriptive exceptions to handle missing data or logic failures.
+*   **Null only from `Find...`:** A `Find...` method is the one place a public function returns `null`, and its caller turns that into a `<RESOURCE>_NOT_FOUND` result. Everything else returns a value, an empty collection or a `Result`; missing data a caller can expect is a `Result`, never an exception.
 *   **Collection Returns:** When returning a list or collection of items, always use `IReadOnlyCollection<T>` to signal that the result is an immutable snapshot.
 *   **Controller Implementation:** Always use `async Task<T>` as the return type for controller actions. Use `async Task` (no generic) for actions that perform an operation without returning data. Success responses return the data directly.
 *   **No Anonymous Returns:** Controller actions must never return `object` or anonymous types. Always define a named record or class for the response.
 *   **DTO Preference:** For `POST` or `PUT` actions, prefer using DTOs/Records for input parameters instead of long lists of primitive arguments.
 *   **Lists:** A list action binds `[FromQuery] PageRequest page` and returns `Page<T>` (`items`, `nextCursor`, and `totalCount` only where counting is cheap). A list ordered by an id pages by key (`page.AfterKey()`, cursor from `PageRequest.KeyCursor`); one that needs a total pages by offset (`page.Offset()`, then `MapPage`). Never take `skip`/`take`/`top` parameters of your own, and never return a bare array or a list type named for its items.
+*   **Time in contracts:** A new request, response or event field holding a moment in time is a `DateTimeOffset` (sent as UTC). Existing `DateTime` fields stay as they are until their contract changes for another reason. Code whose behaviour depends on the time takes it from the injected `TimeProvider` (one clock for every host), so a test can fix it.
 *   **Time Ranges:** `from`/`to` are `DateTimeOffset?` and are resolved with `TimeRange.Resolve`, which owns the defaults, the 1970 floor and the longest span. Each endpoint passes only its own default and cap.
 
 ### API Style (routes and models)

@@ -32,6 +32,7 @@ using Wbskt.Primitives;
 using Wbskt.Workflow.Abstraction.Validation;
 using Wbskt.Workflow.Extensions;
 using Wbskt.Infrastructure.Telemetry;
+using Wbskt.Management.Host.Telemetry;
 
 namespace Wbskt.Management.Host;
 
@@ -40,7 +41,7 @@ public static class Program
     public static async Task Main(string[] args)
     {
         var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json");
-        builder.AddWbsktTelemetry();
+        builder.AddWbsktTelemetry(ManagementMetrics.MeterName, QueuedEventBus.MeterName);
 
         // A Devices instance serves only device registration and login (see HostRole). It keeps the
         // same service registrations, minus the console's background work and live feed.
@@ -48,6 +49,7 @@ public static class Program
 
         // Add services to the container.
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
+        builder.Services.AddSingleton<ManagementMetrics>();
         // Signs client (device) tokens for the socket host; accepts user tokens signed by the auth host,
         // whose public keys it fetches from Jwt:TrustedJwksUrl.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);

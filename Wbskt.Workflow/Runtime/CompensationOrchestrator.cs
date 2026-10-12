@@ -16,7 +16,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
     private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly ILogger<CompensationOrchestrator>? _logger;
 
     public CompensationOrchestrator(
@@ -25,7 +25,7 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
         IRunJournal journal,
         IWorkflowDefinitionCache workflowDefinitionCache,
         INodeExecutorRegistry nodeExecutorRegistry,
-        IClock clock,
+        TimeProvider clock,
         ILogger<CompensationOrchestrator>? logger = null)
     {
         _runProvider = runProvider;

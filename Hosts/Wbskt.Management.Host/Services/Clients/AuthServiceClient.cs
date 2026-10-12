@@ -7,6 +7,8 @@ namespace Wbskt.Management.Host.Services.Clients;
 
 internal sealed class AuthServiceClient : IAuthServiceClient
 {
+    public static readonly Error AuthUnavailable = Error.Unavailable("AUTH_UNAVAILABLE", "Workspace access could not be checked right now. Try again shortly.");
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<AuthServiceClient> _logger;
     private readonly WorkspaceAccessCache _cache;
@@ -68,7 +70,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
                 }
 
                 _logger.LogError("Auth service failed to resolve workspace: '{WorkspaceRef}'. Status: {StatusCode}", workspaceRef, response.StatusCode);
-                return Result<WorkspaceAccess>.Failure(Error.Failure("WORKSPACE_RESOLVE_ERROR", $"Failed to resolve workspace from Auth service. Status: {response.StatusCode}"));
+                return Result<WorkspaceAccess>.Failure((int)response.StatusCode >= 500 ? AuthUnavailable : Error.Failure("WORKSPACE_RESOLVE_ERROR", $"Failed to resolve workspace from Auth service. Status: {response.StatusCode}"));
             }
 
             var result = await response.Content.ReadFromJsonAsync<ResolvedWorkspaceResponse>(cancellationToken: cancellationToken);
@@ -82,11 +84,12 @@ internal sealed class AuthServiceClient : IAuthServiceClient
             _logger.LogDebug("Successfully resolved workspace reference: '{WorkspaceRef}' to internal ID: {WorkspaceId} with {PermissionCount} permissions", workspaceRef, access.WorkspaceId, access.Permissions.Count);
             return Result<WorkspaceAccess>.Success(access);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            _logger.LogError("Unexpected error resolving workspace reference: '{WorkspaceRef}'. Error: {Message}", workspaceRef, ex.Message);
-            _logger.LogTrace(ex, "Workspace resolution failure stack trace for '{WorkspaceRef}'", workspaceRef);
-            return Result<WorkspaceAccess>.Failure(Error.Failure("WORKSPACE_RESOLVE_EXCEPTION", ex.Message));
+            // The auth host is down or did not answer in time: a 503 the caller can retry, as the
+            // engine's outages are, not a 500 that reads as a bug in this host.
+            _logger.LogError("Auth service unreachable resolving workspace reference: '{WorkspaceRef}'. Error: {Message}", workspaceRef, ex.Message);
+            return Result<WorkspaceAccess>.Failure(AuthUnavailable);
         }
     }
 

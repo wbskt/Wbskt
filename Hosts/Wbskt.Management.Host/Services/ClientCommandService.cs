@@ -3,6 +3,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Devices;
+using Wbskt.Management.Host.Telemetry;
 using Wbskt.Management.Models;
 using Wbskt.Models;
 
@@ -24,16 +25,25 @@ public sealed class ClientCommandService : IClientCommandService
     private readonly IDeviceCommandSender _sender;
     private readonly IEventBus _eventBus;
     private readonly ILogger<ClientCommandService> _logger;
+    private readonly ManagementMetrics _metrics;
 
-    public ClientCommandService(IClientQueryService clientService, IDeviceCommandSender sender, IEventBus eventBus, ILogger<ClientCommandService> logger)
+    public ClientCommandService(IClientQueryService clientService, IDeviceCommandSender sender, IEventBus eventBus, ILogger<ClientCommandService> logger, ManagementMetrics metrics)
     {
         _clientService = clientService;
         _sender = sender;
         _eventBus = eventBus;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<Result<ClientCommandResponse>> SendAsync(int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken = default)
+    {
+        var result = await SendCommandAsync(workspaceId, clientRefId, request, cancellationToken);
+        _metrics.RecordCommand(result);
+        return result;
+    }
+
+    private async Task<Result<ClientCommandResponse>> SendCommandAsync(int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken)
     {
         var invalid = Validate(request);
         if (invalid is not null)

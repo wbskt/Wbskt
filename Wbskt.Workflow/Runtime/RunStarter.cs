@@ -18,7 +18,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IRunStartedPublisher _runStartedPublisher;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly decimal _defaultCreditBudgetPerRun;
     private readonly WorkflowMetrics? _workflowMetrics;
@@ -32,7 +32,7 @@ internal sealed class RunStarter : IRunStarter
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ICorrelationKeyResolver correlationKeyResolver,
         IRunStartedPublisher runStartedPublisher,
-        IClock clock,
+        TimeProvider clock,
         IIdGenerator idGenerator,
         IOptions<WorkflowEngineOptions> options,
         WorkflowMetrics? workflowMetrics = null,
@@ -59,7 +59,7 @@ internal sealed class RunStarter : IRunStarter
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
             _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
             decimal creditBudget = ResolveCreditBudget(definition.DefinitionJson);
-            DateTime nowUtc = _clock.UtcNow;
+            DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
             // In practice the dispatcher has always set this by now - it normalizes the event per
             // registration before starting a run. The fallback is kept because this is a public entry point

@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class PendingTriggerEventBacklogReaper(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<PendingTriggerEventBacklogReaper> logger,
@@ -23,7 +23,7 @@ public sealed class PendingTriggerEventBacklogReaper(
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         var pendingTriggerEventProvider = services.GetRequiredService<IPendingTriggerEventProvider>();
-        DateTime cutoffUtc = clock.UtcNow - _pendingTtl;
+        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _pendingTtl;
         await pendingTriggerEventProvider.DeleteExpiredAsync(cutoffUtc, BatchSize, ct);
     }
 }

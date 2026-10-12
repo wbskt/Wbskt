@@ -13,14 +13,14 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
     private readonly IScheduledFireProvider _scheduledFireProvider;
     private readonly ITriggerChannelRegistry _channels;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
 
     public TriggerRegistrationService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ITriggerRegistrationProvider triggerRegistrationProvider,
         IScheduledFireProvider scheduledFireProvider,
         ITriggerChannelRegistry channels,
-        IClock clock)
+        TimeProvider clock)
     {
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _triggerRegistrationProvider = triggerRegistrationProvider;

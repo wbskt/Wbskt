@@ -5,6 +5,7 @@ using Wbskt.Events.Management;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Telemetry;
 
 namespace Wbskt.Management.Host.Services;
 
@@ -17,20 +18,30 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly IEventBus _eventBus;
     private readonly ILogger<ClientRegistrationService> _logger;
+    private readonly ManagementMetrics _metrics;
 
     public ClientRegistrationService(
         IClientProvider clientProvider, 
         IRegistrationPolicyProvider policyProvider,
         IEventBus eventBus,
-        ILogger<ClientRegistrationService> logger)
+        ILogger<ClientRegistrationService> logger,
+        ManagementMetrics metrics)
     {
         _clientProvider = clientProvider;
         _policyProvider = policyProvider;
         _eventBus = eventBus;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<Result<ClientRegistrationResponse>> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
+    {
+        var result = await RegisterAsync(request, cancellationToken);
+        _metrics.RecordRegistration(result);
+        return result;
+    }
+
+    private async Task<Result<ClientRegistrationResponse>> RegisterAsync(ClientRegistrationRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Initiating client registration for Client Name: '{ClientName}'", request.Name);
 

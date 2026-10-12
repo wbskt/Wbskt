@@ -52,8 +52,10 @@ public sealed class LeadershipGateTests
         Assert.True(new AlwaysActiveLeadershipGate().IsActive);
     }
 
-    private sealed class FixedClock : IClock
+    private sealed class FixedClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => Now;
     }
 }

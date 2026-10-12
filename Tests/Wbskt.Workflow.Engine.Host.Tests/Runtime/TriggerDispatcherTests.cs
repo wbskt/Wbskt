@@ -393,8 +393,10 @@ public sealed class TriggerDispatcherTests
             new ExpressionEvaluator(new DispatcherTestClock()));
     }
 
-    private sealed class DispatcherTestClock : IClock
+    private sealed class DispatcherTestClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 8, 7, 12, 0, 0, DateTimeKind.Utc);
     }
 
