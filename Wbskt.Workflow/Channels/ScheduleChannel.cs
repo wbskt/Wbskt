@@ -43,7 +43,7 @@ public sealed class ScheduleChannel : TriggerChannel
             return null;
         }
 
-        if (!CronParser.TryGetNextOccurrence(trigger.Config.Cron, publication.Clock.UtcNow, out DateTime nextFireAt))
+        if (!CronParser.TryGetNextOccurrence(trigger.Config.Cron, publication.Clock.GetUtcNow().UtcDateTime, out DateTime nextFireAt))
         {
             throw new InvalidOperationException($"Schedule trigger '{trigger.NodeId}' has an invalid cron expression '{trigger.Config.Cron}'.");
         }

@@ -116,8 +116,10 @@ public sealed class BookmarkSchedulerTests
         };
     }
 
-    private sealed class FixedClock : IClock
+    private sealed class FixedClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 

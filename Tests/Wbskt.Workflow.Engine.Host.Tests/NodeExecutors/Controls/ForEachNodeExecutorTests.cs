@@ -16,7 +16,7 @@ public sealed class ForEachNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_hands_out_the_first_item_on_the_first_visit()
     {
-        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(CreateNode(), Items("a", "b", "c"));
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -33,7 +33,7 @@ public sealed class ForEachNodeExecutorTests
     {
         // Drives the loop the way the branch loop does: each lap re-enters the node with the
         // iterator the previous lap wrote.
-        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         var state = new Dictionary<string, JsonElement>(Items("a", "b", "c"));
         var seen = new List<string>();
 
@@ -64,7 +64,7 @@ public sealed class ForEachNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_empty_collection_goes_straight_to_done()
     {
-        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(CreateNode(), Items());
 
         NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
@@ -81,7 +81,7 @@ public sealed class ForEachNodeExecutorTests
 
         Assert.NotEqual(ForEachNodeExecutor.IteratorKey(LoopNodeId), ForEachNodeExecutor.IteratorKey(other));
 
-        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new ForEachNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         var state = new Dictionary<string, JsonElement>(Items("a", "b"))
         {
             // The *other* loop is mid-flight; this one must still start at zero.

@@ -6,7 +6,7 @@ namespace Wbskt.Workflow.Engine;
 // A pure in-memory read of LeadershipState, with a safety margin before the lease row actually
 // expires: no DB call per tick, and it turns false slightly before a standby could win the row, so
 // two instances doing the same work stays extremely unlikely.
-internal sealed class LeadershipGate(LeadershipState leadershipState, IClock clock) : ILeadershipGate
+internal sealed class LeadershipGate(LeadershipState leadershipState, TimeProvider clock) : ILeadershipGate
 {
     private static readonly TimeSpan SafetyMargin = TimeSpan.FromSeconds(5);
 
@@ -16,7 +16,7 @@ internal sealed class LeadershipGate(LeadershipState leadershipState, IClock clo
     public bool IsActive =>
         leadershipState.IsLeader
         && leadershipState.BusStarted
-        && clock.UtcNow < leadershipState.LeaseValidUntilUtc - SafetyMargin;
+        && clock.GetUtcNow().UtcDateTime < leadershipState.LeaseValidUntilUtc - SafetyMargin;
 }
 
 // Management and tests: they never run the engine's hosted services, so there is no one to stand by for.

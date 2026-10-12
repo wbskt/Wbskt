@@ -8,7 +8,7 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 /// <summary>Resumes branches whose timer or wait timeout is due.</summary>
 public sealed class BookmarkScheduler(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     IRunDispatcher runDispatcher,
@@ -28,7 +28,7 @@ public sealed class BookmarkScheduler(
         // Claim-by-delete: rows returned here are already removed from the table, no separate
         // delete step needed (and no lease/host-id bookkeeping - the DELETE itself is the claim).
         IReadOnlyCollection<Abstraction.Entities.BookmarkRow> claimedBookmarks =
-            await bookmarkProvider.ClaimDueAsync(clock.UtcNow, _batchSize, ct);
+            await bookmarkProvider.ClaimDueAsync(clock.GetUtcNow().UtcDateTime, _batchSize, ct);
 
         if (claimedBookmarks.Count > 0)
         {

@@ -35,7 +35,7 @@ internal static class RetryExecutor
         BranchContext context,
         INodeExecutor executor,
         INodeExecutionServices services,
-        IClock clock,
+        TimeProvider clock,
         CancellationToken ct,
         IRunCountersProvider runCountersProvider,
         ICreditCostCalculator creditCostCalculator,

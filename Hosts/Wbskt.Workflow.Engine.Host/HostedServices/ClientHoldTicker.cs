@@ -19,7 +19,7 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// presence trigger is for.
 /// </remarks>
 public sealed class ClientHoldTicker(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<ClientHoldTicker> logger,
@@ -38,7 +38,7 @@ public sealed class ClientHoldTicker(
         var provider = services.GetRequiredService<IClientHoldStateProvider>();
         var inboundHub = services.GetRequiredService<IInboundHub>();
         IReadOnlyCollection<ClientHoldStateRow> holds = await provider.LeaseDueAsync(LeaseSeconds, _batchSize, ct);
-        DateTime now = clock.UtcNow;
+        DateTime now = clock.GetUtcNow().UtcDateTime;
 
         foreach (ClientHoldStateRow hold in holds)
         {

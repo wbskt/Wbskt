@@ -13,7 +13,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// resume visit it continues. First-visit vs resume is distinguished by a local-state marker,
 /// because the engine re-executes the same node when a bookmark fires.
 /// </summary>
-internal sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
+internal sealed class DelayNodeExecutor(TimeProvider clock) : INodeExecutor
 {
     internal const string DelayUntilKey = "__delay_until";
 
@@ -29,7 +29,7 @@ internal sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
             && until.ValueKind == JsonValueKind.String
             && DateTime.TryParse(until.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime wakeAt))
         {
-            if (clock.UtcNow >= wakeAt)
+            if (clock.GetUtcNow().UtcDateTime >= wakeAt)
             {
                 // Clear the deadline on the way out. Without this a Delay revisited in a loop sees a
                 // deadline already in the past and continues immediately - so it waits on the first
@@ -47,7 +47,7 @@ internal sealed class DelayNodeExecutor(IClock clock) : INodeExecutor
             return Continue();
         }
 
-        return Park(clock.UtcNow + duration, includeMarker: true);
+        return Park(clock.GetUtcNow().UtcDateTime + duration, includeMarker: true);
     }
 
     private static Task<NodeExecutionResult> Continue(bool clearMarker = false)

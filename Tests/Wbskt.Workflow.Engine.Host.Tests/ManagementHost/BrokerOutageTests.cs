@@ -88,7 +88,7 @@ public sealed class BrokerOutageTests
         var bus = new Mock<IEventBus>();
         bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
-        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new Wbskt.Infrastructure.Devices.DeviceCommandSender(targets.Object, bus.Object, NullLogger<Wbskt.Infrastructure.Devices.DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
+        var controller = new ClientsController(clientService.Object, Mock.Of<IClientLifecycleService>(), new ClientCommandService(clientService.Object, new Wbskt.Infrastructure.Devices.DeviceCommandSender(targets.Object, bus.Object, NullLogger<Wbskt.Infrastructure.Devices.DeviceCommandSender>.Instance), bus.Object, NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()), Mock.Of<IRegistrationPolicyService>(), Mock.Of<IEventLogService>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -125,6 +125,7 @@ public sealed class BrokerOutageTests
             services.AddSingleton(Policies.Object);
             services.AddSingleton(_bus.Object);
             services.AddSingleton(Mock.Of<IClientTokenCutoffs>());
+            services.AddSingleton<Wbskt.Management.Host.Telemetry.ManagementMetrics>();
             services.AddQueuedEventBus();
             services.AddScopedWithQueuedEvents<IClientLifecycleService, ClientLifecycleService>();
             services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();

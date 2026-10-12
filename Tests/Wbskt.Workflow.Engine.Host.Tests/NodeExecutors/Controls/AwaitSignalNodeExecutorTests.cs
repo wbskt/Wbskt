@@ -162,8 +162,10 @@ public sealed class AwaitSignalNodeExecutorTests
         ];
     }
 
-    private sealed class MutableClock(DateTime utcNow) : IClock
+    private sealed class MutableClock(DateTime utcNow) : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow { get; set; } = utcNow;
     }
 

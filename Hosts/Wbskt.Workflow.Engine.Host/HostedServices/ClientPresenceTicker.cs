@@ -17,7 +17,7 @@ namespace Wbskt.Workflow.Engine.Host.HostedServices;
 /// deleted without starting anything.
 /// </summary>
 public sealed class ClientPresenceTicker(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<ClientPresenceTicker> logger,
@@ -47,7 +47,7 @@ public sealed class ClientPresenceTicker(
         var provider = services.GetRequiredService<IClientPresenceCheckProvider>();
         var inboundHub = services.GetRequiredService<IInboundHub>();
         IReadOnlyCollection<ClientPresenceCheckRow> checks = await provider.LeaseDueAsync(LeaseSeconds, _batchSize, ct);
-        DateTime now = clock.UtcNow;
+        DateTime now = clock.GetUtcNow().UtcDateTime;
 
         foreach (ClientPresenceCheckRow check in checks)
         {

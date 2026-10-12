@@ -67,9 +67,9 @@ public sealed class NodeExecutorsE2ETests
             new StubWorkflowDefinitionCache(definition),
             new NodeExecutorRegistry([
                 new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock()),
-                new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock())),
-                new VariableNodeExecutor(new NoOpSharedVariableProvider(), new ExpressionEvaluator(new SystemClock())),
-                new ForEachNodeExecutor(new ExpressionEvaluator(new SystemClock()))
+                new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System)),
+                new VariableNodeExecutor(new NoOpSharedVariableProvider(), new ExpressionEvaluator(TimeProvider.System)),
+                new ForEachNodeExecutor(new ExpressionEvaluator(TimeProvider.System))
             ]),
             dispatcher,
             new InMemoryIdempotencyKeyProvider(),
@@ -299,8 +299,10 @@ public sealed class NodeExecutorsE2ETests
         }
     }
 
-    private sealed class FixedClock : IClock
+    private sealed class FixedClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 

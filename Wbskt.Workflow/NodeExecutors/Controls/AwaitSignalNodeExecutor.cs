@@ -12,7 +12,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// the same key the channel computes for an inbound signal, so the two match. See <see cref="AwaitInboundNodeExecutor"/> for the shared
 /// park/resume/timeout machine.
 /// </summary>
-internal sealed class AwaitSignalNodeExecutor(IClock clock) : AwaitInboundNodeExecutor(clock)
+internal sealed class AwaitSignalNodeExecutor(TimeProvider clock) : AwaitInboundNodeExecutor(clock)
 {
     public override string Kind => NodeKind.ControlAwaitSignal;
 
@@ -34,7 +34,7 @@ internal sealed class AwaitSignalNodeExecutor(IClock clock) : AwaitInboundNodeEx
             TtlPort = DefaultTimeoutPort
         };
 
-        DateTime? deadline = config.Ttl is TimeSpan ttl ? Clock.UtcNow + ttl : null;
+        DateTime? deadline = config.Ttl is TimeSpan ttl ? Clock.GetUtcNow().UtcDateTime + ttl : null;
         return new ParkPlan(condition, config.SignalName, deadline);
     }
 }

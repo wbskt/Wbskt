@@ -239,7 +239,7 @@ public sealed class TriggerChannelTests
     };
 
     private static TriggerPublication Publication(IScheduledFireProvider? fires = null) =>
-        new(Definition, WorkspaceRef, fires ?? Mock.Of<IScheduledFireProvider>(), Mock.Of<IClock>(c => c.UtcNow == Now));
+        new(Definition, WorkspaceRef, fires ?? Mock.Of<IScheduledFireProvider>(), Mock.Of<TimeProvider>(c => c.GetUtcNow() == new DateTimeOffset(Now)));
 
     private static async Task<TriggerRegistrationSpec> RegisterAsync(ITriggerChannel channel, BaseNode node, IScheduledFireProvider? fires = null)
     {

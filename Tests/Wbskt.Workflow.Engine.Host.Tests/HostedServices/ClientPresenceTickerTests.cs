@@ -197,8 +197,10 @@ public sealed class ClientPresenceTickerTests
         ClientLastActivityAt = lastActivityAt
     };
 
-    private sealed class FixedClock(DateTime now) : IClock
+    private sealed class FixedClock(DateTime now) : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => now;
     }
 

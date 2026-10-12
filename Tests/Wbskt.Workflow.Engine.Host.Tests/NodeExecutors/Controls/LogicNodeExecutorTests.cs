@@ -15,7 +15,7 @@ public sealed class LogicNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_true_condition_routes_to_true_port()
     {
-        var executor = new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("decision") } }, new Dictionary<string, JsonElement>
         {
             ["decision"] = JsonSerializer.SerializeToElement(true)
@@ -31,7 +31,7 @@ public sealed class LogicNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_false_condition_routes_to_false_port()
     {
-        var executor = new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("decision") } }, new Dictionary<string, JsonElement>
         {
             ["decision"] = JsonSerializer.SerializeToElement(false)
@@ -48,7 +48,7 @@ public sealed class LogicNodeExecutorTests
     {
         // The headline case: before the condition became a structured expression this was impossible
         // to express - a Logic node could only read a pre-computed boolean out of branch state.
-        var executor = new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(
             new LogicGateNode
             {
@@ -77,7 +77,7 @@ public sealed class LogicNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_routes_false_when_the_comparison_does_not_hold()
     {
-        var executor = new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(
             new LogicGateNode
             {
@@ -105,7 +105,7 @@ public sealed class LogicNodeExecutorTests
     [Fact]
     public async Task ExecuteAsync_non_bool_condition_returns_fail()
     {
-        var executor = new LogicNodeExecutor(new ExpressionEvaluator(new SystemClock()));
+        var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("decision") } }, new Dictionary<string, JsonElement>
         {
             ["decision"] = JsonSerializer.SerializeToElement("yes")

@@ -15,7 +15,7 @@ namespace Wbskt.Workflow.Engine.Host.Tests.NodeExecutors.Controls;
 
 public sealed class ParallelForEachNodeExecutorTests
 {
-    private static readonly IExpressionEvaluator Evaluator = new ExpressionEvaluator(new SystemClock());
+    private static readonly IExpressionEvaluator Evaluator = new ExpressionEvaluator(TimeProvider.System);
 
     [Fact]
     public async Task ExecuteAsync_fails_without_forking_when_the_collection_exceeds_the_fan_out_ceiling()

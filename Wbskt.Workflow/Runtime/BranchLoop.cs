@@ -31,7 +31,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly INodeExecutorRegistry _nodeExecutorRegistry;
     private readonly IRunDispatcher _runDispatcher;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
-    private readonly IClock _clock;
+    private readonly TimeProvider _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly IBranchTerminator _branchTerminator;
     private readonly IRunCancellationService _runCancellationService;
@@ -52,7 +52,7 @@ internal sealed class BranchLoop : IBranchLoop
         INodeExecutorRegistry nodeExecutorRegistry,
         IRunDispatcher runDispatcher,
         IIdempotencyKeyProvider idempotencyKeyProvider,
-        IClock clock,
+        TimeProvider clock,
         IIdGenerator idGenerator,
         IBranchTerminator branchTerminator,
         IRunCancellationService runCancellationService,
@@ -297,8 +297,8 @@ internal sealed class BranchLoop : IBranchLoop
                                 LocalJson = childLocalJson,
                                 LastOutputJson = null,
                                 CompensationStackJson = branchRow.CompensationStackJson,
-                                CreatedAt = _clock.UtcNow,
-                                UpdatedAt = _clock.UtcNow,
+                                CreatedAt = _clock.GetUtcNow().UtcDateTime,
+                                UpdatedAt = _clock.GetUtcNow().UtcDateTime,
                                 RowVersion = Array.Empty<byte>()
                             }, ct);
                             await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, created.Id, BranchExecutionReason.ForkChild), ct);
@@ -326,7 +326,7 @@ internal sealed class BranchLoop : IBranchLoop
                     // lives on the same row (ExpiresAt/TtlPort) rather than a separate companion timer
                     // row - whichever side (signal/http/child match vs. TTL expiry) claims the row
                     // first wins; the loser's claim is a no-op.
-                    DateTime nowUtc = _clock.UtcNow;
+                    DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
                     await _bookmarkProvider.CreateAsync(CreateBookmarkRow(runRow.Id, branchRow.RefId, branchRow.NodeId, wait.Condition, nowUtc), ct);
 
                     if (wait.AfterParked is { } afterParked)
@@ -500,8 +500,8 @@ internal sealed class BranchLoop : IBranchLoop
                 LocalJson = continuationLocalJson,
                 LastOutputJson = null,
                 CompensationStackJson = branchRow.CompensationStackJson,
-                CreatedAt = _clock.UtcNow,
-                UpdatedAt = _clock.UtcNow,
+                CreatedAt = _clock.GetUtcNow().UtcDateTime,
+                UpdatedAt = _clock.GetUtcNow().UtcDateTime,
                 RowVersion = Array.Empty<byte>()
             }, ct);
 

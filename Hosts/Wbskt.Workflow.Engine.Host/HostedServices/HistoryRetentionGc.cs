@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class HistoryRetentionGc(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<HistoryRetentionGc> logger,
@@ -26,8 +26,8 @@ public sealed class HistoryRetentionGc(
     protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
     {
         var historyEventProvider = services.GetRequiredService<IHistoryEventProvider>();
-        DateTime cutoffUtc = clock.UtcNow - _retentionWindow;
-        DateTime elevatedCutoffUtc = clock.UtcNow - _elevatedRetentionWindow;
+        DateTime cutoffUtc = clock.GetUtcNow().UtcDateTime - _retentionWindow;
+        DateTime elevatedCutoffUtc = clock.GetUtcNow().UtcDateTime - _elevatedRetentionWindow;
         while (true)
         {
             int deleted = await historyEventProvider.DeleteForRetiredRunsAsync(cutoffUtc, BatchSize, elevatedCutoffUtc, ct);

@@ -11,7 +11,7 @@ using Wbskt.Workflow.Channels;
 namespace Wbskt.Workflow.Engine.Host.HostedServices;
 
 public sealed class ScheduledFireTicker(
-    IClock clock,
+    TimeProvider clock,
     ILeadershipGate leadership,
     IServiceScopeFactory scopeFactory,
     ILogger<ScheduledFireTicker> logger,
@@ -33,7 +33,7 @@ public sealed class ScheduledFireTicker(
         {
             Logger.LogInformation("Leased {Count} scheduled fires for dispatch", fires.Count);
         }
-        DateTime now = clock.UtcNow;
+        DateTime now = clock.GetUtcNow().UtcDateTime;
 
         foreach (ScheduledFireRow fire in fires)
         {

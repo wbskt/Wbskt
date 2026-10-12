@@ -3,6 +3,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Telemetry;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Management.Host.Services;
@@ -12,15 +13,24 @@ internal sealed class ClientAuthService : IClientAuthService
     private readonly IClientProvider _provider;
     private readonly IJwtService _jwtService;
     private readonly ILogger<ClientAuthService> _logger;
+    private readonly ManagementMetrics _metrics;
 
-    public ClientAuthService(IClientProvider provider, IJwtService jwtService, ILogger<ClientAuthService> logger)
+    public ClientAuthService(IClientProvider provider, IJwtService jwtService, ILogger<ClientAuthService> logger, ManagementMetrics metrics)
     {
         _provider = provider;
         _jwtService = jwtService;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<Result<ClientLoginResponse>> LoginAsync(ClientLoginRequest request, CancellationToken cancellationToken = default)
+    {
+        var result = await VerifyAsync(request, cancellationToken);
+        _metrics.RecordDeviceLogin(result);
+        return result;
+    }
+
+    private async Task<Result<ClientLoginResponse>> VerifyAsync(ClientLoginRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("Client login attempt for ClientRefId: {ClientRefId}", request.ClientRefId);
 

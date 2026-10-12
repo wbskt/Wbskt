@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
 
-internal sealed class RunJournal(IHistoryEventProvider historyEventProvider, IClock clock) : IRunJournal
+internal sealed class RunJournal(IHistoryEventProvider historyEventProvider, TimeProvider clock) : IRunJournal
 {
     public Task AppendAsync(RunJournalEntry entry, CancellationToken ct)
     {
@@ -20,7 +20,7 @@ internal sealed class RunJournal(IHistoryEventProvider historyEventProvider, ICl
                 EventKind = entry.EventKind,
                 Severity = entry.Severity ?? HistoryEventKind.SeverityFor(entry.EventKind),
                 PayloadJson = entry.Payload is null ? null : JsonSerializer.Serialize(entry.Payload, entry.Payload.GetType(), EngineJson.Options),
-                Timestamp = clock.UtcNow
+                Timestamp = clock.GetUtcNow().UtcDateTime
             }
         ], ct);
     }

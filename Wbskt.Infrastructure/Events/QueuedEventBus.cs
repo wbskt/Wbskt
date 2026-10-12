@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Wbskt.EventBus.Abstractions;
@@ -28,8 +29,11 @@ namespace Wbskt.Infrastructure.Events;
 /// queuing the bare <see cref="IEvent"/> would publish everything as that interface.
 /// </para>
 /// </remarks>
-public sealed class QueuedEventBus : IEventBus
+public sealed class QueuedEventBus : IEventBus, IDisposable
 {
+    /// <summary>The queue's depth and drops, for a host that exports this meter.</summary>
+    public const string MeterName = "Wbskt.Events.Queue";
+
     internal const int Capacity = 10_000;
 
     private readonly Channel<QueuedEvent> _channel = Channel.CreateBounded<QueuedEvent>(
@@ -42,10 +46,15 @@ public sealed class QueuedEventBus : IEventBus
         });
 
     private readonly ILogger<QueuedEventBus> _logger;
+    private readonly Meter _meter = new(MeterName);
+    private readonly Counter<long> _dropped;
 
     public QueuedEventBus(ILogger<QueuedEventBus> logger)
     {
         _logger = logger;
+        // A depth that keeps climbing is the broker not keeping up, well before anything is dropped.
+        _meter.CreateObservableGauge("wbskt_event_queue_depth", () => _channel.Reader.Count);
+        _dropped = _meter.CreateCounter<long>("wbskt_event_queue_dropped_total");
     }
 
     /// <summary>Queues the event. Never blocks, never throws, and ignores <paramref name="ct"/>: the request may end before the event is sent.</summary>
@@ -63,12 +72,15 @@ public sealed class QueuedEventBus : IEventBus
         if (!_channel.Writer.TryWrite(queued))
         {
             _logger.LogError("The event queue is full; {EventType} was dropped. The event bus is not keeping up.", queued.Name);
+            _dropped.Add(1);
         }
     }
 
     internal IAsyncEnumerable<QueuedEvent> ReadAllAsync(CancellationToken ct) => _channel.Reader.ReadAllAsync(ct);
 
     internal bool TryRead(out QueuedEvent? queued) => _channel.Reader.TryRead(out queued);
+
+    public void Dispose() => _meter.Dispose();
 
     internal sealed record QueuedEvent(string Name, Func<IEventBus, CancellationToken, Task> Publish);
 }

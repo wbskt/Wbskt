@@ -30,8 +30,18 @@ public static class WorkflowServiceCollectionExtensions
 
     public static IServiceCollection AddWorkflowManagementServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddWorkflowProviders();
-        services.AddSingleton<IClock, SystemClock>();
+        // Only what management reads or writes: definitions and their trigger registrations (with the
+        // schedule rows a registration writes), and the run, branch, history and shared-variable reads
+        // behind the console. Bookmarks, idempotency keys, pending trigger events, joins, leases,
+        // counters and retention are the engine's alone.
+        services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
+        services.AddScoped<ITriggerRegistrationProvider, TriggerRegistrationProvider>();
+        services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
+        services.AddScoped<IRunProvider, RunProvider>();
+        services.AddScoped<IBranchProvider, BranchProvider>();
+        services.AddScoped<IHistoryEventProvider, HistoryEventProvider>();
+        services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
 
@@ -86,7 +96,7 @@ public static class WorkflowServiceCollectionExtensions
     public static IServiceCollection AddWorkflowRuntime(this IServiceCollection services)
     {
         services.AddMemoryCache();
-        services.AddSingleton<IClock, SystemClock>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
         services.AddSingleton<ICreditCostCalculator, DefaultCreditCostCalculator>();
         services.AddSingleton<IHostIdentity, HostIdentity>();
@@ -108,11 +118,11 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         // The client/schedule/webhook/manual triggers all just record the payload and continue via
         // "default", so a single PassthroughTriggerExecutor serves them - one instance per kind.
-        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClient, sp.GetRequiredService<IClock>()));
-        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClientPresence, sp.GetRequiredService<IClock>()));
-        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerSchedule, sp.GetRequiredService<IClock>()));
-        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerWebhook, sp.GetRequiredService<IClock>()));
-        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerManual, sp.GetRequiredService<IClock>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClient, sp.GetRequiredService<TimeProvider>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerClientPresence, sp.GetRequiredService<TimeProvider>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerSchedule, sp.GetRequiredService<TimeProvider>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerWebhook, sp.GetRequiredService<TimeProvider>()));
+        services.AddScoped<INodeExecutor>(sp => new PassthroughTriggerExecutor(NodeKind.TriggerManual, sp.GetRequiredService<TimeProvider>()));
         services.AddScoped<INodeExecutor, LogicNodeExecutor>();
         services.AddScoped<INodeExecutor, VariableNodeExecutor>();
         services.AddScoped<INodeExecutor, ForEachNodeExecutor>();

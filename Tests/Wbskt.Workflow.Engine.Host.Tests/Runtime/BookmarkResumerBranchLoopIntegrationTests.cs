@@ -207,8 +207,10 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         }
     }
 
-    private sealed class LaterClock : IClock
+    private sealed class LaterClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc);
     }
 
@@ -490,8 +492,10 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class FixedClock : IClock
+    private sealed class FixedClock : TimeProvider
     {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
         public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
     }
 

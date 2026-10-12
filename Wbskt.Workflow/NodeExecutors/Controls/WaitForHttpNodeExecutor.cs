@@ -14,7 +14,7 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// not a secret (it also appears in run-list APIs and logs). See <see cref="AwaitInboundNodeExecutor"/>
 /// for the shared park/resume/timeout machine.
 /// </summary>
-internal sealed class WaitForHttpNodeExecutor(IClock clock) : AwaitInboundNodeExecutor(clock)
+internal sealed class WaitForHttpNodeExecutor(TimeProvider clock) : AwaitInboundNodeExecutor(clock)
 {
     public override string Kind => NodeKind.ControlWaitForHttp;
 
@@ -44,6 +44,6 @@ internal sealed class WaitForHttpNodeExecutor(IClock clock) : AwaitInboundNodeEx
             TtlPort = DefaultTimeoutPort
         };
 
-        return new ParkPlan(condition, token, Clock.UtcNow + config.Ttl);
+        return new ParkPlan(condition, token, Clock.GetUtcNow().UtcDateTime + config.Ttl);
     }
 }

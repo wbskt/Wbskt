@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
 using Wbskt.Auth.Models;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
@@ -150,6 +151,29 @@ public sealed class AuthServiceClientCacheTests
         }
 
         auth.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task An_auth_host_that_cannot_be_reached_is_a_retryable_503()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.OK) { OnCall = () => throw new HttpRequestException("connection refused") };
+        var (client, _, _) = CreateClient(auth);
+
+        var result = await client.ResolveWorkspaceAsync(WorkspaceRef);
+
+        result.Error.Should().Be(AuthServiceClient.AuthUnavailable);
+        result.Error.Type.Should().Be(ErrorType.Unavailable);
+    }
+
+    [Fact]
+    public async Task An_auth_host_answering_5xx_is_a_retryable_503()
+    {
+        var auth = new FakeAuthHost(HttpStatusCode.BadGateway);
+        var (client, _, _) = CreateClient(auth);
+
+        var result = await client.ResolveWorkspaceAsync(WorkspaceRef);
+
+        result.Error.Should().Be(AuthServiceClient.AuthUnavailable);
     }
 
     // ---------------------------------------------------------------- the change counter
