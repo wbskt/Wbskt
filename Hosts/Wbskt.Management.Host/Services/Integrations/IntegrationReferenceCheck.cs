@@ -24,7 +24,7 @@ public sealed class IntegrationReferenceCheck(IIntegrationProvider integrations)
     public async Task<IntegrationReferences> CheckAsync(int workspaceId, WorkflowDefinition? definition, CancellationToken ct)
     {
         var steps = definition?.Nodes
-            .Where(n => n is IIntegrationStep { IntegrationRef: { } r } && r != Guid.Empty)
+            .Where(n => n is IIntegrationStep { IntegrationRef: not null })
             .ToList() ?? [];
         if (steps.Count == 0)
         {

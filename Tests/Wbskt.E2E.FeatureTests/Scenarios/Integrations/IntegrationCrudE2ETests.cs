@@ -154,27 +154,26 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task INT_CRUD_06_ChangingSettings_KeepsTheSecret_AndAPartialSecretPatchKeepsTheRest()
+    public async Task INT_CRUD_06_ChangingSettingsOnTheSameServer_KeepsTheSecret_AndAPartialSecretPatchKeepsTheRest()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, ws) = await _api.NewWorkspaceAsync();
-        var created = await _api.CreateAsync(token, ws, IntegrationsApi.Ntfy("Phone", "http://127.0.0.1:9", topic: "first-topic-abcd", accessToken: "tk_access_token_1234"));
-        var refId = IntegrationsApi.RefOf(created);
+        await using var server = FakeHttpServer.Start();
 
-        var moved = await _api.UpdateAsync(token, ws, refId, new { config = new { serverUrl = "http://127.0.0.1:10/" } });
-        moved.GetProperty("config").GetProperty("serverUrl").GetString().Should().Be("http://127.0.0.1:10");
-        moved.GetProperty("secretHint").GetString().Should().Be("••••abcd", "the topic was not part of the change");
+        var api = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.Bearer("API", server.BaseUrl + "/v1", token: "kept-token-abcd1234")));
+        var moved = await _api.UpdateAsync(token, ws, api, new { config = new { baseUrl = server.BaseUrl + "/v2", mode = "bearer" } });
+        moved.GetProperty("config").GetProperty("baseUrl").GetString().Should().Be(server.BaseUrl + "/v2");
+        moved.GetProperty("secretHint").GetString().Should().Be("••••1234", "a new path on the same origin keeps the credential");
         moved.GetProperty("secretRotatedAt").ValueKind.Should().Be(JsonValueKind.Null);
 
         // Patching the topic alone keeps the access token: the test below proves it is still sent.
-        var patched = await _api.UpdateAsync(token, ws, refId, new { secrets = new { topic = "second-topic-wxyz" } });
+        var phone = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.Ntfy("Phone", server.BaseUrl, topic: "first-topic-abcd", accessToken: "tk_access_token_1234")));
+        var patched = await _api.UpdateAsync(token, ws, phone, new { secrets = new { topic = "second-topic-wxyz" } });
         patched.GetProperty("secretHint").GetString().Should().Be("••••wxyz");
 
-        await using var ntfy = FakeHttpServer.Start();
-        await _api.UpdateAsync(token, ws, refId, new { config = new { serverUrl = ntfy.BaseUrl } });
-        var test = await _api.TestAsync(token, ws, new { refId });
+        var test = await _api.TestAsync(token, ws, new { refId = phone });
         test.GetProperty("ok").GetBoolean().Should().BeTrue(test.ToString());
-        var published = ntfy.Requests.Should().ContainSingle().Subject;
+        var published = server.Requests.Should().ContainSingle().Subject;
         published.Header("Authorization").Should().Be("Bearer tk_access_token_1234");
         published.Body.Should().Contain("second-topic-wxyz");
     }
@@ -388,5 +387,45 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
         list.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         using var create = await fixture.SendAsync(HttpMethod.Post, IntegrationsApi.Url(ws), body: IntegrationsApi.Telegram("Anon"));
         create.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [SkippableFact]
+    public async Task INT_CRUD_15_PointingAnIntegrationAtAnotherServer_NeedsItsSecretAgain_AndNeverSendsTheSavedOne()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var (token, ws) = await _api.NewWorkspaceAsync();
+        await using var house = FakeHttpServer.Start();
+        await using var elsewhere = FakeHttpServer.Start();
+        var ha = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.HomeAssistant("House", house.BaseUrl, token: "ha-saved-token-123456")));
+
+        // Saving the move without the token is refused, and nothing changes.
+        using (var move = await _api.UpdateRawAsync(token, ws, ha, new { config = new { baseUrl = elsewhere.BaseUrl } }))
+        {
+            move.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            (await ServicesFixture.ReadErrorCodeAsync(move)).Should().Be("INTEGRATION_SECRET_INVALID");
+        }
+
+        (await _api.GetAsync(token, ws, ha)).GetProperty("config").GetProperty("baseUrl").GetString().Should().Be(house.BaseUrl);
+
+        // Neither is testing the saved token against the other server.
+        using (var probe = await _api.TestRawAsync(token, ws, new { refId = ha, config = new { baseUrl = elsewhere.BaseUrl } }))
+        {
+            probe.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        elsewhere.Requests.Should().BeEmpty("the saved token never leaves for a server it was not saved for");
+
+        // With the token given again, the move is saved as a new secret.
+        var moved = await _api.UpdateAsync(token, ws, ha, new { config = new { baseUrl = elsewhere.BaseUrl }, secrets = new { token = "ha-new-token-654321" } });
+        moved.GetProperty("secretRotatedAt").ValueKind.Should().Be(JsonValueKind.String);
+        (await _api.TestAsync(token, ws, new { refId = ha })).GetProperty("ok").GetBoolean().Should().BeTrue();
+        elsewhere.Requests.Should().ContainSingle().Which.Header("Authorization").Should().Be("Bearer ha-new-token-654321");
+
+        // The same holds for a mail relay's host and port.
+        await using var smtp = FakeSmtpServer.Start("mailer", "relay-password-1234");
+        var relay = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.Smtp("Relay", smtp.Port)));
+        using var relayMove = await _api.UpdateRawAsync(token, ws, relay, new { config = new { host = "127.0.0.1", port = FakeHttpServer.FreePort(), userName = "mailer", fromAddress = "alerts@wbskt.test" } });
+        relayMove.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ServicesFixture.ReadErrorCodeAsync(relayMove)).Should().Be("INTEGRATION_SECRET_INVALID");
     }
 }

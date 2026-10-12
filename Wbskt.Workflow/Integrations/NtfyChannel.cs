@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Runtime;
+using static Wbskt.Workflow.Integrations.IntegrationErrors;
 
 namespace Wbskt.Workflow.Integrations;
 
@@ -65,7 +66,4 @@ internal sealed class NtfyChannel(IHttpClientFactory httpClientFactory, IOutboun
                 : Scrubbed(HttpChannelSupport.FromStatus(response.StatusCode, ServiceName).ForStep("NTFY"), integration);
         }
     }
-
-    private static ChannelResult Scrubbed(ChannelResult result, ResolvedIntegration integration) =>
-        result with { Message = IntegrationErrors.Scrub(result.Message, integration.Secrets) };
 }

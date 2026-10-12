@@ -378,3 +378,4 @@ deploy/compose/.env
 
 # E2E host logs and pids (Tests/Wbskt.E2E.FeatureTests/start-hosts.sh)
 e2e-hosts/
+dump.rdb

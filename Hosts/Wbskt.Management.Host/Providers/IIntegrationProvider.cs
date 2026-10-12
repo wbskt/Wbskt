@@ -16,7 +16,8 @@ public interface IIntegrationProvider
     /// Saves a rename or new settings; <paramref name="ciphertext"/> null keeps the sealed secret.
     /// Throws <see cref="Microsoft.Data.SqlClient.SqlException"/> 2627 on a taken name.
     /// </summary>
-    Task UpdateAsync(int workspaceId, int id, string name, string configJson, bool configChanged, byte[]? ciphertext, byte? keyId, string? secretHint, bool secretRotated, CancellationToken ct);
+    /// <summary>False when the row changed since <paramref name="expectedUpdatedAt"/> was read; nothing is written then.</summary>
+    Task<bool> UpdateAsync(int workspaceId, int id, string name, string configJson, bool configChanged, byte[]? ciphertext, byte? keyId, string? secretHint, bool secretRotated, DateTime expectedUpdatedAt, CancellationToken ct);
 
     /// <summary>Records a test of the saved integration, unless it changed since <paramref name="expectedUpdatedAt"/>. True when recorded.</summary>
     Task<bool> RecordTestAsync(int id, DateTime expectedUpdatedAt, bool ok, string? code, string? error, string? metadata, CancellationToken ct);

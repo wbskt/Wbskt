@@ -24,9 +24,10 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
 
         ResolvedIntegration? integration = null;
         Uri? targetUri;
-        if (config.IntegrationRef is not null)
+        // node.IntegrationRef, not config's: an empty GUID names no integration, as the validator reads it.
+        if (node.IntegrationRef is { } integrationRef)
         {
-            var resolution = await resolver.ResolveAsync(ctx.Branch, config.IntegrationRef, IntegrationType.HttpAuth, ct);
+            var resolution = await resolver.ResolveAsync(ctx.Branch, integrationRef, IntegrationType.HttpAuth, ct);
             if (resolution.Failure is not null)
             {
                 return resolution.Failure;

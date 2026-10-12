@@ -5,6 +5,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Runtime;
+using static Wbskt.Workflow.Integrations.IntegrationErrors;
 
 namespace Wbskt.Workflow.Integrations;
 
@@ -102,7 +103,4 @@ internal sealed class HttpAuthChannel(IHttpClientFactory httpClientFactory, IOut
             ? combined
             : null;
     }
-
-    private static ChannelResult Scrubbed(ChannelResult result, ResolvedIntegration integration) =>
-        result with { Message = IntegrationErrors.Scrub(result.Message, integration.Secrets) };
 }

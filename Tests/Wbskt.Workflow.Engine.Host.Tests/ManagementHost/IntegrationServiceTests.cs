@@ -184,7 +184,7 @@ public sealed class IntegrationServiceTests
         await harness.Service.UpdateAsync(WorkspaceId, saved.RefId, new IntegrationUpdateRequest(" Phone 2 ", null, null, null), CancellationToken.None);
 
         harness.Engine.VerifyNoOtherCalls();
-        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone 2", saved.ConfigJson, false, null, null, null, false, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone 2", saved.ConfigJson, false, null, null, null, false, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<IntegrationUpdatedEvent>(e => e.Changes!.Single() == new FieldChange("name", "Phone", "Phone 2")),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -209,11 +209,44 @@ public sealed class IntegrationServiceTests
         Assert.Equal("tk_new", sent.Secrets!.Value.GetProperty("accessToken").GetString());
         Assert.Equal(saved.SecretCiphertext, sent.Existing!.Ciphertext);
         Assert.Equal(saved.KeyId, sent.Existing.KeyId);
-        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone", saved.ConfigJson, false, It.Is<byte[]>(c => c.SequenceEqual(new byte[] { 9, 9, 9 })), (byte)2, "••••abcd", true, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("https://ntfy.sh", sent.ExistingConfig!.Value.GetProperty("serverUrl").GetString());
+        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone", saved.ConfigJson, false, It.Is<byte[]>(c => c.SequenceEqual(new byte[] { 9, 9, 9 })), (byte)2, "••••abcd", true, SavedAt, It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<IntegrationSecretRotatedEvent>(e => e.Changes!.Single() == new FieldChange("secretHint", "••••", "••••abcd")),
             It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(It.IsAny<IntegrationUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_edit_that_raced_another_is_refused_and_announced_to_nobody()
+    {
+        var harness = new Harness();
+        var saved = harness.Save(Saved());
+        harness.Provider.Setup(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await harness.Service.UpdateAsync(WorkspaceId, saved.RefId, new IntegrationUpdateRequest("Renamed", null, null, null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("INTEGRATION_CHANGED", result.Error.Code);
+        Assert.Equal(ErrorType.Conflict, result.Error.Type);
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<IntegrationUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_test_of_a_saved_integration_sends_the_settings_its_secret_was_saved_with()
+    {
+        var harness = new Harness();
+        var saved = harness.Save(Saved());
+        IntegrationProbeRequest? sent = null;
+        harness.Engine.Setup(e => e.ProbeIntegrationAsync(It.IsAny<IntegrationProbeRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<IntegrationProbeRequest, CancellationToken>((r, _) => sent = r)
+            .ReturnsAsync(Result<IntegrationProbeResponse>.Success(new IntegrationProbeResponse(true, null, null, null)));
+
+        await harness.Service.TestAsync(WorkspaceId, new IntegrationTestRequest(saved.RefId, null, null, Json("{\"serverUrl\":\"https://other.example\"}"), null, null), CancellationToken.None);
+
+        Assert.Equal("https://other.example", sent!.Config!.Value.GetProperty("serverUrl").GetString());
+        Assert.Equal("https://ntfy.sh", sent.ExistingConfig!.Value.GetProperty("serverUrl").GetString());
     }
 
     [Fact]
@@ -226,7 +259,7 @@ public sealed class IntegrationServiceTests
 
         await harness.Service.UpdateAsync(WorkspaceId, saved.RefId, new IntegrationUpdateRequest(null, null, null, Json("{}")), CancellationToken.None);
 
-        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone", saved.ConfigJson, false, It.IsAny<byte[]>(), (byte)2, "••••", false, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone", saved.ConfigJson, false, It.IsAny<byte[]>(), (byte)2, "••••", false, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.VerifyNoOtherCalls();
     }
 
@@ -240,7 +273,7 @@ public sealed class IntegrationServiceTests
 
         await harness.Service.UpdateAsync(WorkspaceId, saved.RefId, new IntegrationUpdateRequest(null, null, Json("{\"serverUrl\":\"https://ntfy.example.test/\"}"), null), CancellationToken.None);
 
-        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone", "{\"serverUrl\":\"https://ntfy.example.test\"}", true, It.IsAny<byte[]>(), It.IsAny<byte?>(), It.IsAny<string?>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Provider.Verify(p => p.UpdateAsync(WorkspaceId, saved.Id, "Phone", "{\"serverUrl\":\"https://ntfy.example.test\"}", true, It.IsAny<byte[]>(), It.IsAny<byte?>(), It.IsAny<string?>(), false, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<IntegrationUpdatedEvent>(e => e.Changes!.Single() == new FieldChange("config.serverUrl", "https://ntfy.sh", "https://ntfy.example.test")),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -257,7 +290,7 @@ public sealed class IntegrationServiceTests
         var result = await harness.Service.UpdateAsync(WorkspaceId, saved.RefId, new IntegrationUpdateRequest("Renamed", null, null, Json("{}")), CancellationToken.None);
 
         Assert.Equal("INTEGRATION_SECRET_UNREADABLE", result.Error.Code);
-        harness.Provider.Verify(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Provider.Verify(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
         harness.Bus.VerifyNoOtherCalls();
     }
 
@@ -266,7 +299,7 @@ public sealed class IntegrationServiceTests
     {
         var harness = new Harness();
         var saved = harness.Save(Saved());
-        harness.Provider.Setup(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+        harness.Provider.Setup(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(2627, "duplicate"));
 
         var result = await harness.Service.UpdateAsync(WorkspaceId, saved.RefId, new IntegrationUpdateRequest("Taken", null, null, null), CancellationToken.None);
@@ -523,6 +556,8 @@ public sealed class IntegrationServiceTests
         {
             var identity = new Mock<IIdentityService>();
             identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(42));
+            Provider.Setup(p => p.UpdateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<byte[]?>(), It.IsAny<byte?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
             var settings = new Dictionary<string, string?>();
             if (maxPerWorkspace is { } max)
             {

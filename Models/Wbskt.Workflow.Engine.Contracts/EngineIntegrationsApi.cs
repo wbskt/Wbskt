@@ -23,6 +23,9 @@ public sealed record SealedSecret(byte[] Ciphertext, byte KeyId);
 /// Validates an integration's settings and seals its secret. <c>Secrets</c> is a patch over
 /// <c>Existing</c> when that is given (a field left out keeps its value, an empty string clears an
 /// optional one), and the whole secret otherwise. The type and preset are the API's names.
+/// <c>ExistingConfig</c> is the settings <c>Existing</c> was saved with: when the new settings point
+/// the credential somewhere else (another server, relay or origin), nothing saved is carried over and
+/// the secret must be given again, so moving an integration cannot send its credential elsewhere.
 /// </summary>
 public sealed record IntegrationSealRequest(
     int WorkspaceId,
@@ -31,7 +34,8 @@ public sealed record IntegrationSealRequest(
     string? Preset,
     JsonElement? Config,
     JsonElement? Secrets,
-    SealedSecret? Existing);
+    SealedSecret? Existing,
+    JsonElement? ExistingConfig = null);
 
 /// <summary>
 /// The settings as they are to be stored (unknown fields dropped, defaults filled in), the secret
@@ -59,7 +63,8 @@ public sealed record IntegrationProbeRequest(
     JsonElement? Config,
     JsonElement? Secrets,
     SealedSecret? Existing,
-    IntegrationTestOptions? Options);
+    IntegrationTestOptions? Options,
+    JsonElement? ExistingConfig = null);
 
 /// <summary>
 /// The test's outcome. A failed test is a successful answer: <c>Ok</c> false with a code and a

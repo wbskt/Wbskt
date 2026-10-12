@@ -9,7 +9,7 @@ public sealed record WebhookNotificationNode : BaseActionNode, IIntegrationStep
 
 
     [JsonIgnore]
-    public Guid? IntegrationRef => Config?.IntegrationRef;
+    public Guid? IntegrationRef => Config?.IntegrationRef is { } r && r != Guid.Empty ? r : null;
 
     [JsonIgnore]
     public override string Kind => NodeKind.ActionWebhook;

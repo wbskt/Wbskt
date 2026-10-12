@@ -260,8 +260,9 @@ public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
             .BuildAndValidate();
         var workflow = await _api.PublishAsync(token, ws, definition);
 
-        // Moving the integration is allowed while it is in use: the step's relative URLs follow it.
-        await _api.UpdateAsync(token, ws, key, new { config = new { baseUrl = newHost.BaseUrl, mode = "bearer" } });
+        // Moving the integration is allowed while it is in use (with its token given again): the step's
+        // relative URLs follow it, but this step's absolute URL is on the old origin.
+        await _api.UpdateAsync(token, ws, key, new { config = new { baseUrl = newHost.BaseUrl, mode = "bearer" }, secrets = new { token = "moved-token-123456" } });
 
         var (run, status) = await _api.RunToEndAsync(token, ws, workflow, trigger);
 

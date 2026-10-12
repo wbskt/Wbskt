@@ -179,11 +179,20 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 
         // An integration deleted while the workflow was deprecated would leave its steps failing on
         // every run; refuse here, where the author can still choose another and publish.
+        // A step published before integrations existed names none and fails every run the same way.
         WorkflowDefinition? stored = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions);
+        var unnamed = (stored?.Nodes ?? [])
+            .Where(n => n is IIntegrationStep { IntegrationRef: null } && IntegrationTypes.IsRequiredFor(n.Kind))
+            .Select(n => new ValidationIssue(
+                ValidationSeverity.Error,
+                "INTEGRATION_REF_MISSING",
+                $"Step '{n.Name}' must name the {IntegrationTypes.NameOf(IntegrationTypes.ForStepKind(n.Kind)!.Value)} integration it sends through. Choose one and publish again.",
+                n.NodeId))
+            .ToList();
         IntegrationReferences integrationRefs = await _integrationCheck.CheckAsync(workspaceId, stored, ct);
-        if (integrationRefs.Issues.Count > 0)
+        if (unnamed.Count > 0 || integrationRefs.Issues.Count > 0)
         {
-            return Result.Failure(ValidationFailed(integrationRefs.Issues));
+            return Result.Failure(ValidationFailed(unnamed.Concat(integrationRefs.Issues)));
         }
 
         // Deprecating deregisters the triggers, so re-enabling has to put them back - otherwise the

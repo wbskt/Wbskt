@@ -43,7 +43,7 @@ internal sealed class IntegrationVault(
             return Result<IntegrationSealResponse>.Failure(NotConfigured);
         }
 
-        var prepared = Prepare(request.WorkspaceId, request.RefId, request.Type, request.Preset, request.Config, request.Secrets, request.Existing);
+        var prepared = Prepare(request.WorkspaceId, request.RefId, request.Type, request.Preset, request.Config, request.Secrets, request.Existing, request.ExistingConfig);
         if (prepared.IsFailure)
         {
             return Result<IntegrationSealResponse>.Failure(prepared.Error);
@@ -73,7 +73,7 @@ internal sealed class IntegrationVault(
             return Result<IntegrationProbeResponse>.Failure(NotConfigured);
         }
 
-        var prepared = Prepare(request.WorkspaceId, request.RefId, request.Type, request.Preset, request.Config, request.Secrets, request.Existing);
+        var prepared = Prepare(request.WorkspaceId, request.RefId, request.Type, request.Preset, request.Config, request.Secrets, request.Existing, request.ExistingConfig);
         if (prepared.IsFailure)
         {
             return Result<IntegrationProbeResponse>.Failure(prepared.Error);
@@ -93,7 +93,7 @@ internal sealed class IntegrationVault(
     /// patch, and checks the whole secret against the settings.
     /// </summary>
     private Result<(ResolvedIntegration Integration, bool SecretChanged)> Prepare(
-        int workspaceId, Guid refId, string typeName, string? presetName, JsonElement? config, JsonElement? secrets, SealedSecret? existing)
+        int workspaceId, Guid refId, string typeName, string? presetName, JsonElement? config, JsonElement? secrets, SealedSecret? existing, JsonElement? existingConfig)
     {
         if (!IntegrationTypes.TryParse(typeName, out var type))
         {
@@ -129,8 +129,12 @@ internal sealed class IntegrationVault(
             return Fail(fields.Error);
         }
 
+        // A credential saved for one server is never carried to another: if the settings now point
+        // somewhere else, the secret has to be given again.
+        bool moved = existing is not null && existingConfig is not null && Moved(type, preset, existingConfig, settings.Value);
+
         var stored = IntegrationSecrets.Empty;
-        if (existing is not null)
+        if (existing is not null && !moved)
         {
             var opened = Open(workspaceId, refId, type, existing);
             if (opened.IsFailure)
@@ -144,13 +148,25 @@ internal sealed class IntegrationVault(
         var merged = IntegrationShape.ValidateSecrets(type, settings.Value, IntegrationShape.Merge(stored, patch.Value), options.Value);
         if (merged.IsFailure)
         {
-            return Fail(merged.Error);
+            return Fail(moved
+                ? Error.Validation(merged.Error.Code, $"The integration now points somewhere else, so its saved secret is not carried over. Enter it again: {merged.Error.Message}")
+                : merged.Error);
         }
 
-        bool changed = existing is null || merged.Value != stored;
+        bool changed = existing is null || moved || merged.Value != stored;
         return Result<(ResolvedIntegration, bool)>.Success((
             new ResolvedIntegration(null, refId, workspaceId, type, preset, settings.Value, merged.Value),
             changed));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="settings"/> send the credential somewhere the saved settings did not.
+    /// Saved settings that no longer parse count as moved: nothing is known about where they pointed.
+    /// </summary>
+    private bool Moved(IntegrationType type, IntegrationPreset? preset, JsonElement? existingConfig, IntegrationSettings settings)
+    {
+        var before = IntegrationShape.ParseSettings(type, preset, existingConfig, options.Value);
+        return before.IsFailure || IntegrationShape.Destination(before.Value) != IntegrationShape.Destination(settings);
     }
 
     /// <summary>Opens a sealed secret into its fields.</summary>
