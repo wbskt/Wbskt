@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using Microsoft.Extensions.Options;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Protocol;
 using Wbskt.Events.Client;
@@ -57,7 +58,7 @@ internal sealed class SocketHandler : ISocketHandler
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await Problems.WriteAsync(context, StatusCodes.Status400BadRequest, "SOCKET_UPGRADE_REQUIRED", "/ws accepts WebSocket requests only.");
             return;
         }
 
@@ -65,7 +66,7 @@ internal sealed class SocketHandler : ISocketHandler
         // formed (a claim missing or unreadable) is refused here rather than failing later.
         if (!ClientIdentity.TryRead(context.User, out var identity))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await Problems.WriteAsync(context, StatusCodes.Status401Unauthorized, "CLIENT_TOKEN_INVALID", "The device token is missing a claim this host needs.");
             return;
         }
 
@@ -75,7 +76,7 @@ internal sealed class SocketHandler : ISocketHandler
         if (await _accessGate.IsRefusedAsync(clientRefId, issuedAt, context.RequestAborted))
         {
             _logger.LogWarning("Rejecting websocket for revoked client {ClientRefId}", clientRefId);
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await Problems.WriteAsync(context, StatusCodes.Status403Forbidden, "CLIENT_REVOKED", "This device's access has been revoked.");
             return;
         }
 
@@ -86,7 +87,7 @@ internal sealed class SocketHandler : ISocketHandler
         if (offered.Count > 0 && !offered.Contains(SocketProtocol.V1))
         {
             _logger.LogWarning("Rejecting websocket for client {ClientRefId}: no supported protocol in {Offered}.", clientRefId, string.Join(", ", offered));
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await Problems.WriteAsync(context, StatusCodes.Status400BadRequest, "SOCKET_PROTOCOL_UNSUPPORTED", $"Offer the {SocketProtocol.V1} subprotocol, or none.");
             return;
         }
 

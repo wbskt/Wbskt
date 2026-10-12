@@ -54,6 +54,25 @@ Two conventions run through every table below:
 
 ---
 
+## Errors
+
+Every host answers a failure the same way: RFC 9457 Problem Details, `application/problem+json`,
+with two extensions:
+
+```json
+{ "status": 404, "title": "Not Found", "detail": "No such client.", "code": "CLIENT_NOT_FOUND", "traceId": "00-…" }
+```
+
+- `code` is the application's error code, the thing to branch on. A failure nothing more specific
+  named carries one for its status: `AUTH_UNAUTHORIZED` (401, including the bearer challenge),
+  `AUTH_FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED` (429, with `Retry-After`), `UNAVAILABLE` (503, with
+  `Retry-After`), `INTERNAL_ERROR`.
+- `traceId` ties the response to the host's logs. A 500's `detail` is generic; the cause is only in
+  the log under that id.
+- Model validation is `VALIDATION_FAILED`, with `errors` mapping each field to its messages.
+- `message` repeats `detail` for one release, for callers that read the body this replaced
+  (`{ code, message, type }`).
+
 ## 1. Auth host
 
 ### 1.1 Credentials — `api/auth`

@@ -78,7 +78,7 @@ public sealed class PublicCallbackController : ControllerBase
                 : null;
             if (idempotencyKey is not null && !IdempotencyKeys.IsValid(idempotencyKey))
             {
-                return BadRequest(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{IdempotencyKeys.MaxLength} printable characters."));
+                return ApiErrorResults.From(Error.Validation("IDEMPOTENCY_KEY_INVALID", $"{IdempotencyKeyHeader} must be 1-{IdempotencyKeys.MaxLength} printable characters."), _logger);
             }
 
             await _engine.SendWebhookAsync(workspaceRef, path, payload, secret, idempotencyKey, ct);

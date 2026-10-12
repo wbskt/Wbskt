@@ -11,6 +11,7 @@ using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Primitives;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -69,7 +70,7 @@ public sealed class ClientsControllerScopingTests
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
-        Assert.IsType<NotFoundObjectResult>(result);
+        ProblemAssert.Is(result, StatusCodes.Status404NotFound);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -96,8 +97,7 @@ public sealed class ClientsControllerScopingTests
 
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, new ClientCommandRequest("reboot", "{}"), CancellationToken.None)).Result;
 
-        var objectResult = Assert.IsType<ConflictObjectResult>(result);
-        objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("DEVICE_OFFLINE");
+        ProblemAssert.Is(result, StatusCodes.Status409Conflict).Should().Be("DEVICE_OFFLINE");
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -127,8 +127,7 @@ public sealed class ClientsControllerScopingTests
         var request = new ClientCommandRequest("reboot", "{}", DateTimeOffset.UtcNow.AddMinutes(minutesAhead));
         var result = (await controller.SendCommand(WorkspaceId, ClientRefId, request, CancellationToken.None)).Result;
 
-        var objectResult = Assert.IsType<BadRequestObjectResult>(result);
-        objectResult.Value.Should().BeOfType<Error>().Which.Code.Should().Be("COMMAND_EXPIRY_INVALID");
+        ProblemAssert.Is(result, StatusCodes.Status400BadRequest).Should().Be("COMMAND_EXPIRY_INVALID");
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -140,7 +139,7 @@ public sealed class ClientsControllerScopingTests
 
         var result = await controller.Ping(WorkspaceId, ClientRefId, CancellationToken.None);
 
-        Assert.IsType<NotFoundObjectResult>(result);
+        ProblemAssert.Is(result, StatusCodes.Status404NotFound);
         bus.Verify(x => x.PublishAsync(It.IsAny<ClientPingEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -166,7 +165,7 @@ public sealed class ClientsControllerScopingTests
 
         var result = await controller.GetComms(WorkspaceId, ClientRefId, direction: null, new PageRequest(), cancellationToken: CancellationToken.None);
 
-        Assert.IsType<NotFoundObjectResult>(result.Result);
+        ProblemAssert.Is(result.Result, StatusCodes.Status404NotFound);
         eventLogService.Verify(x => x.GetClientCommsAsync(
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }

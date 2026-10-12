@@ -1,11 +1,7 @@
-using System.Net;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.System;
-using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Infrastructure.Middlewares;
@@ -14,11 +10,6 @@ public partial class GlobalExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
 
     public GlobalExceptionMiddleware(
         RequestDelegate next, 
@@ -48,23 +39,20 @@ public partial class GlobalExceptionMiddleware
     // path or a genuine bug.
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception, IEventBus eventBus, ILogger logger)
     {
-        context.Response.ContentType = "application/json";
-
-        var statusCode = exception switch
+        var (statusCode, code) = exception switch
         {
             // Providers throw this for "record not found" as well as access denial, deliberately, so
             // that a bad reference cannot be told apart from an inaccessible one. 403 rather than 401:
             // the caller is authenticated, they just cannot have this.
-            SecurityException => (int)HttpStatusCode.Forbidden,
-            ValidationException => (int)HttpStatusCode.BadRequest,
-            NotFoundException => (int)HttpStatusCode.NotFound,
-            OptimisticConcurrencyException => (int)HttpStatusCode.Conflict,
-            ArgumentException => (int)HttpStatusCode.BadRequest,
-            UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
-            _ => (int)HttpStatusCode.InternalServerError
+            SecurityException => (StatusCodes.Status403Forbidden, "AUTH_FORBIDDEN"),
+            ValidationException or ArgumentException => (StatusCodes.Status400BadRequest, Problems.ValidationFailed),
+            NotFoundException => (StatusCodes.Status404NotFound, "NOT_FOUND"),
+            OptimisticConcurrencyException => (StatusCodes.Status409Conflict, "CONFLICT"),
+            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "AUTH_UNAUTHORIZED"),
+            _ => (StatusCodes.Status500InternalServerError, "INTERNAL_ERROR")
         };
 
-        var isServerFault = statusCode == (int)HttpStatusCode.InternalServerError;
+        var isServerFault = statusCode == StatusCodes.Status500InternalServerError;
 
         if (isServerFault)
         {
@@ -85,8 +73,6 @@ public partial class GlobalExceptionMiddleware
             }
         }
 
-        context.Response.StatusCode = statusCode;
-
         // The mapped types carry messages an author wrote for the caller, so those pass through.
         // An unmapped exception's message is arbitrary runtime text — SQL statements, file paths,
         // connection strings — and these hosts are publicly routed, so it is logged, not returned.
@@ -95,15 +81,7 @@ public partial class GlobalExceptionMiddleware
             ? "An unexpected error occurred while processing the request."
             : exception.Message;
 
-        var response = new ErrorResponse(
-            message,
-            isServerFault ? nameof(InternalServerException) : exception.GetType().Name,
-            context.TraceIdentifier
-        );
-
-        var result = JsonSerializer.Serialize(response, Options);
-
-        await context.Response.WriteAsync(result);
+        await Problems.WriteAsync(context, statusCode, code, message);
     }
 
     [LoggerMessage("An unhandled exception occurred: {Message}")]

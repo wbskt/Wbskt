@@ -101,6 +101,7 @@ public static class Program
 
         // Default-deny: the host that owns tenants, roles and permissions must not ship an endpoint
         // anonymous by accident. Sign-in and the other public calls say [AllowAnonymous].
+        builder.Services.AddWbsktProblemDetails();
         builder.Services.AddDefaultDenyAuthorization();
 
         // With credentials, so a console on another origin can send the refresh cookie (see RefreshTokenCookie).
@@ -117,7 +118,7 @@ public static class Program
         // replica needs a Redis-backed limiter, or each replica allows the full budget.
         builder.Services.AddRateLimiter(options =>
         {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.RejectWithProblem();
 
             // Across every caller, not per IP: how many password hashes run at once. See
             // HashesPasswordAttribute. Twice the cores keeps them busy without starving the rest.

@@ -10,6 +10,7 @@ using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Devices;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Services;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -79,8 +80,8 @@ public sealed class ClientCommandServiceTests
 
         result.OnFormatting(context);
 
-        result.StatusCode.Should().Be(503);
         context.HttpContext.Response.Headers.RetryAfter.ToString().Should().Be(ApiErrorResults.RetryAfterSeconds);
-        result.Value.Should().Be(ClientCommandService.BrokerUnavailable);
+        ProblemAssert.Is(result, 503).Should().Be(ClientCommandService.BrokerUnavailable.Code);
+        ProblemAssert.Detail(result).Should().Be(ClientCommandService.BrokerUnavailable.Message);
     }
 }

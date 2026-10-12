@@ -11,6 +11,7 @@ using Wbskt.Primitives.Constants;
 using Wbskt.Primitives.Exceptions;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Engine.Host.Tests.Infrastructure;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
 
@@ -74,7 +75,7 @@ public sealed class WorkflowHistoryControllerTests
 
         var response = await controller.List(WorkspaceId, runRefId, new PageRequest(), CancellationToken.None);
         
-        Assert.IsType<NotFoundObjectResult>(response.Result);
+        ProblemAssert.Is(response.Result, StatusCodes.Status404NotFound);
     }
 
     private static HistoryEventRow CreateEvent(long id, int runId, string kind)

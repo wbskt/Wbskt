@@ -19,13 +19,15 @@ These are specifications, not code. Each row is meant to become one `[SkippableF
 
 ### Response shapes
 
-Three distinct failure shapes exist; a test asserting the wrong one passes for the wrong reason.
+Every failure is Problem Details (`application/problem+json`, #305) with two extensions: `code`
+and `traceId`. `message` repeats `detail` for one release.
 
-- **`Error`** — `{ code, message, type }`, produced by `ApiControllerBase.MapError` for every
-  `Result` failure. This is what the `code` column refers to.
-- **`ValidationProblemDetails`** — produced by `[ApiController]` model validation *before* the action
-  runs (`[Required]`, `[StringLength]`, `[EmailAddress]`, malformed JSON, unbindable route values).
-  It has no `code` field. Rows expecting this say **model-validation 400**.
+- **A `Result` failure** — from `ApiControllerBase.MapError`; `code` is the error's code. This is
+  what the `code` column refers to.
+- **Model validation** — `[ApiController]` model validation *before* the action runs (`[Required]`,
+  `[StringLength]`, `[EmailAddress]`, malformed JSON, unbindable route values). `code` is
+  `VALIDATION_FAILED` and `errors` holds the per-field messages. Rows expecting this say
+  **model-validation 400**.
 - **Empty body** — `204 No Content` from `MapResult(Result.Success())`. Most mutations return this.
 
 ### Fixture helpers the scenarios use
@@ -39,8 +41,7 @@ All present on `ServicesFixture`. The ones worth knowing before writing a new sc
 - `SendAsync(method, url, token?, body?)` → the raw escape hatch. Returns the response untouched, so
   negative scenarios can read the status, the error body, or a header. The typed helpers all call
   `EnsureSuccessStatusCode` and are for arranging, not asserting.
-- `ReadErrorCodeAsync(response)` → the `code` off an `Error` body, or null when the body is
-  `ValidationProblemDetails` instead.
+- `ReadErrorCodeAsync(response)` → the `code` off the problem body, or null when there is no body.
 - `GetPageAsync(url, token)` → item count plus the `X-Total-Count` header.
 - `GetEffectivePermissionsAsync(token, workspaceRef)` → the resolved slug set, for asserting what an
   assignment actually delivered.
