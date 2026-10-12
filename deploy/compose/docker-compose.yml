@@ -1,8 +1,10 @@
 name: wbskt
 
 networks:
-  # Fixed subnets so auth/management can pin ForwardedHeadersOptions.KnownProxies to Traefik's
-  # own address instead of trusting X-Forwarded-For/Proto from any container on the network.
+  # Fixed subnets so auth/management can pin their trusted proxies to Traefik's own address
+  # instead of trusting X-Forwarded-For/Proto from any container on the network. The hosts default
+  # to Traefik's two addresses below (WbsktHost.DefaultKnownProxies); if they change, set
+  # ForwardedHeaders__KnownProxies__0 and __1 on auth and management to match.
   # ip_range confines Docker's automatic allocation to the upper half of each subnet. Without it
   # the allocator hands out .2 upward to whichever container starts first, and Traefik - which
   # starts last, since everything else is a dependency - finds its pinned .2 already taken and

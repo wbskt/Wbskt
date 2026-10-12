@@ -12,6 +12,7 @@
     *   `Unauthorized` means "we cannot identify the caller". A caller who is known but lacks a permission is `Forbidden`. Using 401 there makes clients that redirect to login on 401 sign the user out over a missing permission.
     *   A `Failure` message is assumed to be internal detail (exception text). It is logged and replaced with a generic message before it reaches the client, so never rely on it being visible.
 *   **Thin controllers:** A controller binds the request, calls one service and maps its `Result`. Validation, ownership, publishing events and talking to the engine belong to services, where they can be unit-tested and reused. A controller never injects `IEventBus`, a provider or `IReferenceMapper`; `HostArchitectureTests` enforces it on every host. The only status a controller picks itself is between two successes (`200` vs `202`).
+*   **One host shape:** a `Program` starts from `WbsktHost.CreateBuilder` and runs `app.UseWbsktPipeline()` (forwarded headers, exception handling, CORS, rate limiter, authentication, identity, authorization, in that order). Default-deny, CORS, trusted proxies and per-IP limits come from `AddDefaultDenyAuthorization`, `AddWbsktCors`, `AddWbsktForwardedHeaders` and `RateLimiterOptions.AddPerIpPolicy`. A `Program` keeps only what is its own: its services, policies and endpoints.
 
 ---
 

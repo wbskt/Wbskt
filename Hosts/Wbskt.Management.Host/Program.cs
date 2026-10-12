@@ -1,15 +1,8 @@
-using System.Net;
-using System.Text;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Events;
@@ -20,7 +13,6 @@ using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
 using Wbskt.Infrastructure.Mappers;
-using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Authorization;
 using Wbskt.Management.Host.Controllers.Workflow;
@@ -35,7 +27,6 @@ using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Host.Services.Readings;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Primitives;
-using Wbskt.Primitives.Constants;
 using Wbskt.Workflow.Abstraction.Validation;
 using Wbskt.Workflow.Extensions;
 using Wbskt.Infrastructure.Telemetry;
@@ -44,22 +35,9 @@ namespace Wbskt.Management.Host;
 
 public static class Program
 {
-    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
-
     public static async Task Main(string[] args)
     {
-        Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
-
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-        {
-            Args = args,
-            ContentRootPath = Directory.GetCurrentDirectory()
-        });
-        
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json");
-
-        builder.Host.UseSerilog(builder.CreateSerilog());
+        var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json");
         builder.AddWbsktTelemetry();
 
         // A Devices instance serves only device registration and login (see HostRole). It keeps the
@@ -187,14 +165,9 @@ public static class Program
         // The SignalR hub takes its token from ?access_token=, as browsers cannot set headers there.
         .AddWbsktJwtBearer(x => x.Events = new JwtBearerEvents().AcceptQueryToken("/hubs/notifications"));
 
-        builder.Services.AddAuthorization(options =>
-        {
-            // Default-deny: every endpoint requires an authenticated user unless it explicitly opts
-            // out with [AllowAnonymous] (health checks, client login/registration, and the public
-            // workflow callbacks). This makes the anonymous surface an explicit, auditable choice
-            // rather than the default that any [Authorize]-less controller silently inherits.
-            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
-        });
+        // Default-deny: the anonymous surface (health checks, client login and registration, the
+        // public workflow callbacks) is an explicit [AllowAnonymous] on each.
+        builder.Services.AddDefaultDenyAuthorization();
 
         // Throttles for the anonymous edges: the public callback (see PublicCallbackRateLimits),
         // device enrollment (see ClientRegistrationsController) and device login (ClientAuthController).
@@ -207,49 +180,16 @@ public static class Program
 
             // Device enrollment. A fleet being provisioned from one site shares an address, so the
             // budget is per IP and configurable; the default still makes walking the PIN space hopeless.
-            options.AddPolicy(RateLimitPolicies.DeviceRegistration, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = builder.Configuration.GetValue("RateLimiting:DeviceRegistration:PermitLimit", 20),
-                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:DeviceRegistration:WindowMinutes", 1)),
-                        QueueLimit = 0
-                    }));
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.DeviceRegistration, "DeviceRegistration", defaultPermitLimit: 20);
 
             // Device login. Same per-IP partitioning, with room for a fleet behind one address.
-            options.AddPolicy(RateLimitPolicies.DeviceLogin, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = builder.Configuration.GetValue("RateLimiting:DeviceLogin:PermitLimit", 300),
-                        Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:DeviceLogin:WindowMinutes", 1)),
-                        QueueLimit = 0
-                    }));
+            options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.DeviceLogin, "DeviceLogin", defaultPermitLimit: 300);
         });
 
-        builder.Services.AddCors(options =>
-        {
-            options.AddPolicy("AllowAll", policyBuilder =>
-            {
-                var allowedOrigins = builder.Configuration.GetCorsAllowedOrigins();
-                if (allowedOrigins is { Length: > 0 })
-                {
-                    policyBuilder.SetIsOriginAllowed(allowedOrigins.IsCorsOriginAllowed).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
-                }
-                else if (builder.Environment.IsDevelopment())
-                {
-                    policyBuilder.SetIsOriginAllowed(_ => true).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
-                }
-
-                // AllowAnyHeader covers request headers only. Without this the list endpoints'
-                // X-Total-Count is dropped before script can read it - the console is always a
-                // separate origin (nginx serves the SPA and never proxies the API), so paged
-                // lists would silently look complete.
-                policyBuilder.WithExposedHeaders("X-Total-Count");
-            });
-        });
+        // X-Total-Count is exposed, or the console (always a separate origin) could not read the
+        // list endpoints' count and paged lists would silently look complete.
+        builder.Services.AddWbsktCors(builder.Configuration, builder.Environment, "X-Total-Count");
+        builder.Services.AddWbsktForwardedHeaders(builder.Configuration);
 
         // Readiness probes. Redis is deliberately not among them: it backs the SignalR fan-out
         // across scaled instances, so losing it degrades cross-instance delivery rather than
@@ -289,28 +229,9 @@ public static class Program
 
         await app.RunStartupTasksAsync();
 
-        // A nested `KnownProxies = { }` initializer is a no-op (it Adds nothing, the loopback
-        // defaults survive) - the lists must be populated explicitly or Traefik's X-Forwarded-*
-        // headers get silently ignored. Trust Traefik's own pinned addresses specifically rather
-        // than clearing the lists (which would trust X-Forwarded-* from any container reachable
-        // on the docker network, not just Traefik). These addresses must match the static
-        // ipv4_address pinned to the traefik service on the edge/backend networks in
-        // deploy/compose/docker-compose.yml.
-        var forwardedHeadersOptions = new ForwardedHeadersOptions
-        {
-            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-        };
-        forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("172.28.0.2"));
-        forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("172.28.1.2"));
-        app.UseForwardedHeaders(forwardedHeadersOptions);
-
-        app.UseMiddleware<GlobalExceptionMiddleware>();
-
-        app.UseCors("AllowAll");
-
-        // Reject anonymous callback floods before they reach auth or the engine relay. Placed after
-        // UseForwardedHeaders so the partition key is the real client IP behind Traefik.
-        app.UseRateLimiter();
+        // The rate limiter runs before authentication, so anonymous callback floods are refused
+        // before they reach auth or the engine relay.
+        app.UseWbsktPipeline();
 
         if (app.Configuration.IsApiDocsEnabled(app.Environment))
         {
@@ -321,9 +242,6 @@ public static class Program
             app.MapCustomScalarApiReference();
         }
 
-        app.UseAuthentication();
-        app.UseMiddleware<IdentityMiddleware>();
-        app.UseAuthorization();
         app.MapWbsktHealthChecks();
         app.MapWbsktJwks();
 

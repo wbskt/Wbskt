@@ -1,14 +1,10 @@
 using MassTransit;
-using Serilog;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Hosting;
-using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
-using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Primitives;
-using Wbskt.Primitives.Constants;
 using Wbskt.Infrastructure.Mappers;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Engine;
@@ -26,22 +22,9 @@ namespace Wbskt.Workflow.Engine.Host;
 
 public static class Program
 {
-    private static readonly string ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Application.AppFolderName);
-
     public static async Task Main(string[] args)
     {
-        Environment.SetEnvironmentVariable(Logging.LogPath, ProgramDataPath);
-        Environment.SetEnvironmentVariable(Logging.LogName, typeof(Program).Namespace);
-
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-        {
-            Args = args,
-            ContentRootPath = Directory.GetCurrentDirectory()
-        });
-
-        builder.AddSharedConfiguration("serilog.json", "connectionstrings.json", "rabbitmq.json", "workflow-engine.json");
-
-        builder.Host.UseSerilog(builder.CreateSerilog());
+        var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json", "workflow-engine.json");
         builder.AddWbsktTelemetry(WorkflowMetrics.MeterName);
 
         builder.Services.AddHttpClient();
@@ -76,9 +59,7 @@ public static class Program
 
         await app.RunStartupTasksAsync();
 
-        app.UseMiddleware<GlobalExceptionMiddleware>();
-        app.UseAuthentication();
-        app.UseAuthorization();
+        app.UseWbsktPipeline();
         app.UseMiddleware<InboundApiKeyMiddleware>();
         app.UseMiddleware<LeaderOnlyMiddleware>();
         app.MapWbsktHealthChecks();
