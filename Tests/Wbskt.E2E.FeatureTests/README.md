@@ -45,7 +45,7 @@ Or, from the repo root, build and start all four in the background as Developmen
 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
 ```
 
-The hosts must run as **Development**. `appsettings.Development.json` is what lets a freshly registered user sign in without confirming an address, and what raises the auth host's credential rate limit (`RateLimiting:Authentication:PermitLimit`) from the production default of 10 a minute to 1000, its refresh limit (`RateLimiting:TokenRefresh:PermitLimit`) from 120 to 1000, and its verification limit (`RateLimiting:EmailVerification:PermitLimit`) from 10 to 1000. That limit is per IP, every test shares one, so at 10 the suite starts failing with `429 Too Many Requests` within a few scenarios.
+The hosts must run as **Development**. `appsettings.Development.json` is what lets a freshly registered user sign in without confirming an address, and what raises the auth host's credential rate limit (`RateLimiting:Authentication:PermitLimit`) from the production default of 10 a minute to 100000, its refresh limit (`RateLimiting:TokenRefresh:PermitLimit`) from 120 to 100000, and its verification limit (`RateLimiting:EmailVerification:PermitLimit`) from 10 to 100000. That limit is per IP, every test shares one, so at 10 the suite starts failing with `429 Too Many Requests` within a few scenarios. At 1000 it failed too: the suite registers and signs in close to a thousand users, and a run that fits in one minute's window spends the whole budget before its last scenarios.
 
 ### 4. Run the E2E tests
 
