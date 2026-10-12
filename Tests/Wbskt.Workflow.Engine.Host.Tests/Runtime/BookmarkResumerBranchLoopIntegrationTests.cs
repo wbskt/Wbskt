@@ -117,6 +117,20 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
 
     private LoopBackDispatcher? _dispatcher;
 
+    [Fact]
+    public async Task A_command_step_whose_command_cannot_be_sent_leaves_by_failed_at_once()
+    {
+        (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, _) = CommandStepRun();
+        publisher.FailWith = new InvalidOperationException("broker down");
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // No scheduler tick: the step did not wait out its ack timeout.
+        Assert.Equal(CommandChannel.Failed, ExitPort(providers));
+        Assert.Equal(BranchStatus.Completed, providers.Branches[1001].Status);
+        Assert.Empty(providers.Bookmarks);
+    }
+
     private (BranchLoop Loop, InMemoryProviders Providers, RecordingCommandPublisher Publisher, BookmarkResumer Resumer) CommandStepRun()
     {
         Guid nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -143,6 +157,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         var providers = new InMemoryProviders(definition, nodeId);
         var publisher = new RecordingCommandPublisher();
         _dispatcher = new LoopBackDispatcher();
+        var resumer = new BookmarkResumer(providers, providers, providers, _dispatcher);
         var loop = new BranchLoop(
             providers,
             providers,
@@ -150,7 +165,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             providers,
             new RunJournal(providers, new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(new CommandNodeExecutor(publisher)),
+            new StubNodeExecutorRegistry(new CommandNodeExecutor(publisher, resumer)),
             _dispatcher,
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
@@ -161,7 +176,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
         _dispatcher.Handler = request => loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
-        return (loop, providers, publisher, new BookmarkResumer(providers, providers, providers, _dispatcher));
+        return (loop, providers, publisher, resumer);
     }
 
     private static readonly Dictionary<string, Guid> ExitTargets = new()
@@ -178,8 +193,15 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
     {
         public List<Guid> Sent { get; } = [];
 
+        public Exception? FailWith { get; set; }
+
         public Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, CommandSender? sentBy, CancellationToken ct)
         {
+            if (FailWith is not null)
+            {
+                return Task.FromException(FailWith);
+            }
+
             Sent.Add(commandId);
             return Task.CompletedTask;
         }
