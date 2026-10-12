@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 
@@ -16,15 +17,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 public sealed class DeviceLifecycleTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record SecretDto(Guid ClientRefId, string Secret);
-
-    private sealed record PolicyDto(Guid RefId, string Pin);
-
-    private sealed record FailureDto(Guid ClientRefId, string Code, string Message);
-
-    private sealed record BulkDto(List<Guid> Updated, List<FailureDto> Failed);
-
     // ── Delete ────────────────────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -93,7 +85,7 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
 
         var response = await Send(HttpMethod.Post, workspace, $"clients/{clientRef}/rotate-secret", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var rotated = await response.Content.ReadFromJsonAsync<SecretDto>(JsonOptions);
+        var rotated = await response.Content.ReadFromJsonAsync<ClientSecretResponse>(JsonOptions);
 
         rotated!.ClientRefId.Should().Be(clientRef);
         rotated.Secret.Should().NotBe(oldSecret);
@@ -114,7 +106,7 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
 
         var response = await Send(HttpMethod.Post, workspace, $"registration-policies/{policyRef}/rotate-pin", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var policy = await response.Content.ReadFromJsonAsync<PolicyDto>(JsonOptions);
+        var policy = await response.Content.ReadFromJsonAsync<RegistrationPolicyResponse>(JsonOptions);
 
         policy!.Pin.Should().NotBe(oldPin);
         (await RegisterRawAsync(oldPin)).IsSuccessStatusCode.Should().BeFalse();
@@ -139,9 +131,9 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
             new { ClientRefIds = new[] { first, second, unknown }, Status = 1 });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<BulkDto>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<BulkClientStatusResponse>(JsonOptions);
         result!.Updated.Should().BeEquivalentTo([first, second]);
-        result.Failed.Should().ContainSingle().Which.Should().Match<FailureDto>(f => f.ClientRefId == unknown && f.Code == "CLIENT_NOT_FOUND");
+        result.Failed.Should().ContainSingle().Which.Should().Match<BulkClientStatusFailure>(f => f.ClientRefId == unknown && f.Code == "CLIENT_NOT_FOUND");
         (await ClientLoginAsync(first, firstSecret)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -154,14 +146,14 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
         var created = await Send(HttpMethod.Post, workspace, "registration-policies", token,
             new { Name = $"e2e-limit-{Guid.NewGuid():N}", MaxClients = 1, AutoApproval = false });
         created.EnsureSuccessStatusCode();
-        var policy = await created.Content.ReadFromJsonAsync<PolicyDto>(JsonOptions);
+        var policy = await created.Content.ReadFromJsonAsync<RegistrationPolicyResponse>(JsonOptions);
         var (first, _) = await fixture.RegisterClientAsync(policy!.Pin, "pending-1");
         var (second, _) = await fixture.RegisterClientAsync(policy.Pin, "pending-2");
 
         var response = await Send(HttpMethod.Patch, workspace, "clients/status", token,
             new { ClientRefIds = new[] { first, second }, Status = 1 });
 
-        var result = await response.Content.ReadFromJsonAsync<BulkDto>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<BulkClientStatusResponse>(JsonOptions);
         result!.Updated.Should().Equal(first);
         result.Failed.Should().ContainSingle().Which.Code.Should().Be("POLICY_LIMIT_REACHED");
     }

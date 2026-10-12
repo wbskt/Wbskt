@@ -2,7 +2,6 @@ using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
 using Wbskt.Infrastructure.Security;
-using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;

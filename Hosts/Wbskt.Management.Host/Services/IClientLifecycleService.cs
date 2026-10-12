@@ -1,6 +1,6 @@
 using Wbskt.Protocol;
 using Wbskt.Infrastructure;
-using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services;

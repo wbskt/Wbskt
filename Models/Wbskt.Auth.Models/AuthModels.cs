@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace Wbskt.Auth.Host.Models;
+namespace Wbskt.Auth.Models;
 
 // Deliberately no [EmailAddress] here, unlike RegisterRequest. Login verifies a credential rather
 // than accepting a new one: rejecting a malformed identifier with a 400 tells a caller that the

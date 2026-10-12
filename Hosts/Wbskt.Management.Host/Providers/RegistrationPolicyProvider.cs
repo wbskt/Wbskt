@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;

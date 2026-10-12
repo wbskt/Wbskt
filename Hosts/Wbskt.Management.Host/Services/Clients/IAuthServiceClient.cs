@@ -32,7 +32,3 @@ public sealed record WorkspaceAccess(int WorkspaceId, IReadOnlySet<string> Permi
 {
     public bool HasPermission(PermissionSlug permission) => Permissions.Contains(permission);
 }
-
-public record ResolvedWorkspaceResponse(int WorkspaceId, string[] Permissions);
-public record ResolveWorkspaceRequest(Guid WorkspaceRef);
-public record CurrentUserResponse(int UserId);

@@ -5,6 +5,7 @@ using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
 
 namespace Wbskt.Management.Host.Services;

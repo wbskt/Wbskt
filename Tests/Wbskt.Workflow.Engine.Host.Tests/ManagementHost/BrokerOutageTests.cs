@@ -15,6 +15,7 @@ using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Controllers;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;

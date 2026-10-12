@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Wbskt.Auth.Models;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;

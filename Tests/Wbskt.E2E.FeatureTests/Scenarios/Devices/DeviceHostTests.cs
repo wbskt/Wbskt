@@ -5,6 +5,7 @@ using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Protocol;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 
@@ -24,11 +25,6 @@ public sealed class DeviceHostTests(ServicesFixture fixture)
     private const int Revoked = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record RegistrationDto(Guid ClientRefId, string Secret, int Status);
-
-    private sealed record LoginDto(string AccessToken, int ExpiresIn);
-
     [SkippableFact]
     public async Task DEV_HOST_01_TheSdk_RegistersSignsInAndConnects_ThroughTheDevicesHostAlone()
     {
@@ -58,7 +54,7 @@ public sealed class DeviceHostTests(ServicesFixture fixture)
 
         var registered = await DevicesAsync("/api/client-registrations/initiate", new { Pin = pin, Name = "via-devices-host" });
         registered.StatusCode.Should().Be(HttpStatusCode.OK);
-        var device = (await registered.Content.ReadFromJsonAsync<RegistrationDto>(JsonOptions))!;
+        var device = (await registered.Content.ReadFromJsonAsync<ClientRegistrationResponse>(JsonOptions))!;
         device.Status.Should().Be(Pending);
 
         (await DevicesLoginAsync(device.ClientRefId, device.Secret)).IsSuccessStatusCode.Should().BeFalse("a pending device cannot sign in");
@@ -69,7 +65,7 @@ public sealed class DeviceHostTests(ServicesFixture fixture)
 
         var login = await DevicesLoginAsync(device.ClientRefId, device.Secret);
         login.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await login.Content.ReadFromJsonAsync<LoginDto>(JsonOptions))!.AccessToken.Should().NotBeNullOrEmpty();
+        (await login.Content.ReadFromJsonAsync<ClientLoginResponse>(JsonOptions))!.AccessToken.Should().NotBeNullOrEmpty();
     }
 
     [SkippableFact]

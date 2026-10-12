@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 
 namespace Wbskt.Auth.Host.Controllers;

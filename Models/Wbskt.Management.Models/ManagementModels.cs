@@ -1,7 +1,7 @@
 using Wbskt.Protocol;
 using Wbskt.Models;
 
-namespace Wbskt.Management.Host.Models;
+namespace Wbskt.Management.Models;
 
 public record RegistrationPolicyRequest(
     string Name, 

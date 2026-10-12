@@ -5,6 +5,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 
@@ -24,9 +25,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 public sealed class DeviceRevocationTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record SecretDto(Guid ClientRefId, string Secret);
-
     [SkippableFact]
     public async Task DEV_REV_01_ARevokedDevicesToken_IsRefusedByTheSocketHost()
     {
@@ -72,7 +70,7 @@ public sealed class DeviceRevocationTests(ServicesFixture fixture)
         (await Send(HttpMethod.Delete, workspace, $"clients/{deletedRef}", token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
         var rotation = await Send(HttpMethod.Post, workspace, $"clients/{rotatedRef}/rotate-secret", token);
         rotation.StatusCode.Should().Be(HttpStatusCode.OK);
-        var newSecret = (await rotation.Content.ReadFromJsonAsync<SecretDto>(JsonOptions))!.Secret;
+        var newSecret = (await rotation.Content.ReadFromJsonAsync<ClientSecretResponse>(JsonOptions))!.Secret;
 
         // Everything the socket host heard about these devices is gone with the restart.
         await RestartSocketHostAsync();

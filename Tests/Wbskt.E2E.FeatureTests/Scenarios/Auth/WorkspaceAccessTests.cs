@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -14,8 +15,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 [Collection(E2ECollection.Name)]
 public sealed class WorkspaceAccessTests(ServicesFixture fixture)
 {
-    private sealed record CreatedInvitationDto(Guid RefId, string Email, DateTime ExpiresAt, string Token);
-
     // ── Invitations that name workspaces ──────────────────────────────────────────────────
 
     [SkippableFact]
@@ -146,7 +145,7 @@ public sealed class WorkspaceAccessTests(ServicesFixture fixture)
         var (username, email, password) = ServicesFixture.NewCredentials();
         var invited = await InviteAsync(adminToken, tenantRef, email, extra);
         invited.EnsureSuccessStatusCode();
-        var invitation = await invited.Content.ReadFromJsonAsync<CreatedInvitationDto>()
+        var invitation = await invited.Content.ReadFromJsonAsync<CreatedInvitationResponse>()
             ?? throw new InvalidOperationException("Empty invitation response.");
 
         (await fixture.RegisterAsync(username, email, password, invitation.Token)).EnsureSuccessStatusCode();

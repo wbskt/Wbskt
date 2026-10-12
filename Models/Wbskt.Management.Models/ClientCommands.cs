@@ -1,4 +1,4 @@
-namespace Wbskt.Management.Host.Models;
+namespace Wbskt.Management.Models;
 
 // ExpiresAt is optional: past it the command is refused instead of delivered, by the socket host
 // and by the SDK. At most 24 hours ahead.

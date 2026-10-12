@@ -1,4 +1,5 @@
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Models;
 using Wbskt.Primitives;
 

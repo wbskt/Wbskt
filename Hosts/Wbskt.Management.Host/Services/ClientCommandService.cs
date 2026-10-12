@@ -3,7 +3,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Devices;
-using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services;
