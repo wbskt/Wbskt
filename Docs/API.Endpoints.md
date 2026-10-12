@@ -24,11 +24,12 @@ anonymously and the anonymous surface is an explicit, auditable choice:
 - **Socket host** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a device
   token: `type=client`), validated by the same bearer handler as the other hosts. Browsers cannot set
   headers on a WebSocket, so on `/ws` the handler also reads `?access_token=` (`AcceptQueryToken`,
-  shared with the management host's SignalR hub). `EndpointAuthorizationTests` fails if a controller
+  shared with the management host's SignalR hub). `HostArchitectureTests` fails if a controller
   appears here without stating its posture.
-- **Engine host** — the exception, and it is not publicly routed. `InboundApiKeyMiddleware` gates
-  only endpoints carrying `[InboundEndpoint]`; a controller without that attribute is reachable
-  unauthenticated by anything on the backend network.
+- **Engine host** — not publicly routed, and it has no user tokens. `InboundApiKeyMiddleware`
+  requires `X-Wbskt-Api-Key` on every endpoint except the `[AllowAnonymous]` health probes, so a
+  controller without `[InboundEndpoint]` is still closed (that attribute only keeps a standby from
+  serving it). `HostArchitectureTests` fails if an engine controller lacks it.
 
 Two conventions run through every table below:
 
