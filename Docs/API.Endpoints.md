@@ -12,6 +12,16 @@ semantics, resolution precedence, where the checks live — see [AccessControl.m
 | **Socket** (`Wbskt.Socket.Host`) | yes | device SDK | JWT bearer on the WebSocket upgrade, header or `access_token` query |
 | **Workflow Engine** (`Wbskt.Workflow.Engine.Host`) | **no** — backend network only | management host | shared API key header on `/api/inbound/*` |
 
+**Where a public URL lands.** `api.${DOMAIN}` is the one public API host: tenant administration
+(`/api/tenants`, `/api/invitations`) and the auth host's workspace routes (`/api/workspaces`, one
+workspace, its `members` and `owner`) go to the auth host, device sign-in and registration to the
+devices role, and everything else to the management host. `auth.${DOMAIN}` serves sign-in, refresh
+and sessions (`/api/auth`, where the refresh cookie is scoped), and for one release still answers the
+administration routes too, so the console can move over. Nothing under `/api/internal` is routed
+publicly: those are host-to-host calls over the backend network (`InternalRoutes`). The Traefik
+labels in `deploy/compose/docker-compose.yml` decide all of this, and `PublicRoutingTests` checks
+them against each host's routes.
+
 **The three publicly routed hosts default-deny.** Management, Auth and Socket each set an
 authorization `FallbackPolicy`, so a controller that forgets `[Authorize]` cannot be reached
 anonymously and the anonymous surface is an explicit, auditable choice:
@@ -85,7 +95,7 @@ is issued, so the link already in the inbox keeps working.
 | `POST logout-all` | authenticated | Revokes the caller's entire refresh-token set. |
 | `POST change-password` | authenticated | Takes `currentPassword` and `newPassword`. Writes the new password and revokes **every** session the account has in one transaction, then returns a fresh token pair for the caller. A wrong current password is 400 `AUTH_CURRENT_PASSWORD_INVALID` (not 401, so a client does not sign out) and counts towards the lockout below; a locked account is 403 `AUTH_ACCOUNT_LOCKED`. Rate limited like the anonymous endpoints. |
 | `GET sessions` | authenticated | The caller's live sessions, newest sign-in first: `id` (a GUID that stays the same across refreshes), `createdAt` (the sign-in), `lastUsedAt`, `expiresAt`, `ipAddress` (of the last refresh) and `isCurrent` (the session the request came from). One per signed-in device or browser. |
-| `DELETE sessions/{id}` | authenticated | Ends one of the caller's sessions: its refresh token stops working, and so does the access token that device holds (its `sid` claim names the session). 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. |
+| `DELETE sessions/{sessionId}` | authenticated | Ends one of the caller's sessions: its refresh token stops working, and so does the access token that device holds (its `sid` claim names the session). 404 `AUTH_SESSION_NOT_FOUND` for an id that is not a live session of theirs. |
 | `POST forgot-password` | anonymous | Mails a reset link if the address has a usable account. **Always 204** — same status, same empty body, for a registered address, an unknown one, a deactivated one, and a malformed one. |
 | `POST reset-password` | anonymous | Redeems a reset token, writes the new password, and revokes **every** refresh token the account holds — in one transaction, so a session an attacker already has cannot outlive the recovery. Unknown, spent and expired tokens are all `RESET_TOKEN_INVALID`. |
 | `POST verify-email` | anonymous | Redeems a confirmation token and marks the address verified. Single-use. |
@@ -191,19 +201,23 @@ role or user belonging to another tenant reads as nonexistent.
 |---|---|---|
 | `GET {tenantRef}/permissions` | `roles.read` | The permission catalogue, for building a role editor. Read-only by design: the catalogue is code-defined in `Wbskt.Primitives/Constants/Permissions.cs`, and a slug invented at runtime could not gate anything. |
 
-List endpoints take `skip`/`take`, clamped to 200 rather than rejected, and return `X-Total-Count`.
+The member, invitation, role, group and permission lists page like the management host's (see
+[Paging](#2-management-host)): `cursor` and `limit` (default 100, clamped to 1–200), answering
+`{ items, nextCursor, totalCount }` with `X-Total-Count`. `skip`/`take` are still accepted for a
+release. The lists that return a bare array (tenants, a role's permissions, a group's roles, a
+member's roles, groups and permissions) are unchanged until the console reads pages.
 
 ### 1.4 Workspaces — `api/workspaces`
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `POST resolve` | membership only | **The gate every other host depends on.** Resolves a workspace reference to its internal ID plus the caller's effective permission slugs there. The management host calls this before every workspace-scoped request. Answers 403 for both "not a member" and "no such workspace" and 401 only when the caller cannot be identified at all — the management host relies on that distinction, and treats any other status as a server fault. |
+| `POST /api/internal/workspaces/resolve` | membership only | **Backend network only.** **The gate every other host depends on.** Resolves a workspace reference to its internal ID plus the caller's effective permission slugs there. The management host calls this before every workspace-scoped request. Answers 403 for both "not a member" and "no such workspace" and 401 only when the caller cannot be identified at all — the management host relies on that distinction, and treats any other status as a server fault. |
 | `GET /` | none | Lists workspaces the caller belongs to. |
 | `POST /` | none | Creates a workspace in the caller's tenant and makes them its owner. The owner automatically receives the tenant's `Admin` role scoped to it. |
 | `PUT {workspaceRef}` | `users.manage` **in that workspace** | Renames a workspace or changes its description. |
 | `PUT {workspaceRef}/owner` | `users.manage` in that workspace | Body `{ "userRef": guid }`. Makes another member of the workspace's tenant its owner, adding them to the workspace if needed. The previous owner stays a member and can then be removed. Someone outside the tenant is 404 `USER_NOT_FOUND`. |
 | `DELETE {workspaceRef}` | `users.manage` in that workspace | Deletes the workspace and every assignment scoped to it. What the management host holds for it (registration policies, clients, workflows, schedules, webhook triggers) is retired shortly after, by an event the delete queues in the same transaction, so it is sent even if the auth host stops or the broker is down at that moment. |
-| `GET {workspaceRef}/members` | `users.read` in that workspace | Lists members. |
+| `GET {workspaceRef}/members` | `users.read` in that workspace | Lists members, one page at a time. |
 | `POST {workspaceRef}/members` | `users.manage` in that workspace | Adds an existing **tenant member** to the workspace. It will not pull in a non-member: doing so used to let anyone with `users.manage` in one workspace capture any account in the system knowing only its email. An unknown address and a non-member are reported identically. |
 | `DELETE {workspaceRef}/members/{userRef}` | `users.manage` in that workspace | Removes a member and any assignment scoped to the workspace. The owner cannot be removed. |
 
@@ -220,7 +234,7 @@ List endpoints take `skip`/`take`, clamped to 200 rather than rejected, and retu
 ## 2. Management host
 
 Every workspace-scoped route is `api/workspaces/{workspaceRef:guid}/…` and resolves through
-`POST /api/workspaces/resolve` on the auth host before doing anything else. That call is the
+`POST /api/internal/workspaces/resolve` on the auth host before doing anything else. That call is the
 membership gate; the permission slug is the second gate.
 
 **Paging.** Every list endpoint takes `cursor` and `limit` and answers with one shape,

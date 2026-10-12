@@ -5,7 +5,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
 /// <summary>
 /// Section 14 of Docs/Auth.Host.E2E.Scenarios.md — the effective permission set, observed through
-/// <c>POST /api/workspaces/resolve</c>.
+/// <c>POST /api/internal/workspaces/resolve</c>.
 ///
 /// The order <c>Permission_EffectiveSet</c> implements is
 /// <b>User-Deny &gt; User-Allow &gt; Role-Deny &gt; Role-Allow &gt; default deny</b>. Every rung

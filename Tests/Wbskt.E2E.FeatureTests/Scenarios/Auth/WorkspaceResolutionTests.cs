@@ -5,7 +5,7 @@ using Wbskt.E2E.FeatureTests.Fixtures;
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
 /// <summary>
-/// Section 9 of Docs/Auth.Host.E2E.Scenarios.md — <c>POST /api/workspaces/resolve</c>.
+/// Section 9 of Docs/Auth.Host.E2E.Scenarios.md — <c>POST /api/internal/workspaces/resolve</c>.
 ///
 /// This is the gate every other host depends on: the management host calls it before every
 /// workspace-scoped request, turning a public reference into an internal ID plus the caller's
@@ -158,7 +158,7 @@ public sealed class WorkspaceResolutionTests(ServicesFixture fixture)
 
         var response = await fixture.SendAsync(
             HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/workspaces/resolve"),
+            ServicesFixture.AuthUrl("/api/internal/workspaces/resolve"),
             user.Token,
             new { WorkspaceRef = "not-a-guid" });
 
@@ -173,7 +173,7 @@ public sealed class WorkspaceResolutionTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
 
         var response = await fixture.SendEmptyJsonAsync(
-            HttpMethod.Post, ServicesFixture.AuthUrl("/api/workspaces/resolve"), user.Token);
+            HttpMethod.Post, ServicesFixture.AuthUrl("/api/internal/workspaces/resolve"), user.Token);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }

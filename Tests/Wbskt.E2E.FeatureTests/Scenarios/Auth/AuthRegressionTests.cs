@@ -18,7 +18,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 {
     // ── Fix 1: an unresolvable workspace reference is Forbidden, not NotFound ──────────────
     //
-    // The management host resolves every workspace-scoped request through /api/workspaces/resolve
+    // The management host resolves every workspace-scoped request through /api/internal/workspaces/resolve
     // and maps only 401 and 403; any other status became a Failure and reached the user as a 500.
 
     [SkippableFact]
@@ -30,7 +30,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         var response = await fixture.SendAsync(
             HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/workspaces/resolve"),
+            ServicesFixture.AuthUrl("/api/internal/workspaces/resolve"),
             adminToken,
             new { WorkspaceRef = Guid.NewGuid() });
 
@@ -54,7 +54,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         var response = await fixture.SendAsync(
             HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/workspaces/resolve"),
+            ServicesFixture.AuthUrl("/api/internal/workspaces/resolve"),
             adminToken,
             new { WorkspaceRef = workspaceRef });
 

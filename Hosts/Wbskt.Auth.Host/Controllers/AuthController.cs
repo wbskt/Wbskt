@@ -214,10 +214,9 @@ public class AuthController : ApiControllerBase
     /// and stays the same for the life of the session.
     /// </summary>
     [Authorize]
-    [HttpDelete("sessions/{id:guid}")]
-    public async Task<IActionResult> RevokeSession(Guid id, CancellationToken cancellationToken)
+    [HttpDelete("sessions/{sessionId:guid}")]
+    public async Task<IActionResult> RevokeSession(Guid sessionId, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: RevokeSession requested for session {SessionId}", id);
 
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
@@ -225,7 +224,7 @@ public class AuthController : ApiControllerBase
             return MapError(userIdResult.Error);
         }
 
-        var result = await _authService.RevokeSessionAsync(userIdResult.Value, id, CallerIpAddress(), cancellationToken);
+        var result = await _authService.RevokeSessionAsync(userIdResult.Value, sessionId, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
 

@@ -22,7 +22,7 @@ namespace Wbskt.Auth.Host.Controllers;
 [Authorize]
 public class ManagementController(IManagementService managementService) : ApiControllerBase
 {
-    private const int MaxPageSize = 200;
+    private const int DefaultPageSize = 100;
 
     /// <summary>
     /// Retrieves the tenants the current user belongs to. This is the entry point for every other
@@ -63,9 +63,9 @@ public class ManagementController(IManagementService managementService) : ApiCon
     /// <summary>Lists invitations that have neither been accepted nor revoked.</summary>
     [HttpGet("{tenantRef:guid}/invitations")]
     [RequiresTenantPermission(PermissionNames.UsersRead)]
-    public async Task<ActionResult<ListResponse<InvitationResponse>>> GetInvitations([FromTenant] int tenantId, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<Page<InvitationResponse>>> GetInvitations([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(skip, take, (s, t) => managementService.GetInvitationsAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => managementService.GetInvitationsAsync(tenantId, s, t, cancellationToken));
     }
 
     /// <summary>
@@ -93,9 +93,9 @@ public class ManagementController(IManagementService managementService) : ApiCon
     /// <summary>Lists the roles defined in a tenant.</summary>
     [HttpGet("{tenantRef:guid}/roles")]
     [RequiresTenantPermission(PermissionNames.RolesRead)]
-    public async Task<ActionResult<ListResponse<RoleResponse>>> GetRoles([FromTenant] int tenantId, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<Page<RoleResponse>>> GetRoles([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(skip, take, (s, t) => managementService.GetRolesAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => managementService.GetRolesAsync(tenantId, s, t, cancellationToken));
     }
 
     /// <summary>Creates a role.</summary>
@@ -154,9 +154,9 @@ public class ManagementController(IManagementService managementService) : ApiCon
     /// <summary>Lists the groups defined in a tenant.</summary>
     [HttpGet("{tenantRef:guid}/groups")]
     [RequiresTenantPermission(PermissionNames.UsersRead)]
-    public async Task<ActionResult<ListResponse<GroupResponse>>> GetGroups([FromTenant] int tenantId, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<Page<GroupResponse>>> GetGroups([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(skip, take, (s, t) => managementService.GetGroupsAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => managementService.GetGroupsAsync(tenantId, s, t, cancellationToken));
     }
 
     /// <summary>Creates a group, optionally nested under a parent.</summary>
@@ -215,9 +215,9 @@ public class ManagementController(IManagementService managementService) : ApiCon
     /// </summary>
     [HttpGet("{tenantRef:guid}/permissions")]
     [RequiresTenantPermission(PermissionNames.RolesRead)]
-    public async Task<ActionResult<ListResponse<PermissionResponse>>> GetPermissions([FromTenant] int tenantId, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<Page<PermissionResponse>>> GetPermissions([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(skip, take, (s, t) => managementService.GetPermissionsAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => managementService.GetPermissionsAsync(tenantId, s, t, cancellationToken));
     }
 
     // ----- Members -----------------------------------------------------------------------------
@@ -228,9 +228,9 @@ public class ManagementController(IManagementService managementService) : ApiCon
     /// </summary>
     [HttpGet("{tenantRef:guid}/members")]
     [RequiresTenantPermission(PermissionNames.UsersRead)]
-    public async Task<ActionResult<ListResponse<TenantMemberResponse>>> GetMembers([FromTenant] int tenantId, [FromQuery] string? search, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<Page<TenantMemberResponse>>> GetMembers([FromTenant] int tenantId, [FromQuery] string? search, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(skip, take, (s, t) => managementService.GetMembersAsync(tenantId, search, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => managementService.GetMembersAsync(tenantId, search, s, t, cancellationToken));
     }
 
     /// <summary>Lists the roles a user holds and the scope of each.</summary>
@@ -352,23 +352,14 @@ public class ManagementController(IManagementService managementService) : ApiCon
 
     // ----- Shared plumbing ---------------------------------------------------------------------
 
-    private async Task<ActionResult<ListResponse<T>>> PagedAsync<T>(int skip, int take, Func<int, int, Task<Result<IPagedList<T>>>> operation)
+    private async Task<ActionResult<Page<T>>> PagedAsync<T>(PageRequest page, Func<int, int, Task<Result<IPagedList<T>>>> operation)
     {
-        // Clamped rather than rejected: an out-of-range page size is not worth failing a read over,
-        // but an unbounded one would let a caller pull the whole table in a single request.
-        skip = Math.Max(0, skip);
-        take = Math.Clamp(take, 1, MaxPageSize);
-
-        var result = await operation(skip, take);
-        if (result.IsFailure)
+        var offset = page.Offset();
+        if (offset.IsFailure)
         {
-            return MapError(result.Error);
+            return MapError(offset.Error);
         }
 
-        // The total is what makes the skip/take pair usable — without it a caller cannot tell a
-        // final page from a full one. Matches the header the management host's list endpoints set.
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-
-        return Ok(new ListResponse<T> { Items = result.Value });
+        return MapPage(await operation(offset.Value, page.LimitOr(DefaultPageSize)), offset.Value);
     }
 }

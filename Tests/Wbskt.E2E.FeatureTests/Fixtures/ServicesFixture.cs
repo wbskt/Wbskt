@@ -630,7 +630,7 @@ public sealed class ServicesFixture : IDisposable
     /// are about which status comes back, so this deliberately does not throw on failure.
     /// </summary>
     public Task<HttpResponseMessage> ResolveWorkspaceAsync(string? token, Guid workspaceRef) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/workspaces/resolve"), token, new { WorkspaceRef = workspaceRef });
+        SendAsync(HttpMethod.Post, AuthUrl("/api/internal/workspaces/resolve"), token, new { WorkspaceRef = workspaceRef });
 
     /// <summary>Reads a successful resolve response.</summary>
     public static async Task<ResolvedWorkspace> ReadResolvedWorkspaceAsync(HttpResponseMessage response)

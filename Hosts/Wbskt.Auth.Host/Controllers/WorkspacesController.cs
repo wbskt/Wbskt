@@ -18,61 +18,17 @@ namespace Wbskt.Auth.Host.Controllers;
 [Authorize]
 public class WorkspacesController : ApiControllerBase
 {
-    private const int MaxPageSize = 200;
+    private const int DefaultPageSize = 100;
 
     private readonly IWorkspaceService _workspaceService;
     private readonly ILogger<WorkspacesController> _logger;
-    private readonly AuthMetrics _metrics;
 
     public WorkspacesController(
         IWorkspaceService workspaceService,
-        ILogger<WorkspacesController> logger,
-        AuthMetrics metrics)
+        ILogger<WorkspacesController> logger)
     {
         _workspaceService = workspaceService;
         _logger = logger;
-        _metrics = metrics;
-    }
-
-    /// <summary>
-    /// Resolves a workspace reference and returns the caller's effective permission set within that workspace.
-    /// </summary>
-    /// <param name="request">The resolution request containing the workspace reference.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A response containing the internal workspace ID and the caller's effective permissions.</returns>
-    [HttpPost("resolve")]
-    public async Task<ActionResult<ResolvedWorkspaceResponse>> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
-    {
-        _logger.LogDebug("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}'", request.WorkspaceRef);
-
-        var userIdResult = CurrentUserId();
-        if (userIdResult.IsFailure)
-        {
-            return MapError(userIdResult.Error);
-        }
-
-        var result = await _workspaceService.ResolveAccessAsync(userIdResult.Value, request.WorkspaceRef, cancellationToken);
-        if (result.IsSuccess)
-        {
-            _logger.LogDebug("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId}, Permissions: {PermissionCount})", request.WorkspaceRef, result.Value.WorkspaceId, result.Value.Permissions.Count);
-            _metrics.RecordWorkspaceResolution("success");
-            return Ok(new ResolvedWorkspaceResponse(result.Value.WorkspaceId, result.Value.Permissions.ToArray()));
-        }
-
-        if (result.Error.Code == "WORKSPACE_NOT_FOUND")
-        {
-            _logger.LogWarning("API: Resolve failed - Workspace with RefId: '{WorkspaceRef}' not found", request.WorkspaceRef);
-            _metrics.RecordWorkspaceResolution("not_found");
-
-            // Forbidden, not NotFound: "no such workspace" must read like "not yours", and the
-            // management host treats anything but 401 and 403 from here as a fault. A stale reference
-            // (normal after a workspace is deleted) is a permission answer, not a 500.
-            return MapError(Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found."));
-        }
-
-        _metrics.RecordWorkspaceResolution(result.Error.Type == ErrorType.Forbidden ? "forbidden" : "error");
-
-        return MapError(result.Error);
     }
 
     /// <summary>
@@ -128,18 +84,15 @@ public class WorkspacesController : ApiControllerBase
     /// <summary>Lists the members of a workspace.</summary>
     [HttpGet("{workspaceRef:guid}/members")]
     [RequiresPermission(PermissionNames.UsersRead)]
-    public async Task<ActionResult<ListResponse<TenantMemberResponse>>> GetMembers([FromWorkspace] int workspaceId, [FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<Page<TenantMemberResponse>>> GetMembers([FromWorkspace] int workspaceId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        // Clamped rather than rejected, so an out-of-range page size does not fail a read.
-        var result = await _workspaceService.GetMembersAsync(workspaceId, Math.Max(0, skip), Math.Clamp(take, 1, MaxPageSize), cancellationToken);
-        if (result.IsFailure)
+        var offset = page.Offset();
+        if (offset.IsFailure)
         {
-            return MapError(result.Error);
+            return MapError(offset.Error);
         }
 
-        Response.Headers.Append("X-Total-Count", result.Value.TotalCount.ToString());
-
-        return Ok(new ListResponse<TenantMemberResponse> { Items = result.Value });
+        return MapPage(await _workspaceService.GetMembersAsync(workspaceId, offset.Value, page.LimitOr(DefaultPageSize), cancellationToken), offset.Value);
     }
 
     /// <summary>
