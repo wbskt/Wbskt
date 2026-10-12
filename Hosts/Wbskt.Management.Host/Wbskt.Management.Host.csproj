@@ -33,6 +33,7 @@
       <ProjectReference Include="..\..\Events\Wbskt.Events\Wbskt.Events.csproj" />
       <ProjectReference Include="..\..\Models\Wbskt.Workflow.Engine.Contracts\Wbskt.Workflow.Engine.Contracts.csproj" />
       <ProjectReference Include="..\..\Models\Wbskt.Management.Models\Wbskt.Management.Models.csproj" />
+      <ProjectReference Include="..\..\Models\Wbskt.Auth.Models\Wbskt.Auth.Models.csproj" />
       <ProjectReference Include="..\..\Wbskt.Infrastructure\Wbskt.Infrastructure.csproj" />
       <ProjectReference Include="..\..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
       <ProjectReference Include="..\..\Wbskt.Workflow\Wbskt.Workflow.csproj" />

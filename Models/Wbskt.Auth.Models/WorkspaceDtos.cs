@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Wbskt.Auth.Host.Models;
+namespace Wbskt.Auth.Models;
 
 public record WorkspaceResponse(Guid RefId, string Name, string? Description, DateTime CreatedAt);
 

@@ -1,6 +1,7 @@
 using Wbskt.Auth.Host.Services.Email;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;

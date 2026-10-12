@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Wbskt.Auth.Host.Models;
+namespace Wbskt.Auth.Models;
 
 // Lengths mirror dbo.Users so that over-long input is rejected as a 400 here rather than surfacing
 // as a truncation error from SQL. [ApiController] enforces these before the action runs.

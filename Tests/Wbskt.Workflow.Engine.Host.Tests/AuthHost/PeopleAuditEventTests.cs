@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Services.Email;

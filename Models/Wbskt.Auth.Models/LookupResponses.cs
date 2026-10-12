@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace Wbskt.Auth.Host.Models;
+namespace Wbskt.Auth.Models;
 
 // Responses expose RefId only. The internal integer Id is a database concern and must not cross
 // the API boundary (see "The ID Boundary" in Docs/Coding.Conventions.md).
@@ -144,12 +144,6 @@ public record AcceptInvitationRequest(
 
 /// <summary>Identifies the tenant just joined, so a client can navigate straight into it.</summary>
 public record AcceptInvitationResponse(Guid TenantRef, string TenantName);
-
-/// <summary>
-/// An invitation as read back before it is redeemed. Not a response type — registration uses it to
-/// reject a bad token before creating an account, rather than after.
-/// </summary>
-public record InvitationLookup(Guid RefId, Guid TenantRef, string TenantName, string Email, DateTime ExpiresAt, bool IsLive);
 
 /// <summary>
 /// A user as seen by tenant administration. <paramref name="IsActive"/> is the account, across every

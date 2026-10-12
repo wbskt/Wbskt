@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 
@@ -22,13 +23,6 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
     private const int Revoked = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record PolicyDto(Guid RefId, string Pin);
-
-    private sealed record FailureDto(Guid ClientRefId, string Code, string Message);
-
-    private sealed record BulkDto(List<Guid> Updated, List<FailureDto> Failed);
-
     // ── One device's status ───────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -208,7 +202,7 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         var result = await BulkAsync(workspace, token, [c, a, b], Registered);
 
         result.Updated.Should().Equal(c, a);
-        result.Failed.Should().ContainSingle().Which.Should().Match<FailureDto>(f => f.ClientRefId == b && f.Code == "POLICY_LIMIT_REACHED");
+        result.Failed.Should().ContainSingle().Which.Should().Match<BulkClientStatusFailure>(f => f.ClientRefId == b && f.Code == "POLICY_LIMIT_REACHED");
         (await StatusOfAsync(workspace, b, token)).Should().Be(Pending);
     }
 
@@ -263,17 +257,17 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         var created = await Send(HttpMethod.Post, workspace, "registration-policies", token,
             new { Name = $"e2e-limit-{Guid.NewGuid():N}", MaxClients = maxClients, AutoApproval = false });
         created.EnsureSuccessStatusCode();
-        return (await created.Content.ReadFromJsonAsync<PolicyDto>(JsonOptions))!.Pin;
+        return (await created.Content.ReadFromJsonAsync<RegistrationPolicyResponse>(JsonOptions))!.Pin;
     }
 
     private Task<HttpResponseMessage> SetStatusAsync(Guid workspace, Guid clientRef, string token, int status) =>
         Send(HttpMethod.Patch, workspace, $"clients/{clientRef}", token, new { Status = status });
 
-    private async Task<BulkDto> BulkAsync(Guid workspace, string token, Guid[] clientRefs, int status)
+    private async Task<BulkClientStatusResponse> BulkAsync(Guid workspace, string token, Guid[] clientRefs, int status)
     {
         var response = await Send(HttpMethod.Patch, workspace, "clients/status", token, new { ClientRefIds = clientRefs, Status = status });
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<BulkDto>(JsonOptions))!;
+        return (await response.Content.ReadFromJsonAsync<BulkClientStatusResponse>(JsonOptions))!;
     }
 
     private async Task<JsonElement> DetailAsync(Guid workspace, Guid clientRef, string token)

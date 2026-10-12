@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;
-using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Models;

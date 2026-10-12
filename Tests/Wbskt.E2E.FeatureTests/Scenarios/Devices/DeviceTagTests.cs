@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
+using Wbskt.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 
@@ -17,15 +19,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 public sealed class DeviceTagTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record TagsDto(Guid ClientRefId, List<string> Tags);
-
-    private sealed record ClientDto(Guid ClientRefId, string Name, List<string> Tags);
-
-    private sealed record TagCountDto(string Tag, int ClientCount);
-
-    private sealed record ListDto<T>(List<T> Items);
-
     // ── Setting tags ──────────────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -40,7 +33,7 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
         var response = await SetTagsAsync(workspace, clientRef, token, ["Greenhouse", " garage ", "GARAGE"]);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = (await response.Content.ReadFromJsonAsync<TagsDto>(JsonOptions))!;
+        var body = (await response.Content.ReadFromJsonAsync<ClientTagsResponse>(JsonOptions))!;
         body.ClientRefId.Should().Be(clientRef);
         body.Tags.Should().Equal("garage", "greenhouse");
         (await TagsOfAsync(workspace, clientRef, token)).Should().Equal("garage", "greenhouse");
@@ -191,12 +184,12 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
         var (foreign, _) = await fixture.RegisterClientAsync(strangerPin, "foreign");
         (await SetTagsAsync(strangerWorkspace, foreign, strangerToken, ["garage", "attic"])).EnsureSuccessStatusCode();
 
-        (await WorkspaceTagsAsync(workspace, token)).Should().Equal(new TagCountDto("garage", 2), new TagCountDto("greenhouse", 1));
+        (await WorkspaceTagsAsync(workspace, token)).Should().Equal(new ClientTagCountResponse("garage", 2), new ClientTagCountResponse("greenhouse", 1));
 
         (await Send(HttpMethod.Delete, workspace, $"clients/{first}", token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        (await WorkspaceTagsAsync(workspace, token)).Should().Equal(new TagCountDto("garage", 1));
-        (await WorkspaceTagsAsync(strangerWorkspace, strangerToken)).Should().Equal(new TagCountDto("attic", 1), new TagCountDto("garage", 1));
+        (await WorkspaceTagsAsync(workspace, token)).Should().Equal(new ClientTagCountResponse("garage", 1));
+        (await WorkspaceTagsAsync(strangerWorkspace, strangerToken)).Should().Equal(new ClientTagCountResponse("attic", 1), new ClientTagCountResponse("garage", 1));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────
@@ -208,21 +201,21 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
     {
         var response = await Send(HttpMethod.Get, workspace, $"clients/{clientRef}", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<ClientDto>(JsonOptions))!.Tags;
+        return (await response.Content.ReadFromJsonAsync<ClientResponse>(JsonOptions))!.Tags.ToList();
     }
 
-    private async Task<List<ClientDto>> ListAsync(Guid workspace, string token, string query, string? path = null)
+    private async Task<List<ClientResponse>> ListAsync(Guid workspace, string token, string query, string? path = null)
     {
         var response = await Send(HttpMethod.Get, workspace, path ?? $"clients{query}", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<ListDto<ClientDto>>(JsonOptions))!.Items;
+        return (await response.Content.ReadFromJsonAsync<ListResponse<ClientResponse>>(JsonOptions))!.Items.ToList();
     }
 
-    private async Task<List<TagCountDto>> WorkspaceTagsAsync(Guid workspace, string token)
+    private async Task<List<ClientTagCountResponse>> WorkspaceTagsAsync(Guid workspace, string token)
     {
         var response = await Send(HttpMethod.Get, workspace, "clients/tags", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<ListDto<TagCountDto>>(JsonOptions))!.Items;
+        return (await response.Content.ReadFromJsonAsync<ListResponse<ClientTagCountResponse>>(JsonOptions))!.Items.ToList();
     }
 
     private static string ClientsUrl(Guid workspace, string query) =>

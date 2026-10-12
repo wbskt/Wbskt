@@ -2,6 +2,7 @@ using Wbskt.Protocol;
 using System.Text.Json;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models;
 

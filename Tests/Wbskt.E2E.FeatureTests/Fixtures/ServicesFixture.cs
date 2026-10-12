@@ -4,7 +4,11 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Wbskt.Auth.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Models.Workflow;
+using Wbskt.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.E2E.FeatureTests.Fixtures;
 
@@ -125,7 +129,7 @@ public sealed class ServicesFixture : IDisposable
             new { Email = E2EConfig.AdminEmail, Password = E2EConfig.AdminPassword });
         loginResp.EnsureSuccessStatusCode();
 
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty admin login response.");
 
         var workspaceRef = await ResolveOrCreateWorkspaceAsync(login.AccessToken);
@@ -155,7 +159,7 @@ public sealed class ServicesFixture : IDisposable
             new { Email = email, Password = password });
         loginResp.EnsureSuccessStatusCode();
 
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty login response.");
 
         return login.AccessToken;
@@ -185,7 +189,7 @@ public sealed class ServicesFixture : IDisposable
             new { Email = email, Password = password });
         loginResp.EnsureSuccessStatusCode();
 
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty login response.");
 
         // 3. Resolve workspace (list or create)
@@ -201,7 +205,7 @@ public sealed class ServicesFixture : IDisposable
         var resp = await _http.SendAsync(req);
         resp.EnsureSuccessStatusCode();
 
-        var workspaces = await resp.Content.ReadFromJsonAsync<List<WorkspaceDto>>(JsonOptions)
+        var workspaces = await resp.Content.ReadFromJsonAsync<List<WorkspaceResponse>>(JsonOptions)
             ?? [];
 
         if (workspaces.Count > 0)
@@ -216,7 +220,7 @@ public sealed class ServicesFixture : IDisposable
         var createResp = await _http.SendAsync(createReq);
         createResp.EnsureSuccessStatusCode();
 
-        var created = await createResp.Content.ReadFromJsonAsync<WorkspaceDto>(JsonOptions)
+        var created = await createResp.Content.ReadFromJsonAsync<WorkspaceResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Workspace creation returned empty response.");
 
         return created.RefId;
@@ -368,7 +372,7 @@ public sealed class ServicesFixture : IDisposable
         var resp = await SendAsync(HttpMethod.Get, url, token);
         resp.EnsureSuccessStatusCode();
 
-        var page = await resp.Content.ReadFromJsonAsync<ListDto<JsonElement>>(JsonOptions)
+        var page = await resp.Content.ReadFromJsonAsync<ListResponse<JsonElement>>(JsonOptions)
             ?? throw new InvalidOperationException($"Empty list response from {url}.");
 
         int? total = null;
@@ -378,7 +382,7 @@ public sealed class ServicesFixture : IDisposable
             total = parsed;
         }
 
-        return (page.Items.Count, total);
+        return (page.Items.Count(), total);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -434,7 +438,7 @@ public sealed class ServicesFixture : IDisposable
             new { Email = email, RoleRef = roleRef });
         resp.EnsureSuccessStatusCode();
 
-        var invitation = await resp.Content.ReadFromJsonAsync<CreatedInvitationDto>(JsonOptions)
+        var invitation = await resp.Content.ReadFromJsonAsync<CreatedInvitationResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty invitation response.");
 
         return invitation.Token;
@@ -452,7 +456,7 @@ public sealed class ServicesFixture : IDisposable
             new { Email = email, Password = password });
         loginResp.EnsureSuccessStatusCode();
 
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty login response.");
 
         return new TestUser(username, email, password, login.AccessToken);
@@ -477,7 +481,7 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Reads the token pair out of a successful login or rotation response.</summary>
     public static async Task<Session> ReadSessionAsync(HttpResponseMessage response)
     {
-        var login = await response.Content.ReadFromJsonAsync<LoginDto>(JsonOptions)
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty session response.");
 
         return new Session(login.AccessToken, login.RefreshToken);
@@ -504,7 +508,7 @@ public sealed class ServicesFixture : IDisposable
         var response = await SendAsync(HttpMethod.Get, AuthUrl("/api/workspaces"), accessToken);
         response.EnsureSuccessStatusCode();
 
-        var workspaces = await response.Content.ReadFromJsonAsync<List<WorkspaceDto>>(JsonOptions) ?? [];
+        var workspaces = await response.Content.ReadFromJsonAsync<List<WorkspaceResponse>>(JsonOptions) ?? [];
         return workspaces.Select(w => w.RefId).ToList();
     }
 
@@ -522,7 +526,7 @@ public sealed class ServicesFixture : IDisposable
         var resp = await SendAsync(HttpMethod.Get, AuthUrl("/api/tenants"), token);
         resp.EnsureSuccessStatusCode();
 
-        var tenants = await resp.Content.ReadFromJsonAsync<List<TenantDto>>(JsonOptions) ?? [];
+        var tenants = await resp.Content.ReadFromJsonAsync<List<TenantResponse>>(JsonOptions) ?? [];
         if (tenants.Count == 0)
         {
             throw new InvalidOperationException("Caller belongs to no tenant.");
@@ -544,8 +548,8 @@ public sealed class ServicesFixture : IDisposable
         var resp = await SendAsync(HttpMethod.Get, AuthUrl($"/api/tenants/{tenantRef}/invitations?take=200"), token);
         resp.EnsureSuccessStatusCode();
 
-        var page = await resp.Content.ReadFromJsonAsync<ListDto<Invitation>>(JsonOptions);
-        return page?.Items ?? [];
+        var page = await resp.Content.ReadFromJsonAsync<ListResponse<Invitation>>(JsonOptions);
+        return page?.Items.ToList() ?? [];
     }
 
     /// <summary>Every tenant the caller belongs to, not just the first.</summary>
@@ -570,7 +574,7 @@ public sealed class ServicesFixture : IDisposable
             token);
         resp.EnsureSuccessStatusCode();
 
-        var page = await resp.Content.ReadFromJsonAsync<ListDto<MemberDto>>(JsonOptions);
+        var page = await resp.Content.ReadFromJsonAsync<ListResponse<TenantMemberResponse>>(JsonOptions);
         return page?.Items.FirstOrDefault(m => string.Equals(m.Email, email, StringComparison.OrdinalIgnoreCase))?.RefId;
     }
 
@@ -584,7 +588,7 @@ public sealed class ServicesFixture : IDisposable
             new { Name = name ?? $"e2e-role-{Guid.NewGuid():N}", Description = "created by an E2E scenario" });
         resp.EnsureSuccessStatusCode();
 
-        var role = await resp.Content.ReadFromJsonAsync<RoleDto>(JsonOptions)
+        var role = await resp.Content.ReadFromJsonAsync<RoleResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Role creation returned empty response.");
 
         return role.RefId;
@@ -600,7 +604,7 @@ public sealed class ServicesFixture : IDisposable
             new { Name = name ?? $"e2e-group-{Guid.NewGuid():N}", ParentGroupRef = (Guid?)null });
         resp.EnsureSuccessStatusCode();
 
-        var group = await resp.Content.ReadFromJsonAsync<GroupDto>(JsonOptions)
+        var group = await resp.Content.ReadFromJsonAsync<GroupResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Group creation returned empty response.");
 
         return group.RefId;
@@ -616,7 +620,7 @@ public sealed class ServicesFixture : IDisposable
             new { Name = name ?? $"e2e-ws-{Guid.NewGuid():N}", Description = (string?)null });
         resp.EnsureSuccessStatusCode();
 
-        var workspace = await resp.Content.ReadFromJsonAsync<WorkspaceDto>(JsonOptions)
+        var workspace = await resp.Content.ReadFromJsonAsync<WorkspaceResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Workspace creation returned empty response.");
 
         return workspace.RefId;
@@ -635,7 +639,7 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Reads a successful resolve response.</summary>
     public static async Task<ResolvedWorkspace> ReadResolvedWorkspaceAsync(HttpResponseMessage response)
     {
-        var resolved = await response.Content.ReadFromJsonAsync<ResolvedWorkspaceDto>(JsonOptions)
+        var resolved = await response.Content.ReadFromJsonAsync<ResolvedWorkspaceResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Empty resolve response.");
 
         return new ResolvedWorkspace(resolved.WorkspaceId, resolved.Permissions);
@@ -666,13 +670,13 @@ public sealed class ServicesFixture : IDisposable
 
     public async Task<IReadOnlyList<Role>> GetRolesAsync(string token, Guid tenantRef)
     {
-        var page = await ReadListAsync<RoleDto>(AuthUrl($"/api/tenants/{tenantRef}/roles?take=200"), token);
+        var page = await ReadListAsync<RoleResponse>(AuthUrl($"/api/tenants/{tenantRef}/roles?take=200"), token);
         return page.Select(r => new Role(r.RefId, r.Name, r.Description)).ToList();
     }
 
     public async Task<IReadOnlyList<Group>> GetGroupsAsync(string token, Guid tenantRef)
     {
-        var page = await ReadListAsync<GroupDto>(AuthUrl($"/api/tenants/{tenantRef}/groups?take=200"), token);
+        var page = await ReadListAsync<GroupResponse>(AuthUrl($"/api/tenants/{tenantRef}/groups?take=200"), token);
         return page.Select(g => new Group(g.RefId, g.Name, g.ParentGroupRefId)).ToList();
     }
 
@@ -694,8 +698,8 @@ public sealed class ServicesFixture : IDisposable
         var response = await SendAsync(HttpMethod.Get, url, token);
         response.EnsureSuccessStatusCode();
 
-        var page = await response.Content.ReadFromJsonAsync<ListDto<T>>(JsonOptions);
-        return page?.Items ?? [];
+        var page = await response.Content.ReadFromJsonAsync<ListResponse<T>>(JsonOptions);
+        return page?.Items.ToList() ?? [];
     }
 
     /// <summary>Reads a bare JSON array body, which the read-back endpoints return unwrapped.</summary>
@@ -716,7 +720,7 @@ public sealed class ServicesFixture : IDisposable
             token);
         resp.EnsureSuccessStatusCode();
 
-        var permissions = await resp.Content.ReadFromJsonAsync<List<RolePermissionDto>>(JsonOptions) ?? [];
+        var permissions = await resp.Content.ReadFromJsonAsync<List<RolePermissionAssignmentResponse>>(JsonOptions) ?? [];
         return permissions.Select(p => p.Slug).ToList();
     }
 
@@ -750,7 +754,7 @@ public sealed class ServicesFixture : IDisposable
         var resp = await _http.SendAsync(req);
         resp.EnsureSuccessStatusCode();
 
-        var policy = await resp.Content.ReadFromJsonAsync<PolicyDto>(JsonOptions)
+        var policy = await resp.Content.ReadFromJsonAsync<RegistrationPolicyResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Policy creation returned empty response.");
 
         return (policy.RefId, policy.Pin);
@@ -768,7 +772,7 @@ public sealed class ServicesFixture : IDisposable
             new { Pin = pin, Name = name });
         resp.EnsureSuccessStatusCode();
 
-        var result = await resp.Content.ReadFromJsonAsync<ClientRegistrationDto>(JsonOptions)
+        var result = await resp.Content.ReadFromJsonAsync<ClientRegistrationResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Client registration returned empty response.");
 
         return (result.ClientRefId, result.Secret);
@@ -782,7 +786,7 @@ public sealed class ServicesFixture : IDisposable
             new { ClientRefId = clientRefId, Secret = secret });
         resp.EnsureSuccessStatusCode();
 
-        var result = await resp.Content.ReadFromJsonAsync<ClientLoginDto>(JsonOptions)
+        var result = await resp.Content.ReadFromJsonAsync<ClientLoginResponse>(JsonOptions)
             ?? throw new InvalidOperationException("Client login returned empty response.");
 
         return result.AccessToken;
@@ -1087,21 +1091,7 @@ public sealed class ServicesFixture : IDisposable
     // Local DTOs (mirrors of API response shapes — keeps the test project
     // truly black-box without pulling in host assemblies)
     // ─────────────────────────────────────────────────────────────────────────
-
-    private record LoginDto(string AccessToken, string RefreshToken);
-    private record WorkspaceDto(Guid RefId, string Name, string? Description, DateTime CreatedAt);
     private record ErrorDto(string Code, string Detail, string TraceId);
-    private record ListDto<T>(List<T> Items);
-    private record TenantDto(Guid RefId, string Name);
-    private record RoleDto(Guid RefId, string Name, string? Description);
-    private record GroupDto(Guid RefId, string Name, Guid? ParentGroupRefId);
-    private record MemberDto(Guid RefId, string Username, string Email, bool IsActive);
-    private record CreatedInvitationDto(Guid RefId, string Email, DateTime ExpiresAt, string Token);
-    private record RolePermissionDto(string Slug, bool IsDeny);
-    private record ResolvedWorkspaceDto(int WorkspaceId, List<string> Permissions);
-    private record PolicyDto(Guid RefId, string Pin, string Name, int? MaxClients, bool AutoApproval, bool IsEnabled, DateTime CreatedAt);
-    private record ClientRegistrationDto(Guid ClientRefId, string Secret, int Status);
-    private record ClientLoginDto(string AccessToken, int ExpiresIn);
     private record SignalDto(bool Matched, string Outcome);
     private record EventLogListDto(IReadOnlyList<EventLogItemDto> Items);
 }

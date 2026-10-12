@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -16,9 +17,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 public sealed class AccountSecurityTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record SessionDto(Guid Id, DateTime CreatedAt, DateTime LastUsedAt, DateTime ExpiresAt, string? IpAddress, bool IsCurrent);
-
     // ── Change password ───────────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -241,10 +239,10 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
             accessToken,
             new { CurrentPassword = current, NewPassword = next });
 
-    private async Task<IReadOnlyList<SessionDto>> ListSessionsAsync(string accessToken)
+    private async Task<IReadOnlyList<SessionResponse>> ListSessionsAsync(string accessToken)
     {
         var response = await fixture.SendAsync(HttpMethod.Get, Sessions, accessToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<List<SessionDto>>(JsonOptions) ?? [];
+        return await response.Content.ReadFromJsonAsync<List<SessionResponse>>(JsonOptions) ?? [];
     }
 }

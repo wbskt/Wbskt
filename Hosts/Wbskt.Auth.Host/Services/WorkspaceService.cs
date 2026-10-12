@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.Abstractions;

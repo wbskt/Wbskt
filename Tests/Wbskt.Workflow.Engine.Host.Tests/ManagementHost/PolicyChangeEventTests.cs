@@ -5,6 +5,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 

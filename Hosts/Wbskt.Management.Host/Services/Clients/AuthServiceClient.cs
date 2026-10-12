@@ -1,3 +1,4 @@
+using Wbskt.Auth.Models;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Primitives.Models;

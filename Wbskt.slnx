@@ -33,7 +33,6 @@
     <Project Path="Models/Wbskt.Auth.Models/Wbskt.Auth.Models.csproj" />
     <Project Path="Models/Wbskt.Management.Models/Wbskt.Management.Models.csproj" />
     <Project Path="Models/Wbskt.Workflow.Engine.Contracts/Wbskt.Workflow.Engine.Contracts.csproj" />
-    <Project Path="Models/Wbskt.Workflow.Models/Wbskt.Workflow.Models.csproj" />
     <Project Path="Models/Wbskt.Models/Wbskt.Models.csproj" />
   </Folder>
   <Folder Name="/SolutionItems/">

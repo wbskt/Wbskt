@@ -2,7 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wbskt.Auth.Host.Authorization;
-using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Services;
 using Wbskt.Auth.Host.Telemetry;
 using Wbskt.Infrastructure;

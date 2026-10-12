@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.Data.SqlClient;
 using Wbskt.Auth.Host.Models;
+using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Providers;
 using Wbskt.Auth.Host.Services.Email;
 using Wbskt.Auth.Host.Telemetry;
