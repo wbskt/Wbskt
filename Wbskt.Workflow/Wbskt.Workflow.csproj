@@ -12,11 +12,13 @@
     <ProjectReference Include="..\Events\Wbskt.Events\Wbskt.Events.csproj" />
     <ProjectReference Include="..\Wbskt.Primitives\Wbskt.Primitives.csproj" />
     <ProjectReference Include="..\Wbskt.Workflow.Abstraction\Wbskt.Workflow.Abstraction.csproj" />
+    <ProjectReference Include="..\Models\Wbskt.Workflow.Engine.Contracts\Wbskt.Workflow.Engine.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Cronos" />
     <PackageReference Include="JsonPath.Net" />
+    <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>

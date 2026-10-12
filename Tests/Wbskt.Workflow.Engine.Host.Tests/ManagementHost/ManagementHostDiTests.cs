@@ -4,7 +4,9 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.Security;
+using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Validation;
@@ -34,6 +36,8 @@ public sealed class ManagementHostDiTests
         services.AddSingleton(Mock.Of<ICommandSender>());
         services.AddSingleton(Mock.Of<IWorkflowEngineClient>());
         services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
+        services.AddScoped<IIntegrationProvider, IntegrationProvider>();
+        services.AddScoped<IntegrationReferenceCheck>();
         services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();

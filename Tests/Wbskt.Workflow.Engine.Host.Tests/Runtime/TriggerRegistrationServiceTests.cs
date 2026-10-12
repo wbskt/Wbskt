@@ -221,6 +221,8 @@ public sealed class TriggerRegistrationServiceTests
         public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
         public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
+
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);

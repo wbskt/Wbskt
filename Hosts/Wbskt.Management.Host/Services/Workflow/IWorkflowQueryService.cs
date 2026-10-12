@@ -11,7 +11,7 @@ public interface IWorkflowQueryService
     /// Validates a definition without publishing it. Returns every issue - warnings included - so a
     /// builder can surface them while editing rather than discovering them by creating a version.
     /// </summary>
-    WorkflowValidationResponse Validate(WorkflowDefinition? definition);
+    Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowDefinition? definition, CancellationToken ct);
 
     Task<Result<WorkflowDefinitionDto>> GetCurrentAsync(int workspaceId, Guid refId, CancellationToken ct);
 

@@ -15,6 +15,7 @@ using Wbskt.Workflow.Engine.Host.InboundAdapters;
 using Wbskt.Workflow.Engine.Host.Middleware;
 using Wbskt.Workflow.Engine.Host.Providers;
 using Wbskt.Workflow.Extensions;
+using Wbskt.Workflow.Integrations;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Infrastructure.Telemetry;
 using Wbskt.Workflow.Telemetry;
@@ -33,10 +34,10 @@ public static class Program
         // address can't sidestep the OutboundAddressGuard SSRF check on the original target.
         builder.Services.AddHttpClient("workflow-webhook")
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
-        // Telegram goes to a fixed, configured API base rather than an author-supplied URL, so it needs
-        // no address guard - but it gets its own client so its timeout and handler lifetime are not
-        // shared with arbitrary author-controlled webhook targets.
-        builder.Services.AddHttpClient("workflow-telegram", client => client.Timeout = TimeSpan.FromSeconds(30));
+        // Every call an integration makes (Telegram, Discord, ntfy, an HTTP auth test): no redirects,
+        // so a 3xx cannot carry a credential, or the request, past the checks on where it may go.
+        builder.Services.AddHttpClient(HttpChannelSupport.ClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddEngineHostServices(builder.Configuration);
         builder.Services.AddRabbitMqEventBus(builder.Configuration);

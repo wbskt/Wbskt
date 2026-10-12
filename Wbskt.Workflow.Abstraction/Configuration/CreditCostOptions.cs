@@ -37,6 +37,8 @@ public sealed class CreditCostOptions
         [NodeKind.ActionWebhook] = 5.0m,
         [NodeKind.ActionEmail] = 5.0m,
         [NodeKind.ActionTelegram] = 5.0m,
+        [NodeKind.ActionDiscord] = 5.0m,
+        [NodeKind.ActionNtfy] = 5.0m,
 
         // Crosses the bus but stays inside the platform.
         [NodeKind.ActionClientMessage] = 1.0m,

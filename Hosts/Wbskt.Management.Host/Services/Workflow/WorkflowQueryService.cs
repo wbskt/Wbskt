@@ -1,6 +1,6 @@
+using Wbskt.Management.Host.Services.Integrations;
 using System.Text.Json;
 using Wbskt.Infrastructure;
-using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
@@ -20,25 +20,33 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly WorkflowValidator _validator;
+    private readonly IntegrationReferenceCheck _integrationCheck;
     private readonly ILogger<WorkflowQueryService> _logger;
 
     public WorkflowQueryService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         WorkflowValidator validator,
+        IntegrationReferenceCheck integrationCheck,
         ILogger<WorkflowQueryService> logger)
     {
+        _integrationCheck = integrationCheck;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _validator = validator;
         _logger = logger;
     }
 
-    public WorkflowValidationResponse Validate(WorkflowDefinition? definition)
+    public async Task<WorkflowValidationResponse> ValidateAsync(int workspaceId, WorkflowDefinition? definition, CancellationToken ct)
     {
         ValidationResult validation = _validator.Validate(definition);
 
+        // The workspace's half - do the integrations the steps name exist here, with the right type -
+        // so a draft hears what publishing it would.
+        IntegrationReferences integrations = await _integrationCheck.CheckAsync(workspaceId, definition, ct);
+        var issues = validation.Issues.Concat(integrations.Issues).ToList();
+
         return new WorkflowValidationResponse(
-            validation.IsValid,
-            validation.Issues
+            validation.IsValid && integrations.Issues.Count == 0,
+            issues
                 .Select(issue => new WorkflowValidationIssueDto(
                     issue.Severity.ToString(),
                     issue.Code,

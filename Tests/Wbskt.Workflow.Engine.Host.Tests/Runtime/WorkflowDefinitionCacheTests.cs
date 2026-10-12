@@ -135,6 +135,8 @@ public sealed class WorkflowDefinitionCacheTests
             throw new NotSupportedException();
         }
 
+        public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
+
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)
         {
             throw new NotSupportedException();

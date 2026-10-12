@@ -5,7 +5,9 @@ CREATE PROCEDURE dbo.WorkflowDefinition_Publish
     @Description    NVARCHAR(2000),
     @IsEnabled      BIT,
     @DefinitionJson NVARCHAR(MAX),
-    @PublishedBy    INT
+    @PublishedBy    INT,
+    -- The steps that send through an integration, by its RefId. Omitted means none.
+    @IntegrationRefs dbo.IntegrationRefTableType READONLY
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -33,6 +35,24 @@ BEGIN
         THROW 50022, 'The workflow was deleted.', 1;
     END
 
+    -- Every integration a step names must be this workspace's, and stays so until the version is in:
+    -- the update lock here is the one Integration_Delete takes, so a delete either finishes first
+    -- (and this refuses) or waits until the version and its refs are committed (and then refuses
+    -- the delete). Taken before the insert below, so neither side holds a lock the other's reads need.
+    DECLARE @Refs TABLE (NodeId UNIQUEIDENTIFIER PRIMARY KEY, NodeName NVARCHAR(200), IntegrationId INT);
+
+    INSERT INTO @Refs (NodeId, NodeName, IntegrationId)
+    SELECT R.NodeId, R.NodeName, I.Id
+    FROM @IntegrationRefs R
+    INNER JOIN dbo.Integrations I WITH (UPDLOCK, HOLDLOCK)
+        ON I.RefId = R.IntegrationRefId AND I.WorkspaceId = @WorkspaceId;
+
+    IF (SELECT COUNT(*) FROM @Refs) <> (SELECT COUNT(*) FROM @IntegrationRefs)
+    BEGIN
+        ROLLBACK TRAN;
+        THROW 50023, 'A step names an integration the workspace does not have.', 1;
+    END
+
     -- This procedure is the single authority on the version number. The stored JSON is stamped here,
     -- under the same HOLDLOCK that computed it, so the row's Version column and the DefinitionJson's
     -- "version" property can never disagree - which they could when the caller pre-computed a version
@@ -44,6 +64,10 @@ BEGIN
 
     INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, Description, IsEnabled, DefinitionJson, PublishedBy)
     VALUES (@RefId, @NextVersion, @WorkspaceId, @Name, @Description, @IsEnabled, @DefinitionJson, @PublishedBy);
+
+    INSERT INTO dbo.WorkflowIntegrationRefs (WorkflowDefinitionId, NodeId, NodeName, IntegrationId)
+    SELECT SCOPE_IDENTITY(), NodeId, NodeName, IntegrationId
+    FROM @Refs;
 
     COMMIT TRAN;
 

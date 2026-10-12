@@ -127,7 +127,7 @@ public sealed class OutboundWebhookExecutorTests
         var client = new HttpClient(handler);
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient("workflow-webhook")).Returns(client);
-        return new WebhookNodeExecutor(factory.Object, guard ?? new StubAddressGuard(OutboundAddressDecision.Allow()));
+        return new WebhookNodeExecutor(factory.Object, guard ?? new StubAddressGuard(OutboundAddressDecision.Allow()), NotificationExecutorTests.StubResolver.Failing("UNUSED"));
     }
 
     private sealed class StubAddressGuard(OutboundAddressDecision decision) : IOutboundAddressGuard

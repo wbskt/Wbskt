@@ -31,6 +31,12 @@ public static class Permissions
     public static readonly PermissionSlug TemplatesRead = PermissionSlug.CreateInternal(PermissionNames.TemplatesRead);
     public static readonly PermissionSlug TemplatesManage = PermissionSlug.CreateInternal(PermissionNames.TemplatesManage);
 
+    // A workspace's integrations. Reading one never reveals its secret, so read sits with the other
+    // default reads; adding, changing, testing and deleting one handles a credential, so manage is
+    // its own grant.
+    public static readonly PermissionSlug IntegrationsRead = PermissionSlug.CreateInternal(PermissionNames.IntegrationsRead);
+    public static readonly PermissionSlug IntegrationsManage = PermissionSlug.CreateInternal(PermissionNames.IntegrationsManage);
+
     // Authoring the definition — never a running instance of it.
     public static readonly PermissionSlug WorkflowsRead = PermissionSlug.CreateInternal(PermissionNames.WorkflowsRead);
     public static readonly PermissionSlug WorkflowsCreate = PermissionSlug.CreateInternal(PermissionNames.WorkflowsCreate);

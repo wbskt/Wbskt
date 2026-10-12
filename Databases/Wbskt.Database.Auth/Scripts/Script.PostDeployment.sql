@@ -208,6 +208,28 @@ BEGIN
 END
 GO
 
+-- Integration Permissions. integrations.read joins the User role's default reads (Tenant_Create);
+-- the User roles that already exist get it once, as the slug is added, so a tenant administrator
+-- who later takes it away is not overruled by the next deployment.
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'integrations.read')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('integrations.read', 'Read integrations');
+
+    INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
+    SELECT r.Id, p.Id, 0
+    FROM dbo.Roles r
+    INNER JOIN dbo.Permissions p ON p.Slug = 'integrations.read'
+    WHERE r.Kind = 'User'
+      AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = p.Id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Slug = 'integrations.manage')
+BEGIN
+    INSERT INTO dbo.Permissions (Slug, Description) VALUES ('integrations.manage', 'Add, change, test and delete integrations');
+END
+GO
+
 -- RolePermissions (every tenant's Admin gets ALL).
 --
 -- Set-based across all Admin roles on purpose. Roles are tenant-scoped, so once a second tenant
@@ -231,7 +253,7 @@ BEGIN
     EXEC('INSERT INTO dbo.RolePermissions (RoleId, PermissionId, IsDeny)
           SELECT b.Id, p.Id, 0
           FROM dbo.__UserRoleDefaultsBackfill b
-          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'')
+          INNER JOIN dbo.Permissions p ON p.Slug IN (''clients.read'', ''policies.read'', ''templates.read'', ''workflows.read'', ''logs.read'', ''integrations.read'')
           WHERE NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = b.Id AND rp.PermissionId = p.Id);');
     EXEC('DROP TABLE dbo.__UserRoleDefaultsBackfill;');
 END

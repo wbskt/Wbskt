@@ -1,3 +1,5 @@
+using Wbskt.Management.Host.Services.Integrations;
+using Wbskt.Management.Host.Providers;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -27,7 +29,7 @@ public sealed class PublishToObserveE2ETests
         var triggerService = new RecordingTriggerRegistrationService();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowLifecycleService(provider, triggerService, new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
+        var service = new WorkflowLifecycleService(provider, triggerService, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
         var request = CreatePublishRequest();
 
         var v1 = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
@@ -49,12 +51,12 @@ public sealed class PublishToObserveE2ETests
         var provider = new InMemoryWorkflowDefinitionProvider();
         var identity = new Mock<IIdentityService>();
         identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
-        var service = new WorkflowLifecycleService(provider, new RecordingTriggerRegistrationService(), new WorkflowValidator(), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
+        var service = new WorkflowLifecycleService(provider, new RecordingTriggerRegistrationService(), new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
         var request = CreatePublishRequest();
 
         var first = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
         var second = await service.PublishAsync(1, Guid.NewGuid(), request, CancellationToken.None);
-        var current = await new WorkflowQueryService(provider, new WorkflowValidator(), Mock.Of<ILogger<WorkflowQueryService>>()).GetCurrentAsync(1, request.RefId, CancellationToken.None);
+        var current = await new WorkflowQueryService(provider, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), Mock.Of<ILogger<WorkflowQueryService>>()).GetCurrentAsync(1, request.RefId, CancellationToken.None);
 
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);
@@ -105,6 +107,8 @@ public sealed class PublishToObserveE2ETests
             WorkflowDefinitionRow? row = _rows.GetValueOrDefault(refId)?.SingleOrDefault(candidate => candidate.IsEnabled);
             return Task.FromResult(row);
         }
+
+        public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
 
         public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct)
         {

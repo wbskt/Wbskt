@@ -5,7 +5,7 @@
 --
 -- Rows are disabled or revoked rather than deleted, so the history (clients, definitions, runs)
 -- stays readable for audit. Only the trigger and schedule registrations are deleted, exactly as
--- deprecating a single workflow does.
+-- deprecating a single workflow does, and the workspace's integrations with their credentials.
 --
 -- Idempotent: the event that drives it can be delivered more than once. A client already revoked is
 -- not reported again, so the caller does not re-announce it.
@@ -58,6 +58,14 @@ BEGIN
     SET IsEnabled = 0
     WHERE WorkspaceId = @WorkspaceId
       AND IsEnabled = 1;
+
+    -- Integrations are deleted, not disabled: each holds a credential for an outside account, and
+    -- nothing about a deleted workspace's history needs it.
+    DELETE R
+    FROM dbo.WorkflowIntegrationRefs R
+    INNER JOIN @Definitions D ON D.Id = R.WorkflowDefinitionId;
+
+    DELETE FROM dbo.Integrations WHERE WorkspaceId = @WorkspaceId;
 
     COMMIT TRANSACTION;
 

@@ -35,7 +35,7 @@ public sealed class EventLogQueryTests
     [Fact]
     public void Every_group_has_events_and_none_holds_device_traffic()
     {
-        EventLogGroups.All.Keys.Should().BeEquivalentTo(["people", "clients", "policies", "workflows", "security"]);
+        EventLogGroups.All.Keys.Should().BeEquivalentTo(["people", "clients", "policies", "workflows", "integrations", "security"]);
         foreach (var (group, events) in EventLogGroups.All)
         {
             events.Should().NotBeEmpty(group);

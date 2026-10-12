@@ -1,9 +1,9 @@
 namespace Wbskt.Infrastructure.Email;
 
 /// <summary>
-/// SMTP settings for whichever host is sending. Each host binds its own section — the Auth host from
-/// <c>Auth:Email</c>, the workflow engine from <c>WorkflowEngine:Email</c> — so the two can be pointed
-/// at different relays, and one host's mail failing does not implicate the other's.
+/// SMTP settings for a host's own mail, bound from its own section (the Auth host's is
+/// <c>Auth:Email</c>). Workflow email does not use these: it goes through each workspace's SMTP
+/// integration, so a workflow author can never send as the platform's own relay.
 /// </summary>
 /// <remarks>
 /// These settings live in host configuration rather than on a workflow node, deliberately: a workflow

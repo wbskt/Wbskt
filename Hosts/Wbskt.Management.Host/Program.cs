@@ -26,6 +26,7 @@ using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
+using Wbskt.Management.Host.Services.Integrations;
 using Wbskt.Management.Host.Services.Readings;
 using Wbskt.Management.Host.Services.Workflow;
 using Wbskt.Primitives;
@@ -89,6 +90,9 @@ public static class Program
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
+        builder.Services.AddScoped<IIntegrationProvider, IntegrationProvider>();
+        builder.Services.AddScopedWithQueuedEvents<IIntegrationService, IntegrationService>();
+        builder.Services.AddScoped<IntegrationReferenceCheck>();
         builder.Services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
@@ -192,6 +196,14 @@ public static class Program
 
             // Device login. Same per-IP partitioning, with room for a fleet behind one address.
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.DeviceLogin, "DeviceLogin", defaultPermitLimit: 300);
+
+            // Integration tests, per workspace: generous for someone setting one up, a wall for a loop.
+            int testPermitLimit = builder.Configuration.GetValue("RateLimiting:IntegrationTest:PermitLimit", 20);
+            var testWindow = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:IntegrationTest:WindowMinutes", 1));
+            options.AddPolicy(RateLimitPolicies.IntegrationTest, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.GetRouteValue("workspaceRef")?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = testPermitLimit, Window = testWindow, QueueLimit = 0 }));
         });
 
         // X-Total-Count is exposed, or the console (always a separate origin) could not read the

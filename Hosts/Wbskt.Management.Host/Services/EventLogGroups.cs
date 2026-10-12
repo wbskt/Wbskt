@@ -2,6 +2,7 @@ using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
 using Wbskt.Events.Auth;
 using Wbskt.Events.Client;
+using Wbskt.Events.Integrations;
 using Wbskt.Events.Management;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure;
@@ -19,11 +20,12 @@ public static class EventLogGroups
     public const string Clients = "clients";
     public const string Policies = "policies";
     public const string Workflows = "workflows";
+    public const string Integrations = "integrations";
     public const string Security = "security";
 
     /// <summary>
     /// The warnings and errors about sign-ins, passwords, who has access, keys, PINs, deletions and
-    /// blocked joins: what an owner should look at first. Listed by hand because criticality alone
+    /// blocked joins, and integration credentials replaced or deleted: what an owner should look at first. Listed by hand because criticality alone
     /// also takes in failed runs and commands, which are not security.
     /// </summary>
     private static readonly string[] SecurityEvents =
@@ -41,7 +43,9 @@ public static class EventLogGroups
         nameof(PolicyPinRotatedEvent),
         nameof(PolicyRegistrationAttemptedOnDisabledEvent),
         nameof(PolicyRegistrationLimitReachedEvent),
-        nameof(WorkflowDeletedEvent)
+        nameof(WorkflowDeletedEvent),
+        nameof(IntegrationSecretRotatedEvent),
+        nameof(IntegrationDeletedEvent)
     ];
 
     /// <summary>Each group's event names, by group name.</summary>
@@ -88,6 +92,7 @@ public static class EventLogGroups
                 .ToHashSet(StringComparer.Ordinal),
             [Policies] = InNamespace(typeof(PolicyCreatedEvent), t => t.Name.StartsWith("Policy", StringComparison.Ordinal)),
             [Workflows] = InNamespace(typeof(WorkflowPublishedEvent)),
+            [Integrations] = InNamespace(typeof(IntegrationCreatedEvent)),
             [Security] = SecurityEvents.ToHashSet(StringComparer.Ordinal)
         };
     }

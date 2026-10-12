@@ -137,7 +137,7 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER   # log out/in, or keep using sudo
 
 # Checkout + registry login + .env - see One-time setup above. Fill in DOMAIN, ACME_EMAIL, and
-# generate real secrets for SQL_SA_PASSWORD, SQL_AUTH_PASSWORD, SQL_MANAGEMENT_PASSWORD, SQL_ENGINE_PASSWORD (see SQL logins below), RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, GRAFANA_ADMIN_PASSWORD,
+# generate real secrets for SQL_SA_PASSWORD, SQL_AUTH_PASSWORD, SQL_MANAGEMENT_PASSWORD, SQL_ENGINE_PASSWORD (see SQL logins below), RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, INTEGRATIONS_KEY_1 (see Integration master key below), GRAFANA_ADMIN_PASSWORD,
 # AUTH_JWT_SIGNING_KEY and MANAGEMENT_JWT_SIGNING_KEY (see JWT signing keys below), CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
 # ACME_CASERVER to the Let's Encrypt staging directory first (see .env.example) to avoid burning
 # production rate limits while you're still iterating.
@@ -231,6 +231,23 @@ docker compose up -d --no-deps auth
 
 The same steps apply to management with the `MANAGEMENT_` variables, restarting devices with it
 (`docker compose up -d --no-deps devices management`): devices signs device tokens with the same key.
+
+### Integration master key
+
+Integrations (Telegram bots, mail relays, Discord webhooks, ntfy topics, API tokens) are saved with
+their secret sealed by the engine under `INTEGRATIONS_KEY_1`, 32 random bytes in base64
+(`openssl rand -base64 32`). The database holds only the ciphertext, and only the engine holds the
+key. Without it the stack runs, but saving or testing an integration answers 503
+`INTEGRATIONS_NOT_CONFIGURED` and steps that send through one fail with `INTEGRATION_UNREADABLE`.
+
+Losing the key loses every saved secret: each integration then has to be given its secret again.
+Keep a copy wherever the backup credentials are kept.
+
+**Rotating it.** Each sealed secret records the key id it was sealed with, so old and new keys can
+be held at once. Add the new key as `WorkflowEngine__Integrations__Keys__2` alongside key 1 on the
+engine, set `WorkflowEngine__Integrations__ActiveKeyId: 2`, and restart the engine. New and changed
+secrets are sealed with key 2 and existing ones still open with key 1. Key 1 can be removed once
+every integration's secret has been saved again.
 
 ### Device login and registration (`devices`)
 

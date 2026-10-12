@@ -1,12 +1,14 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Integrations;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-using Wbskt.Infrastructure.Email;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Integrations;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
-internal sealed class EmailNodeExecutor(IEmailSender emailSender) : INodeExecutor
+/// <summary>Sends a plain-text email through the SMTP integration the step names.</summary>
+internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChannel channel) : INodeExecutor
 {
     public string Kind => NodeKind.ActionEmail;
 
@@ -16,43 +18,28 @@ internal sealed class EmailNodeExecutor(IEmailSender emailSender) : INodeExecuto
         EmailConfig config = node.Config
             ?? throw new InvalidOperationException($"Email node {node.NodeId} is missing config.");
 
-        // Checked up front so an unconfigured host says so, rather than failing somewhere inside the
-        // SMTP stack with a message about a null hostname. Not retryable - no number of attempts
-        // configures a relay.
-        if (!emailSender.IsConfigured)
-        {
-            return new NodeExecutionResult.Fail(
-                "EMAIL_NOT_CONFIGURED",
-                "This engine has no SMTP relay configured (WorkflowEngine:Email), so email nodes cannot send.",
-                false,
-                null);
-        }
-
         if (string.IsNullOrWhiteSpace(config.To))
         {
             return new NodeExecutionResult.Fail("EMAIL_RECIPIENT_MISSING", "The email node has no recipient.", false, null);
         }
 
-        try
+        var resolution = await resolver.ResolveAsync(ctx.Branch, config.IntegrationRef, IntegrationType.Smtp, ct);
+        if (resolution.Failure is not null)
         {
-            // Plain text, deliberately: the body comes from a workflow author and is not sanitised
-            // anywhere, so rendering it as HTML in a recipient's client would be handing them
-            // author-controlled markup. Host-authored mail (invitations, password resets) is the
-            // only caller that may pass Html.
-            await emailSender.SendAsync(config.To, config.Subject, config.Body, EmailBodyFormat.PlainText, ct);
-        }
-        catch (FormatException ex)
-        {
-            // A malformed address fails the same way on every attempt.
-            return new NodeExecutionResult.Fail("EMAIL_ADDRESS_INVALID", ex.Message, false, ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Everything else - relay down, greylisted, connection reset - is worth retrying. SMTP is
-            // routinely transient, and the retry policy is what decides how hard to try.
-            return new NodeExecutionResult.Fail("EMAIL_SEND_ERROR", ex.Message, true, ex);
+            return resolution.Failure;
         }
 
+        var integration = resolution.Integration!;
+
+        // A malformed address, a refused sign-in or a refused recipient fails the same way every time;
+        // a relay that is down, greylisting or busy is worth retrying, and the retry policy decides how hard.
+        var result = await channel.SendAsync(integration, config.To, config.Subject, config.Body, ct);
+        if (!result.Ok)
+        {
+            return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
+        }
+
+        await resolver.MarkUsedAsync(integration, ct);
         return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
         {
             ["to"] = JsonSerializer.SerializeToElement(config.To)
