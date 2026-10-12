@@ -57,6 +57,43 @@ public sealed class QueuedEventBusTests
     }
 
     [Fact]
+    public async Task A_queued_command_is_sent_to_its_queue_in_order_with_the_events_and_retried_the_same_way()
+    {
+        var queue = new QueuedEventBus(NullLogger<QueuedEventBus>.Instance);
+        var order = new List<string>();
+        var bus = new Mock<IEventBus>();
+        bus.Setup(b => b.PublishAsync(It.IsAny<TokenRotatedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("event"))
+            .Returns(Task.CompletedTask);
+        var commands = new Mock<ICommandSender>();
+        var sent = new TaskCompletionSource();
+        var attempts = 0;
+        commands.Setup(c => c.SendAsync(It.IsAny<Wbskt.Events.Workflow.CancelWorkflowRun>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                if (++attempts < 2)
+                {
+                    return Task.FromException(new InvalidOperationException("broker down"));
+                }
+
+                order.Add("command");
+                sent.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        await queue.PublishAsync(new TokenRotatedEvent(1, Guid.NewGuid(), "10.0.0.1"));
+        await new QueuedCommandSender(queue, commands.Object).SendAsync(new Wbskt.Events.Workflow.CancelWorkflowRun(5, "deleted"));
+        var dispatcher = new QueuedEventDispatcher(queue, bus.Object, NullLogger<QueuedEventDispatcher>.Instance, FastRetries);
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        await sent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await dispatcher.StopAsync(CancellationToken.None);
+
+        Assert.Equal(["event", "command"], order);
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
     public async Task An_event_that_never_goes_through_is_given_up_on_and_the_next_one_is_sent()
     {
         var queue = new QueuedEventBus(NullLogger<QueuedEventBus>.Instance);

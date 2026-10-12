@@ -95,6 +95,7 @@ public static class EventBusExtensions
         });
 
         services.AddSingleton<IEventBus, MassTransitEventBus>();
+        services.AddSingleton<ICommandSender, MassTransitCommandSender>();
     }
 
     /// <summary>

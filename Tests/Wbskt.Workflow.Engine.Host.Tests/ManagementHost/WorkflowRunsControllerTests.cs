@@ -73,7 +73,7 @@ public sealed class WorkflowRunsControllerTests
         var response = await harness.Controller.Cancel(WorkspaceId, runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
 
         Assert.IsType<AcceptedResult>(response);
-        harness.Bus.Verify(x => x.PublishAsync(
+        harness.Commands.Verify(x => x.SendAsync(
             It.Is<CancelWorkflowRun>(c => c.RunId == 63 && c.Reason == "operator request"),
             It.IsAny<CancellationToken>()), Times.Once);
         harness.QueuedBus.Verify(x => x.PublishAsync(
@@ -100,7 +100,7 @@ public sealed class WorkflowRunsControllerTests
 
         var conflict = Assert.IsType<ConflictObjectResult>(response);
         Assert.Equal("RUN_NOT_CANCELLABLE", Assert.IsType<Error>(conflict.Value).Code);
-        harness.Bus.VerifyNoOtherCalls();
+        harness.Commands.VerifyNoOtherCalls();
         harness.QueuedBus.VerifyNoOtherCalls();
     }
 
@@ -115,7 +115,7 @@ public sealed class WorkflowRunsControllerTests
 
         var notFound = Assert.IsType<NotFoundObjectResult>(response);
         Assert.Equal("RUN_NOT_FOUND", Assert.IsType<Error>(notFound.Value).Code);
-        harness.Bus.VerifyNoOtherCalls();
+        harness.Commands.VerifyNoOtherCalls();
         harness.QueuedBus.VerifyNoOtherCalls();
     }
 
@@ -128,7 +128,7 @@ public sealed class WorkflowRunsControllerTests
 
         var notFound = Assert.IsType<NotFoundObjectResult>(response);
         Assert.Equal("RUN_NOT_FOUND", Assert.IsType<Error>(notFound.Value).Code);
-        harness.Bus.VerifyNoOtherCalls();
+        harness.Commands.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class WorkflowRunsControllerTests
         // accepted cancel that never reaches the engine.
         var harness = new CancelHarness();
         var runRefId = harness.AddRun(66, "Running", WorkspaceId);
-        harness.Bus.Setup(b => b.PublishAsync(It.IsAny<CancelWorkflowRun>(), It.IsAny<CancellationToken>()))
+        harness.Commands.Setup(b => b.SendAsync(It.IsAny<CancelWorkflowRun>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
 
         var response = await harness.Controller.Cancel(WorkspaceId, runRefId, new CancelRunRequest("operator request"), CancellationToken.None);
@@ -512,7 +512,7 @@ public sealed class WorkflowRunsControllerTests
         {
             Runs.Setup(x => x.FindRowByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((RunRow?)null);
-            var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Bus.Object, Mock.Of<IEventBus>(), Mock.Of<ISendEndpointProvider>());
+            var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), Commands.Object, Mock.Of<ICommandSender>());
             var queryService = new WorkflowRunQueryService(Runs.Object, Mock.Of<IBranchProvider>(), Definitions.Object, Mock.Of<ILogger<WorkflowRunQueryService>>());
             Controller = new WorkflowRunsController(queryService, new WorkflowRunService(Mock.Of<IWorkflowQueryService>(), queryService, gateway, QueuedBus.Object, Mock.Of<ILogger<WorkflowRunService>>()))
             {
@@ -525,7 +525,7 @@ public sealed class WorkflowRunsControllerTests
         public Mock<IWorkflowDefinitionProvider> Definitions { get; } = new();
 
         /// <summary>The real bus: what the engine consumes from.</summary>
-        public Mock<IEventBus> Bus { get; } = new();
+        public Mock<ICommandSender> Commands { get; } = new();
 
         /// <summary>The queued bus: after-the-fact announcements such as the audit record.</summary>
         public Mock<IEventBus> QueuedBus { get; } = new();

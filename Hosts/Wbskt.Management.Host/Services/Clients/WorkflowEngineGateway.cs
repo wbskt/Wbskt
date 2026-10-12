@@ -1,5 +1,4 @@
 using System.Text.Json;
-using MassTransit;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
 using Wbskt.Infrastructure.Events;
@@ -14,20 +13,17 @@ internal sealed class WorkflowEngineGateway : IWorkflowEngineGateway
     internal static readonly TimeSpan CommandPublishTimeout = TimeSpan.FromSeconds(5);
 
     private readonly IWorkflowEngineClient _engineClient;
-    private readonly IEventBus _eventBus;
-    private readonly IEventBus _queuedEventBus;
-    private readonly ISendEndpointProvider _sendEndpointProvider;
+    private readonly ICommandSender _commands;
+    private readonly ICommandSender _queuedCommands;
 
     public WorkflowEngineGateway(
         IWorkflowEngineClient engineClient,
-        IEventBus eventBus,
-        [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] IEventBus queuedEventBus,
-        ISendEndpointProvider sendEndpointProvider)
+        ICommandSender commands,
+        [FromKeyedServices(QueuedEventBusExtensions.QueuedKey)] ICommandSender queuedCommands)
     {
         _engineClient = engineClient;
-        _eventBus = eventBus;
-        _queuedEventBus = queuedEventBus;
-        _sendEndpointProvider = sendEndpointProvider;
+        _commands = commands;
+        _queuedCommands = queuedCommands;
     }
 
     public Task<StartRunResponse> StartManualRunAsync(Guid workflowRefId, StartRunRequest request, CancellationToken ct)
@@ -42,40 +38,38 @@ internal sealed class WorkflowEngineGateway : IWorkflowEngineGateway
 
     public Task SendWakeAsync(string token, JsonElement payload, CancellationToken ct)
     {
-        return SendCallbackAsync(new InboundWake(token, payload.GetRawText()), ct);
+        return SendCallbackAsync(new WakeWaitingStep(token, payload.GetRawText()), ct);
     }
 
     public Task SendWebhookAsync(Guid workspaceRef, string path, JsonElement payload, string? secret, string? idempotencyKey, CancellationToken ct)
     {
         // Hashed before it is queued, so the secret is never written to the broker. An empty header is
         // no secret.
-        return SendCallbackAsync(new InboundWebhook(workspaceRef, path, payload.GetRawText(), WebhookSecretHash.Of(secret), idempotencyKey), ct);
+        return SendCallbackAsync(new TriggerWebhook(workspaceRef, path, payload.GetRawText(), WebhookSecretHash.Of(secret), idempotencyKey), ct);
     }
 
-    private async Task SendCallbackAsync<T>(T callback, CancellationToken ct) where T : class
+    // Sent to the engine's own queue: these are commands, and the event log would otherwise keep
+    // every anonymous caller's body and presented secret.
+    private Task SendCallbackAsync<T>(T callback, CancellationToken ct) where T : class, ICommand => SendWithTimeoutAsync(callback, ct);
+
+    public Task CancelRunAsync(long runId, string reason, CancellationToken ct)
     {
-        // Sent to the engine's own queue rather than published: these are not events, and the event
-        // log would otherwise keep every anonymous caller's body and presented secret.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(CommandPublishTimeout);
-
-        ISendEndpoint endpoint = await _sendEndpointProvider.GetSendEndpoint(InboundCallbackQueue.Address);
-        await endpoint.Send(callback, timeout.Token);
-    }
-
-    public async Task CancelRunAsync(long runId, string reason, CancellationToken ct)
-    {
-        // The real bus, not the queued one: a queued command would be reported as sent when it might
-        // never go out. Bounded, so a broker that accepts the connection and never answers is reported
-        // as unavailable rather than holding the request.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(CommandPublishTimeout);
-
-        await _eventBus.PublishAsync(new CancelWorkflowRun(runId, reason), timeout.Token);
+        // Sent now, not queued: a queued command would be reported as sent when it might never go out.
+        return SendWithTimeoutAsync(new CancelWorkflowRun(runId, reason), ct);
     }
 
     public Task QueueCancelRunAsync(long runId, string reason, CancellationToken ct)
     {
-        return _queuedEventBus.PublishAsync(new CancelWorkflowRun(runId, reason), ct);
+        return _queuedCommands.SendAsync(new CancelWorkflowRun(runId, reason), ct);
+    }
+
+    // Bounded, so a broker that accepts the connection and never answers is reported as unavailable
+    // rather than holding the request.
+    private async Task SendWithTimeoutAsync<T>(T command, CancellationToken ct) where T : class, ICommand
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(CommandPublishTimeout);
+
+        await _commands.SendAsync(command, timeout.Token);
     }
 }

@@ -27,6 +27,7 @@
 *   **`FindBy...`**: Returns strictly an **internal integer ID**.
 *   **`GetBy...`**: Returns a **full record, entity, or DTO**.
 *   **Async Suffix:** Any method returning a `Task` or `ValueTask`, or marked as `async`, must end with the `Async` suffix.
+*   **Events and commands:** An event (`IEvent`) records what happened, is named in the past tense with an `Event` suffix (`WorkflowRunCancelRequestedEvent`), is published with `IEventBus` to whoever listens, and lands in the audit log. A command (`ICommand`) asks one service to do something, is named in the imperative without the suffix (`CancelWorkflowRun`), declares its queue as `static QueueName`, and is sent with `ICommandSender`; it never reaches the audit log. `MessageNamingTests` enforces both.
 
 ### Method Signatures & Returns
 *   **No Null Returns:** Public functions must never return `null`. Use descriptive exceptions to handle missing data or logic failures.
