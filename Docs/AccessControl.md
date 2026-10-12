@@ -60,7 +60,7 @@ Consequences worth knowing:
 | Effective permission set for a workspace | `Databases/Wbskt.Database.Auth/StoredProcedures/Permission_EffectiveSet.sql` |
 | Single-permission check (scoped) | `.../Permission_Verify.sql` (`@WorkspaceId NULL` = tenant-wide only) |
 | Membership gate + set resolution | `Hosts/Wbskt.Auth.Host/Services/WorkspaceService.cs` (`ResolveAccessAsync`) |
-| Resolve API | `POST /api/workspaces/resolve` → `{ workspaceId, permissions[] }` |
+| Resolve API | `POST /api/internal/workspaces/resolve` → `{ workspaceId, permissions[] }` |
 | Consumer client | `Hosts/Wbskt.Management.Host/Services/Clients/IAuthServiceClient.cs` (`WorkspaceAccess`, single/multi-permission overloads) |
 | Tenant administration | `Hosts/Wbskt.Auth.Host/Services/ManagementService.cs` — owns the permission gate and the tenant-scoped reference resolution |
 
@@ -226,7 +226,7 @@ runs across every `Admin` role, not just the default tenant's, and must stay set
 ## Workspace-scoped permissions (management host)
 
 Every route below is `api/workspaces/{workspaceRef:guid}/…` and resolves through
-`POST /api/workspaces/resolve` before doing anything else. The resolve call is the membership gate;
+`POST /api/internal/workspaces/resolve` before doing anything else. The resolve call is the membership gate;
 the slug is the second gate.
 
 | Area | Endpoint | Permission |

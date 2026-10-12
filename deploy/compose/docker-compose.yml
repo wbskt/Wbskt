@@ -189,9 +189,22 @@ services:
     logging: *default-logging
     labels:
       - traefik.enable=true
-      - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)
+      # /api/internal is host-to-host only (management calls auth on http://auth:8080), so no
+      # public router may match it.
+      - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`) && !PathPrefix(`/api/internal`)
       - traefik.http.routers.auth.entrypoints=websecure
       - traefik.http.routers.auth.tls.certresolver=letsencrypt
+      - traefik.http.routers.auth.service=auth
+      # Tenant and workspace administration on the one public API host (#304). auth.${DOMAIN}
+      # keeps serving them for a release so the console can move over; sign-in and the refresh
+      # cookie stay there. The workspace regex matches only auth's own routes (the list, one
+      # workspace, its members and owner); every other /api/workspaces/{ref}/... path is
+      # management's. $$ is compose's escape for a literal $.
+      - traefik.http.routers.auth-api.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/tenants`) || PathPrefix(`/api/invitations`) || PathRegexp(`^/api/workspaces(/[0-9a-fA-F-]{36}(/(members|owner)(/.*)?)?)?/?$$`))
+      - traefik.http.routers.auth-api.priority=900
+      - traefik.http.routers.auth-api.entrypoints=websecure
+      - traefik.http.routers.auth-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.auth-api.service=auth
       - traefik.http.services.auth.loadbalancer.server.port=8080
 
   management:
@@ -242,7 +255,7 @@ services:
       replicas: ${MANAGEMENT_REPLICAS:-1}
     labels:
       - traefik.enable=true
-      - traefik.http.routers.management.rule=Host(`api.${DOMAIN}`)
+      - traefik.http.routers.management.rule=Host(`api.${DOMAIN}`) && !PathPrefix(`/api/internal`)
       - traefik.http.routers.management.entrypoints=websecure
       - traefik.http.routers.management.tls.certresolver=letsencrypt
       - traefik.http.services.management.loadbalancer.server.port=8080

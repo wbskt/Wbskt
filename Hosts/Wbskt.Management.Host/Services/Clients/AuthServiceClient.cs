@@ -47,7 +47,7 @@ internal sealed class AuthServiceClient : IAuthServiceClient
         {
             var request = new ResolveWorkspaceRequest(workspaceRef);
 
-            var response = await _httpClient.PostAsJsonAsync("/api/workspaces/resolve", request, cancellationToken);
+            var response = await _httpClient.PostAsJsonAsync("/" + InternalRoutes.ResolveWorkspace, request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {

@@ -5,7 +5,7 @@ using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.AuthDatabase;
 
 /// <summary>
-/// <c>dbo.Workspace_ResolveAccess</c>, the single call behind <c>POST /api/workspaces/resolve</c>. It
+/// <c>dbo.Workspace_ResolveAccess</c>, the single call behind <c>POST /api/internal/workspaces/resolve</c>. It
 /// must give exactly the answers of the three procedures it replaced. Every test builds its own tenant.
 /// </summary>
 [Collection("SqlEdge")]

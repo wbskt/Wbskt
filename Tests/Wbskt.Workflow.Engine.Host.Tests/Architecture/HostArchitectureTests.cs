@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Auth.Host.Authorization;
 using Wbskt.Models;
@@ -36,31 +37,25 @@ public sealed partial class HostArchitectureTests
     private static readonly HashSet<string> LayeringExceptions = [];
 
     /// <summary>Route parameters that predate the naming rule (#301).</summary>
-    private static readonly HashSet<string> RouteParameterExceptions =
-    [
-        "AuthController.RevokeSession:id",
-    ];
+    private static readonly HashSet<string> RouteParameterExceptions = [];
 
-    /// <summary>Lists that return something other than <see cref="Page{T}"/> (#301).</summary>
+    /// <summary>
+    /// Lists that return something other than <see cref="Page{T}"/> (#301). These return bare arrays
+    /// the console reads as arrays, so each moves with a console change.
+    /// </summary>
     private static readonly HashSet<string> ListShapeExceptions =
     [
         "AuthController.GetSessions",
         "ManagementController.GetGroupRoles",
-        "ManagementController.GetGroups",
-        "ManagementController.GetInvitations",
-        "ManagementController.GetMembers",
-        "ManagementController.GetPermissions",
         "ManagementController.GetRolePermissions",
-        "ManagementController.GetRoles",
         "ManagementController.GetTenants",
         "ManagementController.GetUserGroups",
         "ManagementController.GetUserPermissions",
         "ManagementController.GetUserRoles",
-        "WorkspacesController.GetMembers",
         "WorkspacesController.GetWorkspaces",
     ];
 
-    /// <summary>Ids that are public on purpose, and the one response that exists to carry an internal id.</summary>
+    /// <summary>Ids that are public on purpose.</summary>
     private static readonly HashSet<string> InternalIdExceptions =
     [
         // The log's id is its public cursor (sinceId) and is unique per database, not per tenant.
@@ -69,16 +64,13 @@ public sealed partial class HostArchitectureTests
 
         // A run's history position, which the caller pages with.
         "WorkflowHistoryController.List:HistoryEventDto.HistoryEventId",
-
-        // The resolve the management host calls for each workspace-scoped request; the id is its point.
-        "WorkspacesController.AuthorizeAndResolve:ResolvedWorkspaceResponse.WorkspaceId",
     ];
 
     [Fact]
     public void Every_host_has_the_controllers_this_suite_expects()
     {
         // Pins the discovered set, so the rules below cannot pass by finding nothing.
-        Assert.Equal(["AuthController", "InvitationsController", "ManagementController", "WorkspacesController"], Names(ControllersIn(AuthHost)));
+        Assert.Equal(["AuthController", "InternalWorkspacesController", "InvitationsController", "ManagementController", "WorkspacesController"], Names(ControllersIn(AuthHost)));
         Assert.NotEmpty(ControllersIn(ManagementHost));
         Assert.NotEmpty(ControllersIn(EngineHost));
 
@@ -179,9 +171,10 @@ public sealed partial class HostArchitectureTests
     public void No_declared_response_carries_an_internal_id()
     {
         // Callers name things by RefId. An int Id leaks row counts and is only meaningful inside one
-        // database, so a response names things by RefId only.
+        // database, so a response names things by RefId only. Routes under InternalRoutes.Prefix are
+        // host-to-host and never routed publicly, so an internal id is their point.
         var offending = new List<string>();
-        foreach (var action in AllHosts.SelectMany(ActionsIn))
+        foreach (var action in AllHosts.SelectMany(ActionsIn).Where(a => !a.Route.StartsWith(InternalRoutes.Prefix, StringComparison.Ordinal)))
         {
             if (DeclaredResponse(action.Method) is { } response)
             {
@@ -294,9 +287,9 @@ public sealed partial class HostArchitectureTests
             .OrderBy(type => type.Name, StringComparer.Ordinal)
             .ToArray();
 
-    private sealed record Action(string Name, Type Controller, MethodInfo Method, string Route);
+    internal sealed record Action(string Name, Type Controller, MethodInfo Method, string Route);
 
-    private static IEnumerable<Action> ActionsIn(Assembly assembly)
+    internal static IEnumerable<Action> ActionsIn(Assembly assembly)
     {
         foreach (var controller in ControllersIn(assembly))
         {

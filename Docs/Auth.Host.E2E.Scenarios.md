@@ -88,7 +88,7 @@ Highest priority: these encode defects that shipped, so they must fail against t
 
 | ID | ± | Scenario | Expected |
 |---|---|---|---|
-| `REG_01` | − | `POST /api/workspaces/resolve` with a well-formed but unknown `workspaceRef` | **403** `WORKSPACE_NOT_FOUND` (was 404) |
+| `REG_01` | − | `POST /api/internal/workspaces/resolve` with a well-formed but unknown `workspaceRef` | **403** `WORKSPACE_NOT_FOUND` (was 404) |
 | `REG_02` | − | Admin creates a workspace, deletes it, then resolves the dead ref | **403** `WORKSPACE_NOT_FOUND` |
 | `REG_03` | − | Same dead ref used against a *management host* workspace route (e.g. `GET /api/workspaces/{ref}/clients`) | **403**, never **500**. This is the user-visible half of the bug: `AuthServiceClient` only understands 401/403 and turns anything else into a `Failure` → 500 |
 | `REG_04` | − | `POST /api/workspaces/{unknownRef}/members` | **403** `WORKSPACE_NOT_FOUND` |
@@ -268,7 +268,7 @@ Run isolated — the partition key is the client IP and these will otherwise poi
 
 ---
 
-## 9. Workspace resolution — `POST /api/workspaces/resolve`
+## 9. Workspace resolution — `POST /api/internal/workspaces/resolve`
 
 The cross-service contract. Every workspace-scoped management-host request passes through here.
 
@@ -572,7 +572,7 @@ admin unless stated.
 
 ## 14. Permission precedence — the effective set
 
-Exercised through `POST /api/workspaces/resolve`. Order per `Permission_EffectiveSet`:
+Exercised through `POST /api/internal/workspaces/resolve`. Order per `Permission_EffectiveSet`:
 **User-Deny > User-Allow > Role-Deny > Role-Allow > default deny.**
 
 | ID | ± | Scenario | Expected |
