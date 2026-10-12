@@ -14,10 +14,10 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 ///
 /// <para>With <see cref="SendClientMessageConfig.AwaitAck"/> the step waits for the outcome: it parks
 /// on the command's id, sends once parked, and leaves by "acked" when the device acknowledges it,
-/// "failed" when the platform reports it undelivered, or "timeout" when neither comes in time (the
-/// bookmark's TTL takes that port without running the step again).</para>
+/// "failed" when the platform reports it undelivered or it could not be sent at all, or "timeout" when
+/// neither comes in time (the bookmark's TTL takes that port without running the step again).</para>
 /// </summary>
-internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : INodeExecutor
+internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBookmarkResumer bookmarkResumer) : INodeExecutor
 {
     public const string AckedPort = CommandChannel.Acked;
     public const string FailedPort = CommandChannel.Failed;
@@ -93,8 +93,38 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher) : I
             new Dictionary<string, JsonElement> { [AwaitingKey] = JsonSerializer.SerializeToElement(commandId) })
         {
             // Sent only once the bookmark exists: an ack can come back faster than the branch parks.
-            AfterParked = sendCt => SendAsync(ctx, config, commandId, clientRefId, sendCt)
+            AfterParked = sendCt => SendWhileParkedAsync(ctx, config, commandId, clientRefId, sendCt)
         };
+    }
+
+    // A command that could not be sent will never be answered, so the step is woken by "failed" at
+    // once instead of waiting out its whole ack timeout and leaving by "timeout", which would read as
+    // a device that did not answer. The send failure is still rethrown, for the branch loop to log.
+    private async Task SendWhileParkedAsync(NodeContext ctx, SendClientMessageConfig config, Guid commandId, Guid clientRefId, CancellationToken ct)
+    {
+        try
+        {
+            await SendAsync(ctx, config, commandId, clientRefId, ct);
+        }
+        catch (Exception sendFailure) when (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                // A fixed reason: the exception's own message can name brokers or hosts, and the
+                // reason is written to the branch's state, which the workspace can read.
+                await bookmarkResumer.MatchInboundAsync(
+                    CommandChannel.Event(commandId, CommandChannel.Failed, "The command could not be sent."),
+                    hasRegistrations: false,
+                    ct);
+            }
+            catch (Exception wakeFailure)
+            {
+                // Waking failed too, so the ack timeout is what moves the step on.
+                throw new AggregateException(sendFailure, wakeFailure);
+            }
+
+            throw;
+        }
     }
 
     private Task SendAsync(NodeContext ctx, SendClientMessageConfig config, Guid commandId, Guid clientRefId, CancellationToken ct)

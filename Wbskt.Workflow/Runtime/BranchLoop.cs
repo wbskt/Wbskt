@@ -337,8 +337,10 @@ internal sealed class BranchLoop : IBranchLoop
                         }
                         catch (Exception ex)
                         {
-                            // The branch is parked and its bookmark's TTL will move it on, so a failure
-                            // here is logged rather than failing a branch that is already waiting.
+                            // The branch is parked, so a failure here is logged rather than failing a
+                            // branch that is already waiting. The follow-up wakes its own wait when it
+                            // can (a command that could not be sent leaves by "failed"); otherwise the
+                            // bookmark's TTL moves it on.
                             _logger?.LogError(ex, "The follow-up of node {NodeId} failed after branch {BranchId} of run {RunId} parked.", branchRow.NodeId, branchId, runId);
                         }
                     }
