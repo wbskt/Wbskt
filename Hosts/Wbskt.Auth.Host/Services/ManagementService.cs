@@ -25,8 +25,7 @@ internal sealed class ManagementService : IManagementService
     /// and one addressed to a different account are indistinguishable, so a token holder cannot use
     /// the endpoint to learn anything about invitations that are not theirs.
     /// </summary>
-    private static readonly Error InvalidInvitation =
-        Error.Validation("INVITATION_INVALID", "This invitation is not valid. It may have expired, been revoked, already been used, or been sent to a different email address.");
+    private static readonly Error InvalidInvitation = SqlGuardErrors.InvalidInvitation;
 
     private readonly IAuthProvider _provider;
     private readonly IWorkspaceProvider _workspaceProvider;
@@ -683,16 +682,7 @@ internal sealed class ManagementService : IManagementService
     private async Task<Result<int>> AuthorizeAsync(int callerId, Guid tenantRef, PermissionSlug permission, CancellationToken cancellationToken)
     {
         int tenantId;
-        try
-        {
-            tenantId = await _provider.FindTenantIdByRefIdForUserAsync(tenantRef, callerId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to resolve tenant {TenantRef} for user {UserId}. Error: {Message}", tenantRef, callerId, ex.Message);
-            _logger.LogTrace(ex, "Tenant resolution failure for {TenantRef}", tenantRef);
-            return Result<int>.Failure(Error.Failure("AUTH_TENANT_ERROR", ex.Message));
-        }
+        tenantId = await _provider.FindTenantIdByRefIdForUserAsync(tenantRef, callerId, cancellationToken);
 
         if (tenantId <= 0)
         {
@@ -701,18 +691,9 @@ internal sealed class ManagementService : IManagementService
         }
 
         bool allowed;
-        try
-        {
-            // WorkspaceId null: management operations require the permission tenant-wide, so a
-            // workspace-scoped grant deliberately does not satisfy this gate.
-            allowed = await _provider.VerifyPermissionAsync(callerId, tenantId, null, permission, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("Failed to verify '{Permission}' for user {UserId} in tenant {TenantId}. Error: {Message}", permission, callerId, tenantId, ex.Message);
-            _logger.LogTrace(ex, "Permission verification failure for user {UserId}", callerId);
-            return Result<int>.Failure(Error.Failure("AUTH_PERMISSION_ERROR", ex.Message));
-        }
+        // WorkspaceId null: management operations require the permission tenant-wide, so a
+        // workspace-scoped grant deliberately does not satisfy this gate.
+        allowed = await _provider.VerifyPermissionAsync(callerId, tenantId, null, permission, cancellationToken);
 
         if (!allowed)
         {
@@ -861,8 +842,9 @@ internal sealed class ManagementService : IManagementService
             string.Join(",", permissions.Select(p => p.IsDeny ? "!" + p.Slug : p.Slug).Order(StringComparer.Ordinal));
     }
 
-    // These wrap the provider call so that each operation does not repeat the same try/catch and
-    // logging block. Unique-constraint violations are surfaced as a Conflict when the caller passes
+    // These wrap the provider call so that each operation does not repeat the same guard translation.
+    // Only the database's guards become results (see SqlGuardErrors); a fault propagates to
+    // GlobalExceptionMiddleware. Unique-constraint violations are a Conflict when the caller passes
     // one, since "that name is taken" is a client error rather than a server fault.
     private async Task<Result> GuardAsync(string operation, Func<Task> action, Error? conflictError = null)
     {
@@ -871,9 +853,10 @@ internal sealed class ManagementService : IManagementService
             await action();
             return Result.Success();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (SqlGuardErrors.TryTranslate(ex, conflictError, out var error))
         {
-            return Result.Failure(TranslateException(operation, ex, conflictError));
+            _logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
+            return Result.Failure(error);
         }
     }
 
@@ -883,62 +866,10 @@ internal sealed class ManagementService : IManagementService
         {
             return Result<T>.Success(await action());
         }
-        catch (Exception ex)
-        {
-            return Result<T>.Failure(TranslateException(operation, ex, conflictError));
-        }
-    }
-
-    private Error TranslateException(string operation, Exception ex, Error? conflictError)
-    {
-        if (conflictError is not null && ex is SqlException { Number: 2601 or 2627 })
-        {
-            _logger.LogWarning("{Operation} failed: unique constraint violation. Error: {Message}", operation, ex.Message);
-            return conflictError;
-        }
-
-        if (ex is SecurityException)
-        {
-            _logger.LogWarning("{Operation} failed: {Message}", operation, ex.Message);
-            return Error.NotFound("AUTH_NOT_FOUND", "The requested record was not found.");
-        }
-
-        // Redemption lost a race, or the token stopped being valid between the read-back and the
-        // procedure. Reported identically to the pre-check path, so which of the two rejected it is
-        // not observable from outside.
-        if (ex is SqlException { Number: 50011 })
-        {
-            _logger.LogWarning("{Operation} rejected: invitation no longer valid", operation);
-            return InvalidInvitation;
-        }
-
-        // A workspace in another tenant reads exactly like one that does not exist, so an invitation
-        // cannot be used to learn which workspace references are real elsewhere.
-        if (ex is SqlException { Number: 50017 })
+        catch (Exception ex) when (SqlGuardErrors.TryTranslate(ex, conflictError, out var error))
         {
             _logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
-            return Error.Forbidden("WORKSPACE_NOT_FOUND", "Workspace not found.");
+            return Result<T>.Failure(error);
         }
-
-        if (ex is SqlException { Number: 50012 })
-        {
-            _logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
-            return Error.Conflict("AUTH_ALREADY_MEMBER", "That user is already a member of this tenant.");
-        }
-
-        // THROW 50001-50019 from the stored procedures are deliberate guards (wrong tenant, group
-        // has children, cannot remove the owner or the last administrator, unknown permission slug,
-        // expired invitation) rather than faults, so they read back as validation. The upper bound
-        // is deliberately ahead of the codes in use: a new guard that lands outside this range
-        // reaches the caller as a 500, which is the opposite of what a guard is for.
-        if (ex is SqlException { Number: >= 50001 and <= 50019 } guard)
-        {
-            _logger.LogWarning("{Operation} rejected by database guard: {Message}", operation, guard.Message);
-            return Error.Validation("AUTH_OPERATION_REJECTED", guard.Message);
-        }
-
-        _logger.LogError("{Operation} failed. Error: {Message}", operation, ex.Message);
-        _logger.LogTrace(ex, "{Operation} failure stack trace", operation);
-        return Error.Failure("AUTH_MANAGEMENT_ERROR", ex.Message);
     }
 }
