@@ -62,7 +62,7 @@ public sealed class ClientAccessHandlerTests
     [Fact]
     public void The_shared_registered_status_matches_the_management_enum()
     {
-        Assert.Equal((byte)Wbskt.Management.Host.Models.ClientStatus.Registered, ClientStatusChangedEvent.RegisteredStatus);
+        Assert.Equal((byte)Wbskt.Protocol.ClientStatus.Registered, ClientStatusChangedEvent.RegisteredStatus);
     }
 
     private static ConsumeContext<T> Context<T>(T message) where T : class

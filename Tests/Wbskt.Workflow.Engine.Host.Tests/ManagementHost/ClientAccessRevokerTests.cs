@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using FluentAssertions;
 using Moq;
 using Wbskt.EventBus.Abstractions;

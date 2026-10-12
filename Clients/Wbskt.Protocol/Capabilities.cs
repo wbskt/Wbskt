@@ -1,4 +1,7 @@
-namespace Wbskt.Client.Sdk.Models;
+namespace Wbskt.Protocol;
+
+// The payload of the "capabilities" message (MessageTypes.Capabilities). The SDK sends these and the
+// management host reads them, so property names are the contract.
 
 public record PropertySchema(
     string Name,

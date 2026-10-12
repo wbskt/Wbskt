@@ -1,3 +1,5 @@
+using Wbskt.Protocol;
+
 namespace Wbskt.Management.Host.Models;
 
 /// <summary>What dbo.Client_UpdateStatuses did with one client of the list it was given.</summary>

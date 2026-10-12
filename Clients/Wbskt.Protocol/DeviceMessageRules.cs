@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Wbskt.Models;
+namespace Wbskt.Protocol;
 
 /// <summary>
 /// What a message sent to a device may look like, whoever sends it: the console, a message
@@ -8,24 +8,12 @@ namespace Wbskt.Models;
 /// </summary>
 public static class DeviceMessageRules
 {
-    // Message types owned by the platform protocol. Devices and users must not send them as
-    // ordinary payloads: sys.* frames never reach the generic pipeline, and "capabilities" /
-    // "state.report" are destructured by ClientMetadataIngestionHandler.
-    public const string Capabilities = "capabilities";
-    public const string StateReport = "state.report";
-    public const string SystemPrefix = "sys.";
-
-    public const int MaxTypeLength = 100;
+    public const int MaxTypeLength = MessageTypes.MaxTypeLength;
 
     /// <summary>Half the 64 KB socket message cap, leaving room for the envelope.</summary>
-    public const int MaxPayloadChars = 32 * 1024;
+    public const int MaxPayloadChars = SocketProtocol.MaxMessageBytes / 2;
 
-    public static bool IsReserved(string messageType)
-    {
-        return messageType.StartsWith(SystemPrefix, StringComparison.OrdinalIgnoreCase)
-               || messageType.Equals(Capabilities, StringComparison.OrdinalIgnoreCase)
-               || messageType.Equals(StateReport, StringComparison.OrdinalIgnoreCase);
-    }
+    public static bool IsReserved(string messageType) => MessageTypes.IsReserved(messageType);
 
     public static bool IsValidType([NotNullWhen(true)] string? messageType) =>
         !string.IsNullOrWhiteSpace(messageType) && messageType.Length <= MaxTypeLength;

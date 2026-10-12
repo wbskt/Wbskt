@@ -1,3 +1,4 @@
+using Wbskt.Protocol;
 using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;

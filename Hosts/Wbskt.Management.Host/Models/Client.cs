@@ -1,3 +1,5 @@
+using Wbskt.Protocol;
+
 namespace Wbskt.Management.Host.Models;
 
 public class Client : IWorkspaceOwned

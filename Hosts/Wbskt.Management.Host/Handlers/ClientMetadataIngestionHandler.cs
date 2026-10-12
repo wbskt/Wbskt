@@ -5,6 +5,7 @@ using Wbskt.Events.Client;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.Management.Host.Handlers;
 
@@ -12,8 +13,6 @@ namespace Wbskt.Management.Host.Handlers;
 // (telemetry etc.) stay in the workflow-trigger/event-log pipeline and are ignored here.
 public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageReceivedEvent>
 {
-    private const string CapabilitiesType = "capabilities";
-    private const string StateReportType = "state.report";
     // Devices write straight into NVARCHAR(MAX); cap what a single report may carry.
     private const int MaxCapabilitiesPayloadChars = 32 * 1024;
     private const int MaxStatePayloadChars = 8 * 1024;
@@ -46,14 +45,13 @@ public sealed class ClientMetadataIngestionHandler : IConsumer<ClientMessageRece
     {
         var message = context.Message;
 
-        switch (message.Type)
+        if (MessageTypes.Comparer.Equals(message.Type, MessageTypes.Capabilities))
         {
-            case CapabilitiesType:
-                await IngestCapabilitiesAsync(message, context.CancellationToken);
-                break;
-            case StateReportType:
-                await IngestStateReportAsync(message, context.CancellationToken);
-                break;
+            await IngestCapabilitiesAsync(message, context.CancellationToken);
+        }
+        else if (MessageTypes.Comparer.Equals(message.Type, MessageTypes.StateReport))
+        {
+            await IngestStateReportAsync(message, context.CancellationToken);
         }
     }
 

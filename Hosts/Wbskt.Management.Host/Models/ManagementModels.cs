@@ -1,14 +1,7 @@
+using Wbskt.Protocol;
 using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Models;
-
-public enum ClientStatus : byte
-{
-    Pending = 0,
-    Registered = 1,
-    Revoked = 2,
-    Rejected = 3
-}
 
 public record RegistrationPolicyRequest(
     string Name, 
@@ -33,14 +26,6 @@ public record UpdateRegistrationPolicyRequest(
     int? MaxClients,
     bool AutoApproval,
     bool IsEnabled
-);
-
-public record ClientRegistrationRequest(string Pin, string Name);
-
-public record ClientRegistrationResponse(
-    Guid ClientRefId, 
-    string Secret, 
-    ClientStatus Status
 );
 
 /// <summary>A client's new secret, shown once. The old one stops working at once.</summary>
@@ -119,10 +104,6 @@ public record MessageTemplateResponse(
     DateTime CreatedAt,
     DateTime UpdatedAt
 );
-
-public record ClientLoginRequest(Guid ClientRefId, string Secret);
-
-public record ClientLoginResponse(string AccessToken, int ExpiresIn);
 
 /// <summary>A client's fields to change; a field left null stays as it is.</summary>
 public record UpdateClientRequest(string? Name, ClientStatus? Status);
