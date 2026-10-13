@@ -1,0 +1,146 @@
+using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
+
+namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
+
+/// <summary>
+/// Run_Start creates a triggered run whole (run, counters, root branch) and at most once per trigger
+/// start key, so a retried inbound event recovers the run an earlier attempt created (#293).
+/// </summary>
+[Collection("SqlEdge")]
+public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
+{
+    private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
+
+    [SkippableFact]
+    public async Task Start_creates_the_run_its_counters_and_its_root_branch_together()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        (RunRow run, BranchRow branch) = NewRun(wd);
+
+        RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, $"trigger-start:{Guid.NewGuid():N}", CancellationToken.None);
+
+        started.Created.Should().BeTrue();
+        started.Run.RefId.Should().Be(run.RefId);
+        BranchRow root = await ProviderFactory.Branch(fixture.ConnectionString).GetByIdAsync(started.RootBranchId, CancellationToken.None);
+        root.RefId.Should().Be(branch.RefId);
+        root.RunId.Should().Be(started.Run.Id);
+        root.Status.Should().Be(BranchStatus.Active);
+        root.LocalJson.Should().Be(branch.LocalJson);
+        RunCountersRow counters = await ProviderFactory.RunCounters(fixture.ConnectionString).GetByRunIdAsync(started.Run.Id, CancellationToken.None);
+        counters.ActiveBranchCount.Should().Be(1);
+    }
+
+    [SkippableFact]
+    public async Task Start_returns_the_existing_run_for_a_key_that_already_started_one()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        string key = $"trigger-start:{Guid.NewGuid():N}";
+        (RunRow firstRun, BranchRow firstBranch) = NewRun(wd);
+        (RunRow retryRun, BranchRow retryBranch) = NewRun(wd);
+
+        RunStartRow first = await runProvider.StartAsync(firstRun, firstBranch, key, CancellationToken.None);
+        RunStartRow retry = await runProvider.StartAsync(retryRun, retryBranch, key, CancellationToken.None);
+        RunStartRow? found = await runProvider.FindByTriggerStartKeyAsync(key, CancellationToken.None);
+
+        retry.Created.Should().BeFalse();
+        retry.Run.Id.Should().Be(first.Run.Id);
+        retry.RootBranchId.Should().Be(first.RootBranchId);
+        found!.Run.Id.Should().Be(first.Run.Id);
+        found.RootBranchId.Should().Be(first.RootBranchId);
+        found.Created.Should().BeFalse();
+        (await runProvider.FindRowByRefIdAsync(retryRun.RefId, CancellationToken.None)).Should().BeNull();
+        (await ProviderFactory.Branch(fixture.ConnectionString).GetAllByRunIdAsync(first.Run.Id, CancellationToken.None)).Should().ContainSingle();
+    }
+
+    [SkippableFact]
+    public async Task Concurrent_starts_under_one_key_create_one_run()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        string key = $"trigger-start:{Guid.NewGuid():N}";
+
+        RunStartRow[] results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+        {
+            (RunRow run, BranchRow branch) = NewRun(wd);
+            return ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, key, CancellationToken.None);
+        }));
+
+        results.Count(r => r.Created).Should().Be(1);
+        results.Select(r => r.Run.Id).Distinct().Should().ContainSingle();
+        results.Select(r => r.RootBranchId).Distinct().Should().ContainSingle();
+    }
+
+    [SkippableFact]
+    public async Task Start_without_a_key_always_creates_a_run()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow a, BranchRow aBranch) = NewRun(wd);
+        (RunRow b, BranchRow bBranch) = NewRun(wd);
+
+        RunStartRow first = await runProvider.StartAsync(a, aBranch, null, CancellationToken.None);
+        RunStartRow second = await runProvider.StartAsync(b, bBranch, null, CancellationToken.None);
+
+        first.Created.Should().BeTrue();
+        second.Created.Should().BeTrue();
+        second.Run.Id.Should().NotBe(first.Run.Id);
+        (await runProvider.FindByTriggerStartKeyAsync($"trigger-start:{Guid.NewGuid():N}", CancellationToken.None)).Should().BeNull();
+    }
+
+    private async Task<WorkflowDefinitionRow> CreateDefinitionAsync()
+    {
+        return await ProviderFactory.WorkflowDefinition(fixture.ConnectionString).InsertAsync(new WorkflowDefinitionRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), Version = 0, WorkspaceId = 1,
+            Name = $"IT-WD-{Guid.NewGuid():N}",
+            Description = null, IsEnabled = true,
+            DefinitionJson = """{"nodes":[],"edges":[]}""",
+            PublishedBy = 1, CreatedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+    }
+
+    private static (RunRow Run, BranchRow Branch) NewRun(WorkflowDefinitionRow wd)
+    {
+        DateTime now = DateTime.UtcNow;
+        Guid triggerNodeId = Guid.NewGuid();
+        var run = new RunRow
+        {
+            Id = 0, RefId = Guid.NewGuid(),
+            WorkflowDefinitionId = wd.Id,
+            WorkflowRefId = wd.RefId,
+            WorkflowVersion = wd.Version,
+            TriggerNodeId = triggerNodeId,
+            CorrelationKey = "it",
+            Status = RunStatus.Running,
+            StartedAt = now,
+            CompletedAt = null,
+            CancellationRequestedAt = null,
+            CancellationReason = null,
+            CreditBudget = 10m,
+            CreatedAt = now
+        };
+        var branch = new BranchRow
+        {
+            Id = 0, RefId = Guid.NewGuid(), RunId = 0,
+            ParentBranchId = null, ForkCohortId = null,
+            NodeId = triggerNodeId,
+            Status = BranchStatus.Active,
+            PendingTakePort = null,
+            LocalJson = """{"trigger":{"n":1}}""",
+            LastOutputJson = null, CompensationStackJson = null,
+            CreatedAt = now, UpdatedAt = now,
+            RowVersion = Array.Empty<byte>()
+        };
+        return (run, branch);
+    }
+}

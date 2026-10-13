@@ -34,7 +34,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, providers, providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(TriggerChannelRegistry.Default), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
+            new RunStarter(providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(TriggerChannelRegistry.Default), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
             runDispatcher,
             providers,
             new ExpressionEvaluator(new FixedClock()));
@@ -205,6 +205,17 @@ public sealed class InboundEventToRunStartE2ETests
             // for the initial branch (matches the real stored procedure).
             _activeBranches[created.Id] = 0;
             return Task.FromResult(created);
+        }
+
+        public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
+        {
+            // Mirrors Run_Start: the run, its counters seeded with the root branch, and the branch.
+            RunRow created = run with { Id = ++_nextRunId };
+            Runs[created.Id] = created;
+            _activeBranches[created.Id] = 1;
+            BranchRow branch = rootBranch with { Id = ++_nextBranchId, RunId = created.Id };
+            Branches[branch.Id] = branch;
+            return Task.FromResult(new RunStartRow(created, branch.Id, true));
         }
 
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult<int?>(Runs.Values.Single(run => run.RefId == refId).Id);

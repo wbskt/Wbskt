@@ -33,6 +33,40 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Run_Start",
+            p =>
+            {
+                p.AddWithValue("@RefId", run.RefId);
+                p.AddWithValue("@WorkflowDefinitionId", run.WorkflowDefinitionId);
+                p.AddWithValue("@WorkflowRefId", run.WorkflowRefId);
+                p.AddWithValue("@WorkflowVersion", run.WorkflowVersion);
+                p.AddWithValue("@TriggerNodeId", run.TriggerNodeId);
+                p.AddWithValue("@CorrelationKey", (object?)run.CorrelationKey ?? DBNull.Value);
+                p.AddWithValue("@StartedAt", run.StartedAt);
+                p.AddWithValue("@CreditBudget", run.CreditBudget);
+                p.AddWithValue("@TriggerStartKey", (object?)triggerStartKey ?? DBNull.Value);
+                p.AddWithValue("@BranchRefId", rootBranch.RefId);
+                p.AddWithValue("@BranchLocalJson", rootBranch.LocalJson);
+            },
+            MapStart,
+            new InvalidOperationException("Run_Start did not return a row."),
+            ct
+        );
+    }
+
+    public async Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
+    {
+        return await ExecuteFindAsync(
+            "dbo.Run_GetBy_TriggerStartKey",
+            p => p.AddWithValue("@TriggerStartKey", triggerStartKey),
+            MapStart,
+            ct
+        );
+    }
+
     public async Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(
@@ -340,6 +374,11 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             ct
         );
     }
+
+    private static RunStartRow MapStart(DbDataReader reader) => new(
+        Map(reader),
+        reader.GetInt32(reader.GetOrdinal("RootBranchId")),
+        reader.GetBoolean(reader.GetOrdinal("Created")));
 
     internal static RunRow Map(DbDataReader reader)
     {

@@ -88,8 +88,9 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         // A throw part-way through leaves the claim Pending, and a Pending claim drops every later
         // delivery with the same event id as a duplicate. With a caller-chosen id (a webhook's
         // Idempotency-Key) that would turn the sender's retry of a failed delivery into a silent
-        // no-op, so the claim is released as Failed, which BookmarkResumer reclaims on the retry. The
-        // cost is that a registration which did start a run before the throw starts another on retry.
+        // no-op, so the claim is released as Failed, which BookmarkResumer reclaims on the retry.
+        // Each registration then takes a claim of its own (ClaimRegistrationAsync), so the retry
+        // skips the registrations that already went through and only redoes the one that failed.
         try
         {
             foreach (TriggerRegistrationRow registration in registrations)
@@ -123,31 +124,45 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                     continue;
                 }
 
-                TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
-                _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
-                switch (concurrencyDecision.Outcome)
+                string startKey = TriggerStartKeys.For(evt.InboundEventId, registration.Id);
+                RegistrationClaim registrationClaim = await ClaimRegistrationAsync(startKey, ct);
+                if (registrationClaim.Settled is not null)
                 {
-                    case TriggerConcurrencyOutcome.Dropped:
-                        perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue));
-                        continue;
-
-                    case TriggerConcurrencyOutcome.Queued:
-                        perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue));
-                        continue;
-
-                    case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
-                        foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
-                        {
-                            await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
-                        }
-                        break;
+                    // An earlier attempt at this event already went through for this registration: report
+                    // what it did rather than doing it again.
+                    _logger?.LogInformation("Event {EventId} already dispatched to registration {RegistrationId}; skipping it", evt.InboundEventId, registration.Id);
+                    perRegistration.Add(registrationClaim.Settled with { RegistrationId = registration.Id, WorkflowRefId = registration.WorkflowRefId });
+                    continue;
                 }
 
-                (long runId, Guid runRefId, long branchId) = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, ct);
-                _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, runId, branchId, registration.Id);
-                await _runDispatcher.DispatchAsync(new BranchExecutionRequest(runId, branchId, BranchExecutionReason.TriggerStarted), ct);
+                if (!registrationClaim.Owned)
+                {
+                    _logger?.LogInformation("Event {EventId} is already being dispatched to registration {RegistrationId}; skipping it", evt.InboundEventId, registration.Id);
+                    perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Idempotent, null, correlationValue));
+                    continue;
+                }
 
-                perRegistration.Add(new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, runId, correlationValue, runRefId));
+                TriggerRegistrationDispatch dispatch;
+                long? branchToDispatch;
+                try
+                {
+                    (dispatch, branchToDispatch) = await StartForRegistrationAsync(registration, normalizedEvent, correlationValue, startKey, registrationClaim.Reclaimed, ct);
+                    await _idempotencyKeyProvider.MarkSucceededAsync(startKey, JsonSerializer.Serialize(dispatch, EngineJson.Options), ct);
+                }
+                catch
+                {
+                    await _idempotencyKeyProvider.MarkFailedAsync(startKey, "{\"error\":\"dispatch failed\"}", CancellationToken.None);
+                    throw;
+                }
+
+                // Only after the claim is settled: a retry that reclaims this registration's claim knows
+                // its run was never handed to the pump, so it can hand it over without running it twice.
+                if (branchToDispatch is long branchId)
+                {
+                    await _runDispatcher.DispatchAsync(new BranchExecutionRequest(dispatch.RunId!.Value, branchId, BranchExecutionReason.TriggerStarted), ct);
+                }
+
+                perRegistration.Add(dispatch);
             }
         }
         catch when (bookmarkMatch.ClaimKey != null)
@@ -180,6 +195,94 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             perRegistration,
             summary?.RunRefId);
     }
+
+    /// <summary>
+    /// Applies the registration's concurrency policy and starts its run. Returns the branch to hand to
+    /// the pump, if there is one; the caller dispatches it once this registration's claim is settled.
+    /// </summary>
+    private async Task<(TriggerRegistrationDispatch Dispatch, long? BranchToDispatch)> StartForRegistrationAsync(
+        TriggerRegistrationRow registration,
+        InboundEvent normalizedEvent,
+        string correlationValue,
+        string startKey,
+        bool reclaimed,
+        CancellationToken ct)
+    {
+        if (reclaimed)
+        {
+            // An earlier attempt failed for this registration. If it got as far as creating the run, that
+            // run is this event's: the concurrency policy already let it through, and evaluating the policy
+            // again would count it as the active run to drop, queue behind or cancel.
+            RunStartResult? existing = await _runStarter.FindStartedAsync(startKey, ct);
+            if (existing is not null)
+            {
+                _logger?.LogInformation("Event {EventId} recovered run {RunId} for registration {RegistrationId}", normalizedEvent.InboundEventId, existing.RunId, registration.Id);
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, existing.RunId, correlationValue, existing.RunRefId), existing.BranchId);
+            }
+        }
+
+        TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
+        _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
+        switch (concurrencyDecision.Outcome)
+        {
+            case TriggerConcurrencyOutcome.Dropped:
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue), null);
+
+            case TriggerConcurrencyOutcome.Queued:
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue), null);
+
+            case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
+                foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
+                {
+                    await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
+                }
+                break;
+        }
+
+        RunStartResult started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct);
+        _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, started.RunId, started.BranchId, registration.Id);
+
+        // A run that already existed under this key without this registration's claim saying so outlived
+        // its claim (the claims are swept after IdempotencyRetentionWindow, the runs are not), so it has
+        // long since been handed to the pump.
+        return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, started.RunId, correlationValue, started.RunRefId),
+            started.Created ? started.BranchId : null);
+    }
+
+    /// <summary>
+    /// Claims starting this event for one registration. <see cref="RegistrationClaim.Settled"/> carries
+    /// what an earlier attempt did when it went through; a claim another attempt holds is not owned.
+    /// </summary>
+    private async Task<RegistrationClaim> ClaimRegistrationAsync(string startKey, CancellationToken ct)
+    {
+        // Same token-as-claim scheme as the event's own claim; BookmarkResumer explains it.
+        Guid claimToken = Guid.NewGuid();
+        IdempotencyKeyRow claim = await _idempotencyKeyProvider.UpsertPendingAsync(startKey, 0, claimToken, Guid.Empty, 0, ct);
+        if (claim.BranchRefId == claimToken)
+        {
+            return new RegistrationClaim(true, false, null);
+        }
+
+        if (string.Equals(claim.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
+        {
+            TriggerRegistrationDispatch? settled = claim.ResultJson is null
+                ? null
+                : JsonSerializer.Deserialize<TriggerRegistrationDispatch>(claim.ResultJson, EngineJson.Options);
+            return new RegistrationClaim(false, false, settled);
+        }
+
+        if (string.Equals(claim.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
+        {
+            claim = await _idempotencyKeyProvider.ReclaimFailedAsync(startKey, claimToken, ct);
+            return new RegistrationClaim(claim.BranchRefId == claimToken, true, null);
+        }
+
+        // Pending under another token: an attempt that is still going, or one that crashed before it
+        // could settle. Either way this attempt must not start the registration a second time.
+        return new RegistrationClaim(false, false, null);
+    }
+
+    private sealed record RegistrationClaim(bool Owned, bool Reclaimed, TriggerRegistrationDispatch? Settled);
 
     /// <summary>
     /// Constant-time comparison against the registration's secret. A registration without one is open,

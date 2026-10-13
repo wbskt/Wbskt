@@ -5,6 +5,18 @@ namespace Wbskt.Workflow.Abstraction.Providers;
 public interface IRunProvider
 {
     Task<RunRow> CreateAsync(RunRow row, CancellationToken ct);
+
+    /// <summary>
+    /// Creates a triggered run together with its counters and root branch, in one transaction. When
+    /// <paramref name="triggerStartKey"/> already names a run, that run is returned instead and nothing
+    /// is created. Defaulted so the test doubles that never start a run need no stub.
+    /// </summary>
+    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
+        => throw new NotSupportedException();
+
+    /// <summary>The run <see cref="StartAsync"/> created under this key, if there is one.</summary>
+    Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
+        => Task.FromResult<RunStartRow?>(null);
     Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct);
     Task<RunRow> GetByIdAsync(long runId, CancellationToken ct);
     Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct);
