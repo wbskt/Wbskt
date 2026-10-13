@@ -52,6 +52,36 @@ public sealed class PendingTriggerEventDrainerTests
     }
 
     [Fact]
+    public async Task A_stored_event_cannot_claim_to_start_a_child_run()
+    {
+        // StartsChildRun is never read from JSON, so neither a queued event nor anything else that
+        // deserializes one can carry it. The replay is exempt from the run ceiling by ReplayFor instead.
+        var provider = new RecordingPendingTriggerEventProvider(new Queue<PendingTriggerEventRow>([
+            new PendingTriggerEventRow
+            {
+                Id = 2,
+                WorkflowRefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                TriggerNodeId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                CorrelationKey = "manual:x",
+                InboundEventJson = """
+                    {"channelKind":"manual","matchKeys":["manual:x"],"inboundEventId":"evt-2","payload":{},"receivedAt":"2026-10-13T12:00:00Z","startsChildRun":true}
+                    """,
+                EnqueuedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            }
+        ]));
+        var inboundHub = new RecordingInboundHub();
+        var drainer = new PendingTriggerEventDrainer(provider, inboundHub);
+
+        await drainer.DrainAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "manual:x", CancellationToken.None);
+
+        InboundEvent replayed = Assert.Single(inboundHub.Events);
+        Assert.False(replayed.StartsChildRun);
+        Assert.NotNull(replayed.ReplayFor);
+        Assert.DoesNotContain("startsChildRun", JsonSerializer.Serialize(replayed with { StartsChildRun = true }), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Drain_does_nothing_when_queue_is_empty()
     {
         // Arrange

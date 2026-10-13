@@ -53,8 +53,12 @@ CREATE INDEX IX_Runs_WorkflowDefinitionId_Id
     INCLUDE (Status);
 GO
 
-
-
+-- Run_Start's per-workspace ceiling counts the active runs while it holds the workspace's applock;
+-- filtered like IX_Runs_WorkflowRefId_CorrelationKey_Active so the count never reads retained runs.
+CREATE INDEX IX_Runs_WorkflowDefinitionId_Active
+    ON dbo.Runs (WorkflowDefinitionId)
+    WHERE Status IN (N'Running', N'Failing', N'Cancelling');
+GO
 
 -- Drives both retention sweeps (HistoryEvent_DeleteForRetiredRuns, Run_DeleteRetired).
 CREATE INDEX IX_Runs_CompletedAt

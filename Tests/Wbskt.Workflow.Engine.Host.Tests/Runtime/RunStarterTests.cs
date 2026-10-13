@@ -151,6 +151,19 @@ public sealed class RunStarterTests
     }
 
     [Fact]
+    public async Task An_exempt_start_sends_no_ceiling_and_starts_in_a_full_workspace()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { AtCeiling = true };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 3 });
+
+        RunStartResult result = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None, exemptFromCeiling: true);
+
+        Assert.True(result.Created);
+        Assert.Null(runProvider.MaxActiveRuns);
+    }
+
+    [Fact]
     public async Task Start_sends_no_ceiling_when_it_is_switched_off()
     {
         List<string> operations = [];
@@ -205,7 +218,7 @@ public sealed class RunStarterTests
         {
             WorkspaceId = workspaceId;
             MaxActiveRuns = maxActiveRuns;
-            if (AtCeiling)
+            if (AtCeiling && maxActiveRuns is not null)
             {
                 operations.Add("run");
                 throw AuthHost.SqlExceptions.WithNumber(50026, "The workspace has reached its limit of active runs.");

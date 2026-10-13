@@ -248,10 +248,18 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 break;
         }
 
+        // Some starts take a place under the workspace's active-run ceiling that is already held, so
+        // refusing them would lose work rather than shed it: a sub-workflow child (its parent is running),
+        // a queued event's replay (the run that finished made the room, and the event has left the queue),
+        // and a start replacing the runs it has just cancelled (refusing it would leave nothing running).
+        bool exemptFromCeiling = normalizedEvent.StartsChildRun
+            || normalizedEvent.ReplayFor is not null
+            || (concurrencyDecision.Outcome == TriggerConcurrencyOutcome.ProceedAfterCancellingActive && concurrencyDecision.RunIdsToCancel.Count > 0);
+
         RunStartResult started;
         try
         {
-            started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct);
+            started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling);
         }
         catch (WorkspaceRunCeilingException)
         {

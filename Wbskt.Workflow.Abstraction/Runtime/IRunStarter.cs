@@ -5,9 +5,12 @@ public interface IRunStarter
     /// <summary>
     /// Starts a run of the workflow from its trigger node. With a <paramref name="triggerStartKey"/>, a
     /// run already started under the same key is returned instead (<see cref="RunStartResult.Created"/>
-    /// false) and nothing new is created.
+    /// false) and nothing new is created. Past the workspace's active-run ceiling it throws
+    /// <see cref="WorkspaceRunCeilingException"/>, unless <paramref name="exemptFromCeiling"/>: a start
+    /// that takes a place already held (a sub-workflow child, a queued event replayed when its run
+    /// finished, a run replacing the ones it cancels).
     /// </summary>
-    Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct);
+    Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false);
 
     /// <summary>The run an earlier attempt started under <paramref name="triggerStartKey"/>, if any.</summary>
     Task<RunStartResult?> FindStartedAsync(string triggerStartKey, CancellationToken ct);

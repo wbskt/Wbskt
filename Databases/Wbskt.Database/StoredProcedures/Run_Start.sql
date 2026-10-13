@@ -38,12 +38,18 @@ BEGIN
             -- The workspace's ceiling on runs going at once (Running, Failing or Cancelling, as in
             -- IX_Runs_WorkflowRefId_CorrelationKey_Active). Counted under an application lock per
             -- workspace, so concurrent starts one short of the ceiling cannot all pass the count.
-            -- NULL is no ceiling.
+            -- NULL is no ceiling. The wait for the lock is bounded: a start that cannot get it in a
+            -- few seconds is refused as though the workspace were full, rather than holding an inbound
+            -- request (and a pooled connection) for as long as the workspace stays contended.
             IF @MaxActiveRuns IS NOT NULL AND @WorkspaceId IS NOT NULL
             BEGIN
                 DECLARE @Resource NVARCHAR(255) = CONCAT(N'run-ceiling:', @WorkspaceId);
-                EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
+                DECLARE @LockResult INT;
+                EXEC @LockResult = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+                IF @LockResult < 0
+                    THROW 50026, 'The workspace is too busy to start another run.', 1;
 
+                -- IX_Runs_WorkflowDefinitionId_Active keeps this to the runs still going.
                 IF (SELECT COUNT(*)
                     FROM dbo.Runs r
                     JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId

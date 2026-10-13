@@ -68,13 +68,16 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                 null);
         }
 
-        InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.GetUtcNow().UtcDateTime);
+        // The parent already holds a place under the workspace's active-run ceiling, so its child is
+        // started past it (InboundEvent.StartsChildRun).
+        InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.GetUtcNow().UtcDateTime) with { StartsChildRun = true };
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
         if (result.Outcome == TriggerDispatchOutcome.Refused)
         {
-            // The parent already holds a place under the workspace's ceiling; its child waits for
-            // room by way of the step's retry policy rather than failing the parent outright.
+            // Not expected, since a child is exempt from the ceiling; kept as a safety net. Marked
+            // retryable, but a sub-workflow step gets no retries of its own, so this fails the parent
+            // with a code that says why rather than as a missing manual trigger.
             return new NodeExecutionResult.Fail(
                 "SUBWORKFLOW_WORKSPACE_BUSY",
                 $"Child workflow '{childRefId}' did not start: the workspace has as many runs going as it may.",

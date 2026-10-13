@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Wbskt.Workflow.Abstraction.Runtime;
 
@@ -25,6 +26,14 @@ public sealed record InboundEvent(
     /// the replay goes to this trigger alone.
     /// </summary>
     public QueuedTrigger? ReplayFor { get; init; }
+
+    /// <summary>
+    /// Set only by a parent's sub-workflow node starting its child. The parent already holds a place
+    /// under the workspace's active-run ceiling, so the child is started past it. Never read from
+    /// JSON, so no inbound adapter (or a queued event's stored copy) can claim it.
+    /// </summary>
+    [JsonIgnore]
+    public bool StartsChildRun { get; init; }
 }
 
 /// <summary>The workflow trigger a queued event is waiting for.</summary>
