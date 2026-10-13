@@ -15,8 +15,9 @@ public interface IClientProvider : IReferenceProvider
         string? tag, int skip, int take, CancellationToken cancellationToken = default);
     /// <summary>
     /// Creates a client. Throws <c>SqlException</c> 50020 when its policy is at <c>MaxClients</c>, and
-    /// 50025 when the workspace already has <paramref name="maxPerWorkspace"/> pending or registered
-    /// clients (null is no ceiling).
+    /// 50025 when it would be created registered and the workspace already has
+    /// <paramref name="maxPerWorkspace"/> registered clients (null is no ceiling). A pending client is
+    /// not checked against the workspace ceiling until it is approved.
     /// </summary>
     Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, byte[] secretHash, ClientStatus status,
         int? maxPerWorkspace, CancellationToken cancellationToken = default);
@@ -28,9 +29,12 @@ public interface IClientProvider : IReferenceProvider
     /// <summary>
     /// Sets <paramref name="status"/> on each client in <paramref name="clientRefIds"/> that belongs to
     /// the workspace, in one call, and returns one result per reference in the same order. When
-    /// approvals compete for a policy's last places, the earlier references get them.
+    /// approvals compete for a policy's last places, the earlier references get them. Approvals that
+    /// would take the workspace past <paramref name="maxPerWorkspace"/> registered clients (null is no
+    /// ceiling) are refused the same way.
     /// </summary>
-    Task<IReadOnlyList<ClientStatusChange>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds, ClientStatus status, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ClientStatusChange>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds, ClientStatus status,
+        int? maxPerWorkspace, CancellationToken cancellationToken = default);
     /// <summary>Deletes a client in <paramref name="workspaceId"/>; false when there was none to delete.</summary>
     Task<bool> DeleteAsync(int id, int workspaceId, CancellationToken cancellationToken = default);
     /// <summary>

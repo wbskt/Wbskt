@@ -9,7 +9,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
 /// The procedures behind deleting a client, rotating its secret or its policy's PIN, and approving
-/// against a policy's limit. Each test seeds its own workspace, so the shared database is safe.
+/// against a policy's limit and the workspace's ceiling. Each test seeds its own workspace, so the shared database is safe.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
@@ -91,7 +91,7 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         Guid[] refs = await Task.WhenAll(pending.Select(RefIdOfAsync));
 
         var outcomes = await Task.WhenAll(refs.Select(async refId =>
-            (await Clients().UpdateStatusesAsync(workspaceId, [refId], ClientStatus.Registered)).Single().Outcome));
+            (await Clients().UpdateStatusesAsync(workspaceId, [refId], ClientStatus.Registered, maxPerWorkspace: null)).Single().Outcome));
 
         Assert.Equal(1, outcomes.Count(o => o == ClientStatusOutcome.Updated));
         Assert.All(outcomes.Where(o => o != ClientStatusOutcome.Updated), o => Assert.Equal(ClientStatusOutcome.PolicyLimitReached, o));
@@ -100,12 +100,12 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         // Revoking is never limited, and an already-registered client can be re-saved as registered.
         // refs[0] may be the one that won the race, so its old status is whatever the table says now.
         var before = (ClientStatus)await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", refs[0]);
-        var revoked = (await Clients().UpdateStatusesAsync(workspaceId, [refs[0]], ClientStatus.Revoked)).Single();
+        var revoked = (await Clients().UpdateStatusesAsync(workspaceId, [refs[0]], ClientStatus.Revoked, maxPerWorkspace: null)).Single();
         Assert.Equal(ClientStatusOutcome.Updated, revoked.Outcome);
         Assert.Equal(before, revoked.OldStatus);
         Guid registered = await ScalarAsync<Guid>("SELECT TOP 1 RefId FROM dbo.Clients WHERE PolicyId = @p0 AND Status = 1", policyId);
         Assert.Equal(ClientStatusOutcome.AlreadyAtStatus,
-            (await Clients().UpdateStatusesAsync(workspaceId, [registered], ClientStatus.Registered)).Single().Outcome);
+            (await Clients().UpdateStatusesAsync(workspaceId, [registered], ClientStatus.Registered, maxPerWorkspace: null)).Single().Outcome);
     }
 
     [SkippableFact]
@@ -123,7 +123,7 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         Guid missing = Guid.NewGuid();
 
         var changes = await Clients().UpdateStatusesAsync(workspaceId,
-            [limited[2], unlimited, foreign, limited[0], missing, alreadyRegistered, limited[1]], ClientStatus.Registered);
+            [limited[2], unlimited, foreign, limited[0], missing, alreadyRegistered, limited[1]], ClientStatus.Registered, maxPerWorkspace: null);
 
         Assert.Equal(
             new[]
@@ -143,6 +143,91 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
         Assert.Equal(policyId, updated.PolicyId);
         Assert.Equal(await ScalarAsync<Guid>("SELECT RefId FROM dbo.RegistrationPolicies WHERE Id = @p0", policyId), updated.PolicyRefId);
         Assert.Equal(ClientStatus.Pending, updated.OldStatus);
+    }
+
+    [SkippableFact]
+    public async Task Approving_pending_clients_past_the_workspace_ceiling_is_refused_in_the_order_given()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int first = await CreatePolicyAsync(workspaceId);
+        int second = await CreatePolicyAsync(workspaceId, maxClients: 1);
+        await CreateClientAsync(workspaceId, first, status: 1);
+        Guid[] pending = await Task.WhenAll(Enumerable.Range(0, 4).Select(async i =>
+            await RefIdOfAsync(await CreateClientAsync(workspaceId, i % 2 == 0 ? first : second, status: 0))));
+
+        // Three places are left. pending[3] is refused by its policy before the workspace counts, so
+        // it does not take one of them; pending[0..2] fill them.
+        var changes = await Clients().UpdateStatusesAsync(workspaceId, [pending[1], pending[3], pending[0], pending[2]], ClientStatus.Registered, maxPerWorkspace: 3);
+
+        Assert.Equal(
+            new[]
+            {
+                (pending[1], ClientStatusOutcome.Updated),
+                (pending[3], ClientStatusOutcome.PolicyLimitReached),
+                (pending[0], ClientStatusOutcome.Updated),
+                (pending[2], ClientStatusOutcome.WorkspaceLimitReached)
+            },
+            changes.Select(c => (c.RefId, c.Outcome)));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", workspaceId));
+        Assert.Equal(0, await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", pending[2]));
+    }
+
+    [SkippableFact]
+    public async Task Approving_revoked_clients_again_is_refused_once_the_workspace_has_filled_up()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int policyId = await CreatePolicyAsync(workspaceId);
+        Guid[] revoked = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ => await RefIdOfAsync(await CreateClientAsync(workspaceId, policyId, status: 2))));
+        await CreateClientAsync(workspaceId, policyId, status: 1);
+        await CreateClientAsync(workspaceId, policyId, status: 1);
+
+        var changes = await Clients().UpdateStatusesAsync(workspaceId, revoked, ClientStatus.Registered, maxPerWorkspace: 3);
+
+        Assert.Equal([ClientStatusOutcome.Updated, ClientStatusOutcome.WorkspaceLimitReached], changes.Select(c => c.Outcome));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", workspaceId));
+        Assert.Equal(2, await ScalarAsync<byte>("SELECT Status FROM dbo.Clients WHERE RefId = @p0", revoked[1]));
+
+        // Revoking is never limited, and frees a place for the one refused.
+        Assert.Equal(ClientStatusOutcome.Updated,
+            (await Clients().UpdateStatusesAsync(workspaceId, [revoked[0]], ClientStatus.Revoked, maxPerWorkspace: 3)).Single().Outcome);
+        Assert.Equal(ClientStatusOutcome.Updated,
+            (await Clients().UpdateStatusesAsync(workspaceId, [revoked[1]], ClientStatus.Registered, maxPerWorkspace: 3)).Single().Outcome);
+    }
+
+    [SkippableFact]
+    public async Task Racing_approvals_and_registrations_cannot_overshoot_the_workspace_ceiling()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int[] policies = [await CreatePolicyAsync(workspaceId), await CreatePolicyAsync(workspaceId)];
+        Guid[] pending = await Task.WhenAll(Enumerable.Range(0, 10).Select(async i =>
+            await RefIdOfAsync(await CreateClientAsync(workspaceId, policies[i % 2], status: (byte)(i < 5 ? 0 : 2)))));
+
+        // Approvals one at a time and in pairs, with auto-approved registrations through
+        // Client_Create mixed in, all against the same four places.
+        Guid[][] batches = [[pending[0]], [pending[1]], [pending[2], pending[3]], [pending[4]], [pending[5]], [pending[6], pending[7]], [pending[8], pending[9]]];
+        var approvals = batches.Select(batch => Task.Run(() => Clients().UpdateStatusesAsync(workspaceId, batch, ClientStatus.Registered, maxPerWorkspace: 4))).ToArray();
+        var registrations = Enumerable.Range(0, 4).Select(i => Task.Run(async () =>
+        {
+            try
+            {
+                await Clients().InsertClientAsync(workspaceId, policies[i % 2], "racer", new byte[ClientCredential.SecretHashBytes], ClientStatus.Registered, maxPerWorkspace: 4);
+                return true;
+            }
+            catch (SqlException ex) when (ex.Number == 50025)
+            {
+                return false;
+            }
+        })).ToArray();
+
+        var approved = (await Task.WhenAll(approvals)).SelectMany(c => c).ToList();
+        var registered = await Task.WhenAll(registrations);
+
+        Assert.All(approved, c => Assert.Contains(c.Outcome, new[] { ClientStatusOutcome.Updated, ClientStatusOutcome.WorkspaceLimitReached }));
+        Assert.Equal(4, approved.Count(c => c.Outcome == ClientStatusOutcome.Updated) + registered.Count(r => r));
+        Assert.Equal(4, await ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @p0 AND Status = 1", workspaceId));
     }
 
     // ---------------------------------------------------------------- helpers

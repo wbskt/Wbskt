@@ -181,7 +181,7 @@ public class ClientsController : ApiControllerBase
     /// <summary>
     /// Applies one status to many clients: approving or revoking a batch of pending devices at once.
     /// Each client is handled as the single-client endpoint would handle it, so one that fails (the
-    /// policy is full, or the client is not in this workspace) is reported and the rest still change.
+    /// policy or the workspace is full, or the client is not in this workspace) is reported and the rest still change.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
     /// <param name="request">The clients (at most 100) and the status to give them.</param>
