@@ -36,7 +36,13 @@ internal sealed class PendingTriggerEventDrainer : IPendingTriggerEventDrainer
         // Re-mint the idempotency identity: the original InboundEventId already has a "Succeeded"
         // claim from when the event was first queued, so re-injecting it unchanged would make
         // BookmarkResumer.MatchInboundAsync treat this dispatch as a duplicate and drop it.
-        evt = evt with { InboundEventId = $"{evt.InboundEventId}:drain:{row.Id}" };
+        // ReplayFor keeps the replay on the trigger that queued it: the original arrival already started
+        // or queued every other registration on its match keys, and those must not see it twice.
+        evt = evt with
+        {
+            InboundEventId = $"{evt.InboundEventId}:drain:{row.Id}",
+            ReplayFor = new QueuedTrigger(row.WorkflowRefId, row.TriggerNodeId)
+        };
 
         await _inboundHub.HandleAsync(evt, ct);
     }

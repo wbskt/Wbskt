@@ -18,4 +18,14 @@ public sealed record InboundEvent(
     /// business in either.
     /// </summary>
     public string? SecretHash { get; init; }
+
+    /// <summary>
+    /// Set only on a queued event replayed when its correlation slot frees up: the trigger that queued
+    /// it. The original arrival already reached every other registration and any bookmark it matched, so
+    /// the replay goes to this trigger alone.
+    /// </summary>
+    public QueuedTrigger? ReplayFor { get; init; }
 }
+
+/// <summary>The workflow trigger a queued event is waiting for.</summary>
+public sealed record QueuedTrigger(Guid WorkflowRefId, Guid TriggerNodeId);

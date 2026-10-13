@@ -79,6 +79,24 @@ public sealed class BookmarkResumerTests
     }
 
     [Fact]
+    public async Task MatchInbound_does_not_wake_a_bookmark_with_a_replayed_queued_event()
+    {
+        // #316: the replay is for the trigger that queued it. A bookmark parked since the event first
+        // arrived was never this event's to resume.
+        var bookmark = CreateBookmark(77, 42, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var bookmarkProvider = new RecordingBookmarkProvider(bookmark);
+        var dispatcher = new RecordingRunDispatcher();
+        var resumer = new BookmarkResumer(bookmarkProvider, RecordingIdempotencyKeyProvider.NewClaim(), new RecordingBranchProvider((bookmark.BranchRefId, 1001)), dispatcher);
+        InboundEvent replay = CreateInboundEvent() with { ReplayFor = new QueuedTrigger(Guid.NewGuid(), Guid.NewGuid()) };
+
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(replay, hasRegistrations: true, CancellationToken.None);
+
+        Assert.False(result.Matched);
+        Assert.Empty(bookmarkProvider.ClaimedRefIds);
+        Assert.Null(bookmarkProvider.LastMatchKey);
+    }
+
+    [Fact]
     public async Task MatchInbound_claims_bookmark_before_dispatching_branch()
     {
         // Arrange

@@ -32,7 +32,10 @@ internal sealed class BookmarkResumer : IBookmarkResumer
     {
         // Looked up before the claim, so an event nothing will act on writes nothing. A bookmark parked
         // after this read was parked after the event arrived, so it was never this event's to resume.
-        IReadOnlyCollection<BookmarkRow> bookmarks = await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct);
+        // A replayed queued event matched its bookmarks when it first arrived; any parked since are not its.
+        IReadOnlyCollection<BookmarkRow> bookmarks = evt.ReplayFor is null
+            ? await _bookmarkProvider.GetAllByMatchKeysAsync(evt.MatchKeys, ct)
+            : [];
         if (bookmarks.Count == 0 && !hasRegistrations)
         {
             _logger?.LogDebug("Event {EventId} matches no bookmark or registration; not claiming it", evt.InboundEventId);

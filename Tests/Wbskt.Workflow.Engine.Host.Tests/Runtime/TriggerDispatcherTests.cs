@@ -482,6 +482,26 @@ public sealed class TriggerDispatcherTests
         Assert.Equal(501L, late.RunId);
     }
 
+    [Fact]
+    public async Task A_replayed_queued_event_reaches_only_the_trigger_that_queued_it()
+    {
+        // #316: the event started workflow 6 when it arrived and queued for workflow 5. When 5's slot
+        // frees up the replay must start 5 and leave 6 alone.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations);
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: TwoRegistrations(), runStarter: runStarter);
+        InboundEvent replay = CreateInboundEvent() with
+        {
+            InboundEventId = "evt-1:drain:9",
+            ReplayFor = new QueuedTrigger(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+        };
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(replay, CancellationToken.None);
+
+        Assert.Equal(1, runStarter.RunsCreated);
+        Assert.Equal(5L, Assert.Single(result.Registrations).RegistrationId);
+    }
+
     private static RecordingTriggerRegistrationProvider TwoRegistrations() => new(
         CreateRegistration("AllowParallel", id: 5),
         CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));

@@ -44,6 +44,10 @@ public sealed class PendingTriggerEventDrainerTests
         // it as a duplicate of the original (already-Succeeded) delivery.
         Assert.Single(inboundHub.Events);
         Assert.Equal("evt-1:drain:1", inboundHub.Events.Single().InboundEventId);
+        // ...and goes only to the trigger that queued it (#316).
+        Assert.Equal(
+            new QueuedTrigger(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
+            inboundHub.Events.Single().ReplayFor);
         Assert.Equal(1, provider.DequeueCalls);
     }
 
