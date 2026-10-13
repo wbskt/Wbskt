@@ -56,6 +56,14 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         // Registrations are read before the claim so an event that nothing listens for writes nothing
         // (see IBookmarkResumer.MatchInboundAsync); the same list is used below.
         IReadOnlyCollection<TriggerRegistrationRow> registrations = await _triggerRegistrationProvider.GetActiveByChannelKeysAsync(resolvedEvent.ChannelKind, resolvedEvent.MatchKeys, ct);
+        if (evt.ReplayFor is { } replayFor)
+        {
+            // A replayed queued event is for the trigger that queued it and no other (InboundEvent.ReplayFor).
+            registrations = registrations
+                .Where(r => r.WorkflowRefId == replayFor.WorkflowRefId && r.TriggerNodeId == replayFor.TriggerNodeId)
+                .ToArray();
+        }
+
         BookmarkMatchResult bookmarkMatch = await _bookmarkResumer.MatchInboundAsync(resolvedEvent, registrations.Count > 0, ct);
         if (bookmarkMatch.Matched)
         {
