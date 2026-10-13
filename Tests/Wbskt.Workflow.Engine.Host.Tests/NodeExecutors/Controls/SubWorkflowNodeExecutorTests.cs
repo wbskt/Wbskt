@@ -41,6 +41,20 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task First_visit_fails_retryably_when_the_workspace_is_at_its_run_ceiling()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Refused, null, null, "ceiling"));
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock());
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("SUBWORKFLOW_WORKSPACE_BUSY", fail.ErrorCode);
+        Assert.True(fail.Retryable);
+    }
+
+    [Fact]
     public async Task First_visit_fails_when_child_did_not_start()
     {
         var hub = new Mock<IInboundHub>();

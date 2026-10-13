@@ -9,7 +9,9 @@ CREATE PROCEDURE dbo.Run_Start
     @CreditBudget         DECIMAL(18,4),
     @TriggerStartKey      NVARCHAR(200),
     @BranchRefId          UNIQUEIDENTIFIER,
-    @BranchLocalJson      NVARCHAR(MAX)
+    @BranchLocalJson      NVARCHAR(MAX),
+    @WorkspaceId          INT = NULL,
+    @MaxActiveRuns        INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -32,6 +34,23 @@ BEGIN
     BEGIN
         BEGIN TRY
             BEGIN TRANSACTION;
+
+            -- The workspace's ceiling on runs going at once (Running, Failing or Cancelling, as in
+            -- IX_Runs_WorkflowRefId_CorrelationKey_Active). Counted under an application lock per
+            -- workspace, so concurrent starts one short of the ceiling cannot all pass the count.
+            -- NULL is no ceiling.
+            IF @MaxActiveRuns IS NOT NULL AND @WorkspaceId IS NOT NULL
+            BEGIN
+                DECLARE @Resource NVARCHAR(255) = CONCAT(N'run-ceiling:', @WorkspaceId);
+                EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
+
+                IF (SELECT COUNT(*)
+                    FROM dbo.Runs r
+                    JOIN dbo.WorkflowDefinitions d ON d.Id = r.WorkflowDefinitionId
+                    WHERE d.WorkspaceId = @WorkspaceId
+                      AND r.Status IN (N'Running', N'Failing', N'Cancelling')) >= @MaxActiveRuns
+                    THROW 50026, 'The workspace has reached its limit of active runs.', 1;
+            END
 
             INSERT INTO dbo.Runs
                 (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey)

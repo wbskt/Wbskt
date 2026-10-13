@@ -14,6 +14,13 @@ public interface IRunProvider
     Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
         => throw new NotSupportedException();
 
+    /// <summary>
+    /// As above, and refused with <c>SqlException</c> 50026 when <paramref name="workspaceId"/> already
+    /// has <paramref name="maxActiveRuns"/> runs going. A null ceiling is none.
+    /// </summary>
+    Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, ct);
+
     /// <summary>The run <see cref="StartAsync"/> created under this key, if there is one.</summary>
     Task<RunStartRow?> FindByTriggerStartKeyAsync(string triggerStartKey, CancellationToken ct)
         => Task.FromResult<RunStartRow?>(null);

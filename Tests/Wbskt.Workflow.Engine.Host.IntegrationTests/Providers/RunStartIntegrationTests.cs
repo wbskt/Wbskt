@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
@@ -11,6 +12,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 [Collection("SqlEdge")]
 public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 {
+    private const int WorkspaceRunCeilingError = 50026;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
     [SkippableFact]
@@ -97,11 +99,115 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         (await runProvider.FindByTriggerStartKeyAsync($"trigger-start:{Guid.NewGuid():N}", CancellationToken.None)).Should().BeNull();
     }
 
-    private async Task<WorkflowDefinitionRow> CreateDefinitionAsync()
+    [SkippableFact]
+    public async Task Start_past_the_workspace_ceiling_is_refused()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        for (int i = 0; i < 2; i++)
+        {
+            (RunRow run, BranchRow branch) = NewRun(wd);
+            await runProvider.StartAsync(run, branch, null, workspaceId, 2, CancellationToken.None);
+        }
+
+        (RunRow extra, BranchRow extraBranch) = NewRun(wd);
+        Func<Task> act = () => runProvider.StartAsync(extra, extraBranch, null, workspaceId, 2, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceRunCeilingError);
+        (await runProvider.FindRowByRefIdAsync(extra.RefId, CancellationToken.None)).Should().BeNull();
+    }
+
+    [SkippableFact]
+    public async Task Start_at_the_ceiling_still_returns_the_run_a_key_already_started()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        string key = $"trigger-start:{Guid.NewGuid():N}";
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        (RunRow retry, BranchRow retryBranch) = NewRun(wd);
+
+        RunStartRow started = await runProvider.StartAsync(first, firstBranch, key, workspaceId, 1, CancellationToken.None);
+        RunStartRow again = await runProvider.StartAsync(retry, retryBranch, key, workspaceId, 1, CancellationToken.None);
+
+        again.Created.Should().BeFalse();
+        again.Run.Id.Should().Be(started.Run.Id);
+    }
+
+    [SkippableFact]
+    public async Task A_finished_run_frees_its_place_under_the_ceiling()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        await runProvider.StartAsync(first, firstBranch, null, workspaceId, 1, CancellationToken.None);
+        await runProvider.UpdateStatusAsync(first.RefId, RunStatus.Succeeded, DateTime.UtcNow, null, null, CancellationToken.None);
+
+        (RunRow next, BranchRow nextBranch) = NewRun(wd);
+        RunStartRow started = await runProvider.StartAsync(next, nextBranch, null, workspaceId, 1, CancellationToken.None);
+
+        started.Created.Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task Concurrent_starts_never_pass_the_ceiling()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+
+        Task<RunStartRow?>[] attempts = Enumerable.Range(0, 12).Select(async _ =>
+        {
+            (RunRow run, BranchRow branch) = NewRun(wd);
+            try
+            {
+                return await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, 3, CancellationToken.None);
+            }
+            catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)
+            {
+                return null;
+            }
+        }).ToArray();
+        RunStartRow?[] results = await Task.WhenAll(attempts);
+
+        results.Count(r => r is not null).Should().Be(3);
+    }
+
+    [SkippableFact]
+    public async Task The_ceiling_counts_only_its_own_workspace()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int busy = NewWorkspaceId();
+        int other = NewWorkspaceId();
+        WorkflowDefinitionRow busyWd = await CreateDefinitionAsync(busy);
+        WorkflowDefinitionRow otherWd = await CreateDefinitionAsync(other);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow a, BranchRow aBranch) = NewRun(busyWd);
+        await runProvider.StartAsync(a, aBranch, null, busy, 1, CancellationToken.None);
+
+        (RunRow b, BranchRow bBranch) = NewRun(otherWd);
+        RunStartRow started = await runProvider.StartAsync(b, bBranch, null, other, 1, CancellationToken.None);
+
+        started.Created.Should().BeTrue();
+    }
+
+    private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue);
+
+    private async Task<WorkflowDefinitionRow> CreateDefinitionAsync(int workspaceId = 1)
     {
         return await ProviderFactory.WorkflowDefinition(fixture.ConnectionString).InsertAsync(new WorkflowDefinitionRow
         {
-            Id = 0, RefId = Guid.NewGuid(), Version = 0, WorkspaceId = 1,
+            Id = 0, RefId = Guid.NewGuid(), Version = 0, WorkspaceId = workspaceId,
             Name = $"IT-WD-{Guid.NewGuid():N}",
             Description = null, IsEnabled = true,
             DefinitionJson = """{"nodes":[],"edges":[]}""",

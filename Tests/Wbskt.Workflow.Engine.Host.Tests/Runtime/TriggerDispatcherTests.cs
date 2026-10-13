@@ -502,6 +502,57 @@ public sealed class TriggerDispatcherTests
         Assert.Equal(5L, Assert.Single(result.Registrations).RegistrationId);
     }
 
+    [Fact]
+    public async Task Dispatch_returns_Refused_when_the_workspace_is_at_its_run_ceiling()
+    {
+        var operations = new List<string>();
+        var runDispatcher = new RecordingRunDispatcher(operations);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            runStarter: new RecordingRunStarter(operations) { AtCeiling = true },
+            runDispatcher: runDispatcher);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        Assert.Null(result.RunId);
+        Assert.Empty(runDispatcher.Requests);
+    }
+
+    [Fact]
+    public async Task A_refused_event_redelivered_once_the_workspace_has_room_does_not_start_late()
+    {
+        // The refusal settles the event's claim, so a broker redelivery gets the same answer rather than
+        // starting a run for an event the sender was already told was dropped.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            runStarter: runStarter);
+
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+        runStarter.AtCeiling = false;
+        TriggerDispatchResult redelivered = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(0, runStarter.RunsCreated);
+        Assert.Equal(TriggerDispatchOutcome.Refused, redelivered.Outcome);
+    }
+
+    [Fact]
+    public async Task One_refused_registration_does_not_stop_another_from_starting()
+    {
+        // Two workflows' triggers can sit in different workspaces; only the full one is refused.
+        var operations = new List<string>();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: TwoRegistrations(),
+            runStarter: new RecordingRunStarter(operations) { RefuseFirst = true });
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Contains(result.Registrations, r => r.Outcome == TriggerDispatchOutcome.Refused);
+    }
+
     private static RecordingTriggerRegistrationProvider TwoRegistrations() => new(
         CreateRegistration("AllowParallel", id: 5),
         CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));
@@ -779,11 +830,23 @@ public sealed class TriggerDispatcherTests
 
         public int RunsCreated => _started;
 
+        /// <summary>While set, every start is refused as though the workspace were at its run ceiling.</summary>
+        public bool AtCeiling { get; set; }
+
+        /// <summary>Refuses only the first start it sees, as for a trigger in the one full workspace.</summary>
+        public bool RefuseFirst { get; set; }
+
         public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct)
         {
             lock (_gate)
             {
                 operations.Add("start");
+                if (AtCeiling || RefuseFirst)
+                {
+                    RefuseFirst = false;
+                    throw new WorkspaceRunCeilingException(1, 3);
+                }
+
                 if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))
                 {
                     return existing with { Created = false };

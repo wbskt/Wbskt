@@ -192,6 +192,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.StartedRun)
             ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Queued)
             ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Dropped)
+            ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Refused)
             ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.Filtered)
             ?? perRegistration.FirstOrDefault(r => r.Outcome == TriggerDispatchOutcome.SecretMismatch);
 
@@ -247,7 +248,18 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 break;
         }
 
-        RunStartResult started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct);
+        RunStartResult started;
+        try
+        {
+            started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct);
+        }
+        catch (WorkspaceRunCeilingException)
+        {
+            // Settled like a drop: the claim records it, so a redelivered event is not refused twice
+            // or, worse, started late once the workspace has room.
+            return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+        }
+
         _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, started.RunId, started.BranchId, registration.Id);
 
         // A run that already existed under this key without this registration's claim saying so outlived

@@ -19,6 +19,7 @@ public sealed class WorkflowMetrics : IDisposable
         _meter = new Meter(MeterName);
         RunsStarted = _meter.CreateCounter<long>("wbskt_workflow_runs_started_total");
         RunsCompleted = _meter.CreateCounter<long>("wbskt_workflow_runs_completed_total");
+        RunsRefused = _meter.CreateCounter<long>("wbskt_workflow_runs_refused_total");
         BranchesActive = _meter.CreateObservableGauge("wbskt_workflow_branches_active", () => { return _activeBranches; });
         
         BookmarksOutstanding = _meter.CreateObservableGauge("wbskt_workflow_bookmarks_outstanding", () =>
@@ -49,6 +50,9 @@ public sealed class WorkflowMetrics : IDisposable
 
     public Counter<long> RunsStarted { get; }
     public Counter<long> RunsCompleted { get; }
+
+    /// <summary>Triggers that started no run because their workspace was at its active-run ceiling.</summary>
+    public Counter<long> RunsRefused { get; }
     public ObservableGauge<long> BranchesActive { get; }
     public ObservableGauge<long> BookmarksOutstanding { get; }
     public ObservableGauge<long> BookmarksOverdue { get; }
@@ -87,6 +91,15 @@ public sealed class WorkflowMetrics : IDisposable
     public void RecordRunStarted(string workflowRef, string triggerKind, int workspaceId)
     {
         RunsStarted.Add(
+            1,
+            new KeyValuePair<string, object?>("workflow_ref", workflowRef),
+            new KeyValuePair<string, object?>("trigger_kind", triggerKind),
+            new KeyValuePair<string, object?>("workspace_id", workspaceId));
+    }
+
+    public void RecordRunRefused(string workflowRef, string triggerKind, int workspaceId)
+    {
+        RunsRefused.Add(
             1,
             new KeyValuePair<string, object?>("workflow_ref", workflowRef),
             new KeyValuePair<string, object?>("trigger_kind", triggerKind),

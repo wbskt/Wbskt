@@ -29,6 +29,9 @@ internal static class InboundDispatchProjection
         TriggerDispatchOutcome.Idempotent => InboundOutcome.Idempotent,
         TriggerDispatchOutcome.Filtered => InboundOutcome.Filtered,
         TriggerDispatchOutcome.SecretMismatch => InboundOutcome.SecretMismatch,
+        // The public contract has no separate outcome for it: to a caller it is a trigger that
+        // started nothing, which is what Dropped already says.
+        TriggerDispatchOutcome.Refused => InboundOutcome.Dropped,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No inbound outcome for this dispatch outcome.")
     };
 }
