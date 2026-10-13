@@ -67,6 +67,24 @@ public sealed class AccountSecurityTests
         harness.Provider.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(Password)]
+    [InlineData("")]
+    public async Task An_account_seeded_without_a_password_hash_refuses_every_password(string password)
+    {
+        // Root as the auth database seeds it when no RootPasswordHash is supplied: an empty hash,
+        // which must read as a wrong password, not fault, until the owner resets it.
+        var harness = new Harness();
+        var user = AUser();
+        user.PasswordHash = "";
+        harness.WithUser(user);
+
+        var result = await harness.Service.LoginAsync(Email, password, "10.0.0.1");
+
+        Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
+        harness.Provider.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ---------------------------------------------------------------- rehash on sign-in
 
     [Fact]

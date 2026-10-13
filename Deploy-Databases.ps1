@@ -29,7 +29,13 @@ param (
     # with this one password. Production gives each its own through the migrator; this is for
     # running the hosts locally, or in CI, the way they connect in production.
     [Parameter(Mandatory = $false)]
-    [string] $HostLoginPassword = ""
+    [string] $HostLoginPassword = "",
+
+    # The root administrator's password hash, used only when the root account is first created.
+    # Defaults to Password123!, the local development and E2E password (Tests/Wbskt.E2E.FeatureTests
+    # signs in with it). Pass "" to create root with no usable password, as production does.
+    [Parameter(Mandatory = $false)]
+    [string] $RootPasswordHash = "AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ=="
 )
 
 begin {
@@ -158,10 +164,14 @@ process {
         Drop-Database -DbName $coreDbName -SqlPackageExecutable $exe
     }
 
+    # sqlpackage refuses an empty /v: value, so each variable goes only when it has one.
     $authVariables = @()
     $coreVariables = @()
+    if ($RootPasswordHash) {
+        $authVariables += "RootPasswordHash=$RootPasswordHash"
+    }
     if ($HostLoginPassword) {
-        $authVariables = @("AuthHostPassword=$HostLoginPassword")
+        $authVariables += "AuthHostPassword=$HostLoginPassword"
         $coreVariables = @("ManagementHostPassword=$HostLoginPassword", "EngineHostPassword=$HostLoginPassword")
     }
 

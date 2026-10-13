@@ -476,6 +476,25 @@ first deploy that carries this change. Compose refuses to start any service with
 is deliberate. The default deploy runs the migrator before restarting hosts, which is the order
 this needs; do not pass `--skip-migrations` on that deploy.
 
+### Root administrator
+
+The auth database's post-deployment script creates `root` (`admin@wbskt.com`, Admin tenant-wide,
+owner of Default Workspace) the first time it runs. No password for it is in this repository.
+The migrator takes one as a hash in `ROOT_ADMIN_PASSWORD_HASH`, and only uses it on the run that
+creates the account; later runs never change root's password, so one changed in the console stays.
+With no hash, root is created with an empty one, which never matches: sign in after resetting the
+password from the console's "Forgot password" (the reset mail goes to `admin@wbskt.com`).
+
+To set a password on a fresh install, make an ASP.NET Core Identity v3 hash (PBKDF2, HMAC-SHA512,
+100,000 iterations), put it in `.env` for the first migrator run, then clear it:
+
+```bash
+python3 -c 'import base64,getpass,hashlib,os,struct; p=getpass.getpass().encode(); s=os.urandom(16); print(base64.b64encode(b"\x01"+struct.pack(">III",2,100000,16)+s+hashlib.pbkdf2_hmac("sha512",p,s,100000,32)).decode())'
+```
+
+An existing deployment is unaffected: its root row is already there. If it was created by an
+older migrator, its password is the one that used to be documented here; change it in the console.
+
 ### The device-secret migration needs this flag, once
 
 The change that moved `Clients.Secret` (plaintext) to `Clients.SecretHash` (SHA-256) drops a column,

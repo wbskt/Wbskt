@@ -263,14 +263,18 @@ GO
 SET IDENTITY_INSERT dbo.Users ON;
 GO
 
+-- Root gets no password from this repository. The hash arrives as the $(RootPasswordHash) SQLCMD
+-- variable, and only matters on the deploy that creates the row; later deploys never touch it, so a
+-- password changed in the console stays changed. Empty (the default) stores an empty hash, which
+-- never verifies: root then signs in only after a password reset to its address. Root is still
+-- created either way, because Default Workspace below is owned by it.
 IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Id = 1)
 BEGIN
-    -- Password is 'Password123!'
     -- IsEmailVerified = 1: nothing will ever mail root a verification link, and sign-in requires a
     -- verified address, so seeding it unverified would ship a database whose only administrator
     -- cannot log in.
     INSERT INTO dbo.Users (Id, Username, Email, PasswordHash, IsActive, IsEmailVerified)
-    VALUES (1, 'root', 'admin@wbskt.com', 'AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ==', 1, 1);
+    VALUES (1, 'root', 'admin@wbskt.com', N'$(RootPasswordHash)', 1, 1);
 END
 GO
 
