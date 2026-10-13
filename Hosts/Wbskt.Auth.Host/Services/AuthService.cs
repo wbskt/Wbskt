@@ -125,13 +125,12 @@ internal sealed class AuthService : IAuthService
             try
             {
                 user = await _provider.GetByEmailAsync(email, cancellationToken);
-                _logger.LogDebug("User record resolved for email: {Email}", email);
+                _logger.LogDebug("User record resolved for email {EmailHash}", EmailFingerprint.Of(email));
             }
-            catch (SecurityException ex)
+            catch (SecurityException)
             {
                 SpendPasswordCheck(password);
-                _logger.LogWarning("Login failed: User with email {Email} not found. IP: {IpAddress}. Error: {Message}", email, ipAddress, ex.Message);
-                _logger.LogTrace(ex, "Login user lookup failed stack trace for {Email}", email);
+                _logger.LogWarning("Login failed: no user with email {EmailHash}. IP: {IpAddress}", EmailFingerprint.Of(email), ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
                 // The same lookup the known-account answers make for their audit entry, so an unknown
                 // address is not told apart by answering sooner. No account, so no workspace.
@@ -160,7 +159,7 @@ internal sealed class AuthService : IAuthService
 
             if (verificationResult == PasswordVerificationResult.Failed)
             {
-                _logger.LogWarning("Login failed: Invalid password for email {Email}. IP: {IpAddress}", email, ipAddress);
+                _logger.LogWarning("Login failed: Invalid password for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("invalid_credentials");
                 await RecordFailedPasswordAsync(user, ipAddress, cancellationToken);
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Invalid password") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
@@ -169,7 +168,7 @@ internal sealed class AuthService : IAuthService
 
             if (!user.IsActive)
             {
-                _logger.LogWarning("Login failed: Account is inactive for user {Username} ({Email}). IP: {IpAddress}", user.Username, email, ipAddress);
+                _logger.LogWarning("Login failed: Account is inactive for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("user_inactive");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "User inactive") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized("AUTH_USER_INACTIVE", "User is inactive."));
@@ -185,7 +184,7 @@ internal sealed class AuthService : IAuthService
             }
             else if (!user.IsEmailVerified)
             {
-                _logger.LogWarning("Login refused: address not yet verified for user {Username} ({Email}). IP: {IpAddress}", user.Username, email, ipAddress);
+                _logger.LogWarning("Login refused: address not yet verified for user {UserId}. IP: {IpAddress}", user.Id, ipAddress);
                 _metrics.RecordLogin("email_unverified");
                 await _eventBus.PublishAsync(new UserLoginFailedEvent(user.Id, user.RefId, ipAddress, "Email not verified") { WorkspaceIds = await _audit.OfUserAsync(user.Id, cancellationToken) }, cancellationToken);
                 return Result<LoginResponse>.Failure(Error.Unauthorized(
@@ -200,7 +199,7 @@ internal sealed class AuthService : IAuthService
                 await UpgradePasswordHashAsync(user, password, cancellationToken);
             }
 
-            _logger.LogDebug("Credentials verified successfully for user: {Username} ({Email}). Generating tokens...", user.Username, email);
+            _logger.LogDebug("Credentials verified for user {UserId}. Generating tokens...", user.Id);
             var refreshToken = GenerateRefreshToken(user.Id);
             var accessToken = GenerateAccessToken(user, refreshToken.SessionId);
 
@@ -216,11 +215,14 @@ internal sealed class AuthService : IAuthService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _metrics.RecordLogin("error");
+            // Event logs are readable by tenant admins, so the alert names the fault's type, not its
+            // message (which can quote the address or SQL detail), and a fingerprint, not the address.
+            var emailHash = EmailFingerprint.Of(email);
             await _eventBus.PublishAsync(new SecurityAlertEvent(
-                "LoginFailure", 
-                $"Unexpected error during login for {email}: {ex.Message}", 
+                "LoginFailure",
+                $"Unexpected {ex.GetType().Name} during login for email {emailHash}.",
                 ipAddress,
-                $"Email: {email}"), cancellationToken);
+                $"EmailHash: {emailHash}"), cancellationToken);
             
             throw;
         }
@@ -738,7 +740,8 @@ internal sealed class AuthService : IAuthService
     /// </remarks>
     internal async Task<Result> HandleRegistrationConflictAsync(string username, string email, Exception ex, CancellationToken cancellationToken)
     {
-        _logger.LogWarning("User registration conflict for Username={Username}. Error: {Message}", username, ex.Message);
+        // The type, not the message: a unique-key violation quotes the duplicate value, the address.
+        _logger.LogWarning("User registration conflict for Username={Username}. Error: {ErrorType}", username, ex.GetType().Name);
         _logger.LogTrace(ex, "User registration conflict stack trace for {Username}", username);
 
         User? existing;

@@ -72,7 +72,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     public async Task<Result> AddUserToWorkspaceAsync(int workspaceId, AddMemberRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Adding user {UserEmail} to workspace ID: {WorkspaceId}", request.Email, workspaceId);
+        _logger.LogInformation("Adding user {EmailHash} to workspace ID: {WorkspaceId}", EmailFingerprint.Of(request.Email), workspaceId);
 
         try
         {
@@ -81,15 +81,14 @@ internal sealed class WorkspaceService : IWorkspaceService
             {
                 user = await _authProvider.GetByEmailAsync(request.Email, cancellationToken);
             }
-            catch (SecurityException ex)
+            catch (SecurityException)
             {
-                _logger.LogWarning("Failed to add member to workspace ID {WorkspaceId}: User with email {UserEmail} not found. Error: {Message}", workspaceId, request.Email, ex.Message);
-                _logger.LogTrace(ex, "AddUserToWorkspace user not found stack trace for email {UserEmail}", request.Email);
+                _logger.LogWarning("Failed to add member to workspace ID {WorkspaceId}: no user with email {EmailHash}", workspaceId, EmailFingerprint.Of(request.Email));
                 return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
             }
 
             await _workspaceProvider.AddUserToWorkspaceAsync(workspaceId, user.Id, cancellationToken);
-            _logger.LogInformation("Successfully added user ID {UserId} ({UserEmail}) to workspace ID: {WorkspaceId}", user.Id, request.Email, workspaceId);
+            _logger.LogInformation("Successfully added user ID {UserId} to workspace ID: {WorkspaceId}", user.Id, workspaceId);
             await AnnounceAsync(new WorkspaceMemberAddedEvent(workspaceId, user.RefId), cancellationToken);
             return Result.Success();
         }
@@ -99,7 +98,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             // otherwise distinguish "no such account" from "account exists in another tenant" and
             // use this endpoint to test whether an address is registered. Both answers are the same
             // NotFound: as far as this tenant is concerned, that user does not exist.
-            _logger.LogWarning("Add member denied: user {UserEmail} is not a member of the tenant owning workspace ID {WorkspaceId}", request.Email, workspaceId);
+            _logger.LogWarning("Add member denied: user {EmailHash} is not a member of the tenant owning workspace ID {WorkspaceId}", EmailFingerprint.Of(request.Email), workspaceId);
             return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
         }
     }
