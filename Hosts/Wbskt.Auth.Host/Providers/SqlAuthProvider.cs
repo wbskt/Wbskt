@@ -27,7 +27,8 @@ internal sealed class SqlAuthProvider : BaseSqlProvider, IAuthProvider
             "dbo.User_GetBy_Email",
             p => p.AddWithValue("@Email", email),
             MapUser,
-            new SecurityException($"User with email {email} not found."),
+            // No address in the message: whatever lets this escape logs it.
+            new SecurityException("No user with that email address."),
             cancellationToken
         );
     }
