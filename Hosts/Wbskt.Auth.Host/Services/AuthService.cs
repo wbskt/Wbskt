@@ -223,8 +223,10 @@ internal sealed class AuthService : IAuthService
                 $"Unexpected {ex.GetType().Name} during login for email {emailHash}.",
                 ipAddress,
                 $"EmailHash: {emailHash}"), cancellationToken);
-            
-            throw;
+
+            // Not a bare rethrow: GlobalExceptionMiddleware logs the message and publishes it in a
+            // SystemErrorEvent, so the fault goes on as its type name and stack frames only.
+            throw SignInFaultException.From(ex);
         }
     }
 
@@ -742,7 +744,6 @@ internal sealed class AuthService : IAuthService
     {
         // The type, not the message: a unique-key violation quotes the duplicate value, the address.
         _logger.LogWarning("User registration conflict for Username={Username}. Error: {ErrorType}", username, ex.GetType().Name);
-        _logger.LogTrace(ex, "User registration conflict stack trace for {Username}", username);
 
         User? existing;
         try

@@ -84,7 +84,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             catch (SecurityException)
             {
                 _logger.LogWarning("Failed to add member to workspace ID {WorkspaceId}: no user with email {EmailHash}", workspaceId, EmailFingerprint.Of(request.Email));
-                return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
+                return Result.Failure(Error.NotFound("USER_NOT_FOUND", "No user with that email address."));
             }
 
             await _workspaceProvider.AddUserToWorkspaceAsync(workspaceId, user.Id, cancellationToken);
@@ -99,7 +99,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             // use this endpoint to test whether an address is registered. Both answers are the same
             // NotFound: as far as this tenant is concerned, that user does not exist.
             _logger.LogWarning("Add member denied: user {EmailHash} is not a member of the tenant owning workspace ID {WorkspaceId}", EmailFingerprint.Of(request.Email), workspaceId);
-            return Result.Failure(Error.NotFound("USER_NOT_FOUND", $"User with email {request.Email} not found."));
+            return Result.Failure(Error.NotFound("USER_NOT_FOUND", "No user with that email address."));
         }
     }
 
