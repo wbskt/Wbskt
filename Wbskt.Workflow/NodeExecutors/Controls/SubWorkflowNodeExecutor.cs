@@ -71,6 +71,17 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.GetUtcNow().UtcDateTime);
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
+        if (result.Outcome == TriggerDispatchOutcome.Refused)
+        {
+            // The parent already holds a place under the workspace's ceiling; its child waits for
+            // room by way of the step's retry policy rather than failing the parent outright.
+            return new NodeExecutionResult.Fail(
+                "SUBWORKFLOW_WORKSPACE_BUSY",
+                $"Child workflow '{childRefId}' did not start: the workspace has as many runs going as it may.",
+                true,
+                null);
+        }
+
         if (!result.RunId.HasValue)
         {
             return new NodeExecutionResult.Fail(

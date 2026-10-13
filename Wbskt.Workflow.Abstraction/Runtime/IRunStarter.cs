@@ -14,3 +14,15 @@ public interface IRunStarter
 }
 
 public sealed record RunStartResult(long RunId, Guid RunRefId, long BranchId, bool Created);
+
+/// <summary>
+/// Thrown by <see cref="IRunStarter.StartAsync"/> when the workflow's workspace already has
+/// <paramref name="Limit"/> runs going. Nothing was created.
+/// </summary>
+public sealed class WorkspaceRunCeilingException(int workspaceId, int limit)
+    : InvalidOperationException($"Workspace {workspaceId} already has {limit} runs going, its limit.")
+{
+    public int WorkspaceId { get; } = workspaceId;
+
+    public int Limit { get; } = limit;
+}

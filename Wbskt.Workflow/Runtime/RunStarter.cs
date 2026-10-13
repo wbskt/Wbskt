@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -11,6 +12,8 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class RunStarter : IRunStarter
 {
+    private const int WorkspaceRunCeilingError = 50026; // THROW in dbo.Run_Start
+
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
@@ -19,6 +22,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly TimeProvider _clock;
     private readonly IIdGenerator _idGenerator;
     private readonly decimal _defaultCreditBudgetPerRun;
+    private readonly int? _maxActiveRunsPerWorkspace;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<RunStarter>? _logger;
 
@@ -42,6 +46,7 @@ internal sealed class RunStarter : IRunStarter
         _clock = clock;
         _idGenerator = idGenerator;
         _defaultCreditBudgetPerRun = options.Value.DefaultCreditBudgetPerRun;
+        _maxActiveRunsPerWorkspace = options.Value.MaxActiveRunsPerWorkspace > 0 ? options.Value.MaxActiveRunsPerWorkspace : null;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }
@@ -74,44 +79,57 @@ internal sealed class RunStarter : IRunStarter
             // the child branches it creates) and the root branch are written in one transaction, so a
             // failure part-way leaves either all of them or none. That is what lets a retry that finds
             // the run under its trigger start key take it as fully started.
-            RunStartRow started = await _runProvider.StartAsync(
-                new RunRow
-                {
-                    Id = 0,
-                    RefId = runRefId,
-                    WorkflowDefinitionId = workflowDefinitionId,
-                    WorkflowRefId = definition.RefId,
-                    WorkflowVersion = definition.Version,
-                    TriggerNodeId = Guid.Parse(triggerNodeId),
-                    CorrelationKey = correlationKey,
-                    Status = RunStatus.Running,
-                    StartedAt = nowUtc,
-                    CompletedAt = null,
-                    CancellationRequestedAt = null,
-                    CancellationReason = null,
-                    CreditBudget = creditBudget,
-                    CreatedAt = nowUtc
-                },
-                new BranchRow
-                {
-                    Id = 0,
-                    RefId = rootBranchRefId,
-                    RunId = 0,
-                    ParentBranchId = null,
-                    ForkCohortId = null,
-                    NodeId = Guid.Parse(triggerNodeId),
-                    Status = BranchStatus.Active,
-                    PendingTakePort = null,
-                    LocalJson = localJson,
-                    LastOutputJson = null,
-                    CompensationStackJson = null,
-                    CreatedAt = nowUtc,
-                    UpdatedAt = nowUtc,
-                    // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it.
-                    RowVersion = Array.Empty<byte>()
-                },
-                triggerStartKey,
-                ct);
+            RunStartRow started;
+            try
+            {
+                started = await _runProvider.StartAsync(
+                    new RunRow
+                    {
+                        Id = 0,
+                        RefId = runRefId,
+                        WorkflowDefinitionId = workflowDefinitionId,
+                        WorkflowRefId = definition.RefId,
+                        WorkflowVersion = definition.Version,
+                        TriggerNodeId = Guid.Parse(triggerNodeId),
+                        CorrelationKey = correlationKey,
+                        Status = RunStatus.Running,
+                        StartedAt = nowUtc,
+                        CompletedAt = null,
+                        CancellationRequestedAt = null,
+                        CancellationReason = null,
+                        CreditBudget = creditBudget,
+                        CreatedAt = nowUtc
+                    },
+                    new BranchRow
+                    {
+                        Id = 0,
+                        RefId = rootBranchRefId,
+                        RunId = 0,
+                        ParentBranchId = null,
+                        ForkCohortId = null,
+                        NodeId = Guid.Parse(triggerNodeId),
+                        Status = BranchStatus.Active,
+                        PendingTakePort = null,
+                        LocalJson = localJson,
+                        LastOutputJson = null,
+                        CompensationStackJson = null,
+                        CreatedAt = nowUtc,
+                        UpdatedAt = nowUtc,
+                        // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it.
+                        RowVersion = Array.Empty<byte>()
+                    },
+                    triggerStartKey,
+                    definition.WorkspaceId,
+                    _maxActiveRunsPerWorkspace,
+                    ct);
+            }
+            catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)
+            {
+                _workflowMetrics?.RecordRunRefused(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
+                _logger?.LogWarning("Workspace {WorkspaceId} is at its limit of {Limit} active runs; workflow {WorkflowRefId} was not started for {Channel}",
+                    definition.WorkspaceId, _maxActiveRunsPerWorkspace, definition.RefId, triggerEvent.ChannelKind);
+                throw new WorkspaceRunCeilingException(definition.WorkspaceId, _maxActiveRunsPerWorkspace!.Value);
+            }
 
             RunRow createdRun = started.Run;
             if (!started.Created)
@@ -155,7 +173,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not WorkspaceRunCeilingException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

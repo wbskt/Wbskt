@@ -137,12 +137,82 @@ public sealed class RunStarterTests
         Assert.Empty(historyProvider.Events);
     }
 
+    [Fact]
+    public async Task Start_passes_the_workspace_and_its_active_run_ceiling_to_the_store()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 7 });
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+
+        Assert.Equal((await new RecordingWorkflowDefinitionProvider().GetByIdAsync(42, CancellationToken.None)).WorkspaceId, runProvider.WorkspaceId);
+        Assert.Equal(7, runProvider.MaxActiveRuns);
+    }
+
+    [Fact]
+    public async Task Start_sends_no_ceiling_when_it_is_switched_off()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 0 });
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+
+        Assert.Null(runProvider.MaxActiveRuns);
+    }
+
+    [Fact]
+    public async Task Start_at_the_ceiling_is_refused_and_writes_no_history()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { AtCeiling = true };
+        var historyProvider = new RecordingHistoryEventProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { MaxActiveRunsPerWorkspace = 3 }, historyProvider);
+
+        var refused = await Assert.ThrowsAsync<WorkspaceRunCeilingException>(() =>
+            starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), "trigger-start:5:abc", CancellationToken.None));
+
+        Assert.Equal(3, refused.Limit);
+        Assert.Equal(["run"], operations);
+        Assert.Empty(historyProvider.Events);
+    }
+
+    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null) => new(
+        runProvider,
+        new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),
+        new RecordingWorkflowDefinitionProvider(),
+        new CorrelationKeyResolver(TriggerChannelRegistry.Default),
+        new NullRunStartedPublisher(),
+        new FixedClock(),
+        new SequenceIdGenerator(),
+        Options.Create(options));
+
+    private static InboundEvent AnEvent() =>
+        new("client", [], "evt-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)) { CorrelationKey = "c" };
+
     private sealed class RecordingRunProvider(List<string> operations) : IRunProvider
     {
         public RunRow? CreatedRun { get; private set; }
         public BranchRow? RootBranch { get; private set; }
         public string? StartKey { get; private set; }
         public bool AlreadyStarted { get; init; }
+        public bool AtCeiling { get; init; }
+        public int WorkspaceId { get; private set; }
+        public int? MaxActiveRuns { get; private set; }
+
+        public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
+        {
+            WorkspaceId = workspaceId;
+            MaxActiveRuns = maxActiveRuns;
+            if (AtCeiling)
+            {
+                operations.Add("run");
+                throw AuthHost.SqlExceptions.WithNumber(50026, "The workspace has reached its limit of active runs.");
+            }
+
+            return StartAsync(run, rootBranch, triggerStartKey, ct);
+        }
 
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
 

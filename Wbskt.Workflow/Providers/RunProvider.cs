@@ -33,7 +33,10 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
-    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
+    public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, 0, null, ct);
+
+    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Run_Start",
@@ -50,6 +53,11 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@TriggerStartKey", (object?)triggerStartKey ?? DBNull.Value);
                 p.AddWithValue("@BranchRefId", rootBranch.RefId);
                 p.AddWithValue("@BranchLocalJson", rootBranch.LocalJson);
+                if (maxActiveRuns is not null)
+                {
+                    p.AddWithValue("@WorkspaceId", workspaceId);
+                    p.AddWithValue("@MaxActiveRuns", maxActiveRuns.Value);
+                }
             },
             MapStart,
             new InvalidOperationException("Run_Start did not return a row."),

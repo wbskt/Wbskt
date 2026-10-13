@@ -60,6 +60,12 @@ public enum TriggerDispatchOutcome
     /// <summary>The registration matched, but its filter expression rejected the payload.</summary>
     Filtered,
 
+    /// <summary>
+    /// No run started: the workflow's workspace already has as many runs going as it may
+    /// (<c>WorkflowEngineOptions.MaxActiveRunsPerWorkspace</c>).
+    /// </summary>
+    Refused,
+
     /// <summary>The registration matched, but the caller did not present its webhook secret.</summary>
     SecretMismatch
 }

@@ -36,6 +36,13 @@ public sealed class WorkflowEngineOptions
     /// other tenant on the engine. Raise it deliberately, having thought about the row count.
     /// </summary>
     public int MaxFanOut { get; init; } = 1000;
+
+    /// <summary>
+    /// The most runs one workspace may have going at once (running, failing or cancelling). A trigger
+    /// past it is refused, not queued: no run starts and the dispatch reads Refused. Zero or less is no
+    /// ceiling.
+    /// </summary>
+    public int MaxActiveRunsPerWorkspace { get; init; } = 200;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;
     public int PresenceCheckLeaseBatchSize { get; init; } = 64;
