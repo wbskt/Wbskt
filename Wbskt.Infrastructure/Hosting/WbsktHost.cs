@@ -121,8 +121,9 @@ public static class WbsktHost
     /// <summary>
     /// The middleware every host runs, in one order: forwarded headers (so everything after sees the
     /// real client address), exception handling, Problem Details for bare error statuses, CORS, the rate limiter (before authentication, so a
-    /// flood is refused before a token is validated), authentication, the identity middleware, and
-    /// authorization. A step whose services the host did not register is skipped.
+    /// flood is refused before a token is validated), authentication, the identity middleware, the
+    /// per-user budget (after authentication, since it partitions on the user), and authorization. A
+    /// step whose services the host did not register is skipped.
     /// </summary>
     public static WebApplication UseWbsktPipeline(this WebApplication app)
     {
@@ -155,6 +156,11 @@ public static class WbsktHost
         if (app.Services.GetService<IIdentityService>() is not null)
         {
             app.UseMiddleware<IdentityMiddleware>();
+        }
+
+        if (app.Services.GetService<UserRateLimiter>() is not null)
+        {
+            app.UseMiddleware<UserRateLimitMiddleware>();
         }
 
         app.UseAuthorization();

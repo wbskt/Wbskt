@@ -149,6 +149,10 @@ public static class Program
             options.AddPerIpPolicy(builder.Configuration, RateLimitPolicies.EmailVerification, "EmailVerification", defaultPermitLimit: 10);
         });
 
+        // Signed-in callers (tenant and workspace administration, changing a password): a budget per
+        // user (see UserRateLimiter), after authentication.
+        builder.Services.AddUserRateLimit(builder.Configuration);
+
         // Readiness probes. The bus check is registered by AddMassTransit itself (masstransit-bus,
         // tagged "ready"), so only SQL needs adding here.
         builder.Services.AddHealthChecks().AddSqlServerCheck("AuthDBConnection");

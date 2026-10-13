@@ -208,6 +208,9 @@ public static class Program
                     factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = testPermitLimit, Window = testWindow, QueueLimit = 0 }));
         });
 
+        // Signed-in callers: a budget per user (see UserRateLimiter), after authentication.
+        builder.Services.AddUserRateLimit(builder.Configuration);
+
         // X-Total-Count is exposed, or the console (always a separate origin) could not read the
         // list endpoints' count and paged lists would silently look complete.
         builder.Services.AddWbsktCors(builder.Configuration, builder.Environment, "X-Total-Count");
