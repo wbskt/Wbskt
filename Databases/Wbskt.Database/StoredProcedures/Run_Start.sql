@@ -1,0 +1,93 @@
+CREATE PROCEDURE dbo.Run_Start
+    @RefId                UNIQUEIDENTIFIER,
+    @WorkflowDefinitionId INT,
+    @WorkflowRefId        UNIQUEIDENTIFIER,
+    @WorkflowVersion      INT,
+    @TriggerNodeId        UNIQUEIDENTIFIER,
+    @CorrelationKey       NVARCHAR(400),
+    @StartedAt            DATETIME2(3),
+    @CreditBudget         DECIMAL(18,4),
+    @TriggerStartKey      NVARCHAR(200),
+    @BranchRefId          UNIQUEIDENTIFIER,
+    @BranchLocalJson      NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    -- A triggered run is created whole: the run, its counters (seeded with the one branch it starts
+    -- with) and its root branch commit together, so a run is never found without the branch that
+    -- drives it. With a @TriggerStartKey, an attempt that finds the key already taken returns the run
+    -- that holds it instead of starting a second one: that is how a retried inbound event recovers the
+    -- run an earlier attempt created before it failed.
+    DECLARE @RunId INT;
+    DECLARE @Created BIT = 0;
+
+    IF @TriggerStartKey IS NOT NULL
+    BEGIN
+        SELECT @RunId = Id FROM dbo.Runs WHERE TriggerStartKey = @TriggerStartKey;
+    END
+
+    IF @RunId IS NULL
+    BEGIN
+        BEGIN TRY
+            BEGIN TRANSACTION;
+
+            INSERT INTO dbo.Runs
+                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey)
+            VALUES
+                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey);
+
+            SET @RunId = SCOPE_IDENTITY();
+
+            INSERT INTO dbo.RunCounters (RunId, ActiveBranchCount)
+            VALUES (@RunId, 1);
+
+            INSERT INTO dbo.Branches (RefId, RunId, NodeId, Status, LocalJson)
+            VALUES (@BranchRefId, @RunId, @TriggerNodeId, N'Active', @BranchLocalJson);
+
+            COMMIT TRANSACTION;
+            SET @Created = 1;
+        END TRY
+        BEGIN CATCH
+            IF XACT_STATE() <> 0
+                ROLLBACK TRANSACTION;
+
+            -- Two attempts racing on the same key: the unique index lets one insert win, and the
+            -- loser returns the winner's run.
+            IF ERROR_NUMBER() NOT IN (2601, 2627) OR @TriggerStartKey IS NULL
+                THROW;
+
+            SET @RunId = NULL;
+            SELECT @RunId = Id FROM dbo.Runs WHERE TriggerStartKey = @TriggerStartKey;
+            IF @RunId IS NULL
+                THROW;
+        END CATCH
+    END
+
+    SELECT
+        r.Id,
+        r.RefId,
+        r.WorkflowDefinitionId,
+        r.WorkflowRefId,
+        r.WorkflowVersion,
+        r.TriggerNodeId,
+        r.CorrelationKey,
+        r.Status,
+        r.StartedAt,
+        r.CompletedAt,
+        r.CancellationRequestedAt,
+        r.CancellationReason,
+        r.CreditBudget,
+        r.CreatedAt,
+        rb.Id AS RootBranchId,
+        @Created AS Created
+    FROM dbo.Runs r
+    CROSS APPLY (SELECT TOP (1) b.Id
+                   FROM dbo.Branches b
+                  WHERE b.RunId = r.Id
+                    AND b.ParentBranchId IS NULL
+                  ORDER BY b.Id) rb
+    WHERE r.Id = @RunId;
+END;
+GO

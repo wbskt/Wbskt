@@ -356,7 +356,7 @@ public sealed class TriggerDispatcherTests
     {
         // A claim left Pending would drop the sender's retry of this delivery as a duplicate; Failed
         // lets BookmarkResumer reclaim it.
-        var idempotency = new MockIdempotencyKeyProvider();
+        var idempotency = new InMemoryIdempotencyKeyProvider();
         var dispatcher = new TriggerDispatcher(
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
@@ -370,16 +370,150 @@ public sealed class TriggerDispatcherTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None));
 
-        Assert.Equal(["inbound-event:evt-1"], idempotency.Failed);
+        Assert.Equal(["trigger-start:5:" + EventHash("evt-1"), "inbound-event:evt-1"], idempotency.Failed);
+    }
+
+    [Fact]
+    public async Task A_retried_event_starts_only_the_registration_that_failed_before_its_run_was_created()
+    {
+        // #293: one webhook, two workflows; the second fails once, and the retry must not start the
+        // first again.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations);
+        var runDispatcher = new RecordingRunDispatcher(operations);
+        var dispatcher = CreateDispatcher(
+            bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
+            triggerRegistrationProvider: TwoRegistrations(),
+            concurrencyEnforcer: new FlakyConcurrencyEnforcer(failOnceFor: 6),
+            runStarter: runStarter,
+            runDispatcher: runDispatcher);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None));
+        TriggerDispatchResult retry = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(2, runStarter.RunsCreated);
+        Assert.Equal([(501L, 801L, BranchExecutionReason.TriggerStarted), (502L, 802L, BranchExecutionReason.TriggerStarted)], runDispatcher.Requests);
+        // The retry still reports the run the first attempt started, not a blank for that registration.
+        Assert.Equal([501L, 502L], retry.StartedRunIds);
+    }
+
+    [Fact]
+    public async Task A_retry_recovers_a_run_created_before_its_registration_claim_was_settled()
+    {
+        // The window #293's review comment points at: the run is durably created, then the attempt dies
+        // before the registration's claim is marked done. The retry must hand that run to the pump once,
+        // start no second run, and not put it back through the concurrency policy (which would count it
+        // as the active run to drop, queue behind or cancel).
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations);
+        var runDispatcher = new RecordingRunDispatcher(operations);
+        var enforcer = new FlakyConcurrencyEnforcer(failOnceFor: null);
+        var idempotency = new InMemoryIdempotencyKeyProvider();
+        idempotency.FailNextMarkSucceeded.Add("trigger-start:6:" + EventHash("evt-1"));
+        var dispatcher = CreateDispatcher(
+            bookmarkResumer: new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
+            triggerRegistrationProvider: TwoRegistrations(),
+            concurrencyEnforcer: enforcer,
+            runStarter: runStarter,
+            runDispatcher: runDispatcher,
+            idempotency: idempotency);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None));
+        Assert.Equal([(501L, 801L, BranchExecutionReason.TriggerStarted)], runDispatcher.Requests);
+
+        TriggerDispatchResult retry = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(2, runStarter.RunsCreated);
+        Assert.Equal([(501L, 801L, BranchExecutionReason.TriggerStarted), (502L, 802L, BranchExecutionReason.TriggerStarted)], runDispatcher.Requests);
+        Assert.Equal([501L, 502L], retry.StartedRunIds);
+        Assert.Equal(1, enforcer.Evaluations[6]);
+        Assert.Equal(IdempotencyKeyStatus.Succeeded, idempotency.Find("trigger-start:6:" + EventHash("evt-1"))!.Status);
+    }
+
+    [Fact]
+    public async Task A_concurrent_redelivery_does_not_start_a_registration_another_attempt_is_starting()
+    {
+        var operations = new List<string>();
+        var holdFirstStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstStartEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runStarter = new RecordingRunStarter(operations)
+        {
+            DuringStart = () =>
+            {
+                firstStartEntered.TrySetResult();
+                return holdFirstStart.Task;
+            }
+        };
+        var runDispatcher = new RecordingRunDispatcher(operations);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            runStarter: runStarter,
+            runDispatcher: runDispatcher);
+
+        Task<TriggerDispatchResult> first = dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+        await firstStartEntered.Task;
+        TriggerDispatchResult second = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+        holdFirstStart.SetResult();
+        TriggerDispatchResult firstResult = await first;
+
+        Assert.Equal(TriggerDispatchOutcome.Idempotent, Assert.Single(second.Registrations).Outcome);
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, firstResult.Outcome);
+        Assert.Equal(1, runStarter.RunsCreated);
+        Assert.Single(runDispatcher.Requests);
+    }
+
+    [Fact]
+    public async Task An_event_redelivered_after_its_claims_were_swept_does_not_start_or_rerun_its_run()
+    {
+        // Claims are swept after the retention window; runs are not. The run's own trigger start key
+        // still stops a second one, and the run found under it is not handed to the pump again.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations);
+        var runDispatcher = new RecordingRunDispatcher(operations);
+        var registrations = new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel"));
+
+        await CreateDispatcher(triggerRegistrationProvider: registrations, runStarter: runStarter, runDispatcher: runDispatcher)
+            .DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+        TriggerDispatchResult late = await CreateDispatcher(triggerRegistrationProvider: registrations, runStarter: runStarter, runDispatcher: runDispatcher, idempotency: new InMemoryIdempotencyKeyProvider())
+            .DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(1, runStarter.RunsCreated);
+        Assert.Single(runDispatcher.Requests);
+        Assert.Equal(501L, late.RunId);
+    }
+
+    private static RecordingTriggerRegistrationProvider TwoRegistrations() => new(
+        CreateRegistration("AllowParallel", id: 5),
+        CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));
+
+    /// <summary>Lets every registration proceed, except that it throws the first time it sees one.</summary>
+    private sealed class FlakyConcurrencyEnforcer(long? failOnceFor) : ITriggerConcurrencyEnforcer
+    {
+        private bool _failed;
+
+        public Dictionary<long, int> Evaluations { get; } = [];
+
+        public Task<TriggerConcurrencyDecision> EvaluateAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
+        {
+            Evaluations[registration.Id] = Evaluations.GetValueOrDefault(registration.Id) + 1;
+            if (registration.Id == failOnceFor && !_failed)
+            {
+                _failed = true;
+                throw new InvalidOperationException("database unavailable");
+            }
+
+            return Task.FromResult(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, []));
+        }
     }
 
     private static TriggerDispatcher CreateDispatcher(
         RecordingBookmarkResumer? bookmarkResumer = null,
         RecordingTriggerRegistrationProvider? triggerRegistrationProvider = null,
-        RecordingTriggerConcurrencyEnforcer? concurrencyEnforcer = null,
+        ITriggerConcurrencyEnforcer? concurrencyEnforcer = null,
         RecordingRunCancellationService? runCancellationService = null,
         RecordingRunStarter? runStarter = null,
-        RecordingRunDispatcher? runDispatcher = null)
+        RecordingRunDispatcher? runDispatcher = null,
+        InMemoryIdempotencyKeyProvider? idempotency = null)
     {
         return new TriggerDispatcher(
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
@@ -389,7 +523,7 @@ public sealed class TriggerDispatcherTests
             runCancellationService ?? new RecordingRunCancellationService(),
             runStarter ?? new RecordingRunStarter([]),
             runDispatcher ?? new RecordingRunDispatcher([]),
-            new MockIdempotencyKeyProvider(),
+            idempotency ?? new InMemoryIdempotencyKeyProvider(),
             new ExpressionEvaluator(new DispatcherTestClock()));
     }
 
@@ -400,19 +534,114 @@ public sealed class TriggerDispatcherTests
         public DateTime UtcNow => new(2026, 8, 7, 12, 0, 0, DateTimeKind.Utc);
     }
 
-    private sealed class MockIdempotencyKeyProvider : IIdempotencyKeyProvider
+    private static string EventHash(string eventId) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(eventId)));
+
+    /// <summary>The claim semantics of the IdempotencyKey_* procedures, with failures to inject.</summary>
+    private sealed class InMemoryIdempotencyKeyProvider : IIdempotencyKeyProvider
     {
-        public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct) => throw new NotImplementedException();
-        public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotImplementedException();
-        public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
+        private readonly Lock _gate = new();
+        private readonly Dictionary<string, IdempotencyKeyRow> _rows = [];
+
         public List<string> Failed { get; } = [];
+
+        /// <summary>Keys whose next MarkSucceeded throws, as if the attempt died just before settling.</summary>
+        public HashSet<string> FailNextMarkSucceeded { get; } = [];
+
+        public IdempotencyKeyRow? Find(string keyValue)
+        {
+            lock (_gate)
+            {
+                return _rows.GetValueOrDefault(keyValue);
+            }
+        }
+
+        public void HoldPending(string keyValue)
+        {
+            lock (_gate)
+            {
+                _rows[keyValue] = NewRow(keyValue, Guid.NewGuid());
+            }
+        }
+
+        public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct)
+        {
+            lock (_gate)
+            {
+                if (!_rows.TryGetValue(keyValue, out IdempotencyKeyRow? row))
+                {
+                    row = NewRow(keyValue, branchRefId);
+                    _rows[keyValue] = row;
+                }
+
+                return Task.FromResult(row);
+            }
+        }
+
+        public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => throw new NotImplementedException();
+
+        public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct)
+        {
+            lock (_gate)
+            {
+                if (FailNextMarkSucceeded.Remove(keyValue))
+                {
+                    throw new InvalidOperationException("connection lost");
+                }
+
+                return Task.FromResult(Settle(keyValue, IdempotencyKeyStatus.Succeeded, resultJson));
+            }
+        }
+
         public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct)
         {
-            Failed.Add(keyValue);
-            return Task.FromResult<IdempotencyKeyRow>(null!);
+            lock (_gate)
+            {
+                Failed.Add(keyValue);
+                return Task.FromResult(Settle(keyValue, IdempotencyKeyStatus.Failed, null));
+            }
         }
-        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotImplementedException();
+
+        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct)
+        {
+            lock (_gate)
+            {
+                IdempotencyKeyRow row = _rows[keyValue];
+                if (row.Status == IdempotencyKeyStatus.Failed)
+                {
+                    row = row with { Status = IdempotencyKeyStatus.Pending, BranchRefId = newBranchRefId };
+                    _rows[keyValue] = row;
+                }
+
+                return Task.FromResult(row);
+            }
+        }
+
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotImplementedException();
+
+        private IdempotencyKeyRow Settle(string keyValue, string status, string? resultJson)
+        {
+            // The event's own claim is taken by the bookmark resumer, which these tests stand in for.
+            IdempotencyKeyRow row = _rows.GetValueOrDefault(keyValue) ?? NewRow(keyValue, Guid.Empty);
+            row = row with { Status = status, ResultJson = resultJson ?? row.ResultJson };
+            _rows[keyValue] = row;
+            return row;
+        }
+
+        private static IdempotencyKeyRow NewRow(string keyValue, Guid token) => new()
+        {
+            Id = 0,
+            KeyValue = keyValue,
+            RunId = 0,
+            BranchRefId = token,
+            NodeId = Guid.Empty,
+            Attempt = 0,
+            Status = IdempotencyKeyStatus.Pending,
+            ResultJson = null,
+            ErrorJson = null,
+            CreatedAt = DateTime.UtcNow,
+            CompletedAt = null
+        };
     }
 
     private sealed class ThrowingTriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
@@ -518,16 +747,55 @@ public sealed class TriggerDispatcherTests
 
     private static Guid RunRefFor(long runId) => new($"00000000-0000-0000-0000-{runId:D12}");
 
+    /// <summary>Starts runs the way Run_Start does: at most one per trigger start key.</summary>
     private sealed class RecordingRunStarter(List<string> operations) : IRunStarter
     {
+        private readonly Lock _gate = new();
+        private readonly Dictionary<string, RunStartResult> _byKey = [];
         private int _started;
 
-        public Task<(long RunId, Guid RunRefId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
+        /// <summary>Awaited inside every start, so a test can hold an attempt mid-start.</summary>
+        public Func<Task>? DuringStart { get; init; }
+
+        public int RunsCreated => _started;
+
+        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct)
         {
-            operations.Add("start");
-            // Distinct ids per call so a fan-out over several registrations is distinguishable.
-            int offset = _started++;
-            return Task.FromResult((501L + offset, RunRefFor(501L + offset), 801L + offset));
+            lock (_gate)
+            {
+                operations.Add("start");
+                if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))
+                {
+                    return existing with { Created = false };
+                }
+            }
+
+            if (DuringStart != null)
+            {
+                await DuringStart();
+            }
+
+            lock (_gate)
+            {
+                // Distinct ids per call so a fan-out over several registrations is distinguishable.
+                int offset = _started++;
+                var created = new RunStartResult(501L + offset, RunRefFor(501L + offset), 801L + offset, true);
+                if (triggerStartKey != null)
+                {
+                    _byKey[triggerStartKey] = created;
+                }
+
+                return created;
+            }
+        }
+
+        public Task<RunStartResult?> FindStartedAsync(string triggerStartKey, CancellationToken ct)
+        {
+            lock (_gate)
+            {
+                operations.Add("find");
+                return Task.FromResult(_byKey.TryGetValue(triggerStartKey, out RunStartResult? existing) ? existing with { Created = false } : null);
+            }
         }
     }
 

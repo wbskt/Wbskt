@@ -15,19 +15,15 @@ namespace Wbskt.Workflow.Engine.Host.Tests.Runtime;
 public sealed class RunStarterTests
 {
     [Fact]
-    public async Task Start_creates_run_counters_branch_and_history_in_correct_order()
+    public async Task Start_creates_run_with_its_root_branch_then_history()
     {
         // Arrange
         List<string> operations = [];
         var runProvider = new RecordingRunProvider(operations);
-        var countersProvider = new RecordingRunCountersProvider(operations);
-        var branchProvider = new RecordingBranchProvider(operations);
         var historyProvider = new RecordingHistoryEventProvider(operations);
         var workflowDefinitionProvider = new RecordingWorkflowDefinitionProvider();
         var starter = new RunStarter(
             runProvider,
-            countersProvider,
-            branchProvider,
             new RunJournal(historyProvider, new FixedClock()),
             workflowDefinitionProvider,
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
@@ -47,18 +43,22 @@ public sealed class RunStarterTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
         // Act
-        (long runId, Guid runRefId, long branchId) = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, CancellationToken.None);
+        (long runId, Guid runRefId, long branchId, bool created) = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, "trigger-start:5:abc", CancellationToken.None);
 
         // Assert
         Assert.Equal(501L, runId);
         Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), runRefId);
         Assert.Equal(801L, branchId);
-        Assert.Equal(["run", "counters", "branch", "history"], operations);
-        Assert.Equal(1, countersProvider.TotalDelta);
+        Assert.True(created);
+        Assert.Equal(["run", "history"], operations);
+        Assert.Equal("trigger-start:5:abc", runProvider.StartKey);
         Assert.Equal("client:serial-1:telemetry", runProvider.CreatedRun!.CorrelationKey);
         Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), runProvider.CreatedRun.RefId);
-        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), branchProvider.CreatedBranch!.RefId);
-        Assert.Contains("\"trigger\"", branchProvider.CreatedBranch.LocalJson, StringComparison.Ordinal);
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), runProvider.RootBranch!.RefId);
+        Assert.Equal(BranchStatus.Active, runProvider.RootBranch.Status);
+        Assert.Null(runProvider.RootBranch.ParentBranchId);
+        Assert.Contains("\"trigger\"", runProvider.RootBranch.LocalJson, StringComparison.Ordinal);
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), historyProvider.Events.Single().BranchRefId);
         Assert.Equal("RunStarted", historyProvider.Events.Single().EventKind);
         Assert.Equal(new WorkflowEngineOptions().DefaultCreditBudgetPerRun, runProvider.CreatedRun.CreditBudget);
 
@@ -81,8 +81,6 @@ public sealed class RunStarterTests
         var runProvider = new RecordingRunProvider(operations);
         var starter = new RunStarter(
             runProvider,
-            new RecordingRunCountersProvider(operations),
-            new RecordingBranchProvider(operations),
             new RunJournal(new RecordingHistoryEventProvider(operations), new FixedClock()),
             new RecordingWorkflowDefinitionProvider(),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
@@ -102,21 +100,64 @@ public sealed class RunStarterTests
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc));
 
         // Act
-        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, CancellationToken.None);
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(250m, runProvider.CreatedRun!.CreditBudget);
     }
 
+    [Fact]
+    public async Task Start_returns_the_run_already_started_under_the_key_without_announcing_it_again()
+    {
+        // A retried event whose earlier attempt created the run: the run is handed back, and no second
+        // RunStarted lands in its history.
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations) { AlreadyStarted = true };
+        var historyProvider = new RecordingHistoryEventProvider(operations);
+        var starter = new RunStarter(
+            runProvider,
+            new RunJournal(historyProvider, new FixedClock()),
+            new RecordingWorkflowDefinitionProvider(),
+            new CorrelationKeyResolver(TriggerChannelRegistry.Default),
+            new NullRunStartedPublisher(),
+            new FixedClock(),
+            new SequenceIdGenerator(),
+            Options.Create(new WorkflowEngineOptions()));
+        InboundEvent triggerEvent = new("client", [], "evt-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc))
+        {
+            CorrelationKey = "c"
+        };
+
+        RunStartResult result = await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), triggerEvent, "trigger-start:5:abc", CancellationToken.None);
+
+        Assert.False(result.Created);
+        Assert.Equal(400L, result.RunId);
+        Assert.Equal(700L, result.BranchId);
+        Assert.Equal(["run"], operations);
+        Assert.Empty(historyProvider.Events);
+    }
+
     private sealed class RecordingRunProvider(List<string> operations) : IRunProvider
     {
         public RunRow? CreatedRun { get; private set; }
+        public BranchRow? RootBranch { get; private set; }
+        public string? StartKey { get; private set; }
+        public bool AlreadyStarted { get; init; }
 
-        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct)
+        public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
         {
             operations.Add("run");
-            CreatedRun = row with { Id = 501 };
-            return Task.FromResult(CreatedRun);
+            StartKey = triggerStartKey;
+            if (AlreadyStarted)
+            {
+                return Task.FromResult(new RunStartRow(run with { Id = 400 }, 700, false));
+            }
+
+            CreatedRun = run with { Id = 501 };
+            RootBranch = rootBranch;
+            return Task.FromResult(new RunStartRow(CreatedRun, 801, true));
         }
 
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
@@ -134,47 +175,6 @@ public sealed class RunStarterTests
 
         public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
         public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class RecordingRunCountersProvider(List<string> operations) : IRunCountersProvider
-    {
-        public int TotalDelta { get; private set; }
-
-        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
-        {
-            operations.Add("counters");
-            TotalDelta += delta;
-            return Task.FromResult(TotalDelta);
-        }
-
-        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
-        public Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
-        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class RecordingBranchProvider(List<string> operations) : IBranchProvider
-    {
-        public BranchRow? CreatedBranch { get; private set; }
-
-        public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct)
-        {
-            operations.Add("branch");
-            CreatedBranch = row with { Id = 801 };
-            return Task.FromResult(CreatedBranch);
-        }
-
-        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class RecordingHistoryEventProvider(List<string> operations) : IHistoryEventProvider

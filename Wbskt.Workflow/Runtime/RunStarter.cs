@@ -12,8 +12,6 @@ namespace Wbskt.Workflow.Runtime;
 internal sealed class RunStarter : IRunStarter
 {
     private readonly IRunProvider _runProvider;
-    private readonly IRunCountersProvider _runCountersProvider;
-    private readonly IBranchProvider _branchProvider;
     private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
@@ -26,8 +24,6 @@ internal sealed class RunStarter : IRunStarter
 
     public RunStarter(
         IRunProvider runProvider,
-        IRunCountersProvider runCountersProvider,
-        IBranchProvider branchProvider,
         IRunJournal journal,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         ICorrelationKeyResolver correlationKeyResolver,
@@ -39,8 +35,6 @@ internal sealed class RunStarter : IRunStarter
         ILogger<RunStarter>? logger = null)
     {
         _runProvider = runProvider;
-        _runCountersProvider = runCountersProvider;
-        _branchProvider = branchProvider;
         _journal = journal;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _correlationKeyResolver = correlationKeyResolver;
@@ -52,12 +46,11 @@ internal sealed class RunStarter : IRunStarter
         _logger = logger;
     }
 
-    public async Task<(long RunId, Guid RunRefId, long BranchId)> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, CancellationToken ct)
+    public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct)
     {
         try
         {
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
-            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
             decimal creditBudget = ResolveCreditBudget(definition.DefinitionJson);
             DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
@@ -67,32 +60,9 @@ internal sealed class RunStarter : IRunStarter
             // key, and every concurrency policy is keyed on that.
             string correlationKey = triggerEvent.CorrelationKey ?? _correlationKeyResolver.Resolve(triggerEvent);
 
-            RunRow createdRun = await _runProvider.CreateAsync(new RunRow
-            {
-                Id = 0,
-                RefId = _idGenerator.NewId(), // generated outside the DB so tests can pin it
-                WorkflowDefinitionId = workflowDefinitionId,
-                WorkflowRefId = definition.RefId,
-                WorkflowVersion = definition.Version,
-                TriggerNodeId = Guid.Parse(triggerNodeId),
-                CorrelationKey = correlationKey,
-                Status = RunStatus.Running,
-                StartedAt = nowUtc,
-                CompletedAt = null,
-                CancellationRequestedAt = null,
-                CancellationReason = null,
-                CreditBudget = creditBudget,
-                CreatedAt = nowUtc
-            }, ct);
-
-            // Account for the initial branch in the run's active-branch counter so the
-            // run can finalize when this branch completes (mirrors the Fork path, which
-            // counts the child branches it creates). Run_Create seeds the counter at 0.
-
-            // Safe to increment by id even though nothing wrote a counter row here: dbo.Run_Create seeds
-            // dbo.RunCounters as part of creating the run.
-            await _runCountersProvider.IncrementActiveBranchesAsync(createdRun.Id, 1, ct);
-
+            // Generated outside the DB so tests can pin them.
+            Guid runRefId = _idGenerator.NewId();
+            Guid rootBranchRefId = _idGenerator.NewId();
             string localJson = JsonSerializer.Serialize(
                 new Dictionary<string, JsonElement>
                 {
@@ -100,33 +70,64 @@ internal sealed class RunStarter : IRunStarter
                 },
                 EngineJson.Options);
 
-            BranchRow createdBranch = await _branchProvider.CreateAsync(new BranchRow
-            {
-                Id = 0,
-                RefId = _idGenerator.NewId(),
-                RunId = createdRun.Id,
-                ParentBranchId = null,
-                ForkCohortId = null,
-                NodeId = Guid.Parse(triggerNodeId),
-                Status = BranchStatus.Active,
-                PendingTakePort = null,
-                LocalJson = localJson,
-                LastOutputJson = null,
-                CompensationStackJson = null,
-                CreatedAt = nowUtc,
-                UpdatedAt = nowUtc,
-                // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it, so nothing sent on
-                // insert is used. It is mapped on read for completeness, but Branch_Update does not yet
-                // compare it, so the engine has no optimistic-concurrency check on a branch row. That is
-                // survivable because a branch is only ever driven by one host at a time (the pump claims it),
-                // and it is the obvious hook if that ever stops being true.
-                RowVersion = Array.Empty<byte>()
-            }, ct);
+            // The run, its counters (seeded with this one branch, mirroring the Fork path, which counts
+            // the child branches it creates) and the root branch are written in one transaction, so a
+            // failure part-way leaves either all of them or none. That is what lets a retry that finds
+            // the run under its trigger start key take it as fully started.
+            RunStartRow started = await _runProvider.StartAsync(
+                new RunRow
+                {
+                    Id = 0,
+                    RefId = runRefId,
+                    WorkflowDefinitionId = workflowDefinitionId,
+                    WorkflowRefId = definition.RefId,
+                    WorkflowVersion = definition.Version,
+                    TriggerNodeId = Guid.Parse(triggerNodeId),
+                    CorrelationKey = correlationKey,
+                    Status = RunStatus.Running,
+                    StartedAt = nowUtc,
+                    CompletedAt = null,
+                    CancellationRequestedAt = null,
+                    CancellationReason = null,
+                    CreditBudget = creditBudget,
+                    CreatedAt = nowUtc
+                },
+                new BranchRow
+                {
+                    Id = 0,
+                    RefId = rootBranchRefId,
+                    RunId = 0,
+                    ParentBranchId = null,
+                    ForkCohortId = null,
+                    NodeId = Guid.Parse(triggerNodeId),
+                    Status = BranchStatus.Active,
+                    PendingTakePort = null,
+                    LocalJson = localJson,
+                    LastOutputJson = null,
+                    CompensationStackJson = null,
+                    CreatedAt = nowUtc,
+                    UpdatedAt = nowUtc,
+                    // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it.
+                    RowVersion = Array.Empty<byte>()
+                },
+                triggerStartKey,
+                ct);
 
+            RunRow createdRun = started.Run;
+            if (!started.Created)
+            {
+                // An earlier attempt at this event created the run and failed before it was recorded as
+                // started. Its journal entry and announcement may or may not have gone out; a run with
+                // one missing is better than a second run.
+                _logger?.LogInformation("Run {RunId} already started under {TriggerStartKey}; recovering it", createdRun.Id, triggerStartKey);
+                return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, false);
+            }
+
+            _workflowMetrics?.RecordRunStarted(definition.RefId.ToString(), triggerEvent.ChannelKind, definition.WorkspaceId);
             await _journal.AppendAsync(
                 new RunJournalEntry(createdRun.Id, HistoryEventKind.RunStarted)
                 {
-                    BranchRefId = createdBranch.RefId,
+                    BranchRefId = rootBranchRefId,
                     NodeId = Guid.Parse(triggerNodeId),
                     // Describes the arrival that caused this run: which channel it came in on, which key it
                     // matched and when it was received. That is the inbound record the trace was missing;
@@ -152,13 +153,19 @@ internal sealed class RunStarter : IRunStarter
             // management host and every unit test get a no-op without needing a broker.
             await _runStartedPublisher.PublishAsync(createdRun, ct);
 
-            return (createdRun.Id, createdRun.RefId, createdBranch.Id);
+            return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;
         }
+    }
+
+    public async Task<RunStartResult?> FindStartedAsync(string triggerStartKey, CancellationToken ct)
+    {
+        RunStartRow? started = await _runProvider.FindByTriggerStartKeyAsync(triggerStartKey, ct);
+        return started is null ? null : new RunStartResult(started.Run.Id, started.Run.RefId, started.RootBranchId, false);
     }
 
     // Reads the optional per-workflow "creditBudget" from the definition JSON (a cheap property peek,

@@ -14,6 +14,9 @@ CREATE TABLE dbo.Runs
     CancellationReason       NVARCHAR(500)    NULL,
     CreditBudget             DECIMAL(18,4)    NOT NULL,
     CreatedAt                DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    -- Which inbound event and trigger registration started this run (Run_Start). Null for a run
+    -- started any other way.
+    TriggerStartKey          NVARCHAR(200)    NULL,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
     CONSTRAINT FK_Runs_WorkflowDefinitions
         FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)
@@ -33,6 +36,14 @@ GO
 CREATE INDEX IX_Runs_WorkflowRefId_Id
     ON dbo.Runs (WorkflowRefId, Id DESC)
     INCLUDE (Status);
+GO
+
+-- One run per inbound event per trigger registration. The dispatcher's idempotency claims stop a
+-- retried event from starting a registration twice while the claims settle cleanly; this is what
+-- still holds when a run was created and the attempt failed before its claim was marked done.
+CREATE UNIQUE INDEX UX_Runs_TriggerStartKey
+    ON dbo.Runs (TriggerStartKey)
+    WHERE TriggerStartKey IS NOT NULL;
 GO
 
 -- Workspace-wide run listing joins Runs to WorkflowDefinitions on this column. SQL Server does not
