@@ -181,6 +181,20 @@ public sealed class IntegrationStepValidationTests
 
     // ----------------------------------------------------------------- glue
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(1, false)]
+    [InlineData(60, false)]
+    [InlineData(0, true)]
+    [InlineData(61, true)]
+    [InlineData(-5, true)]
+    public void A_webhook_timeout_must_be_one_to_sixty_seconds(int? timeoutSeconds, bool refused)
+    {
+        var node = Webhook("https://example.test", null) with { Config = new WebhookNotificationConfig { Url = "https://example.test", Method = "POST", TimeoutSeconds = timeoutSeconds } };
+
+        Assert.Equal(refused, IssuesFor(node).Any(i => i.Code == "WEBHOOK_TIMEOUT_INVALID"));
+    }
+
     private static List<ValidationIssue> IssuesFor(BaseNode node)
     {
         var def = ValidWorkflowBuilder.Build();

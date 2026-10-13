@@ -295,7 +295,7 @@ public sealed class WorkflowBuilder
     /// With <paramref name="integrationRef"/>, the request carries that HTTP-auth integration's
     /// credential and <paramref name="url"/> may be relative to its base URL.
     /// </remarks>
-    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, out Guid nodeId, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null)
+    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, out Guid nodeId, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null, int? timeoutSeconds = null)
     {
         var id = Guid.NewGuid();
         nodeId = id;
@@ -307,7 +307,7 @@ public sealed class WorkflowBuilder
                 new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" },
                 new PortDefinition { PortId = PortNames.Error, Direction = PortDirection.Output, Label = "Error" }
             ],
-            Config = new WebhookNotificationConfig { Url = url, Method = method, Body = body, IntegrationRef = integrationRef, Headers = headers },
+            Config = new WebhookNotificationConfig { Url = url, Method = method, Body = body, IntegrationRef = integrationRef, Headers = headers, TimeoutSeconds = timeoutSeconds },
             Retry = new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromMilliseconds(500), Factor = null, MaxDelay = null, MaxAttempts = 5, JitterPct = 0, RetryOn = [] } });
 
         ConnectToHead(id, PortNames.In);
@@ -617,7 +617,7 @@ public sealed class WorkflowBuilder
         return def;
     }
 
-    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, Action<WebhookScope> webhookBranches, JoinMode? joinMode = null, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null)
+    public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, Action<WebhookScope> webhookBranches, JoinMode? joinMode = null, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null, int? timeoutSeconds = null)
     {
         AddWebhook(method, url, body, out var webhookId, integrationRef, headers);
         var scope = new WebhookScope(this, webhookId);

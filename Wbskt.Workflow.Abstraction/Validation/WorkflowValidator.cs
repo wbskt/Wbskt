@@ -418,6 +418,15 @@ public sealed class WorkflowValidator
                 node.NodeId));
         }
 
+        if (config.TimeoutSeconds is < 1 or > WebhookNotificationConfig.MaxTimeoutSeconds)
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "WEBHOOK_TIMEOUT_INVALID",
+                $"Step '{node.Name}': the timeout must be 1 to {WebhookNotificationConfig.MaxTimeoutSeconds} seconds.",
+                node.NodeId));
+        }
+
         if (config.Headers is null)
         {
             return;

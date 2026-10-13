@@ -8,6 +8,21 @@ public sealed record WebhookNotificationConfig
     /// </summary>
     public const int MaxHeaders = 20;
 
+    /// <summary>How long a call waits for the whole response when the step names no timeout.</summary>
+    public const int DefaultTimeoutSeconds = 30;
+
+    /// <summary>
+    /// The longest a step may wait. A run's branch holds its place while it waits, so this is kept
+    /// well under the engine's own limits.
+    /// </summary>
+    public const int MaxTimeoutSeconds = 60;
+
+    /// <summary>
+    /// The most of a response body the step reads. The body becomes the step's output and is stored
+    /// with the run, so an endpoint cannot make a run carry an arbitrarily large state.
+    /// </summary>
+    public const int MaxResponseBytes = 256 * 1024;
+
     /// <summary>
     /// Optional: an HTTP-auth integration whose credential is added to the request. With one, the URL
     /// may be relative to the integration's base URL, and an absolute URL must share its origin, so
@@ -28,6 +43,13 @@ public sealed record WebhookNotificationConfig
 
     [JsonPropertyName("body")]
     public System.Text.Json.JsonElement? Body { get; init; } = null;
+
+    /// <summary>
+    /// Optional: seconds to wait for the response, 1 to <see cref="MaxTimeoutSeconds"/>;
+    /// <see cref="DefaultTimeoutSeconds"/> when unset.
+    /// </summary>
+    [JsonPropertyName("timeoutSeconds")]
+    public int? TimeoutSeconds { get; init; }
 
 }
 
