@@ -619,7 +619,7 @@ public sealed class WorkflowBuilder
 
     public WorkflowBuilder AddWebhook(string method, string url, JsonElement? body, Action<WebhookScope> webhookBranches, JoinMode? joinMode = null, Guid? integrationRef = null, IReadOnlyDictionary<string, string>? headers = null, int? timeoutSeconds = null)
     {
-        AddWebhook(method, url, body, out var webhookId, integrationRef, headers);
+        AddWebhook(method, url, body, out var webhookId, integrationRef, headers, timeoutSeconds);
         var scope = new WebhookScope(this, webhookId);
         webhookBranches(scope);
         

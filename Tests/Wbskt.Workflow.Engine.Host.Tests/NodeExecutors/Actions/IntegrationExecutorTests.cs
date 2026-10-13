@@ -220,6 +220,22 @@ public sealed class IntegrationExecutorTests
     }
 
     [Fact]
+    public async Task Webhook_scrubs_the_credential_out_of_a_connection_dropped_mid_body()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new OutboundWebhookExecutorTests.FailingStream(_ => throw new IOException($"reset while reading Bearer {ApiToken}")))
+        });
+        var executor = new WebhookNodeExecutor(new SingleClientFactory(handler), new AllowAllGuard(), new StubResolver(HttpAuth(HttpAuthSettings.Bearer)));
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(WebhookContext("api/states"), CancellationToken.None));
+
+        Assert.Equal("WEBHOOK_NETWORK_ERROR", fail.ErrorCode);
+        Assert.True(fail.Retryable);
+        Assert.DoesNotContain(ApiToken, fail.Message);
+    }
+
+    [Fact]
     public async Task Webhook_passes_on_the_resolvers_failure_without_calling_out()
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));

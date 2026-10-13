@@ -195,6 +195,17 @@ public sealed class IntegrationStepValidationTests
         Assert.Equal(refused, IssuesFor(node).Any(i => i.Code == "WEBHOOK_TIMEOUT_INVALID"));
     }
 
+    [Fact]
+    public void The_builders_branching_webhook_keeps_its_timeout()
+    {
+        var def = new Wbskt.Workflow.Builder.WorkflowBuilder("timeout")
+            .AddManualTrigger()
+            .AddWebhook("GET", "https://example.test", null, scope => scope.OnSuccess(_ => { }), timeoutSeconds: 7)
+            .Build();
+
+        Assert.Equal(7, def.Nodes.OfType<WebhookNotificationNode>().Single().Config.TimeoutSeconds);
+    }
+
     private static List<ValidationIssue> IssuesFor(BaseNode node)
     {
         var def = ValidWorkflowBuilder.Build();

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Integrations;
@@ -131,23 +132,30 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
                     ["body"] = JsonSerializer.SerializeToElement(body)
                 };
 
-                // A JSON reply is also handed on parsed, so later steps can read its fields.
+                // A JSON reply is also handed on parsed, so later steps can read its fields. Without
+                // one, an earlier call's json is dropped from the branch rather than left to be
+                // read as this call's.
                 if (IsJson(response.Content) && TryParse(body) is { } json)
                 {
                     output["json"] = json;
+                    return new NodeExecutionResult.Continue("default", output);
                 }
 
-                return new NodeExecutionResult.Continue("default", output);
+                return new NodeExecutionResult.Continue("default", output, RemoveKeys: ["json"]);
             }
 
             string detail = integration is null ? body : IntegrationErrors.Scrub(body, integration.Secrets);
             return new NodeExecutionResult.Fail("WEBHOOK_HTTP_ERROR", $"{status}: {detail}{(truncated ? "…" : "")}", status >= 500, null);
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+        // A timeout that fires mid-body can surface as the stream's IOException rather than a
+        // cancellation; it is still a timeout.
+        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or IOException
+            && timeout.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             return new NodeExecutionResult.Fail("WEBHOOK_TIMEOUT", $"No complete response within {timeoutSeconds} seconds.", true, null);
         }
-        catch (HttpRequestException ex)
+        // IOException: the connection dropped while the body was being read.
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
         {
             string message = integration is null ? ex.Message : IntegrationErrors.Scrub(ex.Message, integration.Secrets);
             return new NodeExecutionResult.Fail("WEBHOOK_NETWORK_ERROR", message, true, ex);
@@ -161,23 +169,50 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
     private static async Task<(string Body, bool Truncated)> ReadCappedAsync(HttpContent content, CancellationToken ct)
     {
         await using Stream stream = await content.ReadAsStreamAsync(ct);
-        byte[] buffer = new byte[WebhookNotificationConfig.MaxResponseBytes + 1];
+        // One byte past the cap says whether there was more. Rented: a fresh buffer this size would
+        // be a large-object-heap allocation on every call.
+        const int limit = WebhookNotificationConfig.MaxResponseBytes + 1;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(limit);
         int read = 0;
-        while (read < buffer.Length)
+        try
         {
-            int n = await stream.ReadAsync(buffer.AsMemory(read), ct);
-            if (n == 0)
+            while (read < limit)
             {
-                break;
+                int n = await stream.ReadAsync(buffer.AsMemory(read, limit - read), ct);
+                if (n == 0)
+                {
+                    break;
+                }
+
+                read += n;
             }
 
-            read += n;
+            bool truncated = read > WebhookNotificationConfig.MaxResponseBytes;
+            int length = Math.Min(read, WebhookNotificationConfig.MaxResponseBytes);
+            // A byte order mark names the encoding and is not part of the text, as ReadAsStringAsync
+            // reads it; left in, it would make a JSON reply fail to parse.
+            (Encoding encoding, int bomLength) = DetectBom(buffer.AsSpan(0, length)) is { } bom ? bom : (EncodingOf(content), 0);
+            return (encoding.GetString(buffer, bomLength, length - bomLength), truncated);
         }
-
-        bool truncated = read > WebhookNotificationConfig.MaxResponseBytes;
-        Encoding encoding = EncodingOf(content);
-        return (encoding.GetString(buffer, 0, Math.Min(read, WebhookNotificationConfig.MaxResponseBytes)), truncated);
+        finally
+        {
+            // The body may hold what the endpoint returned for a credential; it does not outlive the call.
+            buffer.AsSpan(0, read).Clear();
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
+
+    /// <summary>The encoding a byte order mark at the start of the body names, and the mark's length.</summary>
+    private static (Encoding Encoding, int Length)? DetectBom(ReadOnlySpan<byte> body) => body switch
+    {
+        [0xEF, 0xBB, 0xBF, ..] => (Encoding.UTF8, 3),
+        // UTF-32 LE before UTF-16 LE: its mark starts with UTF-16 LE's.
+        [0xFF, 0xFE, 0x00, 0x00, ..] => (Encoding.UTF32, 4),
+        [0x00, 0x00, 0xFE, 0xFF, ..] => (new UTF32Encoding(bigEndian: true, byteOrderMark: true), 4),
+        [0xFF, 0xFE, ..] => (Encoding.Unicode, 2),
+        [0xFE, 0xFF, ..] => (Encoding.BigEndianUnicode, 2),
+        _ => null
+    };
 
     private static Encoding EncodingOf(HttpContent content)
     {
