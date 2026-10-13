@@ -21,11 +21,13 @@ public sealed class DeviceCommandPublisherTests
 
     private readonly Mock<IEventBus> _bus = new();
     private readonly FixedClock _clock = new(new DateTimeOffset(2026, 10, 12, 9, 0, 0, TimeSpan.Zero));
+    private readonly RecentDeviceActivity _activity;
     private ClientCommandEvent? _sent;
     private ClientCommandFailedEvent? _failed;
 
     public DeviceCommandPublisherTests()
     {
+        _activity = new RecentDeviceActivity(_clock);
         _bus.Setup(b => b.PublishAsync(It.IsAny<ClientCommandEvent>(), It.IsAny<CancellationToken>()))
             .Callback<ClientCommandEvent, CancellationToken>((e, _) => _sent = e)
             .Returns(Task.CompletedTask);
@@ -39,7 +41,7 @@ public sealed class DeviceCommandPublisherTests
     private DeviceCommandPublisher Publisher(ClientCommandTarget? target) => Publisher([target]);
 
     /// <param name="lookups">What each lookup of the device returns, in turn; the last one repeats.</param>
-    private DeviceCommandPublisher Publisher(ClientCommandTarget?[] lookups)
+    private DeviceCommandPublisher Publisher(ClientCommandTarget?[] lookups, IReadOnlyList<TimeSpan>? rechecks = null)
     {
         var targets = new Mock<IClientCommandTargetProvider>();
         int calls = 0;
@@ -47,7 +49,7 @@ public sealed class DeviceCommandPublisherTests
             .ReturnsAsync(() => lookups[Math.Min(calls++, lookups.Length - 1)]);
         _lookups = () => calls;
         var sender = new DeviceCommandSender(targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance);
-        return new DeviceCommandPublisher(sender, _bus.Object, _clock, QuickRechecks);
+        return new DeviceCommandPublisher(sender, _bus.Object, _clock, _activity, rechecks ?? QuickRechecks);
     }
 
     private Func<int> _lookups = () => 0;
@@ -82,7 +84,7 @@ public sealed class DeviceCommandPublisherTests
     }
 
     [Fact]
-    public async Task A_command_to_a_device_that_stays_offline_is_reported_as_failed_after_the_rechecks()
+    public async Task A_command_to_an_offline_device_not_heard_from_lately_is_reported_as_failed_at_once()
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
@@ -94,13 +96,57 @@ public sealed class DeviceCommandPublisherTests
         Assert.Equal(CommandId, _failed.CommandId);
         Assert.Equal(ClientId, _failed.ClientId);
         Assert.Equal("OpenVent", _failed.Type);
+        // No re-checks: they would hold the branch's worker for each of many simply offline devices.
+        Assert.Equal(1, _lookups());
+    }
+
+    [Fact]
+    public async Task A_device_heard_from_longer_ago_than_the_window_is_not_looked_up_again()
+    {
+        _activity.Saw(ClientRefId);
+        _clock.Advance(RecentDeviceActivity.Window + TimeSpan.FromMilliseconds(1));
+
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
+
+        Assert.Equal(ClientCommandFailedEvent.NotConnectedReason, _failed!.Reason);
+        Assert.Equal(1, _lookups());
+    }
+
+    [Fact]
+    public async Task A_device_just_heard_from_that_stays_offline_is_reported_as_failed_after_the_rechecks()
+    {
+        _activity.Saw(ClientRefId);
+
+        await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
+
+        Assert.Null(_sent);
+        Assert.NotNull(_failed);
+        Assert.Equal(ClientCommandFailedEvent.NotConnectedReason, _failed!.Reason);
+        Assert.Equal(CommandId, _failed.CommandId);
         Assert.Equal(1 + QuickRechecks.Length, _lookups());
+    }
+
+    [Fact]
+    public async Task The_rechecks_stop_at_half_the_commands_expiry()
+    {
+        // A short ack timeout: re-checking past half of it would leave the step to time out instead of fail.
+        _activity.Saw(ClientRefId);
+        TimeSpan[] rechecks = [TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(10)];
+
+        await Publisher([new ClientCommandTarget(ClientId, WorkspaceId, false, null)], rechecks)
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", TimeSpan.FromMilliseconds(50), null, CancellationToken.None);
+
+        Assert.Equal(ClientCommandFailedEvent.NotConnectedReason, _failed!.Reason);
+        Assert.Equal(1 + 2, _lookups());
     }
 
     [Fact]
     public async Task A_device_whose_connection_is_recorded_a_moment_late_still_gets_the_command()
     {
         // The run was started by the device's first message, which beat its presence to the database.
+        _activity.Saw(ClientRefId);
         await Publisher([new ClientCommandTarget(ClientId, WorkspaceId, false, null), new ClientCommandTarget(ClientId, WorkspaceId, true, HostId)])
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
@@ -113,6 +159,7 @@ public sealed class DeviceCommandPublisherTests
     [Fact]
     public async Task Only_an_offline_device_is_looked_up_again()
     {
+        _activity.Saw(ClientRefId);
         await Publisher((ClientCommandTarget?)null)
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
 
@@ -184,5 +231,7 @@ public sealed class DeviceCommandPublisherTests
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+
+        public void Advance(TimeSpan by) => now += by;
     }
 }

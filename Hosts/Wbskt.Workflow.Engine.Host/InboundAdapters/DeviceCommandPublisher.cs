@@ -13,17 +13,22 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// is thrown, for the step to fail and the run to retry.
 /// </summary>
 /// <remarks>
-/// A device that reads as offline is looked up again a few times over a couple of seconds before the
-/// command is reported failed. Presence is recorded by the management host from the socket host's
+/// A device that reads as offline but that this engine heard from a moment ago
+/// (<see cref="RecentDeviceActivity"/>) is looked up again a few times over a couple of seconds before
+/// the command is reported failed. Presence is recorded by the management host from the socket host's
 /// connected event, while the device's own messages reach the engine directly, so a run started by a
-/// device's first message can get here before its connection is recorded (#141). The console's
-/// sends answer at once: a person is not racing the device's first message.
+/// device's first message can get here before its connection is recorded (#141). Any other offline
+/// device fails at once: the re-checks wait on the branch's worker, which a fan-out to many offline
+/// devices would hold for seconds each. The re-checks also stay within half the command's expiry, so
+/// a short ack timeout still ends in "failed" rather than "timeout". The console's sends answer at
+/// once: a person is not racing the device's first message.
 /// </remarks>
 /// <param name="offlineRechecks">The waits before each re-check of an offline device; tests shorten them.</param>
 public sealed class DeviceCommandPublisher(
     IDeviceCommandSender sender,
     IEventBus eventBus,
     TimeProvider clock,
+    RecentDeviceActivity recentActivity,
     IReadOnlyList<TimeSpan>? offlineRechecks = null) : IDeviceCommandPublisher
 {
     internal const string UnknownClientReason = "The device does not exist in this workspace.";
@@ -38,10 +43,16 @@ public sealed class DeviceCommandPublisher(
     {
         var request = new DeviceCommand(commandId, clientRefId, workspaceId, command, payload, clock.GetUtcNow().UtcDateTime + expiresIn);
         var result = await sender.SendAsync(request, e => Attribute(e, sentBy), ct);
-        for (int i = 0; result.Outcome == DeviceCommandOutcome.Offline && i < _offlineRechecks.Count; i++)
+        if (result.Outcome == DeviceCommandOutcome.Offline && recentActivity.WasRecentlyActive(clientRefId))
         {
-            await Task.Delay(_offlineRechecks[i], clock, ct);
-            result = await sender.SendAsync(request, e => Attribute(e, sentBy), ct);
+            TimeSpan budget = expiresIn / 2;
+            TimeSpan waited = TimeSpan.Zero;
+            for (int i = 0; result.Outcome == DeviceCommandOutcome.Offline && i < _offlineRechecks.Count && waited + _offlineRechecks[i] <= budget; i++)
+            {
+                await Task.Delay(_offlineRechecks[i], clock, ct);
+                waited += _offlineRechecks[i];
+                result = await sender.SendAsync(request, e => Attribute(e, sentBy), ct);
+            }
         }
 
         string? reason = result.Outcome switch

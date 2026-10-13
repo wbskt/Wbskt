@@ -47,7 +47,7 @@ public sealed class ClientPresenceConsumerTests
         string online = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Online, 0, Guid.NewGuid(), Guid.NewGuid());
         string offline = ClientPresenceTriggerKey.Build(ClientRef, ClientPresenceState.Offline, 60, Guid.NewGuid(), Guid.NewGuid());
         var provider = new RecordingPresenceCheckProvider(online, offline);
-        var consumer = new ClientConnectedConsumer(new ClientPresenceParker(provider));
+        var consumer = new ClientConnectedConsumer(new ClientPresenceParker(provider), new RecentDeviceActivity(TimeProvider.System));
 
         await consumer.Consume(Context(new ClientConnectedEvent(ClientRef, 12, 34, "host-1") { CreatedAtUtc = ChangedAt }));
 
