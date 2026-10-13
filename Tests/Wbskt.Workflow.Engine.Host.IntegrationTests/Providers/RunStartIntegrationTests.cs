@@ -201,6 +201,51 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         started.Created.Should().BeTrue();
     }
 
+    [SkippableFact]
+    public async Task A_start_sent_without_a_ceiling_starts_in_a_full_workspace()
+    {
+        // What RunStarter sends for an exempt start: a sub-workflow child, a queued event's replay or a
+        // run replacing the ones it cancels.
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        await runProvider.StartAsync(first, firstBranch, null, workspaceId, 1, CancellationToken.None);
+
+        (RunRow exempt, BranchRow exemptBranch) = NewRun(wd);
+        RunStartRow started = await runProvider.StartAsync(exempt, exemptBranch, null, workspaceId, null, CancellationToken.None);
+
+        started.Created.Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task A_start_that_cannot_get_the_workspace_lock_in_time_is_refused()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        int workspaceId = NewWorkspaceId();
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync(workspaceId);
+
+        // Another session holds the workspace's ceiling lock for longer than Run_Start will wait.
+        await using var holder = new SqlConnection(fixture.ConnectionString);
+        await holder.OpenAsync();
+        await using SqlTransaction tx = (SqlTransaction)await holder.BeginTransactionAsync();
+        await using (var hold = new SqlCommand("EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';", holder, tx))
+        {
+            hold.Parameters.AddWithValue("@Resource", $"run-ceiling:{workspaceId}");
+            await hold.ExecuteNonQueryAsync();
+        }
+
+        (RunRow run, BranchRow branch) = NewRun(wd);
+        Func<Task> act = () => ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, workspaceId, 10, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceRunCeilingError);
+        await tx.RollbackAsync();
+        (await ProviderFactory.Run(fixture.ConnectionString).FindRowByRefIdAsync(run.RefId, CancellationToken.None)).Should().BeNull();
+    }
+
     private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue);
 
     private async Task<WorkflowDefinitionRow> CreateDefinitionAsync(int workspaceId = 1)

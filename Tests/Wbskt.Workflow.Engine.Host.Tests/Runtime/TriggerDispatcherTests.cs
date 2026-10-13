@@ -553,6 +553,81 @@ public sealed class TriggerDispatcherTests
         Assert.Contains(result.Registrations, r => r.Outcome == TriggerDispatchOutcome.Refused);
     }
 
+    [Fact]
+    public async Task A_sub_workflow_child_starts_past_the_workspace_run_ceiling()
+    {
+        // The parent already holds a place under the ceiling; refusing its child would fail the parent.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            runStarter: runStarter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { StartsChildRun = true }, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal([true], runStarter.ExemptFromCeiling);
+    }
+
+    [Fact]
+    public async Task A_replayed_queued_event_starts_past_the_workspace_run_ceiling()
+    {
+        // The drainer has already taken the event off the queue, so a refusal here would lose it.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            runStarter: runStarter);
+        InboundEvent replay = CreateInboundEvent() with
+        {
+            InboundEventId = "evt-1:drain:9",
+            ReplayFor = new QueuedTrigger(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+        };
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(replay, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal([true], runStarter.ExemptFromCeiling);
+    }
+
+    [Fact]
+    public async Task A_start_that_replaces_the_runs_it_cancels_starts_past_the_workspace_run_ceiling()
+    {
+        // CancelExisting has already asked the old run to stop; refusing its replacement would leave
+        // nothing running for the event.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
+        var cancellationService = new RecordingRunCancellationService();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("CancelExisting")),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [55L])),
+            runCancellationService: cancellationService,
+            runStarter: runStarter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal([(55L, "Trigger-cancel-policy")], cancellationService.Requests);
+        Assert.Equal([true], runStarter.ExemptFromCeiling);
+    }
+
+    [Fact]
+    public async Task A_CancelExisting_start_with_nothing_to_cancel_is_held_to_the_workspace_run_ceiling()
+    {
+        // Nothing gives up a place for it, so it is an ordinary new run.
+        var operations = new List<string>();
+        var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("CancelExisting")),
+            concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [])),
+            runStarter: runStarter);
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.Refused, result.Outcome);
+        Assert.Equal([false], runStarter.ExemptFromCeiling);
+    }
+
     private static RecordingTriggerRegistrationProvider TwoRegistrations() => new(
         CreateRegistration("AllowParallel", id: 5),
         CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));
@@ -836,12 +911,16 @@ public sealed class TriggerDispatcherTests
         /// <summary>Refuses only the first start it sees, as for a trigger in the one full workspace.</summary>
         public bool RefuseFirst { get; set; }
 
-        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct)
+        /// <summary>What each start was told about the ceiling, in order.</summary>
+        public List<bool> ExemptFromCeiling { get; } = [];
+
+        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false)
         {
             lock (_gate)
             {
                 operations.Add("start");
-                if (AtCeiling || RefuseFirst)
+                ExemptFromCeiling.Add(exemptFromCeiling);
+                if ((AtCeiling || RefuseFirst) && !exemptFromCeiling)
                 {
                     RefuseFirst = false;
                     throw new WorkspaceRunCeilingException(1, 3);

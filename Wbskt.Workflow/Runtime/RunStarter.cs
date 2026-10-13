@@ -51,7 +51,7 @@ internal sealed class RunStarter : IRunStarter
         _logger = logger;
     }
 
-    public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct)
+    public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false)
     {
         try
         {
@@ -120,7 +120,7 @@ internal sealed class RunStarter : IRunStarter
                     },
                     triggerStartKey,
                     definition.WorkspaceId,
-                    _maxActiveRunsPerWorkspace,
+                    exemptFromCeiling ? null : _maxActiveRunsPerWorkspace,
                     ct);
             }
             catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)

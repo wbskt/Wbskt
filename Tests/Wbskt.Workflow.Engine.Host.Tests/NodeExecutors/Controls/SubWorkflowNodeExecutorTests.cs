@@ -41,8 +41,25 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task First_visit_starts_the_child_past_the_workspace_run_ceiling()
+    {
+        // The parent holds a place under the ceiling already; the child must not be refused for it.
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(RunRow(ChildRunRefId));
+        var executor = new SubWorkflowNodeExecutor(hub.Object, runProvider.Object, new FixedClock());
+
+        await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(It.Is<InboundEvent>(e => e.StartsChildRun), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task First_visit_fails_retryably_when_the_workspace_is_at_its_run_ceiling()
     {
+        // The safety net: a child is exempt from the ceiling, so this should not happen.
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Refused, null, null, "ceiling"));
