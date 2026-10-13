@@ -83,8 +83,10 @@ public sealed class IntegrationAuditE2ETests(ServicesFixture fixture)
         (await ServicesFixture.PollAsync(
                 async () =>
                 {
+                    // Each change is logged from its own message, so the rotation can land before the
+                    // creation: wait for both rather than assume the order they were made in.
                     integrations = await GroupAsync("integrations");
-                    return integrations.Contains("IntegrationSecretRotatedEvent");
+                    return integrations.Contains("IntegrationSecretRotatedEvent") && integrations.Contains("IntegrationCreatedEvent");
                 },
                 TimeSpan.FromSeconds(30),
                 TimeSpan.FromMilliseconds(500)))
