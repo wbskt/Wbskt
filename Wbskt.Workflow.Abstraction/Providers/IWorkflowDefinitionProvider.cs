@@ -17,6 +17,13 @@ public interface IWorkflowDefinitionProvider
     /// <c>SqlException</c> 50023 when one of those integrations is not the workspace's (any more).
     /// </summary>
     Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, CancellationToken ct);
+
+    /// <summary>
+    /// As above, and a first version is refused with <c>SqlException</c> 50024 when the workspace
+    /// already has <paramref name="maxWorkflows"/> workflows. Null is no ceiling.
+    /// </summary>
+    Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, CancellationToken ct) =>
+        InsertAsync(row, integrationRefs, ct);
     Task<IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct);
     Task DeprecateAsync(int id, CancellationToken ct);
 

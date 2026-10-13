@@ -7,7 +7,10 @@ CREATE PROCEDURE dbo.WorkflowDefinition_Publish
     @DefinitionJson NVARCHAR(MAX),
     @PublishedBy    INT,
     -- The steps that send through an integration, by its RefId. Omitted means none.
-    @IntegrationRefs dbo.IntegrationRefTableType READONLY
+    @IntegrationRefs dbo.IntegrationRefTableType READONLY,
+    -- How many workflows the workspace may have. Only a first version counts against it: a new
+    -- version of an existing workflow is never refused. NULL is no ceiling.
+    @MaxWorkflows   INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -33,6 +36,23 @@ BEGIN
     BEGIN
         ROLLBACK TRAN;
         THROW 50022, 'The workflow was deleted.', 1;
+    END
+
+    -- The workspace's workflow ceiling, for a new workflow only. Counted under an application lock per
+    -- workspace, so two first publishes of different workflows cannot both take the last place.
+    IF @NextVersion = 1 AND @MaxWorkflows IS NOT NULL
+    BEGIN
+        DECLARE @Resource NVARCHAR(255) = CONCAT(N'workflow-ceiling:', @WorkspaceId);
+        EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
+
+        IF (SELECT COUNT(DISTINCT WD.RefId)
+              FROM dbo.WorkflowDefinitions WD
+             WHERE WD.WorkspaceId = @WorkspaceId
+               AND NOT EXISTS (SELECT 1 FROM dbo.WorkflowDeletions D WHERE D.RefId = WD.RefId)) >= @MaxWorkflows
+        BEGIN
+            ROLLBACK TRAN;
+            THROW 50024, 'The workspace has reached its workflow limit.', 1;
+        END
     END
 
     -- Every integration a step names must be this workspace's, and stays so until the version is in:
