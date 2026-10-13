@@ -294,6 +294,30 @@ public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
     }
 
     [SkippableFact]
+    public async Task INT_RUN_13_CallAUrl_WithAStaticHeader_HandsOnAJsonReplyParsed()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        await using var api = FakeHttpServer.Start();
+        api.Respond = request => request.Headers.ContainsKey("X-Api-Version")
+            ? (200, """{"state":"on","level":42}""")
+            : (400, """{"error":"X-Api-Version is required"}""");
+        var (token, ws) = await _api.NewWorkspaceAsync();
+
+        var definition = new WorkflowBuilder("E2E webhook json", Guid.NewGuid())
+            .AddManualTrigger(out var trigger)
+            .AddWebhook("GET", api.BaseUrl + "/state", null, out _, headers: new Dictionary<string, string> { ["X-Api-Version"] = "2024-01" }, timeoutSeconds: 10)
+            .BuildAndValidate();
+        var workflow = await _api.PublishAsync(token, ws, definition);
+
+        var (run, status) = await _api.RunToEndAsync(token, ws, workflow, trigger);
+
+        status.Should().Be("Succeeded");
+        api.Requests.Should().ContainSingle().Which.Header("X-Api-Version").Should().Be("2024-01");
+        (await fixture.GetHistoryAsync(token, ws, run))
+            .Should().Contain(e => e.PayloadJson != null && e.PayloadJson.Contains("\"json\":{\"state\":\"on\",\"level\":42}"));
+    }
+
+    [SkippableFact]
     public async Task INT_RUN_12_OneWorkflow_SendsThroughEveryKind()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");

@@ -11,7 +11,9 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 
 /// <summary>
 /// Call a URL: an HTTP request to an author-chosen URL, optionally with extra headers and with the
-/// credential of an HTTP auth integration.
+/// credential of an HTTP auth integration. Its output is the status, the body as text and, for a JSON
+/// reply, the body parsed (<c>json</c>); the call is bounded by the step's timeout and the body by
+/// <see cref="WebhookNotificationConfig.MaxResponseBytes"/>.
 /// </summary>
 internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, IOutboundAddressGuard addressGuard, IIntegrationResolver resolver) : INodeExecutor
 {
@@ -70,6 +72,9 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
         }
 
         HttpClient client = httpClientFactory.CreateClient("workflow-webhook");
+        int timeoutSeconds = config.TimeoutSeconds ?? WebhookNotificationConfig.DefaultTimeoutSeconds;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
         try
         {
@@ -99,8 +104,9 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
                 HttpAuthChannel.Authorize(request, integration);
             }
 
-            using HttpResponseMessage response = await client.SendAsync(request, ct);
-            string body = await response.Content.ReadAsStringAsync(ct);
+            // Headers only, so the body is read under the cap below rather than buffered whole.
+            using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            (string body, bool truncated) = await ReadCappedAsync(response.Content, timeout.Token);
             int status = (int)response.StatusCode;
 
             if (integration is not null)
@@ -110,20 +116,95 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
 
             if (response.IsSuccessStatusCode)
             {
-                return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
+                if (truncated)
+                {
+                    return new NodeExecutionResult.Fail(
+                        "WEBHOOK_RESPONSE_TOO_LARGE",
+                        $"{status}: the response is larger than {WebhookNotificationConfig.MaxResponseBytes / 1024} KiB.",
+                        false,
+                        null);
+                }
+
+                var output = new Dictionary<string, JsonElement>
                 {
                     ["status"] = JsonSerializer.SerializeToElement(status),
                     ["body"] = JsonSerializer.SerializeToElement(body)
-                });
+                };
+
+                // A JSON reply is also handed on parsed, so later steps can read its fields.
+                if (IsJson(response.Content) && TryParse(body) is { } json)
+                {
+                    output["json"] = json;
+                }
+
+                return new NodeExecutionResult.Continue("default", output);
             }
 
             string detail = integration is null ? body : IntegrationErrors.Scrub(body, integration.Secrets);
-            return new NodeExecutionResult.Fail("WEBHOOK_HTTP_ERROR", $"{status}: {detail}", status >= 500, null);
+            return new NodeExecutionResult.Fail("WEBHOOK_HTTP_ERROR", $"{status}: {detail}{(truncated ? "…" : "")}", status >= 500, null);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            return new NodeExecutionResult.Fail("WEBHOOK_TIMEOUT", $"No complete response within {timeoutSeconds} seconds.", true, null);
         }
         catch (HttpRequestException ex)
         {
             string message = integration is null ? ex.Message : IntegrationErrors.Scrub(ex.Message, integration.Secrets);
             return new NodeExecutionResult.Fail("WEBHOOK_NETWORK_ERROR", message, true, ex);
+        }
+    }
+
+    /// <summary>
+    /// Reads at most <see cref="WebhookNotificationConfig.MaxResponseBytes"/> of the body, and says
+    /// whether there was more.
+    /// </summary>
+    private static async Task<(string Body, bool Truncated)> ReadCappedAsync(HttpContent content, CancellationToken ct)
+    {
+        await using Stream stream = await content.ReadAsStreamAsync(ct);
+        byte[] buffer = new byte[WebhookNotificationConfig.MaxResponseBytes + 1];
+        int read = 0;
+        while (read < buffer.Length)
+        {
+            int n = await stream.ReadAsync(buffer.AsMemory(read), ct);
+            if (n == 0)
+            {
+                break;
+            }
+
+            read += n;
+        }
+
+        bool truncated = read > WebhookNotificationConfig.MaxResponseBytes;
+        Encoding encoding = EncodingOf(content);
+        return (encoding.GetString(buffer, 0, Math.Min(read, WebhookNotificationConfig.MaxResponseBytes)), truncated);
+    }
+
+    private static Encoding EncodingOf(HttpContent content)
+    {
+        try
+        {
+            return content.Headers.ContentType?.CharSet is { Length: > 0 } charset ? Encoding.GetEncoding(charset.Trim('"')) : Encoding.UTF8;
+        }
+        catch (ArgumentException)
+        {
+            return Encoding.UTF8;
+        }
+    }
+
+    private static bool IsJson(HttpContent content) =>
+        content.Headers.ContentType?.MediaType is { } mediaType
+        && (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
+
+    private static JsonElement? TryParse(string body)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(body);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }
