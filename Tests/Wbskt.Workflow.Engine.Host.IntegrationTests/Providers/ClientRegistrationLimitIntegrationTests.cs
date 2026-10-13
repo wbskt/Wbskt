@@ -14,6 +14,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int PolicyLimitReachedError = 50020;
+    private const int WorkspaceLimitReachedError = 50025;
 
     [SkippableFact]
     public async Task Registration_beyond_MaxClients_is_refused()
@@ -69,13 +70,60 @@ public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixtu
         Assert.Equal(5, await CountClientsAsync(policyId));
     }
 
-    private async Task<int> CreatePolicyAsync(int? maxClients)
+    [SkippableFact]
+    public async Task The_workspace_ceiling_spans_its_policies_and_ignores_revoked_clients()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Server is not reachable.");
+
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int first = await CreatePolicyAsync(maxClients: null, workspaceId);
+        int second = await CreatePolicyAsync(maxClients: null, workspaceId);
+
+        await CreateClientAsync(first, workspaceId, maxPerWorkspace: 3);
+        int revoked = await CreateClientAsync(second, workspaceId, maxPerWorkspace: 3, status: 2);
+        await CreateClientAsync(second, workspaceId, maxPerWorkspace: 3, status: 0);
+        await CreateClientAsync(first, workspaceId, maxPerWorkspace: 3);
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => CreateClientAsync(second, workspaceId, maxPerWorkspace: 3));
+        Assert.Equal(WorkspaceLimitReachedError, ex.Number);
+        Assert.True(revoked > 0);
+
+        // Another workspace is unaffected.
+        int elsewhere = await CreatePolicyAsync(maxClients: null, workspaceId - 1);
+        await CreateClientAsync(elsewhere, workspaceId - 1, maxPerWorkspace: 3);
+    }
+
+    [SkippableFact]
+    public async Task Concurrent_registrations_cannot_overshoot_the_workspace_ceiling()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Server is not reachable.");
+
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int[] policies = [await CreatePolicyAsync(maxClients: null, workspaceId), await CreatePolicyAsync(maxClients: null, workspaceId)];
+
+        Task[] attempts = Enumerable.Range(0, 12).Select(i => Task.Run(() => CreateClientAsync(policies[i % 2], workspaceId, maxPerWorkspace: 4))).ToArray();
+        try
+        {
+            await Task.WhenAll(attempts);
+        }
+        catch (SqlException)
+        {
+            // Expected for the attempts past the ceiling; each is checked below.
+        }
+
+        Assert.All(
+            attempts.Where(t => t.IsFaulted),
+            t => Assert.Equal(WorkspaceLimitReachedError, Assert.IsType<SqlException>(t.Exception!.InnerException).Number));
+        Assert.Equal(4, attempts.Count(t => t.IsCompletedSuccessfully));
+    }
+
+    private async Task<int> CreatePolicyAsync(int? maxClients, int workspaceId = 1)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand("dbo.RegistrationPolicy_Create", connection) { CommandType = CommandType.StoredProcedure };
-        command.Parameters.AddWithValue("@WorkspaceId", 1);
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         command.Parameters.AddWithValue("@Name", $"limit-test-{Guid.NewGuid():N}");
         command.Parameters.AddWithValue("@MaxClients", (object?)maxClients ?? DBNull.Value);
         command.Parameters.AddWithValue("@AutoApproval", true);
@@ -87,20 +135,23 @@ public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixtu
         return (int)command.Parameters["@Id"].Value;
     }
 
-    private async Task CreateClientAsync(int policyId)
+    private async Task<int> CreateClientAsync(int policyId, int workspaceId = 1, int? maxPerWorkspace = null, byte status = 1)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand("dbo.Client_Create", connection) { CommandType = CommandType.StoredProcedure };
-        command.Parameters.AddWithValue("@WorkspaceId", 1);
+        command.Parameters.AddWithValue("@WorkspaceId", workspaceId);
         command.Parameters.AddWithValue("@PolicyId", policyId);
         command.Parameters.AddWithValue("@Name", "device");
         command.Parameters.Add("@SecretHash", SqlDbType.VarBinary, 32).Value = ClientSecrets.Hash(ClientSecrets.Generate());
-        command.Parameters.AddWithValue("@Status", (byte)1);
+        command.Parameters.AddWithValue("@Status", status);
+        command.Parameters.AddWithValue("@MaxWorkspaceClients", (object?)maxPerWorkspace ?? DBNull.Value);
         command.Parameters.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
         command.Parameters.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
         await command.ExecuteNonQueryAsync();
+
+        return (int)command.Parameters["@Id"].Value;
     }
 
     private async Task<int> CountClientsAsync(int policyId)

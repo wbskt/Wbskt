@@ -65,7 +65,10 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
 
     public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => InsertAsync(row, [], ct);
 
-    public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, CancellationToken ct)
+    public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, CancellationToken ct) =>
+        InsertAsync(row, integrationRefs, maxWorkflows: null, ct);
+
+    public async Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<WorkflowIntegrationRef> integrationRefs, int? maxWorkflows, CancellationToken ct)
     {
         var refs = new DataTable();
         refs.Columns.Add("NodeId", typeof(Guid));
@@ -91,6 +94,7 @@ internal sealed class WorkflowDefinitionProvider : BaseSqlProvider, IWorkflowDef
                 var refsParameter = p.AddWithValue("@IntegrationRefs", refs);
                 refsParameter.SqlDbType = SqlDbType.Structured;
                 refsParameter.TypeName = "dbo.IntegrationRefTableType";
+                p.AddWithValue("@MaxWorkflows", (object?)maxWorkflows ?? DBNull.Value);
             },
             Map,
             new InvalidOperationException("WorkflowDefinition_Publish did not return a row."),

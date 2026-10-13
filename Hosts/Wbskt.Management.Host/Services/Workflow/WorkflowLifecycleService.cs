@@ -29,6 +29,9 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private const int WorkflowOwnedElsewhereError = 50021; // THROW in dbo.WorkflowDefinition_Publish
     private const int WorkflowDeletedError = 50022; // THROW in dbo.WorkflowDefinition_Publish
     private const int IntegrationMissingError = 50023; // THROW in dbo.WorkflowDefinition_Publish
+    private const int WorkflowLimitReachedError = 50024; // THROW in dbo.WorkflowDefinition_Publish
+
+    public const int DefaultMaxPerWorkspace = 100;
     private const string DeletedCancellationReason = "Workflow deleted.";
 
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
@@ -39,6 +42,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private readonly IWorkflowEngineGateway _engine;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowLifecycleService> _logger;
+    private readonly IConfiguration? _configuration;
 
     public WorkflowLifecycleService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
@@ -48,8 +52,10 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         IIdentityService identityService,
         IWorkflowEngineGateway engine,
         IEventBus eventBus,
-        ILogger<WorkflowLifecycleService> logger)
+        ILogger<WorkflowLifecycleService> logger,
+        IConfiguration? configuration = null)
     {
+        _configuration = configuration;
         _eventBus = eventBus;
         _engine = engine;
         _workflowDefinitionProvider = workflowDefinitionProvider;
@@ -59,6 +65,9 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         _identityService = identityService;
         _logger = logger;
     }
+
+    // Configuration, not a constant, so it can become a plan tier without a redeploy of the code.
+    private int MaxPerWorkspace => _configuration?.GetValue("Workflows:MaxPerWorkspace", DefaultMaxPerWorkspace) ?? DefaultMaxPerWorkspace;
 
     public Task<Result<WorkflowPublishResponse>> PublishAsync(int workspaceId, Guid workspaceRef, WorkflowPublishRequest request, CancellationToken ct)
     {
@@ -111,7 +120,14 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 DefinitionJson = JsonSerializer.Serialize(request.Definition with { WorkspaceId = workspaceId, IsEnabled = true }, SerializerOptions),
                 PublishedBy = _identityService.GetUserIdentity().UserId,
                 CreatedAt = request.Definition.CreatedAt
-            }, integrationRefs.Refs, ct);
+            }, integrationRefs.Refs, MaxPerWorkspace, ct);
+        }
+        catch (SqlException ex) when (ex.Number == WorkflowLimitReachedError)
+        {
+            _logger.LogWarning("Workflow publish rejected: WorkspaceId {WorkspaceId} is at its limit of {MaxWorkflows} workflows", workspaceId, MaxPerWorkspace);
+            return Result<WorkflowPublishResponse>.Failure(Error.Conflict(
+                "WORKFLOW_LIMIT_REACHED",
+                $"A workspace can have at most {MaxPerWorkspace} workflows. Delete one you no longer use."));
         }
         catch (SqlException ex) when (ex.Number == IntegrationMissingError)
         {

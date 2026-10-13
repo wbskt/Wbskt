@@ -14,25 +14,37 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     /// <summary>Raised by <c>dbo.Client_Create</c> when the policy is already at <c>MaxClients</c>.</summary>
     private const int PolicyLimitReachedError = 50020;
 
+    /// <summary>Raised by <c>dbo.Client_Create</c> when the workspace is already at its client ceiling.</summary>
+    private const int WorkspaceLimitReachedError = 50025;
+
+    public const int DefaultMaxPerWorkspace = 1000;
+
     private readonly IClientProvider _clientProvider;
     private readonly IRegistrationPolicyProvider _policyProvider;
     private readonly IEventBus _eventBus;
     private readonly ILogger<ClientRegistrationService> _logger;
     private readonly ManagementMetrics _metrics;
+    private readonly IConfiguration? _configuration;
 
     public ClientRegistrationService(
         IClientProvider clientProvider, 
         IRegistrationPolicyProvider policyProvider,
         IEventBus eventBus,
         ILogger<ClientRegistrationService> logger,
-        ManagementMetrics metrics)
+        ManagementMetrics metrics,
+        IConfiguration? configuration = null)
     {
+        _configuration = configuration;
         _clientProvider = clientProvider;
         _policyProvider = policyProvider;
         _eventBus = eventBus;
         _logger = logger;
         _metrics = metrics;
     }
+
+    // Pending and registered clients across all of a workspace's policies. Configuration, not a
+    // constant, so it can become a plan tier without a redeploy of the code.
+    private int MaxPerWorkspace => _configuration?.GetValue("Clients:MaxPerWorkspace", DefaultMaxPerWorkspace) ?? DefaultMaxPerWorkspace;
 
     public async Task<Result<ClientRegistrationResponse>> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
     {
@@ -83,7 +95,14 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         Client client;
         try
         {
-            client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, cancellationToken);
+            client = await _clientProvider.InsertClientAsync(policy.WorkspaceId, policy.Id, request.Name, ClientSecrets.Hash(secret), initialStatus, MaxPerWorkspace, cancellationToken);
+        }
+        catch (SqlException ex) when (ex.Number == WorkspaceLimitReachedError)
+        {
+            _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId} is at its limit of {MaxClients} clients", policy.WorkspaceId, MaxPerWorkspace);
+            return Result<ClientRegistrationResponse>.Failure(Error.Conflict(
+                "WORKSPACE_CLIENT_LIMIT_REACHED",
+                $"This workspace can have at most {MaxPerWorkspace} devices. Remove one it no longer uses."));
         }
         catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)
         {

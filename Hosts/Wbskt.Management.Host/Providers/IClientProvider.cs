@@ -13,8 +13,13 @@ public interface IClientProvider : IReferenceProvider
         CancellationToken cancellationToken = default);
     Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, ClientStatus? status, string? name,
         string? tag, int skip, int take, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Creates a client. Throws <c>SqlException</c> 50020 when its policy is at <c>MaxClients</c>, and
+    /// 50025 when the workspace already has <paramref name="maxPerWorkspace"/> pending or registered
+    /// clients (null is no ceiling).
+    /// </summary>
     Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, byte[] secretHash, ClientStatus status,
-        CancellationToken cancellationToken = default);
+        int? maxPerWorkspace, CancellationToken cancellationToken = default);
     /// <summary>
     /// The client plus its stored secret hash, for authentication. Comparison happens in the
     /// service, not here and not in SQL - see <c>ClientSecrets.Matches</c>.

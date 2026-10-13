@@ -3,6 +3,7 @@ using Wbskt.Management.Host.Providers;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Workflow;
@@ -36,8 +37,8 @@ public sealed class WorkflowDefinitionServiceTests
         var request = CreatePublishRequest();
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow?)null);
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => row with { Id = 11, Version = 1 });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => row with { Id = 11, Version = 1 });
         var bus = new Mock<IEventBus>();
         var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
 
@@ -54,6 +55,31 @@ public sealed class WorkflowDefinitionServiceTests
     }
 
     [Fact]
+    public async Task A_new_workflow_past_the_workspace_ceiling_is_refused_with_the_configured_number()
+    {
+        var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
+        var triggerService = new Mock<ITriggerRegistrationService>();
+        var identity = new Mock<IIdentityService>();
+        identity.Setup(i => i.GetUserIdentity()).Returns(new UserIdentity(7));
+        var request = CreatePublishRequest();
+        workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow?)null);
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), 25, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(Wbskt.Workflow.Engine.Host.Tests.AuthHost.SqlExceptions.WithNumber(50024, "The workspace has reached its workflow limit."));
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Workflows:MaxPerWorkspace"] = "25" })
+            .Build();
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>(), configuration);
+
+        var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.True(response.IsFailure);
+        Assert.Equal("WORKFLOW_LIMIT_REACHED", response.Error.Code);
+        Assert.Contains("25", response.Error.Message);
+        triggerService.Verify(x => x.OnPublishedAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Publish_stamps_resolved_workspace_id_on_inserted_row()
     {
         var workflowProvider = new Mock<IWorkflowDefinitionProvider>();
@@ -64,8 +90,8 @@ public sealed class WorkflowDefinitionServiceTests
         WorkflowDefinitionRow? inserted = null;
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow?)null);
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => { inserted = row; return row with { Id = 21 }; });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => { inserted = row; return row with { Id = 21 }; });
         var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         await service.PublishAsync(42, Guid.NewGuid(), request, CancellationToken.None);
@@ -150,8 +176,8 @@ public sealed class WorkflowDefinitionServiceTests
             .ReturnsAsync(CreateWorkflowRow(5, refId, 1, isEnabled: false));
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(refId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(6, refId, 2, isEnabled: true));
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => { inserted = row; return row with { Id = 30, Version = 3 }; });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => { inserted = row; return row with { Id = 30, Version = 3 }; });
 
         var bus = new Mock<IEventBus>();
         var service = new WorkflowLifecycleService(
@@ -250,8 +276,8 @@ public sealed class WorkflowDefinitionServiceTests
         // published in between.
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateWorkflowRow(5, request.RefId, 1, true));
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => { submitted = row; return row with { Id = 6, Version = 9 }; });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => { submitted = row; return row with { Id = 6, Version = 9 }; });
 
         var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
@@ -282,7 +308,7 @@ public sealed class WorkflowDefinitionServiceTests
         // The fault propagates to the middleware's 500 rather than reading as a first publish.
         await Assert.ThrowsAsync<TimeoutException>(() => service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None));
 
-        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()), Times.Never);
+        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -299,8 +325,8 @@ public sealed class WorkflowDefinitionServiceTests
         var workspaceRef = Guid.NewGuid();
 
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => row with { Id = 6, Version = 2 });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => row with { Id = 6, Version = 2 });
         workflowProvider.Setup(x => x.DeleteUnreferencedAsync(6, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         triggerService.Setup(x => x.OnPublishedAsync(6, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("registration exploded"));
@@ -328,8 +354,8 @@ public sealed class WorkflowDefinitionServiceTests
         var request = CreatePublishRequest();
         var existing = CreateWorkflowRow(5, request.RefId, 1, true);
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => row with { Id = 6, Version = 2 });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => row with { Id = 6, Version = 2 });
         var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
@@ -358,7 +384,7 @@ public sealed class WorkflowDefinitionServiceTests
         Assert.True(response.IsFailure);
         Assert.Equal(ErrorType.Conflict, response.Error.Type);
         Assert.Equal("WORKFLOW_REF_TAKEN", response.Error.Code);
-        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()), Times.Never);
+        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -454,8 +480,8 @@ public sealed class WorkflowDefinitionServiceTests
         var request = CreatePublishRequest();
         workflowProvider.Setup(x => x.FindCurrentByRefIdAsync(request.RefId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowDefinitionRow?)null);
-        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, CancellationToken _) => row with { Id = 17 });
+        workflowProvider.Setup(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> _, int? _, CancellationToken _) => row with { Id = 17 });
         var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         var response = await service.PublishAsync(WorkspaceId, Guid.NewGuid(), request, CancellationToken.None);
@@ -478,7 +504,7 @@ public sealed class WorkflowDefinitionServiceTests
         
         Assert.True(response.IsFailure);
         Assert.Equal(ErrorType.Validation, response.Error.Type);
-        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<CancellationToken>()), Times.Never);
+        workflowProvider.Verify(x => x.InsertAsync(It.IsAny<WorkflowDefinitionRow>(), It.IsAny<IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef>>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static WorkflowPublishRequest CreatePublishRequest()

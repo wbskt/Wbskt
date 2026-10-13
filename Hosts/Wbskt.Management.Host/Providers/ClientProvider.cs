@@ -74,7 +74,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
     }
 
     public async Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, byte[] secretHash,
-        ClientStatus status, CancellationToken cancellationToken = default)
+        ClientStatus status, int? maxPerWorkspace, CancellationToken cancellationToken = default)
     {
         var parameters = await ExecuteNonQueryAsync("dbo.Client_Create", p =>
         {
@@ -83,6 +83,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             p.AddWithValue("@Name", name);
             p.Add("@SecretHash", SqlDbType.VarBinary, ClientCredential.SecretHashBytes).Value = secretHash;
             p.AddWithValue("@Status", (byte)status);
+            p.AddWithValue("@MaxWorkspaceClients", (object?)maxPerWorkspace ?? DBNull.Value);
             
             p.Add("@Id", SqlDbType.Int).Direction = ParameterDirection.Output;
             p.Add("@RefId", SqlDbType.UniqueIdentifier).Direction = ParameterDirection.Output;
