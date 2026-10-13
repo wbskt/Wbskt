@@ -34,13 +34,23 @@ public sealed class DeviceCommandPublisherTests
             .Returns(Task.CompletedTask);
     }
 
-    private DeviceCommandPublisher Publisher(ClientCommandTarget? target)
+    private static readonly TimeSpan[] QuickRechecks = [TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1)];
+
+    private DeviceCommandPublisher Publisher(ClientCommandTarget? target) => Publisher([target]);
+
+    /// <param name="lookups">What each lookup of the device returns, in turn; the last one repeats.</param>
+    private DeviceCommandPublisher Publisher(ClientCommandTarget?[] lookups)
     {
         var targets = new Mock<IClientCommandTargetProvider>();
-        targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>())).ReturnsAsync(target);
+        int calls = 0;
+        targets.Setup(t => t.FindAsync(ClientRefId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => lookups[Math.Min(calls++, lookups.Length - 1)]);
+        _lookups = () => calls;
         var sender = new DeviceCommandSender(targets.Object, _bus.Object, NullLogger<DeviceCommandSender>.Instance);
-        return new DeviceCommandPublisher(sender, _bus.Object, _clock);
+        return new DeviceCommandPublisher(sender, _bus.Object, _clock, QuickRechecks);
     }
+
+    private Func<int> _lookups = () => 0;
 
     [Fact]
     public async Task A_command_to_a_connected_device_is_addressed_to_the_host_holding_it()
@@ -72,7 +82,7 @@ public sealed class DeviceCommandPublisherTests
     }
 
     [Fact]
-    public async Task A_command_to_an_offline_device_is_reported_as_failed_at_once()
+    public async Task A_command_to_a_device_that_stays_offline_is_reported_as_failed_after_the_rechecks()
     {
         await Publisher(new ClientCommandTarget(ClientId, WorkspaceId, false, null))
             .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
@@ -84,6 +94,37 @@ public sealed class DeviceCommandPublisherTests
         Assert.Equal(CommandId, _failed.CommandId);
         Assert.Equal(ClientId, _failed.ClientId);
         Assert.Equal("OpenVent", _failed.Type);
+        Assert.Equal(1 + QuickRechecks.Length, _lookups());
+    }
+
+    [Fact]
+    public async Task A_device_whose_connection_is_recorded_a_moment_late_still_gets_the_command()
+    {
+        // The run was started by the device's first message, which beat its presence to the database.
+        await Publisher([new ClientCommandTarget(ClientId, WorkspaceId, false, null), new ClientCommandTarget(ClientId, WorkspaceId, true, HostId)])
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
+
+        Assert.NotNull(_sent);
+        Assert.Equal(HostId, _sent!.TargetHostId);
+        Assert.Null(_failed);
+        Assert.Equal(2, _lookups());
+    }
+
+    [Fact]
+    public async Task Only_an_offline_device_is_looked_up_again()
+    {
+        await Publisher((ClientCommandTarget?)null)
+            .PublishCommandAsync(CommandId, ClientRefId, WorkspaceId, "OpenVent", "{}", ExpiresIn, null, CancellationToken.None);
+
+        Assert.Equal(1, _lookups());
+    }
+
+    [Fact]
+    public void The_default_rechecks_wait_a_couple_of_seconds_in_all()
+    {
+        var total = DeviceCommandPublisher.DefaultOfflineRechecks.Aggregate(TimeSpan.Zero, (sum, wait) => sum + wait);
+
+        Assert.InRange(total, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5));
     }
 
     [Theory]
