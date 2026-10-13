@@ -6,7 +6,7 @@ using Wbskt.Workflow.Channels;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
-public sealed class ClientPayloadReceivedConsumer(IInboundHub hub, ClientHoldRecorder holdRecorder) : IConsumer<ClientMessageReceivedEvent>
+public sealed class ClientPayloadReceivedConsumer(IInboundHub hub, ClientHoldRecorder holdRecorder, RecentDeviceActivity recentActivity) : IConsumer<ClientMessageReceivedEvent>
 {
     /// <summary>A message that reached the platform this long after the device sent it was buffered offline.</summary>
     public static readonly TimeSpan LateThreshold = TimeSpan.FromSeconds(30);
@@ -14,6 +14,8 @@ public sealed class ClientPayloadReceivedConsumer(IInboundHub hub, ClientHoldRec
     public async Task Consume(ConsumeContext<ClientMessageReceivedEvent> context)
     {
         ClientMessageReceivedEvent evt = context.Message;
+        // Before the dispatch, so a run this message starts finds the device marked as just heard from.
+        recentActivity.Saw(evt.ClientRefId);
         DateTime receivedAt = DateTime.SpecifyKind(evt.CreatedAtUtc, DateTimeKind.Utc);
         DateTime sentAt = evt.SentAtUtc is { } deviceTime ? DateTime.SpecifyKind(deviceTime, DateTimeKind.Utc) : receivedAt;
         bool late = receivedAt - sentAt > LateThreshold;
