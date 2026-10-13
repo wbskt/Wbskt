@@ -423,8 +423,10 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
       # Adds rabbitmq_prometheus (port 15692, backend network only) for the dead-letter alert.
       - ../observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ../observability/rabbitmq/healthcheck.sh:/usr/local/bin/wbskt-healthcheck.sh:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # A ping, and the policy that caps the public callback queue (see the script).
+      test: ["CMD", "sh", "/usr/local/bin/wbskt-healthcheck.sh"]
       interval: 10s
       timeout: 10s
       retries: 5
