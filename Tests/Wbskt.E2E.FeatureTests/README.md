@@ -114,7 +114,8 @@ All base URLs can be overridden so the tests can target non-default environments
 Permission-gated operations (registration-policy creation, workflow publish) are performed as the
 **seeded administrator** provisioned by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`:
 
-- Username `root`, email `admin@wbskt.com`, password `Password123!`
+- Username `root`, email `admin@wbskt.com`, password `Password123!` (the development password
+  `Deploy-Databases.ps1` passes by default; a database deployed without it has no usable root password)
 - `Admin` role → **all** permissions
 - Owner of the **Default Workspace** (internal `Id = 1`)
 

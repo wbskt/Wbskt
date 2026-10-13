@@ -27,4 +27,13 @@
         </SqlCmdVariable>
     </ItemGroup>
 
+    <!-- The root administrator's password hash, used only when the root account is first created.
+         Empty creates root with no usable password: it signs in after a password reset. -->
+    <ItemGroup>
+        <SqlCmdVariable Include="RootPasswordHash">
+            <DefaultValue></DefaultValue>
+            <Value>$(SqlCmdVar__2)</Value>
+        </SqlCmdVariable>
+    </ItemGroup>
+
 </Project>
