@@ -3,9 +3,10 @@
 -- short of its limit all pass it and all insert. The lock serialises registrations per policy, so
 -- the count below sees every client committed before this one.
 --
--- @MaxWorkspaceClients is the workspace's ceiling across all its policies: pending and registered
--- clients count, revoked ones do not. NULL is no ceiling. Counted under an application lock per
--- workspace, for the same reason as the policy lock.
+-- @MaxWorkspaceClients is the workspace's ceiling across all its policies: only registered clients
+-- count, so it is checked only when the new client is created registered (auto-approval). A pending
+-- client counts once it is approved, which Client_UpdateStatuses checks under the same lock. NULL is
+-- no ceiling. Counted under an application lock per workspace, for the same reason as the policy lock.
 CREATE PROCEDURE dbo.Client_Create
     @WorkspaceId INT,
     @PolicyId INT,
@@ -36,12 +37,12 @@ BEGIN
         THROW 50020, 'Policy registration limit reached.', 1;
     END
 
-    IF @MaxWorkspaceClients IS NOT NULL
+    IF @MaxWorkspaceClients IS NOT NULL AND @Status = 1
     BEGIN
         DECLARE @Resource NVARCHAR(255) = CONCAT(N'client-ceiling:', @WorkspaceId);
         EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
 
-        IF (SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @WorkspaceId AND Status IN (0, 1)) >= @MaxWorkspaceClients
+        IF (SELECT COUNT(*) FROM dbo.Clients WHERE WorkspaceId = @WorkspaceId AND Status = 1) >= @MaxWorkspaceClients
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 50025, 'The workspace has reached its client limit.', 1;

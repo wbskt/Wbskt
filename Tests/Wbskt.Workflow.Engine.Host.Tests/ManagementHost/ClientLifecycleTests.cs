@@ -1,5 +1,6 @@
 using Wbskt.Protocol;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -8,6 +9,7 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Infrastructure;
 using Wbskt.Primitives.Exceptions;
 
 namespace Wbskt.Workflow.Engine.Host.Tests.ManagementHost;
@@ -139,6 +141,40 @@ public sealed class ClientLifecycleTests
     }
 
     [Fact]
+    public async Task Approving_one_client_past_the_workspace_ceiling_is_a_conflict_naming_the_configured_number()
+    {
+        var harness = new Harness(maxPerWorkspace: 25);
+        var client = harness.AddClient(status: ClientStatus.Revoked);
+        harness.WorkspaceFull.Add(client.RefId);
+
+        var result = await harness.Service.UpdateStatusAsync(WorkspaceId, client.RefId, ClientStatus.Registered);
+
+        result.Error.Code.Should().Be("WORKSPACE_CLIENT_LIMIT_REACHED");
+        result.Error.Type.Should().Be(ErrorType.Conflict);
+        result.Error.Message.Should().Contain("25");
+        harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered, 25, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Cutoffs.VerifyNoOtherCalls();
+        harness.Bus.Verify(b => b.PublishAsync(It.IsAny<ClientStatusChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_batch_reports_the_clients_the_workspace_has_no_room_for()
+    {
+        var harness = new Harness();
+        var first = harness.AddClient(status: ClientStatus.Pending);
+        var refused = harness.AddClient(status: ClientStatus.Pending);
+        harness.WorkspaceFull.Add(refused.RefId);
+
+        var result = await harness.Service.UpdateStatusesAsync(WorkspaceId, [first.RefId, refused.RefId], ClientStatus.Registered);
+
+        result.Value.Updated.Should().Equal(first.RefId);
+        result.Value.Failed.Select(f => (f.ClientRefId, f.Code)).Should().Equal((refused.RefId, "WORKSPACE_CLIENT_LIMIT_REACHED"));
+        // No configuration: the default ceiling still applies.
+        harness.Provider.Verify(p => p.UpdateStatusesAsync(WorkspaceId, It.IsAny<IReadOnlyList<Guid>>(), ClientStatus.Registered,
+            ClientRegistrationService.DefaultMaxPerWorkspace, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task A_batch_is_one_database_call_with_each_client_once_in_the_order_given()
     {
         var harness = new Harness();
@@ -151,6 +187,7 @@ public sealed class ClientLifecycleTests
             WorkspaceId,
             It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { b.RefId, a.RefId })),
             ClientStatus.Registered,
+            It.IsAny<int?>(),
             It.IsAny<CancellationToken>()), Times.Once);
         harness.Provider.Verify(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -186,23 +223,29 @@ public sealed class ClientLifecycleTests
     {
         private int _nextId = 40;
 
-        public Harness()
+        public Harness(int? maxPerWorkspace = null)
         {
             Provider
                 .Setup(p => p.FindDetailByRefIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((ClientDetail?)null);
             // A stand-in for dbo.Client_UpdateStatuses, answering from the clients added below.
             Provider
-                .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, CancellationToken _) =>
+                .Setup(p => p.UpdateStatusesAsync(It.IsAny<int>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<ClientStatus>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int workspaceId, IReadOnlyList<Guid> refIds, ClientStatus status, int? _, CancellationToken _) =>
                     refIds.Select(refId => Change(workspaceId, refId, status)).ToList());
-            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance);
+            var configuration = maxPerWorkspace is null ? null : new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Clients:MaxPerWorkspace"] = maxPerWorkspace.ToString() })
+                .Build();
+            Service = new ClientLifecycleService(Provider.Object, Bus.Object, Cutoffs.Object, NullLogger<ClientLifecycleService>.Instance, configuration);
         }
 
         public Mock<IClientProvider> Provider { get; } = new();
 
         /// <summary>Clients whose policy has no places left.</summary>
         public HashSet<Guid> Full { get; } = [];
+
+        /// <summary>Clients the workspace has no registered places left for.</summary>
+        public HashSet<Guid> WorkspaceFull { get; } = [];
 
         private Dictionary<Guid, ClientDetail> Clients { get; } = [];
 
@@ -239,6 +282,7 @@ public sealed class ClientLifecycleTests
             var outcome = client.WorkspaceId != workspaceId ? ClientStatusOutcome.OtherWorkspace
                 : client.Status == status ? ClientStatusOutcome.AlreadyAtStatus
                 : status == ClientStatus.Registered && Full.Contains(refId) ? ClientStatusOutcome.PolicyLimitReached
+                : status == ClientStatus.Registered && WorkspaceFull.Contains(refId) ? ClientStatusOutcome.WorkspaceLimitReached
                 : ClientStatusOutcome.Updated;
             return new ClientStatusChange(refId, client.Id, client.PolicyId, client.PolicyRefId, client.Status, outcome);
         }

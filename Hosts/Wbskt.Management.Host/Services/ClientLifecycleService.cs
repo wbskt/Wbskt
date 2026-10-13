@@ -20,24 +20,30 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
     private readonly IEventBus _eventBus;
     private readonly ClientAccessRevoker _access;
     private readonly ILogger<ClientLifecycleService> _logger;
+    private readonly IConfiguration? _configuration;
 
     public ClientLifecycleService(
         IClientProvider clientProvider,
         IEventBus eventBus,
         IClientTokenCutoffs cutoffs,
-        ILogger<ClientLifecycleService> logger)
+        ILogger<ClientLifecycleService> logger,
+        IConfiguration? configuration = null)
     {
+        _configuration = configuration;
         _clientProvider = clientProvider;
         _eventBus = eventBus;
         _access = new ClientAccessRevoker(eventBus, cutoffs);
         _logger = logger;
     }
 
+    // The same ceiling registration enforces: approving a pending or revoked client makes it count.
+    private int MaxPerWorkspace => ClientRegistrationService.ReadMaxPerWorkspace(_configuration);
+
     public async Task<Result> UpdateStatusAsync(int workspaceId, Guid clientRefId, ClientStatus status, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Updating client RefId {ClientRefId} status to '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefId, status, workspaceId);
 
-        var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, cancellationToken)).Single();
+        var change = (await _clientProvider.UpdateStatusesAsync(workspaceId, [clientRefId], status, MaxPerWorkspace, cancellationToken)).Single();
         switch (change.Outcome)
         {
             case ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace:
@@ -46,6 +52,9 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
             case ClientStatusOutcome.PolicyLimitReached:
                 _logger.LogWarning("Client approval failed: Policy registration limit reached for Policy ID {PolicyId}", change.PolicyId);
                 return Result.Failure(PolicyFull);
+            case ClientStatusOutcome.WorkspaceLimitReached:
+                _logger.LogWarning("Client approval failed: WorkspaceId {WorkspaceId} is at its limit of {MaxClients} clients", workspaceId, MaxPerWorkspace);
+                return Result.Failure(ClientRegistrationService.WorkspaceLimitReached(MaxPerWorkspace));
             case ClientStatusOutcome.Updated:
                 await AnnounceStatusChangeAsync(workspaceId, change, status, cancellationToken);
                 break;
@@ -60,9 +69,10 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
         _logger.LogInformation("Updating {Count} clients to status '{ClientStatus}' in WorkspaceId: {WorkspaceId}", clientRefIds.Count, status, workspaceId);
 
         // One database call for the whole list, in the order given: approvals compete for the
-        // policy's remaining places, and a predictable order decides which ones get them.
+        // policy's and the workspace's remaining places, and a predictable order decides which ones get them.
+        var maxPerWorkspace = MaxPerWorkspace;
         IReadOnlyList<ClientStatusChange> changes;
-        changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, cancellationToken);
+        changes = await _clientProvider.UpdateStatusesAsync(workspaceId, clientRefIds.Distinct().ToList(), status, maxPerWorkspace, cancellationToken);
 
         var updated = new List<Guid>();
         var failed = new List<BulkClientStatusFailure>();
@@ -73,6 +83,7 @@ internal sealed class ClientLifecycleService : IClientLifecycleService
                 // A missing client and another workspace's read the same; see WorkspaceOwnership.
                 ClientStatusOutcome.NotFound or ClientStatusOutcome.OtherWorkspace => WorkspaceOwnership.ClientNotFound,
                 ClientStatusOutcome.PolicyLimitReached => PolicyFull,
+                ClientStatusOutcome.WorkspaceLimitReached => ClientRegistrationService.WorkspaceLimitReached(maxPerWorkspace),
                 _ => null
             };
 

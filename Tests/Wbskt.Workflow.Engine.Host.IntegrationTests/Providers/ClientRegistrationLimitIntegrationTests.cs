@@ -8,7 +8,8 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 /// <summary>
 /// <c>dbo.Client_Create</c> enforces a policy's <c>MaxClients</c> under a lock on the policy row. The
 /// service's earlier count is check-then-insert, so without this concurrent registrations against a
-/// policy one short of its limit all got in.
+/// policy one short of its limit all got in. It also enforces the workspace's ceiling on registered
+/// clients, for a client that is created registered.
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixture)
@@ -71,7 +72,7 @@ public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixtu
     }
 
     [SkippableFact]
-    public async Task The_workspace_ceiling_spans_its_policies_and_ignores_revoked_clients()
+    public async Task The_workspace_ceiling_spans_its_policies_and_counts_registered_clients_only()
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Server is not reachable.");
 
@@ -83,6 +84,7 @@ public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixtu
         int revoked = await CreateClientAsync(second, workspaceId, maxPerWorkspace: 3, status: 2);
         await CreateClientAsync(second, workspaceId, maxPerWorkspace: 3, status: 0);
         await CreateClientAsync(first, workspaceId, maxPerWorkspace: 3);
+        await CreateClientAsync(second, workspaceId, maxPerWorkspace: 3);
 
         var ex = await Assert.ThrowsAsync<SqlException>(() => CreateClientAsync(second, workspaceId, maxPerWorkspace: 3));
         Assert.Equal(WorkspaceLimitReachedError, ex.Number);
@@ -91,6 +93,30 @@ public sealed class ClientRegistrationLimitIntegrationTests(SqlEdgeFixture fixtu
         // Another workspace is unaffected.
         int elsewhere = await CreatePolicyAsync(maxClients: null, workspaceId - 1);
         await CreateClientAsync(elsewhere, workspaceId - 1, maxPerWorkspace: 3);
+    }
+
+    [SkippableFact]
+    public async Task Pending_registrations_are_not_refused_by_a_full_workspace_and_do_not_fill_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, "SQL Server is not reachable.");
+
+        // A leaked PIN for a policy that needs approval must not lock out every other policy.
+        int workspaceId = Random.Shared.Next(1_000_000, int.MaxValue);
+        int approvalRequired = await CreatePolicyAsync(maxClients: null, workspaceId);
+        int autoApproved = await CreatePolicyAsync(maxClients: null, workspaceId);
+
+        for (int i = 0; i < 5; i++)
+        {
+            await CreateClientAsync(approvalRequired, workspaceId, maxPerWorkspace: 2, status: 0);
+        }
+
+        await CreateClientAsync(autoApproved, workspaceId, maxPerWorkspace: 2);
+        await CreateClientAsync(autoApproved, workspaceId, maxPerWorkspace: 2);
+
+        // Full of registered clients now: another registered one is refused, a pending one is not.
+        var ex = await Assert.ThrowsAsync<SqlException>(() => CreateClientAsync(autoApproved, workspaceId, maxPerWorkspace: 2));
+        Assert.Equal(WorkspaceLimitReachedError, ex.Number);
+        await CreateClientAsync(approvalRequired, workspaceId, maxPerWorkspace: 2, status: 0);
     }
 
     [SkippableFact]

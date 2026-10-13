@@ -14,7 +14,10 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
     /// <summary>Raised by <c>dbo.Client_Create</c> when the policy is already at <c>MaxClients</c>.</summary>
     private const int PolicyLimitReachedError = 50020;
 
-    /// <summary>Raised by <c>dbo.Client_Create</c> when the workspace is already at its client ceiling.</summary>
+    /// <summary>
+    /// Raised by <c>dbo.Client_Create</c> when an auto-approved client would take the workspace past
+    /// its ceiling on registered clients.
+    /// </summary>
     private const int WorkspaceLimitReachedError = 50025;
 
     public const int DefaultMaxPerWorkspace = 1000;
@@ -42,9 +45,18 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         _metrics = metrics;
     }
 
-    // Pending and registered clients across all of a workspace's policies. Configuration, not a
-    // constant, so it can become a plan tier without a redeploy of the code.
-    private int MaxPerWorkspace => _configuration?.GetValue("Clients:MaxPerWorkspace", DefaultMaxPerWorkspace) ?? DefaultMaxPerWorkspace;
+    private int MaxPerWorkspace => ReadMaxPerWorkspace(_configuration);
+
+    // Registered clients across all of a workspace's policies; pending ones do not count until they
+    // are approved, so a leaked PIN for a policy that needs approval cannot fill the workspace.
+    // Configuration, not a constant, so it can become a plan tier without a redeploy of the code.
+    internal static int ReadMaxPerWorkspace(IConfiguration? configuration) =>
+        configuration?.GetValue("Clients:MaxPerWorkspace", DefaultMaxPerWorkspace) ?? DefaultMaxPerWorkspace;
+
+    /// <summary>The answer when a registration or an approval would take the workspace past its ceiling.</summary>
+    internal static Error WorkspaceLimitReached(int maxPerWorkspace) => Error.Conflict(
+        "WORKSPACE_CLIENT_LIMIT_REACHED",
+        $"This workspace can have at most {maxPerWorkspace} devices. Remove one it no longer uses.");
 
     public async Task<Result<ClientRegistrationResponse>> InitiateRegistrationAsync(ClientRegistrationRequest request, CancellationToken cancellationToken = default)
     {
@@ -100,9 +112,7 @@ internal sealed class ClientRegistrationService : IClientRegistrationService
         catch (SqlException ex) when (ex.Number == WorkspaceLimitReachedError)
         {
             _logger.LogWarning("Client registration failed: WorkspaceId {WorkspaceId} is at its limit of {MaxClients} clients", policy.WorkspaceId, MaxPerWorkspace);
-            return Result<ClientRegistrationResponse>.Failure(Error.Conflict(
-                "WORKSPACE_CLIENT_LIMIT_REACHED",
-                $"This workspace can have at most {MaxPerWorkspace} devices. Remove one it no longer uses."));
+            return Result<ClientRegistrationResponse>.Failure(WorkspaceLimitReached(MaxPerWorkspace));
         }
         catch (SqlException ex) when (ex.Number == PolicyLimitReachedError && policy.MaxClients.HasValue)
         {

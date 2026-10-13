@@ -105,7 +105,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
     }
 
     public async Task<IReadOnlyList<ClientStatusChange>> UpdateStatusesAsync(int workspaceId, IReadOnlyList<Guid> clientRefIds,
-        ClientStatus status, CancellationToken cancellationToken = default)
+        ClientStatus status, int? maxPerWorkspace, CancellationToken cancellationToken = default)
     {
         using var table = new DataTable();
         table.Columns.Add("Ordinal", typeof(int));
@@ -122,6 +122,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
                 var parameter = p.AddWithValue("@Clients", table);
                 parameter.SqlDbType = SqlDbType.Structured;
                 parameter.TypeName = "dbo.OrderedRefIdTableType";
+                p.AddWithValue("@MaxWorkspaceClients", (object?)maxPerWorkspace ?? DBNull.Value);
             },
             reader => new ClientStatusChange(
                 reader.GetGuid(reader.GetOrdinal("RefId")),

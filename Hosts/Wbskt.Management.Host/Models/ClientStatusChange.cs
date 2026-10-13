@@ -9,7 +9,8 @@ public enum ClientStatusOutcome : byte
     AlreadyAtStatus = 1,
     NotFound = 2,
     OtherWorkspace = 3,
-    PolicyLimitReached = 4
+    PolicyLimitReached = 4,
+    WorkspaceLimitReached = 5
 }
 
 /// <summary>
