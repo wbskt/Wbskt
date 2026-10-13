@@ -156,6 +156,94 @@ public sealed class OutboundWebhookExecutorTests
 
         Assert.False(continuation.LocalStatePatch.ContainsKey("json"));
         Assert.Equal(text, continuation.LocalStatePatch["body"].GetString());
+        // Outputs merge into the branch, so an earlier call's json would otherwise read as this one's.
+        Assert.Contains("json", continuation.RemoveKeys!);
+    }
+
+    [Fact]
+    public async Task A_json_reply_does_not_remove_its_own_parsed_output()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"a":1}""", System.Text.Encoding.UTF8, "application/json")
+        });
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(await CreateExecutor(handler).ExecuteAsync(BuildContext("https://example.test/webhook", "GET"), CancellationToken.None));
+
+        Assert.True(continuation.LocalStatePatch.ContainsKey("json"));
+        Assert.True(continuation.RemoveKeys is null || !continuation.RemoveKeys.Contains("json"));
+    }
+
+    public static TheoryData<string> BomEncodings => new() { "utf-8", "utf-16LE", "utf-16BE", "utf-32LE", "utf-32BE" };
+
+    [Theory]
+    [MemberData(nameof(BomEncodings))]
+    public async Task A_json_reply_with_a_byte_order_mark_is_read_in_the_marks_encoding(string encodingName)
+    {
+        var encoding = encodingName switch
+        {
+            "utf-8" => new System.Text.UTF8Encoding(true),
+            "utf-16LE" => new System.Text.UnicodeEncoding(false, true),
+            "utf-16BE" => new System.Text.UnicodeEncoding(true, true),
+            "utf-32LE" => new System.Text.UTF32Encoding(false, true),
+            _ => (System.Text.Encoding)new System.Text.UTF32Encoding(true, true)
+        };
+        const string text = """{"state":"on"}""";
+        byte[] bytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(text)];
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            // No charset: the mark alone says how to read the body.
+            var content = new ByteArrayContent(bytes);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        });
+
+        var continuation = Assert.IsType<NodeExecutionResult.Continue>(await CreateExecutor(handler).ExecuteAsync(BuildContext("https://example.test/webhook", "GET"), CancellationToken.None));
+
+        Assert.Equal(text, continuation.LocalStatePatch["body"].GetString());
+        Assert.Equal("on", continuation.LocalStatePatch["json"].GetProperty("state").GetString());
+    }
+
+    [Fact]
+    public async Task A_connection_dropped_mid_body_fails_retryable_as_a_network_error()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new FailingStream(_ => throw new IOException("connection reset by peer")))
+        });
+
+        var failure = Assert.IsType<NodeExecutionResult.Fail>(await CreateExecutor(handler).ExecuteAsync(BuildContext("https://example.test/webhook", "GET"), CancellationToken.None));
+
+        Assert.Equal("WEBHOOK_NETWORK_ERROR", failure.ErrorCode);
+        Assert.Equal("connection reset by peer", failure.Message);
+        Assert.True(failure.Retryable);
+        Assert.IsType<IOException>(failure.Cause);
+    }
+
+    [Fact]
+    public async Task A_body_that_stalls_past_the_timeout_is_a_timeout_even_when_the_stream_throws_io()
+    {
+        // The headers come back at once; the body never finishes, and its stream reports the
+        // cancellation as a broken read rather than a cancellation.
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new FailingStream(async ct =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                }
+                catch (OperationCanceledException ex)
+                {
+                    throw new IOException("the read was aborted", ex);
+                }
+            }))
+        });
+
+        var failure = Assert.IsType<NodeExecutionResult.Fail>(await CreateExecutor(handler).ExecuteAsync(BuildContext("https://example.test/webhook", "GET", timeoutSeconds: 1), CancellationToken.None));
+
+        Assert.Equal("WEBHOOK_TIMEOUT", failure.ErrorCode);
+        Assert.True(failure.Retryable);
     }
 
     [Fact]
@@ -292,6 +380,31 @@ public sealed class OutboundWebhookExecutorTests
                 .ToDictionary(h => h.Key, h => string.Join(",", h.Value), StringComparer.OrdinalIgnoreCase);
             return responder(request);
         }
+    }
+
+    /// <summary>A body whose first read runs <paramref name="onRead"/>, which throws.</summary>
+    internal sealed class FailingStream(Func<CancellationToken, Task> onRead) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await onRead(cancellationToken);
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>An endpoint that never answers within any timeout a test uses.</summary>
