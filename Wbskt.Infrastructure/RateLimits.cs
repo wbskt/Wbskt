@@ -2,6 +2,8 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Wbskt.Infrastructure.Middlewares;
 
 namespace Wbskt.Infrastructure;
 
@@ -27,4 +29,11 @@ public static class RateLimits
                     QueueLimit = 0
                 }));
     }
+
+    /// <summary>
+    /// Counts every signed-in user's requests against a <see cref="UserRateLimiter"/>, which
+    /// <see cref="Hosting.WbsktHost.UseWbsktPipeline"/> applies after authentication.
+    /// </summary>
+    public static IServiceCollection AddUserRateLimit(this IServiceCollection services, IConfiguration configuration) =>
+        services.AddSingleton(_ => UserRateLimiter.FromConfiguration(configuration));
 }
