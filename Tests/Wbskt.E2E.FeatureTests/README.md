@@ -118,9 +118,10 @@ dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.
 dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Devices"
 ```
 
-The two opt-in passes below must still run **alone**, with `--filter`: the rate-limit scenarios spend
-the per-IP budget the other collections are signing in with, and the socket restart drops every live
-device connection, the engine collection's included.
+The three opt-in passes below must still run **alone**, with `--filter`: the rate-limit scenarios spend
+the per-IP budget the other collections are signing in with, the socket restart drops every live
+device connection, the engine collection's included, and the outage pass stops the broker, Redis and
+the engine under everything else.
 
 The integration scenarios (`Scenarios/Integrations`) stand in for Telegram, Discord, ntfy, mail relays and HTTP APIs with local fakes on 127.0.0.1. The engine's Development settings (`WorkflowEngine:Integrations`) give it a fixed master key, allow plain http and any SMTP port, and point Telegram at `http://127.0.0.1:5098/telegram`, so port 5098 must be free while they run. The other fakes take a free port each.
 
@@ -162,9 +163,49 @@ E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh soc
 Against the hosts `e2e-up.sh` started, the restart command is
 `E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/e2e-up.sh restart socket"`.
 
+### 7. Outage pass (opt-in)
+
+`Scenarios/Outage` takes the hosts' dependencies away under them and checks what the code promises
+while they are gone and once they are back. They skip unless `E2E_OUTAGE_COMMAND` holds a command
+that performs an outage action, with `{action}` standing for the action (appended when absent).
+`outage.sh` is that command for hosts run with `start-hosts.sh`; it stops and starts the RabbitMQ
+and Redis containers named by `E2E_RABBITMQ_CONTAINER` and `E2E_REDIS_CONTAINER` (an id or a name),
+and runs a second engine from the same build on ports 5031/7031:
+
+| Action | What it does |
+|---|---|
+| `broker-stop`, `broker-start` | `docker stop` / `docker start` the RabbitMQ container; start waits until it is healthy |
+| `redis-stop`, `redis-start` | the same for Redis |
+| `engine2-start` | a second engine beside the first, on the same database and broker; it waits as a standby |
+| `engine-kill-leader` | `kill -9` whichever engine answers `/healthz/ready` (only the lease holder does), and print its port |
+| `engine-restore` | stop the second engine, restart the original if it is gone, and wait until it holds the lease again |
+| `restore-all` | the broker, Redis and the original engine, all back |
+
+Every action waits until what it changed has settled, and bringing back something already up does
+nothing, so each scenario restores what it took down whether it passed or not. Run the pass on its
+own, as it stops what every other scenario is using:
+
+```bash
+E2E_OUTAGE_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/outage.sh {action}" \
+E2E_RABBITMQ_CONTAINER=wbskt-rabbit E2E_REDIS_CONTAINER=wbskt-redis \
+  dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Outage"
+```
+
+| Class | What it asserts |
+|---|---|
+| `BrokerOutageE2ETests` | With RabbitMQ stopped, a command and a ping answer 503 `EVENT_BUS_UNAVAILABLE` with `Retry-After`, sign-in still works, and a webhook to the public callback answers 503 with `Retry-After`. Once it is back, pings and commands go through again and the retried webhook starts its run. The callback does not hold a delivery it could not queue: it is the sender's retry that drains it. |
+| `RedisOutageE2ETests` | With Redis stopped, a device revoked before the outage and one revoked during it are refused at the socket (the socket host falls back to the revocations it heard by event), and an untouched device still connects. A member removed from a workspace during the outage is refused by the auth host at once and by the management host within its access-cache lifetime (`WorkspaceAccessCache:Seconds`, 30 s). |
+| `EngineFailoverE2ETests` | With a second engine running, the standby answers inbound calls 503 `ENGINE_NOT_LEADER` with `Retry-After` and is not ready. A run parks on a signal; the leader is killed; the standby keeps refusing until it holds the lease, then serves. The signal, sent to it, resumes the parked branch and the run succeeds, with one run, one `BranchStarted`, one `BranchParked` and one `BranchResumed`. |
+
+The management host calls the one engine URL it is configured with, so after the kill its engine
+calls fail until the original engine is restored; the failover scenario watches the takeover and
+resumes the run on the second engine's own inbound route, which is what a proxy routing on
+`/healthz/ready` would send to it. The engine actions assume the hosts `start-hosts.sh` runs (they
+use its pid files in `e2e-hosts/`), not those `e2e-up.sh` runs in containers.
+
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs all three passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it, and once more for the 429 row of the error-shape contract theory. Before the main pass, the job compares each host's OpenAPI document with its snapshot (see [OpenAPI snapshots](#openapi-snapshots)). Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs all four passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it, and once more for the 429 row of the error-shape contract theory. The outage pass runs last, against an auth host restarted with the Development limits again; it passes the RabbitMQ and Redis service containers to `outage.sh` by id, and runs `outage.sh restore-all` at the end whatever happened. Before the main pass, the job compares each host's OpenAPI document with its snapshot (see [OpenAPI snapshots](#openapi-snapshots)). Image publishing does not wait on it yet.
 
 The job does not use `e2e-up.sh` yet. Moving it over would build the five host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
 
@@ -244,6 +285,7 @@ All base URLs can be overridden so the tests can target non-default environments
 | `E2E_SOCKET_URL`      | `https://localhost:7020`   |
 | `E2E_SOCKET_WS_URL`   | `ws://localhost:5020`      |
 | `E2E_WORKFLOW_URL`    | `https://localhost:7030`   |
+| `E2E_ENGINE2_URL`     | `http://localhost:5031`    |
 | `E2E_ADMIN_EMAIL`     | `admin@wbskt.com`          |
 | `E2E_ADMIN_PASSWORD`  | `Password123!`             |
 
