@@ -21,8 +21,8 @@ public class ConcurrencyStressE2ETests
     {
         Skip.IfNot(_fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // 1. Setup Admin & workspace
-        var (token, workspaceRef) = await _fixture.LoginAsAdminAsync();
+        // 1. A workspace of its own
+        var (token, workspaceRef) = await _fixture.CreateIsolatedWorkspaceAsync();
 
         // 2. Define and Publish the Stress Workflow
         // Fork into 5 branches -> Delay 1s -> Join

@@ -28,7 +28,7 @@ public sealed class IdempotentManualStartE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
 
         // Publish a trivial manual workflow (trigger only → starts and completes).
         var workflowRefId = Guid.NewGuid();

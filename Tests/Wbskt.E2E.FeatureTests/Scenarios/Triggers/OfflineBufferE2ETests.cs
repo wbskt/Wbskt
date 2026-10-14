@@ -22,7 +22,7 @@ public sealed class OfflineBufferE2ETests(ServicesFixture fixture)
     public async Task A_reading_sent_while_offline_arrives_on_connect_marked_late()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
         var deviceName = $"e2e-offline-{Guid.NewGuid():N}";
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
