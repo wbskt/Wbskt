@@ -192,7 +192,24 @@ jobs:
         id: hosts
         run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
 
+      # Each host's OpenAPI document (/openapi/v1.json, served in Development) against the snapshot
+      # checked in under Tests/Wbskt.E2E.FeatureTests/openapi, so a route or contract change is a
+      # reviewed diff. A snapshot not committed yet is written instead of compared, with a warning;
+      # the documents fetched are uploaded either way, to be committed from the artifact. The E2E
+      # tests still run when this fails, so a contract diff does not hide their result.
+      - name: OpenAPI snapshots
+        run: Tests/Wbskt.E2E.FeatureTests/openapi/refresh.sh --check
+
+      - name: Upload OpenAPI documents
+        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-snapshots
+          path: openapi-current/
+          if-no-files-found: warn
+
       - name: E2E tests
+        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
         run: |
           set -o pipefail
           dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj \
@@ -240,6 +257,15 @@ jobs:
             dotnet test "$project" --no-build --filter "FullyQualifiedName~RateLimitingTests.$t" \
               --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee -a rl-output.txt || status=1
           done
+          # The 429 row of the error-shape contract theory, which the main pass skips for the same reason.
+          Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+          dotnet test "$project" --no-build --filter "FullyQualifiedName~ErrorShapeContractTests&DisplayName~RateLimited429" \
+            --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee contract-429.txt || status=1
+          cat contract-429.txt >> rl-output.txt
+          if ! grep -qP 'Passed:\s*[1-9]' contract-429.txt; then
+            echo "::error::the RateLimited429 row of ErrorShapeContractTests did not run"
+            status=1
+          fi
           exit $status
 
       # Every test is a [SkippableFact] that skips itself when the hosts are unreachable, and a

@@ -378,4 +378,7 @@ deploy/compose/.env
 
 # E2E host logs and pids (Tests/Wbskt.E2E.FeatureTests/start-hosts.sh)
 e2e-hosts/
+
+# The OpenAPI documents refresh.sh --check fetched (Tests/Wbskt.E2E.FeatureTests/openapi)
+openapi-current/
 dump.rdb
