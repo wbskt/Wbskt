@@ -13,9 +13,7 @@ public sealed class ClientReadingRetentionService : PeriodicWorker
 {
     internal const int BatchSize = 5000;
 
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<ClientReadingRetentionService> _logger;
     private readonly TimeSpan _retention;
 
     public ClientReadingRetentionService(
@@ -34,9 +32,7 @@ public sealed class ClientReadingRetentionService : PeriodicWorker
         : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, timeProvider)
     {
         Interval = options.Value.RetentionInterval;
-        _scopeFactory = scopeFactory;
         _timeProvider = timeProvider;
-        _logger = logger;
         _retention = TimeSpan.FromDays(options.Value.RetentionDays);
     }
 
@@ -53,7 +49,7 @@ public sealed class ClientReadingRetentionService : PeriodicWorker
     /// <summary>One sweep in a scope of its own; see <see cref="SweepAsync(IServiceProvider, CancellationToken)"/>.</summary>
     internal async Task<long> SweepAsync(CancellationToken cancellationToken)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         return await SweepAsync(scope.ServiceProvider, cancellationToken);
     }
 
@@ -76,7 +72,7 @@ public sealed class ClientReadingRetentionService : PeriodicWorker
 
         if (total > 0)
         {
-            _logger.LogInformation("Readings retention deleted {Count} readings received before {CutoffUtc:o}.", total, cutoffUtc);
+            Logger.LogInformation("Readings retention deleted {Count} readings received before {CutoffUtc:o}.", total, cutoffUtc);
         }
 
         return total;

@@ -39,6 +39,7 @@ public static class Program
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         builder.Services.AddTransient<IStartupTask, FolderInitializationStartupTask>();
         builder.Services.AddEngineHostServices(builder.Configuration);
+        builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<WorkflowMetrics>());
         builder.Services.AddRabbitMqEventBus(builder.Configuration, consumerAssemblies: [typeof(Program).Assembly]);
         // The bus is started manually by EngineLeadershipCoordinator once this instance is leader,
         // so a standby never attaches to the shared engine queues.

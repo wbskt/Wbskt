@@ -20,6 +20,7 @@ internal static class WorkflowOwnershipCheck
         WorkflowDefinitionRow? row = await provider.FindCurrentByRefIdAsync(refId, ct);
         if (row is null)
         {
+            logger.LogWarning("Workflow '{RefId}' was not found for WorkspaceId: {WorkspaceId}", refId, workspaceId);
             return Result<WorkflowDefinitionRow>.Failure(WorkspaceOwnership.WorkflowNotFound);
         }
 

@@ -1,3 +1,4 @@
+using Wbskt.Infrastructure.Telemetry;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -51,6 +52,7 @@ public sealed class LeaderPeriodicWorkerTests
         using var metrics = new WorkflowMetrics();
         var services = new ServiceCollection();
         services.AddSingleton(metrics);
+        services.AddSingleton<IWorkerTickMetrics>(metrics);
         IServiceScopeFactory scopes = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
         var recorded = new List<(string Worker, string Outcome)>();
         using var listener = new MeterListener();
