@@ -307,9 +307,9 @@ revoked token. Consumers such as `AuthServiceClient` rely on the distinction.
 Run these against the Auth DB once, in order, **before** `sqlpackage /Action:Publish` (or before
 `Deploy-Databases.ps1` without `-Fresh`). Fresh deployments (`-Fresh`) need neither.
 
-1. `Databases/Migrations/PreTenantUpgrade.Auth.sql` — the `Workspaces.TenantId` FK validates during
+1. `Databases/Migrations/archive/PreTenantUpgrade.Auth.sql` — the `Workspaces.TenantId` FK validates during
    schema deployment, before the post-deployment seed can create the default tenant.
-2. `Databases/Migrations/AddRoleGroupRefIds.Auth.sql` — adds `RefId` to `Roles` and `Groups` as a
+2. `Databases/Migrations/archive/AddRoleGroupRefIds.Auth.sql` — adds `RefId` to `Roles` and `Groups` as a
    nullable column, backfills it, then tightens it to `NOT NULL` with a unique constraint. Doing
    that in one publish against tables that already have rows is a change SqlPackage will refuse or
    attempt as a table rebuild.

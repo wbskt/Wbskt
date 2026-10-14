@@ -74,8 +74,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      # A self-hosted runner keeps its global tools between jobs, and `dotnet tool install` fails
-      # when the tool is already there, so install only when it is missing.
+      # `dotnet tool install` fails when the tool is already there, so install only when it is missing.
       - name: Install sqlpackage
         run: |
           dotnet tool list -g | grep -qi '^microsoft\.sqlpackage ' || dotnet tool install -g microsoft.sqlpackage
@@ -169,8 +168,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      # A self-hosted runner keeps its global tools between jobs, and `dotnet tool install` fails
-      # when the tool is already there, so install only when it is missing.
+      # `dotnet tool install` fails when the tool is already there, so install only when it is missing.
       - name: Install sqlpackage
         run: |
           dotnet tool list -g | grep -qi '^microsoft\.sqlpackage ' || dotnet tool install -g microsoft.sqlpackage

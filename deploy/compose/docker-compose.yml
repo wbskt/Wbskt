@@ -397,7 +397,7 @@ services:
     networks: [backend]
     restart: unless-stopped
     logging: *default-logging
-    # Keep at 1 until the engine remediation prerequisite lands (Docs\Workflow.Engine.V3.Remediation.Plan.md).
+    # Keep at 1 until the engine remediation prerequisite lands (Docs\archive\Workflow.Engine.V3.Remediation.Plan.md).
     deploy:
       replicas: ${ENGINE_REPLICAS:-1}
     labels:

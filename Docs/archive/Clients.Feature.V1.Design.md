@@ -1,3 +1,5 @@
+> Archived 2026-10-14: historical design/plan document; type and file names in it have since diverged from the code.
+
 # Clients Feature V1 — API Gap Analysis & Design
 
 ## §1 Context & goals

@@ -669,19 +669,9 @@ to already belong to the workspace's tenant, so the cross-boundary capture it de
 
 Every section now has an implementation, and every scenario ID in §12.2–12.5 and §13 has a test.
 
-What remains open is not scenarios but verification, in two separate senses.
-
-**Compilation is no longer the gap, but it is still not automatic.** The suite builds clean under
-the .NET 10 SDK (`dotnet build Tests/Wbskt.E2E.FeatureTests`), and all scenarios are discovered by
-the runner. But nothing in `Tests/` is built by CI — `build-images.yml` builds only the four host
-images, and no host references the test project — so a scenario that stops compiling still breaks
-nobody's build. Until a host references it or CI builds it explicitly, that `dotnet build` is a
-manual step.
-
-**Nothing here has run green against a live stack.** Every scenario gates on
-`Skip.IfNot(fixture.HostsAvailable, …)` and skips when the four dev hosts are down, so a full run
-with no hosts reports success while asserting nothing. A ✅ in the list above means "written and
-compiling", not "passing".
+CI builds and runs them: `.github/workflows/build-images.yml` runs the unit and integration test
+projects, then starts the four hosts and runs this suite in three passes (the main run, the socket
+restart tests and the opt-in rate-limiting tests), and fails if any pass executed no tests.
 
 ### Known mismatch
 

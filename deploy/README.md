@@ -1,7 +1,7 @@
 # Deployment assets
 
 Docker-on-VMs deployment for Wbskt (K8s-ready images, no K8s yet). See
-`Docs\Workflow.Engine.V3.Remediation.Plan.md` for the engine remediation prerequisite before
+`Docs\archive\Workflow.Engine.V3.Remediation.Plan.md` for the engine remediation prerequisite before
 running the engine with 2 replicas (Phase 4 below).
 
 Images are built in GitHub Actions and pushed to GHCR; the VM only ever pulls them. It has no
@@ -448,6 +448,8 @@ sqlpackage reported, and if the loss is intended, rerun with:
 ```
 MIGRATE_ALLOW_DATA_LOSS=true docker compose --profile migrate run --rm migrator
 ```
+
+Archived one-time upgrade helpers (run by hand once, never by the migrator) live in `Databases/Migrations/archive/`.
 
 ### SQL logins
 

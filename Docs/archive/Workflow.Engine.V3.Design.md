@@ -1,3 +1,5 @@
+> Archived 2026-10-14: historical design/plan document; type and file names in it have since diverged from the code.
+
 # Wbskt Workflow Engine V3 — Design
 
 **Status:** Finalized (Sections 1-7 complete)
