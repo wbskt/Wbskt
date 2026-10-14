@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wbskt.Protocol\Wbskt.Protocol.csproj" />
+    <ProjectReference Include="..\..\Models\Wbskt.Models\Wbskt.Models.csproj" />
+    <ProjectReference Include="..\..\Models\Wbskt.Auth.Models\Wbskt.Auth.Models.csproj" />
+    <ProjectReference Include="..\..\Models\Wbskt.Management.Models\Wbskt.Management.Models.csproj" />
+  </ItemGroup>
+
+</Project>
