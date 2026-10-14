@@ -10,7 +10,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 /// Saving, reading, changing and deleting integrations: every type's shape and defaults, that a
 /// secret is never echoed, the validation and conflict answers, and who may see or change them.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
 {
     private readonly IntegrationsApi _api = new(fixture);

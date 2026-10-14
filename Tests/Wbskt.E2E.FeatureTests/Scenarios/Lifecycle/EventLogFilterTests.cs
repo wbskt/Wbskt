@@ -13,7 +13,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 ///
 /// Requires the auth, management and socket hosts running. Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class EventLogFilterTests(ServicesFixture fixture)
 {
     [SkippableFact]

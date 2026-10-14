@@ -14,7 +14,9 @@ using Wbskt.Protocol;
 namespace Wbskt.E2E.FeatureTests.Fixtures;
 
 /// <summary>
-/// xUnit collection fixture shared across all E2E feature tests.
+/// xUnit collection fixture for the E2E feature tests: one instance per collection (see
+/// <c>E2ECollections.cs</c>), which is safe because it holds nothing but an HttpClient and the
+/// result of its host probes.
 ///
 /// <para>
 /// The hosts are spoken to through the typed clients in <c>Clients/Wbskt.Api.Client</c>:
@@ -89,9 +91,12 @@ public sealed class ServicesFixture : IDisposable
         Auth = new WbsktAuthClient(_http, new Uri(E2EConfig.AuthBaseUrl));
         Management = new WbsktManagementClient(_http, new Uri(E2EConfig.ManagementBaseUrl));
 
-        HostsAvailable = ProbePublicHostsAsync().GetAwaiter().GetResult();
-        EngineAvailable = ProbeHostAsync(E2EConfig.WorkflowBaseUrl).GetAwaiter().GetResult();
-        DevicesHostAvailable = ProbeHostAsync(E2EConfig.DevicesBaseUrl).GetAwaiter().GetResult();
+        // On the thread pool, so no awaited continuation needs the thread this blocks. The three
+        // collections build their fixtures at the same time, and a probe that resumed on a context
+        // whose threads were all blocked here would never finish.
+        HostsAvailable = Task.Run(() => ProbePublicHostsAsync()).GetAwaiter().GetResult();
+        EngineAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.WorkflowBaseUrl)).GetAwaiter().GetResult();
+        DevicesHostAvailable = Task.Run(() => ProbeHostAsync(E2EConfig.DevicesBaseUrl)).GetAwaiter().GetResult();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

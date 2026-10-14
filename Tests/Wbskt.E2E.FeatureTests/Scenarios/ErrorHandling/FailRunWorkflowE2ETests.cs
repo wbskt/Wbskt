@@ -16,7 +16,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.ErrorHandling;
 ///   • A fan-out where one branch fails and another completes (failFast=false) aggregates to
 ///     "PartiallyFailed" — the failing branch does NOT cancel its healthy sibling.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

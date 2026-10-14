@@ -18,7 +18,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 ///
 /// Requires the auth and management hosts running. Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class TokenAcceptanceTests(ServicesFixture fixture)
 {
     /// <summary>Any authenticated endpoint will do; this one needs only a valid identity.</summary>

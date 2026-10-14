@@ -9,7 +9,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// Requires all four dev hosts running. Skips gracefully when hosts are down.
 /// Each run uses unique credentials so tests are fully isolated and repeatable.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class AuthAndRegistrationTests(ServicesFixture fixture)
 {
     [SkippableFact]

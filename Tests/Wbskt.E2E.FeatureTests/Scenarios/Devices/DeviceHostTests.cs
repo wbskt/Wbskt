@@ -17,7 +17,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 ///
 /// Requires the hosts from start-hosts.sh, including "devices". Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(DevicesCollection.Name)]
 public sealed class DeviceHostTests(ServicesFixture fixture)
 {
     private const int Pending = 0;

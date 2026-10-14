@@ -14,7 +14,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// run, however many more out-of-range readings follow; a reading that drops back in range first
 /// starts nothing.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

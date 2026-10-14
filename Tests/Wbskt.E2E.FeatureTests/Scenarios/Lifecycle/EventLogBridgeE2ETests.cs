@@ -22,7 +22,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 /// and a WorkflowRunCompletedEvent appear with this workflow's RefId, and that the completed event
 /// is Info criticality (0). The detailed per-node trace remains in the separate run-history API.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class EventLogBridgeE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

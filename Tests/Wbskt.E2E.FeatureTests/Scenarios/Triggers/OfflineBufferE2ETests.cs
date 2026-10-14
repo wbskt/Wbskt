@@ -13,7 +13,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// A device that sends while offline keeps the reading and delivers it on connect, with the time it
 /// was sent, so a workflow can tell a late reading from a live one.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class OfflineBufferE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

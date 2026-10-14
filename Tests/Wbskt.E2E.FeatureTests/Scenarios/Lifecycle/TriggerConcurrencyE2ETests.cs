@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

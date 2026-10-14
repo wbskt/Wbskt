@@ -24,7 +24,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 /// the "default" port to SendCommand while the losers terminate as Completed. We assert exactly
 /// ONE command is delivered and the run reaches the terminal "Succeeded" status.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

@@ -18,7 +18,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 /// shortly after. So every scenario that expects a cancelled run polls for it rather than reading it
 /// straight after the request.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class RunCancellationE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

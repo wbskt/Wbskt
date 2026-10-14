@@ -23,7 +23,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// the same "signal:approve:{runRefId}" key, BookmarkResumer matches the bookmark, the branch
 /// resumes and sends the command. We assert: no command before the signal, command after it.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

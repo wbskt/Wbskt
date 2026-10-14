@@ -23,7 +23,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Timeouts;
 /// it arrived no sooner than ~the delay, proving the branch genuinely parked and was resumed
 /// rather than running straight through.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

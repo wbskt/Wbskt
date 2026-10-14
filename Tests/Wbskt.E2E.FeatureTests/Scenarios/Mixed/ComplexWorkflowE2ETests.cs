@@ -26,7 +26,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 /// and the history shows the branch parked at the Delay node and resumed no sooner than the delay
 /// later), the run reaches Succeeded, and the history shows the node sequence.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

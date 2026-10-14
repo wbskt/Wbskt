@@ -26,7 +26,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 /// continue-port would throw). We assert the client receives exactly N commands, the run reaches
 /// the terminal "Succeeded" status, and each fanned-out branch carried a distinct item.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class ForEachFanOutE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
