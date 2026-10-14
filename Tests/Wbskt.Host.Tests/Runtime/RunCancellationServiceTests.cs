@@ -269,7 +269,7 @@ public sealed class RunCancellationServiceTests
             7);
         var branchProvider = new RecordingBranchProvider(nodeId);
         var counters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new BranchLoopRunProvider(),
             counters,

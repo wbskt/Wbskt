@@ -28,7 +28,7 @@ public sealed class BookmarkCompanionTimerTests
         WorkflowDefinition definition = CreateDefinition(nodeId);
         var bookmarkProvider = new RecordingBookmarkProvider();
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 1001),
             new StubRunProvider(),
             runCounters,

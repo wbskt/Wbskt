@@ -36,7 +36,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             7);
         var providers = new InMemoryProviders(definition, nodeId);
         var dispatcher = new LoopBackDispatcher();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             providers,
             providers,
             providers,
@@ -158,7 +158,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         var publisher = new RecordingCommandPublisher();
         _dispatcher = new LoopBackDispatcher();
         var resumer = new BookmarkResumer(providers, providers, providers, _dispatcher);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             providers,
             providers,
             providers,

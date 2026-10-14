@@ -15,6 +15,7 @@ using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.NodeExecutors.Triggers;
 using Wbskt.Workflow.Providers;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Runtime.BranchResults;
 using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Workflow.Extensions;
@@ -160,6 +161,14 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutor, DiscordNodeExecutor>();
         services.AddScoped<INodeExecutor, NtfyNodeExecutor>();
         services.AddScoped<INodeExecutorRegistry, NodeExecutorRegistry>();
+        // One handler per NodeExecutionResult type, as there is one executor per node kind. Scoped like
+        // the executors and holding nothing per branch: each call brings its branch in a BranchResultContext.
+        services.AddScoped<IBranchResultHandler, ContinueResultHandler>();
+        services.AddScoped<IBranchResultHandler, ForkResultHandler>();
+        services.AddScoped<IBranchResultHandler, WaitForBookmarkResultHandler>();
+        services.AddScoped<IBranchResultHandler, FailResultHandler>();
+        services.AddScoped<IBranchResultHandler, TerminalResultHandler>();
+        services.AddScoped<IBranchResultDispatcher, BranchResultDispatcher>();
         services.AddScoped<IBranchLoop, BranchLoop>();
         services.AddScoped<IBookmarkResumer, BookmarkResumer>();
         services.AddScoped<ITriggerConcurrencyEnforcer, TriggerConcurrencyEnforcer>();

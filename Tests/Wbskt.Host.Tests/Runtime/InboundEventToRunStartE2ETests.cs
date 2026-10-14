@@ -40,7 +40,7 @@ public sealed class InboundEventToRunStartE2ETests
             providers,
             new ExpressionEvaluator(new FixedClock()));
         var inboundHub = new InboundHub(triggerDispatcher, new FixedClock(), new TestLogger<InboundHub>());
-        var branchLoop = new BranchLoop(
+        var branchLoop = TestBranchLoop.Create(
             providers,
             providers,
             providers,

@@ -31,7 +31,7 @@ public sealed class BranchLoopTests
         var branchProvider = new RecordingBranchProvider(nodeId);
         var countersProvider = new StubRunCountersProvider();
         var historyProvider = new RecordingHistoryEventProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             countersProvider,
@@ -82,7 +82,7 @@ public sealed class BranchLoopTests
             new ScriptedExecutor(new NodeExecutionResult.Fail("BOOM", "node blew up", false, null)));
 
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -136,7 +136,7 @@ public sealed class BranchLoopTests
         var registry = new StubNodeExecutorRegistry(
             new ScriptedExecutor(new NodeExecutionResult.Fail("BOOM", "node blew up", false, null)));
 
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -231,7 +231,7 @@ public sealed class BranchLoopTests
         StubNodeExecutorRegistry registry)
     {
         var runCounters = new StubRunCountersProvider();
-        return new BranchLoop(
+        return TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -272,7 +272,7 @@ public sealed class BranchLoopTests
                 new NodeExecutionResult.Terminal(BranchTerminalReason.Completed)));
         var historyProvider = new RecordingHistoryEventProvider();
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             runProvider,
             runCounters,
@@ -322,7 +322,7 @@ public sealed class BranchLoopTests
         var branchProvider = new RecordingBranchProvider(rootNodeId);
         var dispatcher = new RecordingRunDispatcher();
         var counters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -382,7 +382,7 @@ public sealed class BranchLoopTests
         var operationLog = new List<string>();
         var dispatcher = new RecordingRunDispatcher(operationLog);
         var counters = new StubRunCountersProvider(operationLog);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -440,7 +440,7 @@ public sealed class BranchLoopTests
             7);
         var operationLog = new List<string>();
         var runCounters = new StubRunCountersProvider(operationLog);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(rootNodeId),
             new StubRunProvider(),
             runCounters,
@@ -495,7 +495,7 @@ public sealed class BranchLoopTests
         var branchProvider = new RecordingBranchProvider(nodeId);
         var historyProvider = new RecordingHistoryEventProvider();
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -547,7 +547,7 @@ public sealed class BranchLoopTests
         var counters = new StubRunCountersProvider();
         var branchProvider = new RecordingBranchProvider(nodeId);
         var historyProvider = new RecordingHistoryEventProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -601,7 +601,7 @@ public sealed class BranchLoopTests
         var counters = new StubRunCountersProvider();
         var branchProvider = new RecordingBranchProvider(nodeId);
         var cancellationService = new RecordingRunCancellationService();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -649,7 +649,7 @@ public sealed class BranchLoopTests
         var counters = new StubRunCountersProvider();
         var branchProvider = new RecordingBranchProvider(nodeId);
         var historyProvider = new RecordingHistoryEventProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -703,7 +703,7 @@ public sealed class BranchLoopTests
             new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
             new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -750,7 +750,7 @@ public sealed class BranchLoopTests
             7);
         var branchProvider = new RecordingBranchProvider(startNodeId);
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -802,7 +802,7 @@ public sealed class BranchLoopTests
             7);
         var branchProvider = new RecordingBranchProvider(startNodeId);
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -857,7 +857,7 @@ public sealed class BranchLoopTests
             7);
         var branchProvider = new RecordingBranchProvider(startNodeId);
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -908,7 +908,7 @@ public sealed class BranchLoopTests
             RunCompensationOnFailure: true);
         var compensationOrchestrator = new RecordingCompensationOrchestrator();
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId),
             new StubRunProvider(),
             runCounters,
@@ -953,7 +953,7 @@ public sealed class BranchLoopTests
             FailFast: true);
         var runProvider = new StubRunProvider();
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId),
             runProvider,
             runCounters,
@@ -997,7 +997,7 @@ public sealed class BranchLoopTests
             7);
         var runProvider = new StubRunProvider();
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId),
             runProvider,
             runCounters,
@@ -1042,7 +1042,7 @@ public sealed class BranchLoopTests
             FailFast: true);
         var runProvider = new StubRunProvider("Cancelling");
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId),
             runProvider,
             runCounters,
@@ -1087,7 +1087,7 @@ public sealed class BranchLoopTests
             7);
         var branchProvider = new RecordingBranchProvider(nodeId);
         var runCounters = new StubRunCountersProvider();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -1135,7 +1135,7 @@ public sealed class BranchLoopTests
         var historyProvider = new RecordingHistoryEventProvider();
         using var hostCts = new CancellationTokenSource();
         var counters = new HostShutdownRunCountersProvider(hostCts);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -1188,7 +1188,7 @@ public sealed class BranchLoopTests
         var historyProvider = new RecordingHistoryEventProvider();
         using var hostCts = new CancellationTokenSource();
         var executor = new CancelAfterReturnExecutor(hostCts, new NodeExecutionResult.Continue("next", CreatePatch("step", 1)));
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -1234,7 +1234,7 @@ public sealed class BranchLoopTests
             7);
         var counters = new StubRunCountersProvider(counterResults: [1]);
         var branchProvider = new RecordingBranchProvider(nodeId);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             counters,
@@ -1279,7 +1279,7 @@ public sealed class BranchLoopTests
             7);
         var finalizer = new RecordingRunFinalizer();
         var runCounters = new StubRunCountersProvider(counterResults: [0]);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId),
             new StubRunProvider(),
             runCounters,
@@ -1323,7 +1323,7 @@ public sealed class BranchLoopTests
             7);
         var finalizer = new RecordingRunFinalizer();
         var runCounters = new StubRunCountersProvider(counterResults: [2]);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             new RecordingBranchProvider(nodeId),
             new StubRunProvider(),
             runCounters,
@@ -1369,7 +1369,7 @@ public sealed class BranchLoopTests
         var branchProvider = new RecordingBranchProvider(nodeId, localJson);
         var capturingExecutor = new CapturingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         var runCounters = new StubRunCountersProvider(counterResults: [1]);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,
@@ -1421,7 +1421,7 @@ public sealed class BranchLoopTests
         var branchProvider = new RecordingBranchProvider(nodeId, "{}");
         var capturingExecutor = new CapturingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         var runCounters = new StubRunCountersProvider(counterResults: [1]);
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             branchProvider,
             new StubRunProvider(),
             runCounters,

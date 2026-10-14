@@ -38,7 +38,7 @@ public sealed class BranchLoopEndToEndTests
             7);
         var providers = new InMemoryProviders(definition, triggerNodeId);
         var finalizer = new RecordingRunFinalizer();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             providers,
             providers,
             providers,

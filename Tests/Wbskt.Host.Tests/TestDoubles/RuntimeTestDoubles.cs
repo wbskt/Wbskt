@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Runtime.BranchResults;
 
 namespace Wbskt.Host.Tests;
 
@@ -110,5 +112,55 @@ internal sealed class UncachedTriggerRegistrationCache : ITriggerRegistrationCac
 
     public void Clear()
     {
+    }
+}
+
+/// <summary>
+/// Builds a branch loop by hand the way the container does: the loop, and the five result handlers it
+/// dispatches to, sharing the collaborators passed in, so a test that records on a fake sees what the
+/// loop and the handlers both did to it.
+/// </summary>
+internal static class TestBranchLoop
+{
+    public static BranchLoop Create(
+        IBranchProvider branchProvider,
+        IRunProvider runProvider,
+        IRunCountersProvider runCountersProvider,
+        IBookmarkProvider bookmarkProvider,
+        IRunJournal journal,
+        IWorkflowDefinitionCache workflowDefinitionCache,
+        INodeExecutorRegistry nodeExecutorRegistry,
+        IRunDispatcher runDispatcher,
+        IIdempotencyKeyProvider idempotencyKeyProvider,
+        TimeProvider clock,
+        IIdGenerator idGenerator,
+        IBranchTerminator branchTerminator,
+        IRunCancellationService runCancellationService,
+        ICompensationOrchestrator compensationOrchestrator,
+        ICreditCostCalculator creditCostCalculator,
+        IJoinAggregatorProvider joinAggregatorProvider)
+    {
+        var resultDispatcher = new BranchResultDispatcher(
+        [
+            new ContinueResultHandler(branchProvider, journal, branchTerminator),
+            new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, journal, branchTerminator),
+            new WaitForBookmarkResultHandler(branchProvider, bookmarkProvider, idGenerator, clock, journal),
+            new FailResultHandler(branchProvider, runProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator),
+            new TerminalResultHandler(branchProvider, journal, branchTerminator)
+        ]);
+
+        return new BranchLoop(
+            branchProvider,
+            runProvider,
+            runCountersProvider,
+            journal,
+            workflowDefinitionCache,
+            nodeExecutorRegistry,
+            idempotencyKeyProvider,
+            clock,
+            branchTerminator,
+            runCancellationService,
+            creditCostCalculator,
+            resultDispatcher);
     }
 }
