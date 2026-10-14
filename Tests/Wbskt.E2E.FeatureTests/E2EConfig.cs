@@ -53,6 +53,27 @@ internal static class E2EConfig
     public static string? SocketRestartCommand =>
         Environment.GetEnvironmentVariable("E2E_SOCKET_RESTART_COMMAND") is { Length: > 0 } command ? command : null;
 
+    /// <summary>
+    /// Opt-in: a shell command that takes a dependency of the hosts down or brings it back, with
+    /// <c>{action}</c> standing for what to do (appended when the template has no placeholder), e.g.
+    /// <c>Tests/Wbskt.E2E.FeatureTests/outage.sh {action}</c>. The actions are those of outage.sh:
+    /// <c>broker-stop</c>, <c>broker-start</c>, <c>redis-stop</c>, <c>redis-start</c>,
+    /// <c>engine2-start</c>, <c>engine-kill-leader</c>, <c>engine-restore</c> and <c>restore-all</c>.
+    /// The scenarios under <c>Scenarios/Outage</c> skip without it; they stop the broker, Redis and
+    /// the engine under every other scenario, so they are meant to run on their own.
+    /// </summary>
+    public static string? OutageCommand =>
+        Environment.GetEnvironmentVariable("E2E_OUTAGE_COMMAND") is { Length: > 0 } command ? command : null;
+
+    public static bool OutageTestsEnabled => OutageCommand is not null;
+
+    /// <summary>
+    /// The second engine <c>outage.sh engine2-start</c> starts beside the first, on its plain-HTTP
+    /// port. It shares the first one's database and broker and waits as a standby for the lease.
+    /// </summary>
+    public static string StandbyEngineBaseUrl =>
+        Environment.GetEnvironmentVariable("E2E_ENGINE2_URL") ?? "http://localhost:5031";
+
     /// <summary>Must match RateLimiting:Authentication:PermitLimit on the host under test.</summary>
     public static int AuthPermitLimit =>
         int.TryParse(Environment.GetEnvironmentVariable("E2E_AUTH_PERMIT_LIMIT"), out var limit) ? limit : 10;
