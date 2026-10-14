@@ -69,6 +69,8 @@ public static class Program
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
         builder.Services.AddScoped<ISocketHostProvider, SocketHostProvider>();
         builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
+        // The one way a deleted workspace is retired (WorkspaceDeletedHandler).
+        builder.Services.AddScoped<WorkspaceRetirer>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
         builder.Services.AddScoped<IClientQueryService, ClientQueryService>();
