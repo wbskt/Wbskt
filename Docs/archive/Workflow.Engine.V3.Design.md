@@ -1863,8 +1863,11 @@ start, signal, wake and webhook over HTTP, cancel over the bus.
 Publishing, deprecating and deleting a definition still write definitions and trigger registrations
 from the management host directly. The engine reads definitions through its own
 `IWorkflowDefinitionCache`, which the management host cannot evict (its invalidations only ever
-evicted its own copy, so they were removed). The planned follow-up is a `WorkflowDefinitionChanged`
-event the engine reacts to, in place of a shared cache contract.
+evicted its own copy, so they were removed). In place of a shared cache contract, the management host
+publishes a `WorkflowDefinitionChangedEvent` after every publish, rollback, deprecate, reinstate,
+delete and workspace retirement; the engine's `WorkflowDefinitionChangedConsumer` evicts the named
+definitions and clears its `ITriggerRegistrationCache`, the cache device messages read their trigger
+registrations through (entries also expire after `WorkflowEngine:TriggerRegistrationCacheLifetime`).
 
 **Cooperative, not pre-emptive.** A branch that ignores its CancellationToken
 runs to completion. We log a "branch ignored cancellation for >30s" warning
