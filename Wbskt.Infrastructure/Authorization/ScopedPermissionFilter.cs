@@ -9,7 +9,11 @@ using Microsoft.Extensions.Logging;
 namespace Wbskt.Infrastructure.Authorization;
 
 /// <summary>A resolved scope: its internal id, and which of the permissions asked about the caller holds in it.</summary>
-public sealed record PermissionScope(int Id, IReadOnlySet<string> Granted);
+public sealed record PermissionScope(int Id, IReadOnlySet<string> Granted)
+{
+    /// <summary>The scope a resolver answers with: the permission names compared ordinally.</summary>
+    public static PermissionScope Of(int id, IEnumerable<string> granted) => new(id, granted.ToHashSet(StringComparer.Ordinal));
+}
 
 /// <summary>
 /// Enforces <typeparamref name="TAttribute"/> on the actions that carry it. Runs as an authorization

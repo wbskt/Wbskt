@@ -18,9 +18,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
 {
     internal const int BatchSize = 5000;
 
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<EventLogRetentionService> _logger;
     private readonly TimeSpan _retention;
     private readonly TimeSpan _deviceTrafficRetention;
 
@@ -40,9 +38,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
         : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, timeProvider)
     {
         Interval = options.Value.RetentionInterval;
-        _scopeFactory = scopeFactory;
         _timeProvider = timeProvider;
-        _logger = logger;
         _retention = TimeSpan.FromDays(options.Value.RetentionDays);
         _deviceTrafficRetention = TimeSpan.FromDays(Math.Min(options.Value.DeviceTrafficRetentionDays, options.Value.RetentionDays));
     }
@@ -60,7 +56,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
     /// <summary>One sweep in a scope of its own; see <see cref="SweepAsync(IServiceProvider, CancellationToken)"/>.</summary>
     internal async Task<long> SweepAsync(CancellationToken cancellationToken)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         return await SweepAsync(scope.ServiceProvider, cancellationToken);
     }
 
@@ -105,7 +101,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
 
         if (total > 0)
         {
-            _logger.LogInformation("Event log retention deleted {Count} entries ({Scope}) older than {CutoffUtc:o}.", total, scope, cutoffUtc);
+            Logger.LogInformation("Event log retention deleted {Count} entries ({Scope}) older than {CutoffUtc:o}.", total, scope, cutoffUtc);
         }
 
         return total;

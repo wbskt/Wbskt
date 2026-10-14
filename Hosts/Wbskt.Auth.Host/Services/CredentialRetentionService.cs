@@ -21,9 +21,7 @@ public sealed class CredentialRetentionService : PeriodicWorker
     /// </summary>
     internal static readonly TimeSpan Grace = TimeSpan.FromDays(30);
 
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<CredentialRetentionService> _logger;
 
     public CredentialRetentionService(IServiceScopeFactory scopeFactory, ILogger<CredentialRetentionService> logger)
         : this(scopeFactory, TimeProvider.System, logger)
@@ -33,9 +31,7 @@ public sealed class CredentialRetentionService : PeriodicWorker
     internal CredentialRetentionService(IServiceScopeFactory scopeFactory, TimeProvider timeProvider, ILogger<CredentialRetentionService> logger)
         : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, timeProvider)
     {
-        _scopeFactory = scopeFactory;
         _timeProvider = timeProvider;
-        _logger = logger;
     }
 
     protected override string Name => "Credential retention";
@@ -51,7 +47,7 @@ public sealed class CredentialRetentionService : PeriodicWorker
     /// <summary>One sweep in a scope of its own; see <see cref="SweepAsync(IServiceProvider, CancellationToken)"/>.</summary>
     internal async Task<long> SweepAsync(CancellationToken cancellationToken)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         return await SweepAsync(scope.ServiceProvider, cancellationToken);
     }
 
@@ -77,7 +73,7 @@ public sealed class CredentialRetentionService : PeriodicWorker
 
         if (total > 0)
         {
-            _logger.LogInformation("Credential retention deleted {Count} rows that expired before {CutoffUtc:o}.", total, cutoffUtc);
+            Logger.LogInformation("Credential retention deleted {Count} rows that expired before {CutoffUtc:o}.", total, cutoffUtc);
         }
 
         return total;

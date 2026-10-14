@@ -22,6 +22,6 @@ public sealed class WorkspaceServiceAccessResolver(IIdentityService identity, IW
         var access = await workspaces.ResolveAccessAsync(caller.UserId, workspaceRef, cancellationToken);
         return access.IsFailure
             ? Result<PermissionScope>.Failure(access.Error)
-            : Result<PermissionScope>.Success(new PermissionScope(access.Value.WorkspaceId, access.Value.Permissions.ToHashSet(StringComparer.Ordinal)));
+            : Result<PermissionScope>.Success(PermissionScope.Of(access.Value.WorkspaceId, access.Value.Permissions));
     }
 }
