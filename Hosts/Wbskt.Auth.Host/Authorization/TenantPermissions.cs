@@ -44,18 +44,19 @@ public sealed class TenantPermissionFilter : ScopedPermissionFilter<RequiresTena
             return Result<PermissionScope>.Failure(Error.Unauthorized("AUTH_UNAUTHORIZED", "Unauthorized access."));
         }
 
-        var provider = httpContext.RequestServices.GetRequiredService<IAuthProvider>();
-        int tenantId = await provider.FindTenantIdByRefIdForUserAsync(scopeRef, caller.UserId, cancellationToken);
+        var tenants = httpContext.RequestServices.GetRequiredService<ITenantProvider>();
+        int tenantId = await tenants.FindTenantIdByRefIdForUserAsync(scopeRef, caller.UserId, cancellationToken);
         if (tenantId <= 0)
         {
             return Result<PermissionScope>.Failure(Error.Forbidden("TENANT_NOT_FOUND", "Tenant not found."));
         }
 
+        var accessControl = httpContext.RequestServices.GetRequiredService<IAccessControlProvider>();
         var granted = new HashSet<string>(StringComparer.Ordinal);
         foreach (string permission in permissions)
         {
             // WorkspaceId null: tenant administration needs the permission tenant-wide.
-            if (await provider.VerifyPermissionAsync(caller.UserId, tenantId, null, permission, cancellationToken))
+            if (await accessControl.VerifyPermissionAsync(caller.UserId, tenantId, null, permission, cancellationToken))
             {
                 granted.Add(permission);
             }

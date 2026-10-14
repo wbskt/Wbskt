@@ -10,7 +10,7 @@ namespace Wbskt.Auth.Host.Services;
 /// drift silently unredeemable, and the properties each of these needs are identical.
 /// <para>
 /// <see cref="Hash"/> is also what refresh tokens are stored as. Those are minted by
-/// <c>AuthService</c> (64 random bytes, base64) but hashed here for the same reason.
+/// <c>SessionTokens</c> (64 random bytes, base64) but hashed here for the same reason.
 /// </para>
 /// </summary>
 internal static class SecurityTokens

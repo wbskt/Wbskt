@@ -17,12 +17,12 @@ namespace Wbskt.Auth.Host.Controllers;
 [Authorize]
 public class InvitationsController : ApiControllerBase
 {
-    private readonly IManagementService _managementService;
+    private readonly ITenantService _tenantService;
     private readonly ILogger<InvitationsController> _logger;
 
-    public InvitationsController(IManagementService managementService, ILogger<InvitationsController> logger)
+    public InvitationsController(ITenantService tenantService, ILogger<InvitationsController> logger)
     {
-        _managementService = managementService;
+        _tenantService = tenantService;
         _logger = logger;
     }
 
@@ -46,6 +46,6 @@ public class InvitationsController : ApiControllerBase
             return MapError(caller.Error);
         }
 
-        return MapResult(await _managementService.AcceptInvitationAsync(caller.Value, request.Token, cancellationToken));
+        return MapResult(await _tenantService.AcceptInvitationAsync(caller.Value, request.Token, cancellationToken));
     }
 }

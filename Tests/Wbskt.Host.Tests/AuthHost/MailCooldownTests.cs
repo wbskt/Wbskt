@@ -14,7 +14,7 @@ public sealed class MailCooldownTests
 {
     private const string Address = "someone@example.test";
 
-    /// <summary>The default rules, kept in this process. What the AuthService tests construct.</summary>
+    /// <summary>The default rules, kept in this process. What the account service tests construct.</summary>
     internal static MailCooldown InProcess(MailCooldownOptions? options = null, TimeProvider? time = null, IConnectionMultiplexer? redis = null) =>
         new(Options.Create(options ?? new MailCooldownOptions()), redis, time ?? TimeProvider.System, NullLogger<MailCooldown>.Instance);
 

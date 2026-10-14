@@ -37,12 +37,12 @@ public sealed class RefreshRotationTests
     {
         var harness = new Harness();
         RefreshToken? stored = null;
-        harness.Provider
+        harness.Sessions
             .Setup(p => p.RotateRefreshTokenAsync("old", It.IsAny<RefreshToken>(), It.IsAny<TimeSpan>(), "10.0.0.1", It.IsAny<CancellationToken>()))
             .Callback<string, RefreshToken, TimeSpan, string, CancellationToken>((_, replacement, _, _, _) => stored = replacement)
             .ReturnsAsync(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
 
-        var result = await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+        var result = await harness.SignIn.RefreshTokenAsync("old", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         Assert.Equal("access-token", result.Value.AccessToken);
@@ -76,7 +76,7 @@ public sealed class RefreshRotationTests
         var harness = new Harness();
         harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
 
-        await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+        await harness.SignIn.RefreshTokenAsync("old", "10.0.0.1");
 
         Assert.Equal(TheSession.ToString(), harness.LastClaims!.Single(c => c.Type == "sid").Value);
     }
@@ -87,9 +87,9 @@ public sealed class RefreshRotationTests
         var harness = new Harness();
         harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Rotated, 42, TheUser, TheSession));
 
-        await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+        await harness.SignIn.RefreshTokenAsync("old", "10.0.0.1");
 
-        harness.Provider.Verify(p => p.RotateRefreshTokenAsync("old", It.IsAny<RefreshToken>(), TimeSpan.FromDays(30), "10.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
+        harness.Sessions.Verify(p => p.RotateRefreshTokenAsync("old", It.IsAny<RefreshToken>(), TimeSpan.FromDays(30), "10.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public sealed class RefreshRotationTests
         var harness = new Harness();
         harness.Rotates(new RefreshRotation(RefreshRotationOutcome.Replayed, 42, null));
 
-        var result = await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+        var result = await harness.SignIn.RefreshTokenAsync("old", "10.0.0.1");
 
         Assert.Equal("AUTH_TOKEN_INACTIVE", result.Error.Code);
         harness.AccessTokens.Verify(a => a.RevokeUserAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), It.IsAny<CancellationToken>()), Times.Once);
@@ -116,12 +116,12 @@ public sealed class RefreshRotationTests
         var harness = new Harness();
         harness.Rotates(new RefreshRotation(outcome, outcome == RefreshRotationOutcome.Unknown ? null : 42, null));
 
-        var result = await harness.Service.RefreshTokenAsync("old", "10.0.0.1");
+        var result = await harness.SignIn.RefreshTokenAsync("old", "10.0.0.1");
 
         Assert.True(result.IsFailure);
         Assert.Equal(expectedCode, result.Error.Code);
         harness.AccessTokens.Verify(a => a.RevokeUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-        harness.Provider.Verify(p => p.RevokeAllRefreshTokensForUserAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Sessions.Verify(p => p.RevokeAllRefreshTokensForUserAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private sealed class Harness
@@ -133,12 +133,14 @@ public sealed class RefreshRotationTests
                 .Callback<IEnumerable<Claim>, string, TimeSpan>((claims, _, _) => LastClaims = claims.ToList())
                 .Returns("access-token");
 
-            Provider.Setup(p => p.GetByIdAsync(TheUser.Id, It.IsAny<CancellationToken>())).ReturnsAsync(TheUser);
-            Service = Create(jwt.Object, Bus.Object);
+            Accounts.Setup(p => p.GetByIdAsync(TheUser.Id, It.IsAny<CancellationToken>())).ReturnsAsync(TheUser);
+            SignIn = Create(jwt.Object, Bus.Object);
             QueuedService = Create(jwt.Object, new Wbskt.Infrastructure.Events.QueuedEventBus(NullLogger<Wbskt.Infrastructure.Events.QueuedEventBus>.Instance));
         }
 
-        public Mock<IAuthProvider> Provider { get; } = new();
+        public Mock<IAccountProvider> Accounts { get; } = new();
+
+        public Mock<ISessionProvider> Sessions { get; } = new();
 
         public Mock<IAccessTokenRevocation> AccessTokens { get; } = new();
 
@@ -148,26 +150,25 @@ public sealed class RefreshRotationTests
         public List<Claim>? LastClaims { get; private set; }
 
         /// <summary>Publishes straight to <see cref="Bus"/>, so a test can see what was sent.</summary>
-        public AuthService Service { get; }
+        public SignInService SignIn { get; }
 
         /// <summary>Publishes through the queue, as the host wires it.</summary>
-        public AuthService QueuedService { get; }
+        public SignInService QueuedService { get; }
 
         public void Rotates(RefreshRotation rotation) =>
-            Provider
+            Sessions
                 .Setup(p => p.RotateRefreshTokenAsync(It.IsAny<string>(), It.IsAny<RefreshToken>(), It.IsAny<TimeSpan>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(rotation);
 
-        private AuthService Create(IJwtService jwt, IEventBus bus) => new(
-            Provider.Object,
+        private SignInService Create(IJwtService jwt, IEventBus bus) => new(
+            Accounts.Object,
+            Sessions.Object,
             jwt,
             bus,
-            Mock.Of<IAuthMailer>(),
             Options.Create(new AuthEmailOptions()),
-            NullLogger<AuthService>.Instance,
+            NullLogger<SignInService>.Instance,
             new AuthMetrics(),
             AccessTokens.Object,
-            Options.Create(new AccessTokenOptions()),
-            MailCooldownTests.InProcess());
+            Options.Create(new AccessTokenOptions()));
     }
 }
