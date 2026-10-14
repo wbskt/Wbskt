@@ -326,6 +326,30 @@ jobs:
           fi
           exit $status
 
+      # Then the outage scenarios (Scenarios/Outage), which every pass above skips. outage.sh stops
+      # the RabbitMQ and Redis service containers by id and kills whichever engine holds the lease,
+      # under hosts the other scenarios would be using, so these run on their own. Each scenario
+      # brings back what it took down as it ends, and restore-all runs once more here whatever
+      # happened, so the steps after this one find the services and the original engine as they were.
+      # The runner's user can drive the service containers: the docker socket is open to it.
+      - name: Outage tests
+        if: ${{ !cancelled() && steps.hosts.outcome == 'success' }}
+        env:
+          E2E_OUTAGE_COMMAND: "${{ github.workspace }}/Tests/Wbskt.E2E.FeatureTests/outage.sh {action}"
+          E2E_RABBITMQ_CONTAINER: ${{ job.services.rabbitmq.id }}
+          E2E_REDIS_CONTAINER: ${{ job.services.redis.id }}
+        run: |
+          set -o pipefail
+          # The rate-limit pass left the auth host on the production limits, which these scenarios'
+          # sign-ups and sign-ins would exhaust; restarted here without them, it is back on Development's.
+          Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+          status=0
+          dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --no-build \
+            --filter "FullyQualifiedName~Scenarios.Outage" \
+            --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee outage-output.txt || status=1
+          Tests/Wbskt.E2E.FeatureTests/outage.sh restore-all || status=1
+          exit $status
+
       # Every test is a [SkippableFact] that skips itself when the hosts are unreachable, and a
       # fully skipped run exits 0, so a host that never came up would otherwise report green.
       # A handful of scenarios skip by design (an engine-only route, an opt-in gate), so this
@@ -333,7 +357,7 @@ jobs:
       - name: Fail if the suite did not actually run
         if: always()
         run: |
-          for f in e2e-output.txt sr-output.txt rl-output.txt; do
+          for f in e2e-output.txt sr-output.txt rl-output.txt outage-output.txt; do
             passed=$(grep -oP 'Passed:\s*\K\d+' "$f" 2>/dev/null | awk '{ n += $1 } END { print n + 0 }')
             echo "$f: passed=${passed:-0}"
             if [[ "${passed:-0}" -eq 0 ]]; then
