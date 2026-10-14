@@ -5,7 +5,45 @@ Tests exercise the **public HTTP APIs** and the real `WbsktClient` SDK end-to-en
 
 ## Prerequisites
 
-All four dev hosts, RabbitMQ, Redis and SQL Edge must be running **before** executing these tests.
+The five dev hosts (auth, management, devices, socket, engine), SQL Server with both databases
+deployed, RabbitMQ and Redis must be running **before** executing these tests.
+
+### One command
+
+From the repo root:
+
+```bash
+Tests/Wbskt.E2E.FeatureTests/e2e-up.sh     # infrastructure, databases and hosts; returns when all answer
+dotnet test Tests/Wbskt.E2E.FeatureTests
+Tests/Wbskt.E2E.FeatureTests/e2e-up.sh down  # stop it all and drop the database
+```
+
+`e2e-up.sh` runs `deploy/compose/docker-compose.e2e.yml`: SQL Server, RabbitMQ, Redis and
+[Mailpit](https://mailpit.axllent.org/), the migrator, which publishes both databases incrementally
+on every start (so a local database always matches the checkout), and the five hosts built from
+source with `deploy/docker/Dockerfile` and run as Development. The first start builds six images and
+takes a few minutes; later ones reuse the cache. It replaces steps 1 to 3 below.
+
+- **Host networking.** The hosts run with `network_mode: host`, so they bind the same localhost
+  ports `start-hosts.sh` uses and reach the fakes the integration scenarios start on 127.0.0.1. That
+  works on Linux as is; on Docker Desktop (macOS, Windows) turn on host networking in its settings.
+  The ports must be free: stop any hosts, SQL Server, RabbitMQ or Redis you already run on them.
+- **HTTPS.** The hosts serve their HTTPS ports with your own ASP.NET Core development certificate,
+  which `e2e-up.sh` exports with `dotnet dev-certs https` on every start. It must be trusted on this
+  machine, as for running the hosts from source (`dotnet dev-certs https --trust`; on Linux, see the
+  "Trust the development certificate" step in `.github/workflows/build-images.yml`).
+- **Mail.** The auth host sends its mail to Mailpit. Read it at http://localhost:8025.
+- **Infrastructure only.** `e2e-up.sh infra` starts SQL Server (sa password `Welcome1234`, as
+  `Config/connectionstrings.json` expects), RabbitMQ, Redis and Mailpit and deploys the databases,
+  then stops, for running the hosts yourself (step 3).
+- **Logs and the rest.** `e2e-up.sh logs -f engine`, `e2e-up.sh ps`: any other argument is passed
+  to `docker compose`. `e2e-up.sh restart <host>` restarts one host and waits for it.
+
+CI does not use it yet: the `e2e` job still starts the hosts with `start-hosts.sh` (see [CI](#ci)).
+
+### By hand
+
+The same, step by step. `e2e-up.sh infra` does steps 1 and 2.
 
 ### 1. Start infrastructure (Docker)
 
@@ -28,7 +66,7 @@ dotnet tool install -g microsoft.sqlpackage
 pwsh ./Deploy-Databases.ps1
 ```
 
-### 3. Start all four hosts
+### 3. Start the hosts
 
 Use the Rider compound run configuration **RunAll** (`.run/RunAll.run.xml`), or start each host manually:
 
@@ -39,7 +77,7 @@ dotnet run --project Hosts/Wbskt.Socket.Host         # https://localhost:7020 / 
 dotnet run --project Hosts/Wbskt.Workflow.Engine.Host # https://localhost:7030
 ```
 
-Or, from the repo root, build and start all four in the background as Development and wait until they answer (this is what CI does; logs land in `e2e-hosts/`):
+Or, from the repo root, build and start all five in the background as Development and wait until they answer (this is what CI does; logs land in `e2e-hosts/`):
 
 ```bash
 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
@@ -55,6 +93,35 @@ dotnet test Tests/Wbskt.E2E.FeatureTests
 
 When hosts are not reachable the tests **skip** automatically — they will never fail due to infrastructure being down.
 
+#### Collections and parallelism
+
+The suite is three xUnit collections, by folder (`Fixtures/E2ECollections.cs`):
+
+| Collection | Folders |
+|---|---|
+| `E2E auth` (`AuthCollection`) | `Scenarios/Auth` |
+| `E2E devices` (`DevicesCollection`) | `Scenarios/Devices` |
+| `E2E engine` (`EngineCollection`) | every other folder under `Scenarios` |
+
+`xunit.runner.json` runs the three at the same time (`maxParallelThreads: 3`, one per collection);
+the classes inside a collection still run one after another. That is safe because every scenario
+arranges a user and workspace of its own (see [Identities](#identities-a-fresh-user-and-workspace-per-scenario)),
+and the Development rate limits sit far above what the three spend together. A new scenario class
+goes in the collection of its folder: `[Collection(AuthCollection.Name)]`,
+`[Collection(DevicesCollection.Name)]` or `[Collection(EngineCollection.Name)]`. Each collection gets
+its own `ServicesFixture`, so the fixture must not hold anything that has to be process-wide.
+
+To run one collection, filter by its folders' namespace:
+
+```bash
+dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Auth"
+dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~Scenarios.Devices"
+```
+
+The two opt-in passes below must still run **alone**, with `--filter`: the rate-limit scenarios spend
+the per-IP budget the other collections are signing in with, and the socket restart drops every live
+device connection, the engine collection's included.
+
 The integration scenarios (`Scenarios/Integrations`) stand in for Telegram, Discord, ntfy, mail relays and HTTP APIs with local fakes on 127.0.0.1. The engine's Development settings (`WorkflowEngine:Integrations`) give it a fixed master key, allow plain http and any SMTP port, and point Telegram at `http://127.0.0.1:5098/telegram`, so port 5098 must be free while they run. The other fakes take a free port each.
 
 ### 5. Rate-limit scenarios (opt-in)
@@ -67,6 +134,12 @@ E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
   dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~RateLimitingTests.AUTH_RL_01
 ```
 
+`e2e-up.sh` cannot restart its auth host with other limits. Against it, stop that one container and
+run the auth host from source in its place, against the same infrastructure:
+`Tests/Wbskt.E2E.FeatureTests/e2e-up.sh stop auth` and `dotnet build Hosts/Wbskt.Auth.Host`, then the
+`start-hosts.sh auth` line above (with a host named, it does not build). `e2e-up.sh restart auth`
+puts the container back.
+
 `E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with. `AUTH_RL_04` exhausts the separate refresh bucket instead, so restart the auth host with `RateLimiting__TokenRefresh__PermitLimit=120` for it (`E2E_REFRESH_PERMIT_LIMIT` defaults to 120 and must match); `AUTH_RL_05` and `AUTH_RL_11` spend it too. `AUTH_RL_12` exhausts the verification bucket, so restart with `RateLimiting__EmailVerification__PermitLimit=10` for it (`E2E_VERIFICATION_PERMIT_LIMIT` defaults to 10 and must match).
 
 ### 6. Socket host restart scenario (opt-in)
@@ -78,9 +151,14 @@ E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/start-hosts.sh soc
   dotnet test Tests/Wbskt.E2E.FeatureTests --filter FullyQualifiedName~DeviceRevocationTests.DEV_REV_02
 ```
 
+Against the hosts `e2e-up.sh` started, the restart command is
+`E2E_SOCKET_RESTART_COMMAND="$PWD/Tests/Wbskt.E2E.FeatureTests/e2e-up.sh restart socket"`.
+
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs all three passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the four hosts started with `start-hosts.sh`. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs all three passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
+
+The job does not use `e2e-up.sh` yet. Moving it over would build the five host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
 
 ---
 
@@ -92,6 +170,7 @@ All base URLs can be overridden so the tests can target non-default environments
 |-----------------------|----------------------------|
 | `E2E_AUTH_URL`        | `https://localhost:7000`   |
 | `E2E_MANAGEMENT_URL`  | `https://localhost:7010`   |
+| `E2E_DEVICES_URL`     | `https://localhost:7015`   |
 | `E2E_SOCKET_URL`      | `https://localhost:7020`   |
 | `E2E_SOCKET_WS_URL`   | `ws://localhost:5020`      |
 | `E2E_WORKFLOW_URL`    | `https://localhost:7030`   |

@@ -22,6 +22,12 @@ there. See [Build and release flow](#build-and-release-flow).
   console, RabbitMQ, Redis, SQL Server, the observability stack, and a one-shot `migrator`
   (profile `migrate`). The 4 hosts and the migrator carry both `image:` (what the VM pulls) and
   `build:` (local development).
+- `compose/docker-compose.e2e.yml` — the E2E environment, local only: SQL Server, RabbitMQ, Redis,
+  Mailpit, the migrator, and (profile `hosts`) the five hosts built from source and run as
+  Development on host networking, on the ports the E2E suite expects. A project of its own
+  (`wbskt-e2e`) sharing nothing with `docker-compose.yml`, so it needs no `.env` and every value in
+  it is a development one. Start it with `Tests/Wbskt.E2E.FeatureTests/e2e-up.sh` (see that
+  folder's README); CI's `e2e` job still runs the hosts with `start-hosts.sh`.
 - `observability/` — config for the OTLP collector, Prometheus and its alert rules, Alertmanager,
   Loki, Tempo and Grafana. See [Observability](#observability).
 - `config/serilog.json` — the Serilog console sink, mounted at `/Config` (replaces the
