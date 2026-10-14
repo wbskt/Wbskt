@@ -141,4 +141,4 @@ action:clientMessage (SendCommandActionNode)
   ports:  [{ portId: "in", direction: "Input" }, { portId: "out", direction: "Output" }]
 ```
 
-The trigger port id is `"default"` to match what `PassthroughTriggerExecutor` emits (`Continue("default", …)`), which is what `BranchLoop.ResolveNextNodeId` uses to follow the outgoing edge.
+The trigger port id is `"default"` to match what `PassthroughTriggerExecutor` emits (`Continue("default", …)`), which is the port the branch loop's `ContinueResultHandler` follows to the outgoing edge (`BranchRouting.ResolveNext`).
