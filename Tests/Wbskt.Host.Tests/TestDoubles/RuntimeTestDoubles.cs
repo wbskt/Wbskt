@@ -90,3 +90,25 @@ internal sealed class UnlimitedRunCountersProvider : IRunCountersProvider
 
     public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult(0L);
 }
+
+/// <summary>A trigger registration cache that keeps nothing: every lookup is read, for tests not about the cache.</summary>
+internal sealed class UncachedTriggerRegistrationCache : ITriggerRegistrationCache
+{
+    public static UncachedTriggerRegistrationCache Instance { get; } = new();
+
+    public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetOrLoadAsync(
+        string channelKind,
+        string key,
+        Func<CancellationToken, Task<IReadOnlyCollection<TriggerRegistrationRow>>> load,
+        CancellationToken ct) => load(ct);
+
+    public Task<IReadOnlyCollection<TriggerRegistrationRow>> LoadUnlessKnownEmptyAsync(
+        string channelKind,
+        string key,
+        Func<CancellationToken, Task<IReadOnlyCollection<TriggerRegistrationRow>>> load,
+        CancellationToken ct) => load(ct);
+
+    public void Clear()
+    {
+    }
+}

@@ -14,7 +14,7 @@ internal sealed class RecordingHoldStateProvider(params TriggerRegistrationRow[]
     public List<int> Deleted { get; } = [];
 
     /// <summary>A recorder with no hold triggers registered, for tests that are not about holds.</summary>
-    public static ClientHoldRecorder EmptyRecorder() => new(new RecordingHoldStateProvider(), new FixedFilterEvaluator(true));
+    public static ClientHoldRecorder EmptyRecorder() => new(new RecordingHoldStateProvider(), new FixedFilterEvaluator(true), UncachedTriggerRegistrationCache.Instance);
 
     public Task<IReadOnlyCollection<TriggerRegistrationRow>> GetRegistrationsAsync(Guid clientRefId, string messageType, int workspaceId, CancellationToken ct)
     {
