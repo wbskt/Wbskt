@@ -11,7 +11,8 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 // Two scenarios must still run alone, and are opt-in so the parallel pass never runs them:
 // RateLimitingTests (auth) spends the per-IP limiter budget every collection shares, and
 // DeviceRevocationTests.DEV_REV_02 (devices) restarts the socket host, dropping every live device
-// connection. CI runs each in a pass of its own with --filter; see the README.
+// connection. CI runs each in a pass of its own with --filter; see the README. The RateLimited429 row of
+// ErrorShapeContractTests (engine) spends the same per-IP budget, so it is gated and run the same way.
 
 /// <summary>Sign-in, tokens, tenants and workspaces: <c>Scenarios/Auth</c>.</summary>
 [CollectionDefinition(Name)]
