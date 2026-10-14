@@ -107,6 +107,9 @@ public static class WorkflowServiceCollectionExtensions
         services.AddSingleton<ChannelRunDispatcher>();
         services.AddSingleton<IRunDispatcher>(serviceProvider => serviceProvider.GetRequiredService<ChannelRunDispatcher>());
         services.AddSingleton<IWorkflowDefinitionCache, WorkflowDefinitionCache>();
+        // Process-wide, like the definition cache: the engine host's WorkflowDefinitionChangedConsumer
+        // clears both when the management host announces a change.
+        services.AddSingleton<ITriggerRegistrationCache, TriggerRegistrationCache>();
         services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
         services.AddSingleton<ICorrelationKeyResolver, CorrelationKeyResolver>();
         // Scoped, not Singleton: the evaluator reads shared variables through the Scoped

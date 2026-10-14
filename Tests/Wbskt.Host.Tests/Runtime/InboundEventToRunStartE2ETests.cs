@@ -32,6 +32,7 @@ public sealed class InboundEventToRunStartE2ETests
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             bookmarkResumer,
             providers,
+            UncachedTriggerRegistrationCache.Instance,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
             new RunStarter(providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(TriggerChannelRegistry.Default), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),

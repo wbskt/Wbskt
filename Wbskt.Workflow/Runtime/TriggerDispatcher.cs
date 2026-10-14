@@ -3,6 +3,7 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Channels;
 using Microsoft.Extensions.Logging;
 
 namespace Wbskt.Workflow.Runtime;
@@ -12,6 +13,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IBookmarkResumer _bookmarkResumer;
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
+    private readonly ITriggerRegistrationCache _triggerRegistrationCache;
     private readonly ITriggerConcurrencyEnforcer _triggerConcurrencyEnforcer;
     private readonly IRunCancellationService _runCancellationService;
     private readonly IRunStarter _runStarter;
@@ -24,6 +26,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         ICorrelationKeyResolver correlationKeyResolver,
         IBookmarkResumer bookmarkResumer,
         ITriggerRegistrationProvider triggerRegistrationProvider,
+        ITriggerRegistrationCache triggerRegistrationCache,
         ITriggerConcurrencyEnforcer triggerConcurrencyEnforcer,
         IRunCancellationService runCancellationService,
         IRunStarter runStarter,
@@ -35,6 +38,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
         _triggerRegistrationProvider = triggerRegistrationProvider;
+        _triggerRegistrationCache = triggerRegistrationCache;
         _triggerConcurrencyEnforcer = triggerConcurrencyEnforcer;
         _runCancellationService = runCancellationService;
         _runStarter = runStarter;
@@ -55,7 +59,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
 
         // Registrations are read before the claim so an event that nothing listens for writes nothing
         // (see IBookmarkResumer.MatchInboundAsync); the same list is used below.
-        IReadOnlyCollection<TriggerRegistrationRow> registrations = await _triggerRegistrationProvider.GetActiveByChannelKeysAsync(resolvedEvent.ChannelKind, resolvedEvent.MatchKeys, ct);
+        IReadOnlyCollection<TriggerRegistrationRow> registrations = await GetRegistrationsAsync(resolvedEvent, ct);
         if (evt.ReplayFor is { } replayFor)
         {
             // A replayed queued event is for the trigger that queued it and no other (InboundEvent.ReplayFor).
@@ -203,6 +207,31 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             summary?.CorrelationKey ?? defaultCorrelation,
             perRegistration,
             summary?.RunRefId);
+    }
+
+    /// <summary>
+    /// The registrations for the event's keys. For a device message, "nothing listens" may come from the
+    /// cache, which is the answer most device messages get; registrations, which claim the event and start
+    /// runs below, are always read from the database. A stale cache can therefore cost a read, or (until
+    /// the change is announced) miss a trigger published a moment ago, but never act on a removed one.
+    /// </summary>
+    /// <remarks>
+    /// Only device messages, the channel that arrives at the rate devices talk. Every other channel is
+    /// read each time, so a webhook fired or a run started by hand right after a publish never waits on
+    /// the announcement that clears the cache.
+    /// </remarks>
+    private Task<IReadOnlyCollection<TriggerRegistrationRow>> GetRegistrationsAsync(InboundEvent evt, CancellationToken ct)
+    {
+        if (!string.Equals(evt.ChannelKind, ClientChannel.Name, StringComparison.Ordinal) || evt.MatchKeys.Count == 0)
+        {
+            return _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, ct);
+        }
+
+        return _triggerRegistrationCache.LoadUnlessKnownEmptyAsync(
+            evt.ChannelKind,
+            string.Join('\n', evt.MatchKeys),
+            token => _triggerRegistrationProvider.GetActiveByChannelKeysAsync(evt.ChannelKind, evt.MatchKeys, token),
+            ct);
     }
 
     /// <summary>

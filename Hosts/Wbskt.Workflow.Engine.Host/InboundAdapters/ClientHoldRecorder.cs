@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
@@ -12,11 +13,24 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// <see cref="HostedServices.ClientHoldTicker"/> starts the run once the filter has kept matching for
 /// the trigger's whole hold time.
 /// </summary>
-public sealed class ClientHoldRecorder(IClientHoldStateProvider provider, ITriggerFilterEvaluator filterEvaluator)
+/// <remarks>
+/// The hold registrations are taken from <see cref="ITriggerRegistrationCache"/>, registrations and
+/// "none" alike, rather than read for every message. A registration removed a moment ago can still be
+/// recorded against until the change is announced; that starts nothing, because the ticker dispatches
+/// a due hold through the trigger dispatcher, which reads the registration again and drops the hold
+/// when it is gone.
+/// </remarks>
+public sealed class ClientHoldRecorder(IClientHoldStateProvider provider, ITriggerFilterEvaluator filterEvaluator, ITriggerRegistrationCache registrationCache)
 {
     public async Task RecordAsync(InboundEvent message, Guid clientRefId, string messageType, int workspaceId, DateTime sentAtUtc, CancellationToken ct)
     {
-        IReadOnlyCollection<TriggerRegistrationRow> registrations = await provider.GetRegistrationsAsync(clientRefId, messageType, workspaceId, ct);
+        // The workspace is part of the key because the lookup is scoped to it.
+        string key = string.Create(CultureInfo.InvariantCulture, $"{workspaceId}:{ClientHoldTriggerKey.Prefix(clientRefId, messageType)}");
+        IReadOnlyCollection<TriggerRegistrationRow> registrations = await registrationCache.GetOrLoadAsync(
+            ClientHoldTriggerKey.TriggerKind,
+            key,
+            token => provider.GetRegistrationsAsync(clientRefId, messageType, workspaceId, token),
+            ct);
         if (registrations.Count == 0)
         {
             return;

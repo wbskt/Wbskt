@@ -48,6 +48,14 @@ public sealed class WorkflowEngineOptions
     public int PresenceCheckLeaseBatchSize { get; init; } = 64;
     public int ClientHoldLeaseBatchSize { get; init; } = 64;
 
+    /// <summary>
+    /// How long the trigger registrations read for a device message are reused before they are read
+    /// again (<c>ITriggerRegistrationCache</c>). A <c>WorkflowDefinitionChangedEvent</c> from the
+    /// management host drops them at once; this only bounds how long a late or lost one goes unnoticed.
+    /// Zero turns the cache off.
+    /// </summary>
+    public TimeSpan TriggerRegistrationCacheLifetime { get; init; } = TimeSpan.FromMinutes(1);
+
     // Engine active/standby leader election (WP4) - separate from LeaseDurationSeconds above,
     // which governs per-item claim leases (bookmarks, scheduled fires), not the engine-leader lease.
     public TimeSpan LeaderElectionRenewInterval { get; init; } = TimeSpan.FromSeconds(10);

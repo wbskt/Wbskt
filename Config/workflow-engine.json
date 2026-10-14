@@ -18,6 +18,7 @@
     "BookmarkLeaseBatchSize": 64,
     "ScheduledFireLeaseBatchSize": 64,
     "PresenceCheckLeaseBatchSize": 64,
-    "ClientHoldLeaseBatchSize": 64
+    "ClientHoldLeaseBatchSize": 64,
+    "TriggerRegistrationCacheLifetime": "00:01:00"
   }
 }

@@ -72,6 +72,8 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var dispatcher2 = provider.GetRequiredService<IRunDispatcher>();
         var cache1 = provider.GetRequiredService<IWorkflowDefinitionCache>();
         var cache2 = provider.GetRequiredService<IWorkflowDefinitionCache>();
+        var registrationCache1 = provider.GetRequiredService<ITriggerRegistrationCache>();
+        var registrationCache2 = provider.GetRequiredService<ITriggerRegistrationCache>();
         var hostIdentity1 = provider.GetRequiredService<IHostIdentity>();
         var hostIdentity2 = provider.GetRequiredService<IHostIdentity>();
         var correlationKeyResolver1 = provider.GetRequiredService<ICorrelationKeyResolver>();
@@ -128,6 +130,8 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.NotSame(registry1, registry2);
         Assert.IsType<WorkflowDefinitionCache>(cache1);
         Assert.Same(cache1, cache2);
+        Assert.IsType<TriggerRegistrationCache>(registrationCache1);
+        Assert.Same(registrationCache1, registrationCache2);
         Assert.IsType<HostIdentity>(hostIdentity1);
         Assert.Same(hostIdentity1, hostIdentity2);
         Assert.IsType<CorrelationKeyResolver>(correlationKeyResolver1);
