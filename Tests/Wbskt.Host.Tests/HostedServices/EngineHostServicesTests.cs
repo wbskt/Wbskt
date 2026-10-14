@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Workflow.Engine.Host;
 
 namespace Wbskt.Host.Tests.HostedServices;
 
