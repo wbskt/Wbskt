@@ -72,7 +72,11 @@ public sealed class ServicesFixture : IDisposable
         {
             ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
         };
-        _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        // Generous on purpose: list and history reads grow with what a scenario created, and a slow
+        // one should fail as a slow assertion, not as a TaskCanceledException from inside a helper.
+        // How long a scenario waits for something is bounded by the PollUntilAsync timeouts, and the
+        // host probes below carry their own short timeout.
+        _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
 
         HostsAvailable = ProbePublicHostsAsync().GetAwaiter().GetResult();
         EngineAvailable = ProbeHostAsync(E2EConfig.WorkflowBaseUrl).GetAwaiter().GetResult();
