@@ -1,6 +1,9 @@
 using System.Text.Json;
 using FluentAssertions;
+using Wbskt.Api.Client;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
+using Wbskt.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 
@@ -33,7 +36,7 @@ public sealed class IntegrationAuditE2ETests(ServicesFixture fixture)
             "IntegrationCreatedEvent", "IntegrationUpdatedEvent", "IntegrationSecretRotatedEvent",
             "IntegrationTestedEvent", "IntegrationDeletedEvent"
         ];
-        IReadOnlyList<EventLogItemDto> logs = [];
+        IReadOnlyList<EventLogResponse> logs = [];
         (await ServicesFixture.PollAsync(
                 async () =>
                 {
@@ -52,11 +55,11 @@ public sealed class IntegrationAuditE2ETests(ServicesFixture fixture)
         changed.Should().Contain(["name", "config.baseUrl"]);
 
         var rotated = logs.Single(l => l.EventName == "IntegrationSecretRotatedEvent");
-        rotated.Criticality.Should().Be(1, "replacing a credential is a warning");
+        rotated.Criticality.Should().Be(EventCriticality.Warning, "replacing a credential is a warning");
         Data(logs, "IntegrationSecretRotatedEvent").Prop("Changes").EnumerateArray()
             .Select(c => c.Prop("Field").GetString()).Should().Equal("secretHint");
 
-        logs.Single(l => l.EventName == "IntegrationDeletedEvent").Criticality.Should().Be(1);
+        logs.Single(l => l.EventName == "IntegrationDeletedEvent").Criticality.Should().Be(EventCriticality.Warning);
         Data(logs, "IntegrationTestedEvent").Prop("Ok").GetBoolean().Should().BeTrue();
     }
 
@@ -70,13 +73,8 @@ public sealed class IntegrationAuditE2ETests(ServicesFixture fixture)
 
         async Task<IReadOnlyList<string>> GroupAsync(string group)
         {
-            using var response = await fixture.SendAsync(
-                HttpMethod.Get,
-                ServicesFixture.ManagementUrl($"/api/workspaces/{ws}/event-logs?group={group}&limit=100"),
-                token);
-            response.EnsureSuccessStatusCode();
-            var page = await IntegrationsApi.ReadAsync(response);
-            return page.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("eventName").GetString()!).ToList();
+            var page = await fixture.Management.As(token).GetEventLogsAsync(ws, new EventLogSearch { Groups = [group] }, limit: 100);
+            return page.Items.Select(i => i.EventName).ToList();
         }
 
         IReadOnlyList<string> integrations = [];
@@ -98,7 +96,7 @@ public sealed class IntegrationAuditE2ETests(ServicesFixture fixture)
     }
 
     /// <summary>The logged payload. Its property casing is the log's business, so lookups ignore case.</summary>
-    private static JsonElement Data(IEnumerable<EventLogItemDto> logs, string eventName) =>
+    private static JsonElement Data(IEnumerable<EventLogResponse> logs, string eventName) =>
         JsonDocument.Parse(logs.First(l => l.EventName == eventName).EventData).RootElement;
 }
 

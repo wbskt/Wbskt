@@ -120,7 +120,7 @@ public sealed class WorkspaceAccessTests(ServicesFixture fixture)
         var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
         var workspace = await fixture.CreateWorkspaceAsync(owner.Token);
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        await fixture.SendAsync(HttpMethod.Post, ServicesFixture.AuthUrl($"/api/workspaces/{workspace}/members"), owner.Token, new { Email = member.Email });
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspace, new AddMemberRequest(Email: member.Email));
         var memberRef = await fixture.FindTenantMemberRefAsync(owner.Token, tenantRef, member.Email);
 
         var response = await TransferAsync(member.Token, workspace, memberRef!.Value);
@@ -131,7 +131,7 @@ public sealed class WorkspaceAccessTests(ServicesFixture fixture)
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private Task<HttpResponseMessage> TransferAsync(string token, Guid workspaceRef, Guid userRef) =>
-        fixture.SendAsync(HttpMethod.Put, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/owner"), token, new { UserRef = userRef });
+        fixture.Auth.As(token).TransferWorkspaceOwnershipRawAsync(workspaceRef, new TransferOwnershipRequest(UserRef: userRef));
 
     private Task<HttpResponseMessage> InviteAsync(string adminToken, Guid tenantRef, string email, object extra)
     {

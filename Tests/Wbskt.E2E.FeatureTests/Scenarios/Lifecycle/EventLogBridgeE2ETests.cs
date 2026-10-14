@@ -3,6 +3,8 @@ using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
+using Wbskt.Models;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Validation;
@@ -24,8 +26,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 public sealed class EventLogBridgeE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
-    private const int InfoCriticality = 0;
 
     [SkippableFact]
     public async Task SucceededRun_SurfacesStartedAndCompletedMilestones_InEventLog()
@@ -61,8 +61,8 @@ public sealed class EventLogBridgeE2ETests(ServicesFixture fixture)
         summary!.Status.Should().Be("Succeeded");
 
         // The milestones flow async through the bus → buffer → batch flush, so poll the event-log.
-        EventLogItemDto? completed = null;
-        EventLogItemDto? started = null;
+        EventLogResponse? completed = null;
+        EventLogResponse? started = null;
         var surfaced = await ServicesFixture.PollAsync(
             async () =>
             {
@@ -78,7 +78,7 @@ public sealed class EventLogBridgeE2ETests(ServicesFixture fixture)
 
         surfaced.Should().BeTrue(
             "both the started and completed run milestones must surface in the central event-log scoped to this workflow");
-        completed!.Criticality.Should().Be(InfoCriticality, "a successful run is an informational milestone");
+        completed!.Criticality.Should().Be(EventCriticality.Info, "a successful run is an informational milestone");
         completed.EventData.Should().Contain("Succeeded", "the completed event payload carries the terminal status");
     }
 

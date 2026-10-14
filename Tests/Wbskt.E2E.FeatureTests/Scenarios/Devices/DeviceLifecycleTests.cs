@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Management.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 
@@ -178,8 +179,8 @@ public sealed class DeviceLifecycleTests(ServicesFixture fixture)
         fixture.SendAsync(method, ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/{path}"), token, body);
 
     private Task<HttpResponseMessage> ClientLoginAsync(Guid clientRef, string secret) =>
-        fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl("/api/client-auth/login"), null, new { ClientRefId = clientRef, Secret = secret });
+        fixture.Management.LoginClientRawAsync(new ClientLoginRequest(ClientRefId: clientRef, Secret: secret));
 
     private Task<HttpResponseMessage> RegisterRawAsync(string pin) =>
-        fixture.SendAsync(HttpMethod.Post, ServicesFixture.ManagementUrl("/api/client-registrations/initiate"), null, new { Pin = pin, Name = "after-rotation" });
+        fixture.Management.RegisterClientRawAsync(new ClientRegistrationRequest(Pin: pin, Name: "after-rotation"));
 }

@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -74,11 +75,7 @@ public sealed class WorkspaceResolutionTests(ServicesFixture fixture)
         // nothing. An empty permission set is a successful resolution, not a failure — the two
         // gates are separate and the management host applies the slug check itself.
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        var add = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token,
-            new { Email = member.Email });
+        var add = await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
         add.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var response = await fixture.ResolveWorkspaceAsync(member.Token, workspaceRef);
@@ -188,11 +185,7 @@ public sealed class WorkspaceResolutionTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(owner.Token);
 
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
         var memberRef = await fixture.FindTenantMemberRefAsync(owner.Token, tenantRef, member.Email);
         memberRef.Should().NotBeNull();
@@ -222,11 +215,7 @@ public sealed class WorkspaceResolutionTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(owner.Token);
 
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
         var memberRef = await fixture.FindTenantMemberRefAsync(owner.Token, tenantRef, member.Email);
 

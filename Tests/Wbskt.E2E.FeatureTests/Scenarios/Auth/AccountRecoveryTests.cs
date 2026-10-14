@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -26,11 +27,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 [Collection(E2ECollection.Name)]
 public sealed class AccountRecoveryTests(ServicesFixture fixture)
 {
-    private static string ForgotUrl => ServicesFixture.AuthUrl("/api/auth/forgot-password");
-    private static string ResetUrl => ServicesFixture.AuthUrl("/api/auth/reset-password");
-    private static string VerifyUrl => ServicesFixture.AuthUrl("/api/auth/verify-email");
-    private static string ResendUrl => ServicesFixture.AuthUrl("/api/auth/resend-verification");
-
     // ── Non-disclosure ────────────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -41,7 +37,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
         var (username, email, password) = ServicesFixture.NewCredentials();
         await fixture.RegisterAsync(username, email, password);
 
-        var response = await fixture.SendAsync(HttpMethod.Post, ForgotUrl, body: new { Email = email });
+        var response = await fixture.Auth.ForgotPasswordRawAsync(new ForgotPasswordRequest(Email: email));
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
@@ -53,7 +49,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
 
         var (_, email, _) = ServicesFixture.NewCredentials();
 
-        var response = await fixture.SendAsync(HttpMethod.Post, ForgotUrl, body: new { Email = email });
+        var response = await fixture.Auth.ForgotPasswordRawAsync(new ForgotPasswordRequest(Email: email));
 
         // Byte for byte what a registered address gets. This assertion is the whole point of the
         // endpoint's design.
@@ -68,7 +64,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
 
         var (_, email, _) = ServicesFixture.NewCredentials();
 
-        var response = await fixture.SendAsync(HttpMethod.Post, ResendUrl, body: new { Email = email });
+        var response = await fixture.Auth.ResendVerificationRawAsync(new ResendVerificationRequest(Email: email));
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
@@ -82,7 +78,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(HttpMethod.Post, ForgotUrl, body: new { Email = "not-an-address" });
+        var response = await fixture.Auth.ForgotPasswordRawAsync(new ForgotPasswordRequest(Email: "not-an-address"));
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
@@ -94,9 +90,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post, ResetUrl,
-            body: new { Token = "not-a-real-token", NewPassword = "a perfectly long password" });
+        var response = await fixture.Auth.ResetPasswordRawAsync(new ResetPasswordRequest(Token: "not-a-real-token", NewPassword: "a perfectly long password"));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("RESET_TOKEN_INVALID");
@@ -107,7 +101,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(HttpMethod.Post, VerifyUrl, body: new { Token = "not-a-real-token" });
+        var response = await fixture.Auth.VerifyEmailRawAsync(new VerifyEmailRequest(Token: "not-a-real-token"));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("VERIFICATION_TOKEN_INVALID");
@@ -122,9 +116,7 @@ public sealed class AccountRecoveryTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post, ResetUrl,
-            body: new { Token = "not-a-real-token", NewPassword = new string('a', 11) });
+        var response = await fixture.Auth.ResetPasswordRawAsync(new ResetPasswordRequest(Token: "not-a-real-token", NewPassword: new string('a', 11)));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 

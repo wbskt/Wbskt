@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Management.Models.Workflow;
@@ -17,10 +16,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Workflows;
 [Collection(E2ECollection.Name)]
 public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private sealed record VersionList(List<WorkflowVersionDto> Items);
-
     [SkippableFact]
     public async Task WF_VER_01_EveryVersionIsListed_NewestFirst()
     {
@@ -30,11 +25,9 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
         var (refId, _) = await PublishWebhookWorkflowAsync(token, workspace);
         await PublishWebhookWorkflowAsync(token, workspace, refId);
 
-        var response = await Send(HttpMethod.Get, workspace, $"workflows/{refId}/versions", token);
+        var versions = await fixture.Management.As(token).GetWorkflowVersionsAsync(workspace, refId);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var list = await response.Content.ReadFromJsonAsync<VersionList>(JsonOptions);
-        list!.Items.Select(v => (v.Version, v.Status)).Should().Equal((2, "Published"), (1, "Superseded"));
+        versions.Items.Select(v => (v.Version, v.Status)).Should().Equal((2, "Published"), (1, "Superseded"));
     }
 
     [SkippableFact]
@@ -45,14 +38,14 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
         var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
         var (refId, _) = await PublishWebhookWorkflowAsync(token, workspace);
 
-        (await Send(HttpMethod.Delete, workspace, $"workflows/{refId}", token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var management = fixture.Management.As(token);
+        (await management.DeleteWorkflowRawAsync(workspace, refId)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        (await Send(HttpMethod.Get, workspace, $"workflows/{refId}", token)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await Send(HttpMethod.Get, workspace, $"workflows/{refId}/versions", token)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await Send(HttpMethod.Delete, workspace, $"workflows/{refId}", token)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await management.GetWorkflowRawAsync(workspace, refId)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await management.GetWorkflowVersionsRawAsync(workspace, refId)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await management.DeleteWorkflowRawAsync(workspace, refId)).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        var listed = await Send(HttpMethod.Get, workspace, "workflows", token);
-        (await listed.Content.ReadAsStringAsync()).Should().NotContain(refId.ToString());
+        (await management.GetWorkflowsAsync(workspace)).Items.Select(w => w.RefId).Should().NotContain(refId);
 
         var republish = await PublishRawAsync(token, workspace, refId, $"hook-{Guid.NewGuid():N}");
         republish.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -68,8 +61,8 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
         var (refId, _) = await PublishWebhookWorkflowAsync(ownerToken, ownerWorkspace);
         var (strangerToken, strangerWorkspace) = await fixture.RegisterAndLoginUserAsync();
 
-        (await Send(HttpMethod.Delete, strangerWorkspace, $"workflows/{refId}", strangerToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await Send(HttpMethod.Get, ownerWorkspace, $"workflows/{refId}", ownerToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.Management.As(strangerToken).DeleteWorkflowRawAsync(strangerWorkspace, refId)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await fixture.Management.As(ownerToken).GetWorkflowRawAsync(ownerWorkspace, refId)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [SkippableFact]
@@ -131,14 +124,12 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
             .AddWebhookTrigger(path, "POST", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
-        return Send(HttpMethod.Post, workspace, "workflows", token, new WorkflowPublishRequest(refId, $"E2E-Lifecycle-{refId:N}", null, definition));
+        return fixture.Management.As(token).PublishWorkflowRawAsync(workspace, new WorkflowPublishRequest(refId, $"E2E-Lifecycle-{refId:N}", null, definition));
     }
-
-    private Task<HttpResponseMessage> Send(HttpMethod method, Guid workspace, string path, string token, object? body = null) =>
-        fixture.SendAsync(method, ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/{path}"), token, body);
 
     private static async Task<HttpResponseMessage> SendKeyedWebhookAsync(Guid workspace, string path, string key)
     {
+        // Bespoke: the Idempotency-Key header is what is under test, and the typed client sends none.
         using var http = new HttpClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/callbacks/webhook/{workspace}/{Uri.EscapeDataString(path)}"))
         {

@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -28,11 +29,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/internal/workspaces/resolve"),
-            adminToken,
-            new { WorkspaceRef = Guid.NewGuid() });
+        var response = await fixture.Auth.As(adminToken).ResolveWorkspaceRawAsync(new ResolveWorkspaceRequest(WorkspaceRef: Guid.NewGuid()));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "an unresolvable reference must be indistinguishable from one the caller cannot see");
@@ -48,15 +45,10 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(adminToken);
 
-        var deleteResponse = await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), adminToken);
+        var deleteResponse = await fixture.Auth.As(adminToken).DeleteWorkspaceRawAsync(workspaceRef);
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/internal/workspaces/resolve"),
-            adminToken,
-            new { WorkspaceRef = workspaceRef });
+        var response = await fixture.Auth.As(adminToken).ResolveWorkspaceRawAsync(new ResolveWorkspaceRequest(WorkspaceRef: workspaceRef));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -69,15 +61,11 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(adminToken);
 
-        await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), adminToken);
+        await fixture.Auth.As(adminToken).DeleteWorkspaceRawAsync(workspaceRef);
 
         // The user-visible half of the defect. Resources in other services outlive a deleted
         // workspace, so a stale reference is the normal state of affairs — and it used to 500.
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.ManagementUrl($"/api/workspaces/{workspaceRef}/registration-policies"),
-            adminToken);
+        var response = await fixture.Management.As(adminToken).GetPoliciesRawAsync(workspaceRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a stale workspace reference is a permission answer, not a server fault");
@@ -90,11 +78,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{Guid.NewGuid()}/members"),
-            adminToken,
-            new { Email = "admin@wbskt.com" });
+        var response = await fixture.Auth.As(adminToken).AddWorkspaceMemberRawAsync(Guid.NewGuid(), new AddMemberRequest(Email: "admin@wbskt.com"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKSPACE_NOT_FOUND");
@@ -107,10 +91,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         var (adminToken, _) = await fixture.LoginAsAdminAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/workspaces/{Guid.NewGuid()}/members"),
-            adminToken);
+        var response = await fixture.Auth.As(adminToken).GetWorkspaceMembersRawAsync(Guid.NewGuid());
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("WORKSPACE_NOT_FOUND");
@@ -132,8 +113,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
 
         updateResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        var deleteResponse = await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{unknownRef}"), adminToken);
+        var deleteResponse = await fixture.Auth.As(adminToken).DeleteWorkspaceRawAsync(unknownRef);
 
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -152,11 +132,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
         var roleRef = await fixture.CreateRoleAsync(adminToken, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            adminToken,
-            new { Slug = "roles.mange", IsDeny = false });
+        var response = await fixture.Auth.As(adminToken).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "roles.mange", IsDeny: false));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "a typo'd slug grants nothing, so answering 204 reports a success that did not happen");
@@ -173,11 +149,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
         var roleRef = await fixture.CreateRoleAsync(adminToken, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            adminToken,
-            new { Slug = "roles.mange", IsDeny = false });
+        await fixture.Auth.As(adminToken).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "roles.mange", IsDeny: false));
 
         // Proves the 400 is not merely cosmetic — nothing was persisted under the bad slug.
         var slugs = await fixture.GetRolePermissionSlugsAsync(adminToken, tenantRef, roleRef);
@@ -215,11 +187,7 @@ public sealed class AuthRegressionTests(ServicesFixture fixture)
         var tenantRef = await fixture.GetTenantRefAsync(adminToken);
         var roleRef = await fixture.CreateRoleAsync(adminToken, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            adminToken,
-            new { Slug = "logs.read", IsDeny = false });
+        var response = await fixture.Auth.As(adminToken).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "logs.read", IsDeny: false));
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent,
             "tightening the unknown-slug path must not break the valid one");

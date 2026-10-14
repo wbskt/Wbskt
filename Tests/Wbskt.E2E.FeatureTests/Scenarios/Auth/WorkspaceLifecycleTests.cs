@@ -1,6 +1,8 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
+using Wbskt.Protocol;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -27,11 +29,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
 
         var user = await fixture.CreateUserAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/workspaces"),
-            user.Token,
-            new { Name = $"e2e-{Guid.NewGuid():N}", Description = "created by a scenario" });
+        var response = await fixture.Auth.As(user.Token).CreateWorkspaceRawAsync(new CreateWorkspaceRequest(Name: $"e2e-{Guid.NewGuid():N}", Description: "created by a scenario"));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -77,8 +75,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
 
         // Tenant administration requires the slug tenant-wide, which a workspace-scoped grant
         // deliberately does not satisfy. This is the escalation boundary.
-        var tenantRoles = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles"), member.Token);
+        var tenantRoles = await fixture.Auth.As(member.Token).GetRolesRawAsync(tenantRef);
 
         tenantRoles.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a workspace-scoped grant must never reach tenant administration");
@@ -141,11 +138,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
 
         var user = await fixture.CreateUserAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/workspaces"),
-            user.Token,
-            new { Name = "valid", Description = new string('x', 501) });
+        var response = await fixture.Auth.As(user.Token).CreateWorkspaceRawAsync(new CreateWorkspaceRequest(Name: "valid", Description: new string('x', 501)));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -219,11 +212,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Put,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"),
-            user.Token,
-            new { Name = "renamed by a scenario", Description = "and re-described" });
+        var response = await fixture.Auth.As(user.Token).UpdateWorkspaceRawAsync(workspaceRef, new CreateWorkspaceRequest(Name: "renamed by a scenario", Description: "and re-described"));
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
@@ -257,11 +246,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(owner.Token);
 
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
         // A member, but holding nothing — membership is not authority.
         var response = await fixture.SendAsync(
@@ -301,8 +286,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token);
+        var response = await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await fixture.GetWorkspaceRefsAsync(user.Token)).Should().NotContain(workspaceRef);
@@ -318,14 +302,9 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(owner.Token);
 
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), member.Token);
+        var response = await fixture.Auth.As(member.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -338,11 +317,9 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
 
-        await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token);
+        await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
-        var second = await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token);
+        var second = await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
         // The reference stops resolving, which reads the same as one that never existed.
         second.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -359,16 +336,11 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(owner.Token);
 
         var member = await fixture.CreateUserInTenantAsync(owner.Token, tenantRef);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(owner.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
         (await fixture.GetWorkspaceRefsAsync(member.Token)).Should().Contain(workspaceRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), owner.Token);
+        await fixture.Auth.As(owner.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
         (await fixture.GetWorkspaceRefsAsync(member.Token)).Should().NotContain(workspaceRef);
     }
@@ -381,8 +353,7 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
 
-        await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token);
+        await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
         // Resources in other services outlive the workspace, so their references land here. A 403
         // is what keeps that a permission answer rather than a 500 in the management host.
@@ -406,23 +377,16 @@ public sealed class WorkspaceLifecycleTests(ServicesFixture fixture)
         var (_, pin) = await fixture.CreatePolicyAsync(user.Token, workspaceRef);
         var (clientRef, secret) = await fixture.RegisterClientAsync(pin, $"e2e-device-{Guid.NewGuid():N}");
 
-        await fixture.SendAsync(
-            HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token);
+        await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef);
 
         var deadline = DateTime.UtcNow.AddSeconds(30);
         bool registrationRefused = false, loginRefused = false;
         while (DateTime.UtcNow < deadline && !(registrationRefused && loginRefused))
         {
-            var registration = await fixture.SendAsync(
-                HttpMethod.Post,
-                ServicesFixture.ManagementUrl("/api/client-registrations/initiate"),
-                body: new { Pin = pin, Name = $"e2e-late-{Guid.NewGuid():N}" });
+            var registration = await fixture.Management.RegisterClientRawAsync(new ClientRegistrationRequest(Pin: pin, Name: $"e2e-late-{Guid.NewGuid():N}"));
             registrationRefused = !registration.IsSuccessStatusCode;
 
-            var login = await fixture.SendAsync(
-                HttpMethod.Post,
-                ServicesFixture.ManagementUrl("/api/client-auth/login"),
-                body: new { ClientRefId = clientRef, Secret = secret });
+            var login = await fixture.Management.LoginClientRawAsync(new ClientLoginRequest(ClientRefId: clientRef, Secret: secret));
             loginRefused = !login.IsSuccessStatusCode;
 
             if (!(registrationRefused && loginRefused))

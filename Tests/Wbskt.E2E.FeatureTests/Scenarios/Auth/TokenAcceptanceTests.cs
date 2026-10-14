@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -28,7 +29,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint);
+        var response = await fixture.Auth.GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -38,7 +39,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, "not-a-jwt");
+        var response = await fixture.Auth.As("not-a-jwt").GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -54,7 +55,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
             subject: "1",
             lifetime: TimeSpan.FromMinutes(30));
 
-        var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, forged);
+        var response = await fixture.Auth.As(forged).GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "the signing key is the only thing standing between a caller and any identity they like");
@@ -68,7 +69,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         // The classic alg:none downgrade — a well-formed token with the signature omitted entirely.
         var unsigned = ServicesFixture.MintJwt(signingKey: null, subject: "1", lifetime: TimeSpan.FromMinutes(30));
 
-        var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, unsigned);
+        var response = await fixture.Auth.As(unsigned).GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -93,7 +94,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
 
         var clientToken = await MintClientTokenAsync();
 
-        var response = await fixture.SendAsync(HttpMethod.Get, ProtectedEndpoint, clientToken);
+        var response = await fixture.Auth.As(clientToken).GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "a device credential must never be accepted as a user identity — it is signed by another "
@@ -107,8 +108,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
 
         var clientToken = await MintClientTokenAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl("/api/tenants"), clientToken);
+        var response = await fixture.Auth.As(clientToken).GetTenantsRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "tenant administration is the most privileged surface here and must be no more reachable "
@@ -130,11 +130,7 @@ public sealed class TokenAcceptanceTests(ServicesFixture fixture)
         userRef.Should().NotBeNull();
         var ownWorkspace = (await fixture.GetWorkspaceRefsAsync(user.Token)).First();
         var sharedWorkspace = await fixture.CreateWorkspaceAsync(adminToken);
-        (await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{sharedWorkspace}/members"),
-            adminToken,
-            new { Email = user.Email })).IsSuccessStatusCode.Should().BeTrue();
+        (await fixture.Auth.As(adminToken).AddWorkspaceMemberRawAsync(sharedWorkspace, new AddMemberRequest(Email: user.Email))).IsSuccessStatusCode.Should().BeTrue();
 
         var sharedEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{sharedWorkspace}/registration-policies");
         var ownEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{ownWorkspace}/registration-policies");

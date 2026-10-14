@@ -2,10 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Wbskt.Api.Client;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Engine.Contracts;
+using Wbskt.Protocol;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
@@ -159,7 +162,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         var (publishedRef, triggerNodeId) = await PublishAwaitingSignalAsync(user.Token, workspaceRef);
         var runRefId = await StartAndWaitForRunAsync(user.Token, workspaceRef, publishedRef, triggerNodeId);
 
-        using (var deleted = await fixture.SendAsync(HttpMethod.Delete, ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}"), user.Token))
+        using (var deleted = await fixture.Auth.As(user.Token).DeleteWorkspaceRawAsync(workspaceRef))
         {
             deleted.EnsureSuccessStatusCode();
         }
@@ -169,10 +172,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         var retired = await ServicesFixture.PollAsync(
             async () =>
             {
-                using var registration = await fixture.SendAsync(
-                    HttpMethod.Post,
-                    ServicesFixture.ManagementUrl("/api/client-registrations/initiate"),
-                    body: new { Pin = pin, Name = $"e2e-late-{Guid.NewGuid():N}" });
+                using var registration = await fixture.Management.RegisterClientRawAsync(new ClientRegistrationRequest(Pin: pin, Name: $"e2e-late-{Guid.NewGuid():N}"));
                 return !registration.IsSuccessStatusCode;
             },
             TimeSpan.FromSeconds(30),
@@ -187,14 +187,14 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
             TimeSpan.FromSeconds(10),
             "the engine taking the cancel for a deleted workspace's run cannot be observed from outside");
 
+        // The engine's inbound API is backend-only and has no public client, so this goes to it directly.
         using var signal = await fixture.SendAsync(
             HttpMethod.Post,
             $"{E2EConfig.WorkflowBaseUrl}/api/inbound/signal/{runRefId}/continue",
             body: new { });
-        signal.EnsureSuccessStatusCode();
-        var outcome = await signal.Content.ReadFromJsonAsync<EngineSignalDto>(JsonOpts);
+        var outcome = await WbsktApiClient.ReadAsync<InboundResponse>(signal);
 
-        outcome!.Matched.Should().BeFalse("the run was cancelled when its workspace was deleted, which deletes its bookmarks");
+        outcome.Outcome.Should().NotBe(InboundOutcome.ResumedBookmark, "the run was cancelled when its workspace was deleted, which deletes its bookmarks");
     }
 
     private async Task<(Guid PublishedRef, Guid TriggerNodeId)> PublishTriggerOnlyAsync(string token, Guid workspaceRef)
@@ -236,6 +236,4 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         runRefId.Should().NotBe(Guid.Empty);
         return runRefId;
     }
-
-    private sealed record EngineSignalDto(string Outcome, bool Matched);
 }

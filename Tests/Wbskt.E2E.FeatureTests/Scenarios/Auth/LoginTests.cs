@@ -43,8 +43,7 @@ public sealed class LoginTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
         var session = await fixture.LoginAsync(user.Email, user.Password);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl("/api/workspaces"), session.AccessToken);
+        var response = await fixture.Auth.As(session.AccessToken).GetWorkspacesRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

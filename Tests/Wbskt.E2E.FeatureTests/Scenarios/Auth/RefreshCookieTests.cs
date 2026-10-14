@@ -86,6 +86,7 @@ public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
         var user = await fixture.CreateUserAsync();
         string cookie = CookieValue(await LoginAsync(user));
 
+        // Bespoke: the cookie transport header and the Cookie header are what is under test, and the typed client sends neither.
         using var request = new HttpRequestMessage(HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/refresh-token"))
         {
             Content = JsonContent.Create(new { })
@@ -124,6 +125,7 @@ public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
 
     private async Task<HttpResponseMessage> LoginAsync(ServicesFixture.TestUser user)
     {
+        // Bespoke: the cookie transport header and the Cookie header are what is under test, and the typed client sends neither.
         using var request = new HttpRequestMessage(HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/login"))
         {
             Content = JsonContent.Create(new { email = user.Email, password = user.Password })
@@ -135,6 +137,7 @@ public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
     /// <summary>A body-less POST in the cookie transport, as the console sends refresh and logout.</summary>
     private async Task<HttpResponseMessage> PostWithCookieAsync(string path, string? cookie)
     {
+        // Bespoke: the cookie transport header and the Cookie header are what is under test, and the typed client sends neither.
         using var request = new HttpRequestMessage(HttpMethod.Post, ServicesFixture.AuthUrl(path));
         request.Headers.Add(TransportHeader, "cookie");
         if (cookie is not null)

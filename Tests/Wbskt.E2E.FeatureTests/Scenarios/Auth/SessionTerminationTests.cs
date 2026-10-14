@@ -134,8 +134,7 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/logout-all"));
+        var response = await fixture.Auth.LogoutAllRawAsync();
 
         // Unlike logout, this one needs to know *whose* sessions to end, so it cannot be anonymous.
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -146,8 +145,7 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/logout-all"), "not-a-jwt");
+        var response = await fixture.Auth.As("not-a-jwt").LogoutAllRawAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -187,8 +185,7 @@ public sealed class SessionTerminationTests(ServicesFixture fixture)
         // already handed out - including the one that asked, and one from another device.
         foreach (var token in new[] { session.AccessToken, other.AccessToken })
         {
-            var response = await fixture.SendAsync(
-                HttpMethod.Get, ServicesFixture.AuthUrl("/api/workspaces"), token);
+            var response = await fixture.Auth.As(token).GetWorkspacesRawAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
