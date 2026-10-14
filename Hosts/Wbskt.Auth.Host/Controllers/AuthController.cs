@@ -18,20 +18,17 @@ public class AuthController : ApiControllerBase
     private readonly IPasswordService _passwords;
     private readonly IRegistrationService _registration;
     private readonly RefreshTokenCookie _refreshCookie;
-    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         ISignInService signIn,
         IPasswordService passwords,
         IRegistrationService registration,
-        RefreshTokenCookie refreshCookie,
-        ILogger<AuthController> logger)
+        RefreshTokenCookie refreshCookie)
     {
         _signIn = signIn;
         _passwords = passwords;
         _registration = registration;
         _refreshCookie = refreshCookie;
-        _logger = logger;
     }
 
     /// <summary>
@@ -54,7 +51,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: Register requested for Username: '{Username}'", request.Username);
         var result = await _registration.RegisterUserAsync(request.Username, request.Email, request.Password, request.InvitationToken, cancellationToken);
         return MapResult(result);
     }
@@ -73,7 +69,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: Login requested");
         var result = await _signIn.LoginAsync(request.Email, request.Password, CallerIpAddress(), cancellationToken);
         return MapSession(result);
     }
@@ -95,7 +90,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("refresh-token")]
     public async Task<ActionResult<LoginResponse>> RefreshToken([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: RefreshToken requested");
         var token = PresentedRefreshToken(request);
         if (token is null)
         {
@@ -130,7 +124,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: Logout requested");
         var token = PresentedRefreshToken(request);
         if (token is null && !RefreshTokenCookie.IsRequested(Request))
         {
@@ -157,8 +150,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("logout-all")]
     public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: LogoutAll requested");
-
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
@@ -185,8 +176,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("change-password")]
     public async Task<ActionResult<LoginResponse>> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: ChangePassword requested");
-
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
@@ -251,8 +240,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
-        // The address is the subject of the request rather than a lookup key, and is logged as such.
-        _logger.LogDebug("API: ForgotPassword requested");
         var result = await _passwords.ForgotPasswordAsync(request.Email, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -271,8 +258,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
     {
-        // The token is a bearer credential and is deliberately absent from this log line.
-        _logger.LogDebug("API: ResetPassword requested");
         var result = await _passwords.ResetPasswordAsync(request.Token, request.NewPassword, CallerIpAddress(), cancellationToken);
         return MapResult(result);
     }
@@ -286,7 +271,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail(VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: VerifyEmail requested");
         var result = await _registration.VerifyEmailAsync(request.Token, cancellationToken);
         return MapResult(result);
     }
@@ -304,7 +288,6 @@ public class AuthController : ApiControllerBase
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification(ResendVerificationRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: ResendVerification requested");
         var result = await _registration.ResendVerificationAsync(request.Email, cancellationToken);
         return MapResult(result);
     }

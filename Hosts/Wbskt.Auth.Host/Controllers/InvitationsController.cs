@@ -18,12 +18,10 @@ namespace Wbskt.Auth.Host.Controllers;
 public class InvitationsController : ApiControllerBase
 {
     private readonly ITenantService _tenantService;
-    private readonly ILogger<InvitationsController> _logger;
 
-    public InvitationsController(ITenantService tenantService, ILogger<InvitationsController> logger)
+    public InvitationsController(ITenantService tenantService)
     {
         _tenantService = tenantService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -37,9 +35,6 @@ public class InvitationsController : ApiControllerBase
     [HttpPost("accept")]
     public async Task<ActionResult<AcceptInvitationResponse>> Accept([FromBody] AcceptInvitationRequest request, CancellationToken cancellationToken)
     {
-        // The token is a bearer credential for tenant membership and is deliberately absent here.
-        _logger.LogInformation("API: AcceptInvitation requested");
-
         var caller = CurrentUserId();
         if (caller.IsFailure)
         {

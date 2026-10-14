@@ -21,14 +21,10 @@ public class WorkspacesController : ApiControllerBase
     private const int DefaultPageSize = 100;
 
     private readonly IWorkspaceService _workspaceService;
-    private readonly ILogger<WorkspacesController> _logger;
 
-    public WorkspacesController(
-        IWorkspaceService workspaceService,
-        ILogger<WorkspacesController> logger)
+    public WorkspacesController(IWorkspaceService workspaceService)
     {
         _workspaceService = workspaceService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -39,8 +35,6 @@ public class WorkspacesController : ApiControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspaces(CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: GetWorkspaces requested");
-        
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
@@ -60,8 +54,6 @@ public class WorkspacesController : ApiControllerBase
     [HttpPost]
     public async Task<ActionResult<WorkspaceResponse>> CreateWorkspace([FromBody] CreateWorkspaceRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("API: CreateWorkspace requested (Name: '{WorkspaceName}')", request.Name);
-        
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {

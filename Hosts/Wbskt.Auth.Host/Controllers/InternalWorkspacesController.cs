@@ -20,13 +20,11 @@ namespace Wbskt.Auth.Host.Controllers;
 public class InternalWorkspacesController : ApiControllerBase
 {
     private readonly IWorkspaceService _workspaceService;
-    private readonly ILogger<InternalWorkspacesController> _logger;
     private readonly AuthMetrics _metrics;
 
-    public InternalWorkspacesController(IWorkspaceService workspaceService, ILogger<InternalWorkspacesController> logger, AuthMetrics metrics)
+    public InternalWorkspacesController(IWorkspaceService workspaceService, AuthMetrics metrics)
     {
         _workspaceService = workspaceService;
-        _logger = logger;
         _metrics = metrics;
     }
 
@@ -39,8 +37,6 @@ public class InternalWorkspacesController : ApiControllerBase
     [HttpPost("resolve")]
     public async Task<ActionResult<ResolvedWorkspaceResponse>> AuthorizeAndResolve([FromBody] ResolveWorkspaceRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("API: AuthorizeAndResolve requested for WorkspaceRef: '{WorkspaceRef}'", request.WorkspaceRef);
-
         var userIdResult = CurrentUserId();
         if (userIdResult.IsFailure)
         {
@@ -50,14 +46,12 @@ public class InternalWorkspacesController : ApiControllerBase
         var result = await _workspaceService.ResolveAccessAsync(userIdResult.Value, request.WorkspaceRef, cancellationToken);
         if (result.IsSuccess)
         {
-            _logger.LogDebug("API: Resolve succeeded for WorkspaceRef: '{WorkspaceRef}' (Internal ID: {WorkspaceId}, Permissions: {PermissionCount})", request.WorkspaceRef, result.Value.WorkspaceId, result.Value.Permissions.Count);
             _metrics.RecordWorkspaceResolution("success");
             return Ok(new ResolvedWorkspaceResponse(result.Value.WorkspaceId, result.Value.Permissions.ToArray()));
         }
 
         if (result.Error.Code == "WORKSPACE_NOT_FOUND")
         {
-            _logger.LogWarning("API: Resolve failed - Workspace with RefId: '{WorkspaceRef}' not found", request.WorkspaceRef);
             _metrics.RecordWorkspaceResolution("not_found");
 
             // Forbidden, not NotFound: "no such workspace" must read like "not yours", and the
