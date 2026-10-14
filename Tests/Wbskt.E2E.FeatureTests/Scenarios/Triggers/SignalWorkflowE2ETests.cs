@@ -5,6 +5,7 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
@@ -87,13 +88,16 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
         runAppeared.Should().BeTrue("telemetry should have started a run that parks on the signal");
 
         // ── 5. The gate must block: no command before the approval signal ────
-        var leaked = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        leaked.Should().NotBe(commandTcs.Task,
+        // The branch parking on AwaitSignal, ahead of the command node, is what shows the gate held;
+        // the command cannot be sent until something resumes it.
+        await fixture.WaitForBranchParkedAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
+        commandTcs.Task.IsCompleted.Should().BeFalse(
             "the command must NOT be sent before the approval signal — the branch must stay parked on AwaitSignal");
 
         // ── 6. Operator approves → branch resumes via the inbound bookmark ──
-        var (matched, outcome) = await fixture.SendSignalAsync(token, workspaceRef, runRefId, "approve");
-        matched.Should().BeTrue($"the 'approve' signal should resume the parked bookmark (outcome was '{outcome}')");
+        // The bookmark is written just after the park is recorded, so the signal is repeated until it
+        // matches; the run has nothing else that could resume it.
+        await fixture.SendSignalUntilMatchedAsync(token, workspaceRef, runRefId, "approve", TimeSpan.FromSeconds(15));
 
         // ── 7. Now the command must arrive ───────────────────────────────────
         var resumed = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(30)));
@@ -111,6 +115,14 @@ public sealed class SignalWorkflowE2ETests(ServicesFixture fixture)
             timeout: TimeSpan.FromSeconds(30),
             interval: TimeSpan.FromSeconds(2));
         completed.Should().BeTrue("the run must finalize after the signalled branch completes");
+
+        // ── 9. Server side, the command node ran only once the signal resumed the branch ──
+        var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId);
+        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        var resumedBySignal = history.FirstOrDefault(e => e.EventKind == "BranchResumed");
+        resumedBySignal.Should().NotBeNull("the signal resumes the parked branch");
+        history.Should().ContainSingle(e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId)
+            .Which.Timestamp.Should().BeOnOrAfter(resumedBySignal!.Timestamp, "the command is sent only after the signal");
     }
 
     private static bool IsTerminal(string status) =>

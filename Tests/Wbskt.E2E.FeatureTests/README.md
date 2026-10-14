@@ -142,6 +142,39 @@ the Default Workspace themselves. Those lists grow across runs, so assertions on
 never "count equals". Override the credentials with `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` if your
 deployment seeds a different admin.
 
+## Waiting
+
+No bare `Task.Delay` for eventual consistency. A sleep long enough for a slow runner wastes time on a
+fast one, and a sleep before a negative assertion ("no second run within 5 s") passes on a runner too
+slow to have produced the second run yet. Wait for something observable instead, with the fixture's
+helpers in `Fixtures/ServicesFixture.cs`:
+
+- **Runs and history:** `WaitForFirstRunAsync`, `WaitForRunCountAsync`, `WaitForRunStatusAsync`,
+  `WaitForRunTerminalAsync`, `WaitForHistoryEventAsync`, and `WaitForBranchParkedAsync` (a
+  `BranchParked` event: the branch is parked on its bookmark).
+- **Acting on a parked run:** the engine records the park just before it writes the bookmark, so
+  `SendSignalUntilMatchedAsync` repeats a signal until it resumes one; repeat an http wake until its
+  effect shows.
+- **A trigger going live after publish:** nothing reports it, so `WaitForManualTriggerLiveAsync` starts
+  manual runs until one is started, and `FireWebhookUntilRunAsync` fires a webhook until a run appears.
+  Deliveries still queued can start more runs afterwards: count runs by a marker in their trigger
+  data (`ListRunsCarryingAsync`, `WaitForRunsCarryingAsync`), not by total.
+- **Anything else:** `ServicesFixture.PollUntilAsync(what, probe, timeout)`. The probe returns whether
+  it is done and a description of what it saw, and a timeout throws "Timed out after … waiting for
+  {what}; last state: {state}". The `WaitFor…` helpers throw the same way rather than returning
+  null or `Guid.Empty`.
+
+For a negative assertion, wait for the competing positive signal and then assert: a sentinel workflow
+on the same device whose run can only start after the moment in question (see `ClientHoldTriggerE2ETests`,
+`ClientPresenceTriggerE2ETests`, `OfflineBufferE2ETests`), a later delivery's run, or a finished run's
+history, which is complete once the run is terminal (a command node that ran twice shows there even
+while its second command is still in flight).
+
+A `Task.Delay` that remains is either the scenario itself (a reading that has to be 30 s old, a hold
+or blip of a set length, signals aimed at a TTL running out) and says so, or a bounded wait with no
+signal to wait for, written as `ServicesFixture.WaitWithoutSignalAsync(duration, reason)`. Timeouts
+are generous (at least twice what the wait usually takes): they cost nothing when the signal comes.
+
 ## Workflow definition published by Task 3
 
 ```

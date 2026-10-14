@@ -25,7 +25,7 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         // 1. Build and publish Child workflow
         var childWorkflowRefId = Guid.NewGuid();
         var childDefinition = new WorkflowBuilder($"E2E-Child-{childWorkflowRefId:N}", childWorkflowRefId)
-            .AddManualTrigger()
+            .AddManualTrigger(out var childTriggerNodeId)
             .AddDelay(TimeSpan.FromSeconds(2))
             .BuildAndValidate();
 
@@ -66,8 +66,9 @@ public sealed class SubWorkflowE2ETests(ServicesFixture fixture)
         await wbsktClient.StartAsync();
 
         // 4. Send telemetry to start the parent
-        // Give time for Child workflow manual trigger registration to propagate
-        await Task.Delay(2000);
+        // The parent starts the child through the child's manual trigger, so wait until the engine
+        // has picked that trigger up: a manual start of the child is answered with a run once it has.
+        await fixture.WaitForManualTriggerLiveAsync(token, workspaceRef, childWorkflowRefId, childTriggerNodeId, TimeSpan.FromSeconds(30));
 
         await wbsktClient.SendAsync("telemetry", new { sensor = "subworkflow-test" });
 

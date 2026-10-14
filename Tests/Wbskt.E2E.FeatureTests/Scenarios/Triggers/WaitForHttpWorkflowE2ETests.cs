@@ -5,6 +5,7 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
@@ -56,27 +57,42 @@ public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
 
         await wbsktClient.SendAsync("telemetry", new { sensor = "http-test", value = 1 });
 
-        // Wait until the run exists (parked at WaitForHttp on the author-defined wake token).
-        var runAppeared = await ServicesFixture.PollAsync(
-            async () =>
-            {
-                var runs = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);
-                return runs.Count > 0;
-            },
-            timeout: TimeSpan.FromSeconds(30), interval: TimeSpan.FromSeconds(1));
-        runAppeared.Should().BeTrue("telemetry should have started a run that parks on the http-wait");
+        // Wait until the run exists, parked at WaitForHttp on the author-defined wake token.
+        var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
 
-        // The gate must block before the callback.
-        var leaked = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        leaked.Should().NotBe(commandTcs.Task, "the command must not fire before the http-wake callback");
+        // The gate must block before the callback. The branch parking at WaitForHttp, ahead of the
+        // command node, is what shows it held; the command cannot be sent until something wakes it.
+        await fixture.WaitForBranchParkedAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
+        commandTcs.Task.IsCompleted.Should().BeFalse("the command must not fire before the http-wake callback");
 
         // External callback resumes the parked branch, using the design-time wake token. The callback
-        // is opaque (202), so the resume is observed via the command firing below, not the response.
-        await fixture.SendHttpWakeAsync(wakeToken, new { approved = true });
-
-        var resumed = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        resumed.Should().Be(commandTcs.Task, "the resumed branch must send the command");
+        // is opaque (202), so the resume is observed via the command firing, not the response. The
+        // bookmark is written just after the park is recorded, so the callback is repeated until the
+        // command comes: a wake that finds no bookmark is dropped, and one after the resume finds
+        // the bookmark already gone.
+        await ServicesFixture.PollUntilAsync(
+            "the http-wake callback to resume the branch and send the command",
+            async () =>
+            {
+                await fixture.SendHttpWakeAsync(wakeToken, new { approved = true });
+                var arrived = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(3))) == commandTcs.Task;
+                return (arrived, arrived ? "command received" : "no command yet");
+            },
+            TimeSpan.FromSeconds(30),
+            TimeSpan.Zero);
         (await commandTcs.Task).Action.Should().Be("OpenVent");
+
+        // Server side, the command node ran only once the wake resumed the branch.
+        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        var commandCompleted = await fixture.WaitForHistoryEventAsync(
+            token, workspaceRef, runRefId,
+            e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId,
+            "the command node's NodeCompleted",
+            TimeSpan.FromSeconds(30));
+        var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId);
+        var resumedByWake = history.FirstOrDefault(e => e.EventKind == "BranchResumed");
+        resumedByWake.Should().NotBeNull("the wake resumes the parked branch");
+        commandCompleted.Timestamp.Should().BeOnOrAfter(resumedByWake!.Timestamp, "the command is sent only after the wake");
     }
 
     private static WorkflowDefinition BuildHttpWaitDefinition(Guid workflowRefId, string clientRef, string wakeToken)

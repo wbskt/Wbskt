@@ -5,6 +5,7 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
@@ -99,8 +100,13 @@ public sealed class ParallelForEachJoinE2ETests(ServicesFixture fixture)
             interval: TimeSpan.FromSeconds(1));
         arrived.Should().BeTrue("the join winner must send the command");
 
-        // Give any erroneous extra continuations a window to surface, then assert exactly one.
-        await Task.Delay(TimeSpan.FromSeconds(3));
+        // An erroneous extra continuation would have run the command node again before the run
+        // finished, so the finished run's history shows it even if its command is still in flight.
+        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
+        history.Count(e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId)
+            .Should().Be(1, "the Join must elect exactly one winner to continue past the barrier");
+
         lock (commandLock)
         {
             commands.Should().ContainSingle("the Join must elect exactly one winner to continue past the barrier")

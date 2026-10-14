@@ -45,6 +45,17 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
             token, workspaceRef, workflowRefId, definition.Name,
             JsonSerializer.SerializeToElement(definition, JsonOpts));
 
+        // A sentinel on the same device and message type that runs for every event. A client message
+        // is matched against every trigger watching it in one pass, so once the sentinel has a run
+        // per event, the trigger under test has been offered all five as well.
+        var sentinelRefId = Guid.NewGuid();
+        var sentinel = new WorkflowBuilder($"E2E-Concurrency-Sentinel-{sentinelRefId:N}", sentinelRefId)
+            .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
+            .BuildAndValidate();
+        var sentinelPublishedRef = await fixture.PublishWorkflowAsync(
+            token, workspaceRef, sentinelRefId, sentinel.Name,
+            JsonSerializer.SerializeToElement(sentinel, JsonOpts));
+
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
         await wbsktClient.StartAsync();
 
@@ -55,8 +66,7 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
             await Task.Delay(50);
         }
 
-        // Wait a little bit for processing
-        await Task.Delay(2000);
+        await fixture.WaitForRunCountAsync(token, workspaceRef, sentinelPublishedRef, 5, TimeSpan.FromSeconds(30));
 
         // ── 4. Assert that exactly 1 run was created ──────────────────────
         var runs = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);

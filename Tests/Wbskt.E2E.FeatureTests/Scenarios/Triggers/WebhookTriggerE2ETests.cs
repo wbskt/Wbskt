@@ -37,26 +37,15 @@ public sealed class WebhookTriggerE2ETests(ServicesFixture fixture)
         var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
 
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
+        // Returns once the socket is connected.
         await wbsktClient.StartAsync();
-
-        // Give the client time to connect
-        await Task.Delay(500);
 
         // Fire the workspace-scoped webhook via Management's public callback. The callback is opaque
         // (202), so we retry firing until a run appears (registration may be momentarily delayed) and
         // observe the started run via the runs API rather than the response body.
-        Guid runRefId = Guid.Empty;
-        var runStarted = await ServicesFixture.PollAsync(async () =>
-        {
-            await fixture.SendWebhookAsync(workspaceRef, path, new { test = "payload" });
-            var runs = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);
-            if (runs.Count > 0) { runRefId = runs[0].RefId; return true; }
-            return false;
-        }, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(1));
+        var runRefId = await fixture.FireWebhookUntilRunAsync(token, workspaceRef, publishedRef, path, TimeSpan.FromSeconds(30), new { test = "payload" });
 
         // 4. Assert the run succeeds
-        runStarted.Should().BeTrue("the webhook callback should have started a run");
-
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
         summary.Should().NotBeNull();
         summary!.Status.Should().Be("Succeeded");

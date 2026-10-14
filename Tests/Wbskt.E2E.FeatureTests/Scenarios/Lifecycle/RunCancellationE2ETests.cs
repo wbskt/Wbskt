@@ -86,8 +86,11 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         var (matched, _) = await fixture.SendSignalAsync(token, workspaceRef, runRefId, "continue");
         matched.Should().BeFalse("because the run was cancelled and the signal bookmark should have been deleted");
 
-        // Wait a bit to ensure no command is received
-        await Task.Delay(2000);
+        // The command could only come from a resumed branch. The run is finished and the signal
+        // matched nothing, so its history is complete and shows whether any branch was resumed.
+        var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
+        history.Should().NotContain(e => e.EventKind == "BranchResumed",
+            "because the run was cancelled and the signal should not resume it");
 
         lock (commandLock)
         {
@@ -177,8 +180,12 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
         retired.Should().BeTrue("the deleted workspace is retired by the management host");
 
         // Asking is not free: a signal that still matched would resume the run. So give the engine
-        // time to take the command first, then ask once.
-        await Task.Delay(TimeSpan.FromSeconds(5));
+        // time to take the command first, then ask once. Nothing observable says it has: the
+        // workspace's runs and event feed cannot be read once it is deleted, and the engine has no
+        // read API of its own.
+        await ServicesFixture.WaitWithoutSignalAsync(
+            TimeSpan.FromSeconds(10),
+            "the engine taking the cancel for a deleted workspace's run cannot be observed from outside");
 
         using var signal = await fixture.SendAsync(
             HttpMethod.Post,
