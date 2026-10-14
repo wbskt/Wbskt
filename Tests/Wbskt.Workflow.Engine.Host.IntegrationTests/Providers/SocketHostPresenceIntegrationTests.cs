@@ -68,8 +68,10 @@ public sealed class SocketHostPresenceIntegrationTests(SqlEdgeFixture fixture)
         (int otherClient, _) = await CreateClientAsync(workspaceId);
         await PresenceAsync(heldClient, DateTime.UtcNow.AddMinutes(-10), restartedHost);
         await PresenceAsync(otherClient, DateTime.UtcNow.AddMinutes(-10), otherHost);
-        // The restarted process heartbeats at once, so the lease sweep would never expire its clients.
+        // Both hosts are heartbeating: the restarted process beats at once, so the lease sweep would
+        // never expire the clients that died with it.
         await hosts.RecordHeartbeatAsync(restartedHost);
+        await hosts.RecordHeartbeatAsync(otherHost);
         Assert.DoesNotContain(await clients.ExpirePresenceAsync(StaleAfter), e => e.ClientId == heldClient);
 
         var cleared = await clients.ResetPresenceByHostAsync(restartedHost);
