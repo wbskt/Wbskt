@@ -72,7 +72,7 @@ public static class Program
         builder.AddWbsktTelemetry(AuthMetrics.MeterName, QueuedEventBus.MeterName);
 
         // Event Bus
-        builder.Services.AddRabbitMqEventBus(builder.Configuration);
+        builder.Services.AddRabbitMqEventBus(builder.Configuration, consumerAssemblies: [typeof(Program).Assembly]);
 
         // Invitations, member and workspace changes record who made them and from where, as the
         // management host's actions do; the queued bus stamps the same way (see ActorStampingEventBus).

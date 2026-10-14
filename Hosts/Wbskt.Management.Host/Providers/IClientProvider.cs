@@ -47,7 +47,6 @@ public interface IClientProvider : IReferenceProvider
     /// <summary>Replaces a client's secret hash; false when the client is not in <paramref name="workspaceId"/>.</summary>
     Task<bool> UpdateSecretAsync(int id, int workspaceId, byte[] secretHash, CancellationToken cancellationToken = default);
     Task UpdatePresenceAsync(int id, bool isConnected, DateTime lastActivityAt, string? hostId = null, CancellationToken cancellationToken = default);
-    Task ResetAllPresenceAsync(string? hostId = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// Clears the presence of clients held by a socket host not heard from for <paramref name="staleAfter"/>,
     /// and returns them. Each row is claimed once, however many instances sweep at the same time.

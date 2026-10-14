@@ -154,7 +154,8 @@ public static class Program
                 }
             },
             // The audit log retries whole batches on a longer schedule of its own.
-            endpointsWithOwnRetry: [EventLoggerHandlerDefinition.QueueName]);
+            endpointsWithOwnRetry: [EventLoggerHandlerDefinition.QueueName],
+            consumerAssemblies: [typeof(Program).Assembly]);
 
         // Commands and pings go straight to the bus, so they are attributed to their sender there; the
         // queued bus does the same for everything else (see ActorStampingEventBus).

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -6,10 +5,8 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class RunCancellationService : IRunCancellationService
 {
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
-    private readonly IMemoryCache _memoryCache;
     private readonly TimeProvider _clock;
     private readonly IBranchProvider _branchProvider;
     private readonly IBookmarkProvider _bookmarkProvider;
@@ -23,7 +20,6 @@ internal sealed class RunCancellationService : IRunCancellationService
     public RunCancellationService(
         IRunProvider runProvider,
         IRunJournal journal,
-        IMemoryCache memoryCache,
         TimeProvider clock,
         IBranchProvider branchProvider,
         IBookmarkProvider bookmarkProvider,
@@ -33,7 +29,6 @@ internal sealed class RunCancellationService : IRunCancellationService
         _tokenRegistry = tokenRegistry;
         _runProvider = runProvider;
         _journal = journal;
-        _memoryCache = memoryCache;
         _clock = clock;
         _branchProvider = branchProvider;
         _bookmarkProvider = bookmarkProvider;
@@ -43,14 +38,6 @@ internal sealed class RunCancellationService : IRunCancellationService
     public CancellationToken GetToken(long runId)
     {
         return _tokenRegistry.GetToken(runId);
-    }
-
-    // Cancellation is read through a short-lived cache, so the cancel overwrites the cached answer
-    // rather than leaving IsCancellationRequestedAsync returning a stale false until the entry expires.
-    private void MarkCancellationRequested(long runId)
-    {
-        _memoryCache.Set(CreateCacheKey(runId), true, CacheTtl);
-        CancelCts(runId);
     }
 
     // Also called from RunRecoveryService, where a run found already in 'Failing' needs its token
@@ -88,8 +75,8 @@ internal sealed class RunCancellationService : IRunCancellationService
                 ct);
         }
 
-        // Flip the local view before the cleanup, so anything checking mid-way sees the cancel.
-        MarkCancellationRequested(runId);
+        // Cancel the token before the cleanup, so a branch running on this host stops mid-node.
+        CancelCts(runId);
 
         // Mass-delete bookmarks for this run. Every step below is idempotent, which is what lets the
         // already-Cancelling path above fall through to it safely.
@@ -123,20 +110,10 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     public async Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
     {
-        if (_memoryCache.TryGetValue(CreateCacheKey(runId), out bool cached))
-        {
-            return cached;
-        }
-
+        // Read from the run row every time: a cancel taken by another host only shows up there, and a
+        // cached answer kept this host running a cancelled run until the entry expired.
         string status = (await _runProvider.GetByIdAsync(runId, ct)).Status;
-        bool isCancellationRequested = string.Equals(status, RunStatus.Cancelling, StringComparison.Ordinal)
+        return string.Equals(status, RunStatus.Cancelling, StringComparison.Ordinal)
             || string.Equals(status, RunStatus.Cancelled, StringComparison.Ordinal);
-        _memoryCache.Set(CreateCacheKey(runId), isCancellationRequested, CacheTtl);
-        return isCancellationRequested;
-    }
-
-    private static string CreateCacheKey(long runId)
-    {
-        return $"run-cancellation:{runId}";
     }
 }

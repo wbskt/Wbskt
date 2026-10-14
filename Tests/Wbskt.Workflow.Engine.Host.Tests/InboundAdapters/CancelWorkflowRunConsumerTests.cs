@@ -1,6 +1,5 @@
 using System.Text.Json;
 using MassTransit;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Wbskt.EventBus.Abstractions;
@@ -50,7 +49,6 @@ public sealed class CancelWorkflowRunConsumerTests
         var service = new RunCancellationService(
             run.Provider.Object,
             new RunJournal(history.Object, TimeProvider.System),
-            new MemoryCache(new MemoryCacheOptions()),
             Mock.Of<TimeProvider>(c => c.GetUtcNow() == new DateTimeOffset(new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))),
             Mock.Of<IBranchProvider>(),
             Mock.Of<IBookmarkProvider>(),
