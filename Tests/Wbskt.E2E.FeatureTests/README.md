@@ -140,6 +140,14 @@ run the auth host from source in its place, against the same infrastructure:
 `start-hosts.sh auth` line above (with a host named, it does not build). `e2e-up.sh restart auth`
 puts the container back.
 
+The `RateLimited429` row of the error-shape contract theory (see [Contract tests](#contract-tests)) is gated the same way and runs the same way, against a freshly restarted auth host:
+
+```bash
+RateLimiting__Authentication__PermitLimit=10 Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
+E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 \
+  dotnet test Tests/Wbskt.E2E.FeatureTests --filter "FullyQualifiedName~ErrorShapeContractTests&DisplayName~RateLimited429"
+```
+
 `E2E_AUTH_PERMIT_LIMIT` must match the limit the host is running with. `AUTH_RL_04` exhausts the separate refresh bucket instead, so restart the auth host with `RateLimiting__TokenRefresh__PermitLimit=120` for it (`E2E_REFRESH_PERMIT_LIMIT` defaults to 120 and must match); `AUTH_RL_05` and `AUTH_RL_11` spend it too. `AUTH_RL_12` exhausts the verification bucket, so restart with `RateLimiting__EmailVerification__PermitLimit=10` for it (`E2E_VERIFICATION_PERMIT_LIMIT` defaults to 10 and must match).
 
 ### 6. Socket host restart scenario (opt-in)
@@ -156,9 +164,71 @@ Against the hosts `e2e-up.sh` started, the restart command is
 
 ### CI
 
-The `e2e` job in `.github/workflows/build-images.yml` runs all three passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it. Image publishing does not wait on it yet.
+The `e2e` job in `.github/workflows/build-images.yml` runs all three passes on every pull request and push to master, against SQL Server, RabbitMQ and Redis service containers and the five hosts started with `start-hosts.sh`. The main pass runs the three collections in parallel. The socket restart pass runs once after the main one. The rate-limit pass restarts the auth host before each scenario, since the budget one exhausts outlives it, and once more for the 429 row of the error-shape contract theory. Before the main pass, the job compares each host's OpenAPI document with its snapshot (see [OpenAPI snapshots](#openapi-snapshots)). Image publishing does not wait on it yet.
 
 The job does not use `e2e-up.sh` yet. Moving it over would build the five host images in the job, which costs build time and wants a cache of its own, so it is a separate decision; until then CI and the compose file are two ways of standing up the same thing, and a host setting one needs has to go in both.
+
+---
+
+## Contract tests
+
+`Scenarios/Contract` checks the shapes every caller depends on, route by route, rather than what any
+one feature does. Both are theories with a row per case, so a new route or status is one more row.
+
+**`ListRoutesContractTests`**: one row per list route of the auth and management hosts, carrying the
+paging the route is expected to answer with. Each row arranges just enough data (a workspace, a
+policy and devices, published workflows and their runs, roles, groups, invitations, tenant members),
+reads the list as raw JSON and checks:
+
+| Paging | Routes | Shape |
+|---|---|---|
+| Offset | registration policies, clients, message templates, workflows; workspace members; tenant invitations, roles, groups, permissions, members | `items`, `nextCursor`, `totalCount`, and the same count in `X-Total-Count` |
+| Keyset | event logs, a device's comms, a workflow's runs, the workspace's runs, a run's history | `items` and `nextCursor`; no count anywhere |
+| Whole | client tags, a device's state, a workflow's versions | the page shape around the whole list: `nextCursor` null, `limit` ignored |
+| Whole, counted | integrations | as Whole, with `totalCount` |
+| Array | the caller's workspaces, sessions and tenants; a role's permissions, a group's roles, a member's roles, permissions and groups | a bare JSON array |
+
+Where a row arranges two rows on a paged route, `limit=1` must give one item and a cursor, and the
+cursor must lead to a different item. The readings series, the CSV exports, the event-log summary,
+the deprecated `clients/policy/{policyRef}` alias and the internal routes are not lists and are left out.
+
+**`ErrorShapeContractTests`**: one row per error status, each provoked on the running hosts, and
+each must answer `application/problem+json` with `status`, `title`, the expected `code` and a
+non-empty `traceId`:
+
+| Row | Provoked by | Code |
+|---|---|---|
+| `Validation400` | creating a workspace with an empty name; also checks `errors` names the field | `VALIDATION_FAILED` |
+| `Unauthenticated401` | no token on a management route | `AUTH_UNAUTHORIZED` |
+| `Forbidden403` | another user's workspace | `WORKSPACE_FORBIDDEN` |
+| `NotFound404` | an unknown device in one's own workspace | `CLIENT_NOT_FOUND` |
+| `Conflict409` | a second role of the same name in a tenant | `AUTH_ROLE_CONFLICT` |
+| `RateLimited429` | failed logins past the credential limit; also checks `Retry-After`. Opt-in: `E2E_RATE_LIMIT_TESTS=1`, run alone (see [5](#5-rate-limit-scenarios-opt-in)) | `RATE_LIMITED` |
+| `Unavailable503` | always skipped: nothing answers 503 on demand against Development hosts (the 503s are an unreachable auth host or broker, a non-leader engine, and unset internal or engine API keys, which only Production refuses) | |
+
+The per-user `Api` limiter cannot stand in for the 429: Development raises it to 100,000 a minute.
+
+### OpenAPI snapshots
+
+`openapi/auth.v1.json` and `openapi/management.v1.json` are the hosts' OpenAPI documents, checked in,
+so a change to a route or a request or response shape is a diff someone reviews rather than
+something `Docs/API.Endpoints.md` catches up with later. The hosts serve them at `/openapi/v1.json`
+when API docs are on, which they are in Development. The engine host references the OpenAPI package
+but maps no document, and the socket host serves none, so neither has a snapshot.
+
+CI's `e2e` job runs `openapi/refresh.sh --check` once the hosts are up: it fetches each document,
+normalizes it (keys sorted with `jq -S`, `servers` dropped, since that is the address it was fetched
+from) and fails with a diff when it differs from the snapshot. The documents it fetched are uploaded
+as the `openapi-snapshots` artifact either way. After an intended change, refresh the snapshots
+against hosts started as Development and commit them:
+
+```bash
+Tests/Wbskt.E2E.FeatureTests/start-hosts.sh        # or e2e-up.sh
+Tests/Wbskt.E2E.FeatureTests/openapi/refresh.sh
+```
+
+or take the two files from the failed run's artifact. Until a snapshot is committed, `--check` writes
+it, warns "snapshot created, commit it", and passes; see `openapi/README.md`.
 
 ---
 

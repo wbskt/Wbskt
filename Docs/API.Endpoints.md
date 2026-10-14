@@ -3,6 +3,13 @@
 Every HTTP surface in the system, by host. For the permission model behind the slugs — scope
 semantics, resolution precedence, where the checks live — see [AccessControl.md](AccessControl.md).
 
+**The OpenAPI snapshots are the source of truth for routes and shapes.** The auth and management
+hosts' documents are checked in as
+[`Tests/Wbskt.E2E.FeatureTests/openapi`](../Tests/Wbskt.E2E.FeatureTests/openapi/README.md)
+(`auth.v1.json`, `management.v1.json`), and CI fails when a running host's document differs from
+them, so a route change arrives as a reviewed diff there. This page explains the routes; where it
+and a snapshot disagree, the snapshot is right and this page is behind.
+
 ## Hosts at a glance
 
 | Host | Routed publicly | Callers | How a request is authenticated |
