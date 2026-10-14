@@ -49,6 +49,27 @@ public sealed class WorkspaceDeletedHandlerTests
         engine.Verify(e => e.CancelRunAsync(101L, "Workspace deleted.", It.IsAny<CancellationToken>()), Times.Once);
         engine.Verify(e => e.CancelRunAsync(102L, "Workspace deleted.", It.IsAny<CancellationToken>()), Times.Once);
         engine.VerifyNoOtherCalls();
+
+        // The engine drops what it cached of every workflow in the workspace.
+        bus.Verify(b => b.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == null && e.WorkspaceId == WorkspaceId && e.DefinitionIds.SequenceEqual(new[] { 31, 32 })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_workspace_with_no_workflows_announces_no_definition_change()
+    {
+        var provider = new Mock<IWorkspaceRetirementProvider>();
+        provider.Setup(p => p.RetireAsync(WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceRetirement([], [], []));
+        var bus = new Mock<IEventBus>();
+
+        var handler = new WorkspaceDeletedHandler(
+            provider.Object, bus.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceDeletedHandler>.Instance);
+
+        await handler.Consume(Context());
+
+        bus.Verify(b => b.PublishAsync(It.IsAny<WorkflowDefinitionChangedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

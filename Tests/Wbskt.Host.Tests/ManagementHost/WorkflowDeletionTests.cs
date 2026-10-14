@@ -44,6 +44,9 @@ public sealed class WorkflowDeletionTests
         harness.Bus.Verify(b => b.PublishAsync(
             It.Is<WorkflowDeletedEvent>(e => e.WorkflowRefId == RefId && e.WorkflowId == 12 && e.WorkspaceId == WorkspaceId && e.CancelledRuns == 2),
             It.IsAny<CancellationToken>()), Times.Once);
+        harness.Bus.Verify(b => b.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == RefId && e.WorkspaceId == WorkspaceId && e.DefinitionIds.SequenceEqual(new[] { 11, 12 })),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

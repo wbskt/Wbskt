@@ -52,6 +52,10 @@ public sealed class WorkflowDefinitionServiceTests
         bus.Verify(x => x.PublishAsync(
             It.Is<WorkflowPublishedEvent>(e => e.WorkflowRefId == request.RefId && e.WorkflowId == 11 && e.WorkspaceId == WorkspaceId && e.Version == 1 && e.RestoredFromVersion == null),
             It.IsAny<CancellationToken>()), Times.Once);
+        // The engine is told to drop what it cached of the workflow.
+        bus.Verify(x => x.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == request.RefId && e.WorkspaceId == WorkspaceId && e.DefinitionIds.SequenceEqual(new[] { 11 })),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -122,6 +126,9 @@ public sealed class WorkflowDefinitionServiceTests
         bus.Verify(x => x.PublishAsync(
             It.Is<WorkflowReinstatedEvent>(e => e.WorkflowRefId == refId && e.WorkflowId == 9 && e.Version == 3),
             It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(x => x.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == refId && e.WorkspaceId == WorkspaceId && e.DefinitionIds.SequenceEqual(new[] { 9 })),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -187,6 +194,10 @@ public sealed class WorkflowDefinitionServiceTests
         var result = await service.RollbackAsync(WorkspaceId, Guid.NewGuid(), refId, 1, CancellationToken.None);
         bus.Verify(x => x.PublishAsync(
             It.Is<WorkflowPublishedEvent>(e => e.WorkflowId == 30 && e.Version == 3 && e.RestoredFromVersion == 1),
+            It.IsAny<CancellationToken>()), Times.Once);
+        // Both the new version and the one it superseded changed.
+        bus.Verify(x => x.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == refId && e.DefinitionIds.OrderBy(id => id).SequenceEqual(new[] { 6, 30 })),
             It.IsAny<CancellationToken>()), Times.Once);
 
         Assert.True(result.IsSuccess);
@@ -331,7 +342,8 @@ public sealed class WorkflowDefinitionServiceTests
         triggerService.Setup(x => x.OnPublishedAsync(6, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("registration exploded"));
 
-        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IEventBus>(), Mock.Of<ILogger<WorkflowLifecycleService>>());
+        var bus = new Mock<IEventBus>();
+        var service = new WorkflowLifecycleService(workflowProvider.Object, triggerService.Object, new WorkflowValidator(), new IntegrationReferenceCheck(Mock.Of<IIntegrationProvider>()), identity.Object, Mock.Of<IWorkflowEngineGateway>(), bus.Object, Mock.Of<ILogger<WorkflowLifecycleService>>());
 
         // The original fault still reaches the caller as a 500, after the compensation below.
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync(WorkspaceId, workspaceRef, request, CancellationToken.None));
@@ -342,6 +354,12 @@ public sealed class WorkflowDefinitionServiceTests
         // workspace-scoped webhook keys match what callers will present.
         workflowProvider.Verify(x => x.SetEnabledAsync(5, true, It.IsAny<CancellationToken>()), Times.Once);
         triggerService.Verify(x => x.OnPublishedAsync(5, workspaceRef, It.IsAny<CancellationToken>()), Times.Once);
+        // The superseded version's registrations were removed and put back, and the engine may have
+        // cached "nothing listens" for them in between, so it is told; nothing reads as published.
+        bus.Verify(x => x.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == request.RefId && e.DefinitionIds.OrderBy(id => id).SequenceEqual(new[] { 5, 6 })),
+            It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(x => x.PublishAsync(It.IsAny<WorkflowPublishedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -467,6 +485,9 @@ public sealed class WorkflowDefinitionServiceTests
         triggerService.Verify(x => x.OnDeprecatedAsync(14, It.IsAny<CancellationToken>()), Times.Once);
         bus.Verify(x => x.PublishAsync(
             It.Is<WorkflowDeprecatedEvent>(e => e.WorkflowRefId == refId && e.WorkflowId == 14 && e.Version == 6),
+            It.IsAny<CancellationToken>()), Times.Once);
+        bus.Verify(x => x.PublishAsync(
+            It.Is<WorkflowDefinitionChangedEvent>(e => e.WorkflowRefId == refId && e.WorkspaceId == WorkspaceId && e.DefinitionIds.SequenceEqual(new[] { 14 })),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

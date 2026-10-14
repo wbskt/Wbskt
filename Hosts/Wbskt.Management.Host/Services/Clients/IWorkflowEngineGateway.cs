@@ -11,10 +11,11 @@ namespace Wbskt.Management.Host.Services.Clients;
 /// Reads (run lists, history, stats) are not engine operations and stay direct queries.
 /// </summary>
 /// <remarks>
-/// Publishing a definition and registering its triggers still happen in this host. The engine reads a
-/// definition through its own cache, which this host never could invalidate (it only ever evicted its
-/// own copy). A follow-up <c>WorkflowDefinitionChanged</c> event, for the engine to react to, is what
-/// is meant to replace a shared cache contract; it does not exist yet.
+/// Publishing a definition and registering its triggers still happen in this host, not through here.
+/// The engine reads definitions and trigger registrations through caches of its own, which this host
+/// does not reach into: after each change it publishes a <c>WorkflowDefinitionChangedEvent</c>, and the
+/// engine drops the cached entries when it arrives (entries also expire on their own, for an event that
+/// arrives late or never).
 /// </remarks>
 public interface IWorkflowEngineGateway
 {
