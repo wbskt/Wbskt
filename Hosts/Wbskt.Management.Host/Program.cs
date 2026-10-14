@@ -69,7 +69,7 @@ public static class Program
         builder.Services.AddScoped<IClientProvider, ClientProvider>();
         builder.Services.AddScoped<ISocketHostProvider, SocketHostProvider>();
         builder.Services.AddScoped<IWorkspaceRetirementProvider, WorkspaceRetirementProvider>();
-        // The one way a deleted workspace is retired (WorkspaceDeletedHandler).
+        // The one way a deleted workspace is retired: WorkspaceDeletedHandler and DeletedWorkspaceSweeper share it.
         builder.Services.AddScoped<WorkspaceRetirer>();
         builder.Services.AddScoped<IEventLogService, EventLogService>();
         builder.Services.AddScopedWithQueuedEvents<IClientRegistrationService, ClientRegistrationService>();
@@ -89,6 +89,13 @@ public static class Program
         if (role == HostRole.All)
         {
             builder.Services.AddHostedService<StalePresenceSweeper>();
+        }
+        // The backstop behind WorkspaceDeletedEvent: daily, retires any workspace the auth host reports
+        // deleted that still has live content here (an event lost, or one whose handling gave up).
+        builder.Services.Configure<WorkspaceReconciliationOptions>(builder.Configuration.GetSection(WorkspaceReconciliationOptions.SectionName));
+        if (role == HostRole.All)
+        {
+            builder.Services.AddHostedService<DeletedWorkspaceSweeper>();
         }
         builder.Services.AddScoped<IMessageTemplateProvider, MessageTemplateProvider>();
         builder.Services.AddScoped<IMessageTemplateService, MessageTemplateService>();
@@ -121,6 +128,17 @@ public static class Program
             client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Services:AuthTimeoutSeconds", 5));
         })
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
+        // The sweep's call to auth has no user token to forward, so it sends the shared internal key.
+        builder.Services.AddTransient<AuthInternalApiKeyHandler>();
+        builder.Services.AddHttpClient<IDeletedWorkspacesClient, DeletedWorkspacesClient>(client =>
+        {
+            client.BaseAddress = new Uri(builder.Configuration["Services:Auth"]
+                                         ?? throw new ArgumentNullException(nameof(client.BaseAddress), "Services:Auth configuration is missing."));
+
+            // A background job, not a request someone waits on: longer than the resolve's few seconds.
+            client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .AddHttpMessageHandler<AuthInternalApiKeyHandler>();
         // A user token names its user by RefId; the id this host's records use comes from the auth host.
         builder.Services.AddUserIdLookup(sp => sp.GetRequiredService<IAuthServiceClient>());
         // WorkspacePermissionFilter resolves each workspace route through the auth host.

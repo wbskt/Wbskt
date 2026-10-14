@@ -5,7 +5,8 @@ using Wbskt.Management.Host.Services;
 namespace Wbskt.Management.Host.Handlers;
 
 // Retires what the main database holds for a workspace the auth host has deleted; see
-// WorkspaceRetirer.
+// WorkspaceRetirer, which the deleted workspace sweep (DeletedWorkspaceSweeper) shares, so a workspace
+// the sweep repairs ends up exactly as one retired here.
 //
 // Safe to redeliver: a client is reported only by the call that revoked it, so it is announced once,
 // while a run still going and the workspace's definitions are reported every time. A cancel or the
