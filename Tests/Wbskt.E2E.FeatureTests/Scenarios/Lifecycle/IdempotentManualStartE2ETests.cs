@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Validation;
 
@@ -44,15 +45,26 @@ public sealed class IdempotentManualStartE2ETests(ServicesFixture fixture)
 
         // Start the run twice with the SAME idempotency key.
         var idempotencyKey = $"e2e-idem-{Guid.NewGuid():N}";
-        await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey);
-        await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey);
+        var first = await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey);
+        var second = await fixture.StartManualRunAsync(token, workspaceRef, publishedRef, triggerNodeId.ToString(), idempotencyKey);
 
-        // Give the engine a moment to process, then assert exactly one run exists.
-        await Task.Delay(TimeSpan.FromSeconds(3));
+        // A manual start is answered once the engine has dispatched it, so the answers are the signal
+        // to wait for: the first started the run, and the second was recognised as a repeat of it
+        // (reported as a duplicate, or as the original's own start replayed).
+        first.Outcome.Should().Be(StartRunOutcome.Started);
+        (second.Outcome == StartRunOutcome.Duplicate
+                || (second.Outcome == StartRunOutcome.Started && second.RunRefId == first.RunRefId))
+            .Should().BeTrue(
+                $"the second start with the same idempotency key must be deduped (outcome {second.Outcome}, run {second.RunRefId}, first run {first.RunRefId})");
+        if (second.RunRefId != Guid.Empty)
+        {
+            second.RunRefId.Should().Be(first.RunRefId, "a deduplicated start answers with the run the original started");
+        }
 
-        var runs = await fixture.ListRunsAsync(token, workspaceRef, publishedRef);
-        runs.Should().HaveCount(1,
-            "the second start with the same idempotency key must be deduped — only one run may exist");
+        var runs = await fixture.WaitForRunCountAsync(token, workspaceRef, publishedRef, 1, TimeSpan.FromSeconds(30));
+        runs.Should().ContainSingle(
+            "the second start with the same idempotency key must be deduped — only one run may exist")
+            .Which.RefId.Should().Be(first.RunRefId);
     }
 
     private static WorkflowDefinition BuildManualDefinition(Guid workflowRefId, out Guid triggerNodeId)

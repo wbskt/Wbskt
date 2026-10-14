@@ -4,6 +4,7 @@ using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Timeouts;
 
@@ -125,11 +126,10 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);
 
-        // Wait a moment for the branch to park
-        await Task.Delay(TimeSpan.FromSeconds(2));
-
-        // Send the signal
-        await fixture.SendSignalAsync(token, workspaceRef, runRefId, "continue");
+        // Wait for the branch to park, then signal it well inside its 10 second TTL. The bookmark is
+        // written just after the park is recorded, so the signal is repeated until it matches.
+        await fixture.WaitForBranchParkedAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
+        await fixture.SendSignalUntilMatchedAsync(token, workspaceRef, runRefId, "continue", TimeSpan.FromSeconds(5));
 
         var arrived = await ServicesFixture.PollAsync(
             () =>
@@ -196,10 +196,10 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty);
 
-        // Wait a moment for the branch to park
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await fixture.WaitForBranchParkedAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(30));
 
-        // Fire multiple signals to simulate race signal
+        // Aim the signals at the 3 second TTL running out. This wait is the scenario, not a wait for
+        // something to happen: either side may win, and the assertions below hold for both.
         await Task.Delay(TimeSpan.FromSeconds(2.8));
 
         // Blast the signal 10 times concurrently
@@ -210,10 +210,29 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
         summary.Should().NotBeNull();
         summary!.Status.Should().Be("Succeeded");
 
+        // The run is finished, so whichever command it sent is on its way; wait for it to land.
+        await ServicesFixture.PollUntilAsync(
+            "the winning branch's command to arrive",
+            () =>
+            {
+                lock (commandLock)
+                {
+                    return Task.FromResult((commands.Count >= 1, $"{commands.Count} command(s)"));
+                }
+            },
+            TimeSpan.FromSeconds(15));
+
         lock (commandLock)
         {
             commands.Count.Should().Be(1, "exactly one branch should continue, either timeout or signal, but not both");
             commands.First().Should().Match(c => c == "SignalFired" || c == "TimeoutFired");
         }
+
+        // The finished run's history is complete, so it shows a second command a slow socket has not
+        // delivered yet: exactly one of the two command nodes ran.
+        var commandNodeIds = definition.Nodes.OfType<SendClientMessageNode>().Select(n => n.NodeId).ToHashSet();
+        var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
+        history.Count(e => e.EventKind == "NodeCompleted" && e.NodeId is { } id && commandNodeIds.Contains(id))
+            .Should().Be(1, "exactly one of the signal and timeout paths runs its command");
     }
 }

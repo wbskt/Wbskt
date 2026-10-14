@@ -26,7 +26,11 @@ public sealed class OfflineBufferE2ETests(ServicesFixture fixture)
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
         var deviceName = $"e2e-offline-{Guid.NewGuid():N}";
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);
-        var workflowRefId = await PublishLateOnlyAsync(token, workspaceRef, clientRefId);
+        var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, late: true);
+        // Its opposite, on the same device and message type: it starts a run for a live reading only.
+        // A client message is matched against every trigger watching it in one pass, so once this one
+        // has run for the live reading below, the late-only trigger has judged that reading too.
+        var liveOnlyRefId = await PublishAsync(token, workspaceRef, clientRefId, late: false);
 
         var storage = new InMemoryClientStorage(clientRefId, secret);
         await using var client = new WbsktClient(new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null), storage);
@@ -35,7 +39,8 @@ public sealed class OfflineBufferE2ETests(ServicesFixture fixture)
         await client.SendAsync("temperature", new { celsius = 12 });
         client.PendingMessageCount.Should().Be(1);
 
-        // Past the 30 second late threshold.
+        // Past the 30 second late threshold. This wait is the scenario: the reading has to be that old
+        // when it arrives, and nothing can be observed while the device is offline.
         await Task.Delay(TimeSpan.FromSeconds(32));
         await client.StartAsync();
 
@@ -43,25 +48,27 @@ public sealed class OfflineBufferE2ETests(ServicesFixture fixture)
         runRefId.Should().NotBe(Guid.Empty, "the buffered reading was delivered on connect and marked late");
         client.PendingMessageCount.Should().Be(0);
 
-        // A live reading is not late, so the late-only trigger stays quiet.
+        // A live reading is not late, so the late-only trigger stays quiet. The live-only trigger
+        // running for it is what shows the reading has been judged.
         await client.SendAsync("temperature", new { celsius = 13 });
-        await Task.Delay(TimeSpan.FromSeconds(5));
+        await fixture.WaitForFirstRunAsync(token, workspaceRef, liveOnlyRefId, TimeSpan.FromSeconds(60));
 
         var runs = await fixture.ListRunsAsync(token, workspaceRef, workflowRefId);
         runs.Should().HaveCount(1, "only the reading that waited offline is late");
+        (await fixture.ListRunsAsync(token, workspaceRef, liveOnlyRefId)).Should().HaveCount(1, "only the reading sent while connected is live");
     }
 
-    private async Task<Guid> PublishLateOnlyAsync(string token, Guid workspaceRef, Guid clientRefId)
+    private async Task<Guid> PublishAsync(string token, Guid workspaceRef, Guid clientRefId, bool late)
     {
         var workflowRefId = Guid.NewGuid();
-        // late == true
-        WorkflowExpression lateOnly = new BinaryExpression(
+        // late == true, or late == false
+        WorkflowExpression filter = new BinaryExpression(
             new BranchStateRefExpression("late"),
             BinaryOperator.Equal,
-            new LiteralExpression(true));
+            new LiteralExpression(late));
 
         WorkflowDefinition definition = new WorkflowBuilder($"E2E-Offline-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(clientRefId.ToString(), "temperature", WorkflowConcurrencyPolicy.AllowParallel, null, out _, filter: lateOnly)
+            .AddClientTrigger(clientRefId.ToString(), "temperature", WorkflowConcurrencyPolicy.AllowParallel, null, out _, filter: filter)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
 

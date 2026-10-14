@@ -5,6 +5,7 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.ErrorHandling;
@@ -120,7 +121,13 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
             interval: TimeSpan.FromSeconds(1));
         arrived.Should().BeTrue("the healthy branch must send its command even though its sibling failed");
 
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        // A command from the wrong branch would have been sent before the run finished, so the
+        // finished run's history shows it even if it is still in flight to the device.
+        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
+        history.Count(e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId)
+            .Should().Be(1, "only the true-routed branch runs the command node");
+
         lock (commandLock)
         {
             commands.Should().ContainSingle("only the true-routed branch sends a command")

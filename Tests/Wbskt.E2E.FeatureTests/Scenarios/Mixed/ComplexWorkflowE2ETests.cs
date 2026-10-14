@@ -6,6 +6,8 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Validation;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
@@ -20,8 +22,9 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Mixed;
 ///
 /// Telemetry starts the run; the gate routes to the true port; the Delay node parks on a durable
 /// timer for 5s (BranchParked in history); when the timer fires the branch resumes and sends the
-/// command. We assert: the command is gated by the delay (arrives no earlier than ~the duration),
-/// the run reaches Succeeded, and the history shows the durable park plus the node sequence.
+/// command. We assert: the command is gated by the delay (arrives no earlier than ~the duration,
+/// and the history shows the branch parked at the Delay node and resumed no sooner than the delay
+/// later), the run reaches Succeeded, and the history shows the node sequence.
 /// </summary>
 [Collection(E2ECollection.Name)]
 public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
@@ -66,11 +69,9 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
         var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, publishedRef, TimeSpan.FromSeconds(30));
         runRefId.Should().NotBe(Guid.Empty, "telemetry should have started a run");
 
-        // The command must be gated by the durable delay — it must not arrive almost immediately.
-        var early = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(2)));
-        early.Should().NotBe(commandTcs.Task, "the Delay node must hold the branch — the command must not fire before the timer");
-
         // The command must arrive once the timer fires (with headroom for scheduler granularity).
+        // That it did not arrive before is shown by the stopwatch below and, independent of how fast
+        // this runner is, by the park and resume the run's history records.
         var resumed = await Task.WhenAny(commandTcs.Task, Task.Delay(TimeSpan.FromSeconds(30)));
         resumed.Should().Be(commandTcs.Task, "the resumed branch must send the command after the delay");
         (await commandTcs.Task).Should().Be("OpenVent");
@@ -87,6 +88,20 @@ public sealed class ComplexWorkflowE2ETests(ServicesFixture fixture)
         var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId);
         history.Should().Contain(e => e.EventKind == "BranchParked",
             "the Delay node must durably park the branch (recorded as BranchParked)");
+
+        // The Delay node held the branch: it parked there and was resumed by the timer no sooner than
+        // the delay later, and the command node only completed after that.
+        var delayNodeId = definition.Nodes.OfType<DelayNode>().Single().NodeId;
+        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        var parkedAtDelay = history.First(e => e.EventKind == "BranchParked" && e.NodeId == delayNodeId);
+        var resumedByTimer = history.FirstOrDefault(e =>
+            e.EventKind == "BranchResumed" && e.BranchRefId == parkedAtDelay.BranchRefId && e.Timestamp >= parkedAtDelay.Timestamp);
+        resumedByTimer.Should().NotBeNull("the timer must resume the branch parked at the Delay node");
+        (resumedByTimer!.Timestamp - parkedAtDelay.Timestamp).Should().BeGreaterThanOrEqualTo(
+            Delay - TimeSpan.FromSeconds(1),
+            "the branch must stay parked for the configured delay");
+        history.Should().ContainSingle(e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId)
+            .Which.Timestamp.Should().BeOnOrAfter(resumedByTimer.Timestamp, "the command is sent only once the timer has resumed the branch");
         history.Count(e => e.EventKind == "NodeCompleted").Should().BeGreaterThanOrEqualTo(3,
             "the gate, delay and command nodes should each complete");
     }

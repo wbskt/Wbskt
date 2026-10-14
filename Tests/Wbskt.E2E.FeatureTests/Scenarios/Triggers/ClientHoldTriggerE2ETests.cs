@@ -24,7 +24,12 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("warm");
-        var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 2);
+        var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 2, Celsius(BinaryOperator.GreaterThan, 8));
+        // A sentinel on the same device that only a reading above 11 starts holding, for 4 seconds.
+        // The last reading below is the only one that warm, so the sentinel's run starts after every
+        // reading before it has been recorded and any hold they could have started (2 seconds at
+        // most) was due: by then a second run of the trigger under test would have started.
+        var sentinelRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 4, Celsius(BinaryOperator.GreaterThan, 11));
         await using var client = await ConnectAsync(clientRefId, secret, deviceName);
 
         for (int i = 0; i < 4; i++)
@@ -42,7 +47,9 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
             await client.SendAsync("temperature", new { celsius = 11 });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
-        await Task.Delay(TimeSpan.FromSeconds(3));
+        await client.SendAsync("temperature", new { celsius = 12 });
+
+        await fixture.WaitForFirstRunAsync(token, workspaceRef, sentinelRefId, TimeSpan.FromSeconds(60));
 
         var runs = await fixture.ListRunsAsync(token, workspaceRef, workflowRefId);
         runs.Should().HaveCount(1, "a reading that stays out of range alerts once, not on every message");
@@ -53,15 +60,20 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("recovers");
-        var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 10);
+        var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 10, Celsius(BinaryOperator.GreaterThan, 8));
+        // A sentinel on the same device that holds on an in-range reading, for 12 seconds. The
+        // in-range reading comes 3 seconds after the warm one, so the sentinel is due 15 seconds after
+        // the warm reading, past the 10 seconds the trigger under test would have needed: once the
+        // sentinel has run, the hold ticker has looked at that hold too.
+        var sentinelRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 12, Celsius(BinaryOperator.LessThan, 8));
         await using var client = await ConnectAsync(clientRefId, secret, deviceName);
 
+        // Warm for a few seconds, then back in range well within the hold.
         await client.SendAsync("temperature", new { celsius = 10 });
         await Task.Delay(TimeSpan.FromSeconds(3));
         await client.SendAsync("temperature", new { celsius = 5 });
 
-        // Well past the hold, with the ticker checking every second.
-        await Task.Delay(TimeSpan.FromSeconds(15));
+        await fixture.WaitForFirstRunAsync(token, workspaceRef, sentinelRefId, TimeSpan.FromSeconds(60));
 
         var runs = await fixture.ListRunsAsync(token, workspaceRef, workflowRefId);
         runs.Should().BeEmpty("the reading came back in range before the hold ran out");
@@ -76,17 +88,19 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
         return (token, workspaceRef, clientRefId, secret, deviceName);
     }
 
-    private async Task<Guid> PublishAsync(string token, Guid workspaceRef, Guid clientRefId, int holdSeconds)
+    // payload.celsius {op} {limit}
+    private static WorkflowExpression Celsius(BinaryOperator op, int limit) =>
+        new BinaryExpression(
+            new BranchStateRefExpression("payload.celsius"),
+            op,
+            new LiteralExpression(limit));
+
+    private async Task<Guid> PublishAsync(string token, Guid workspaceRef, Guid clientRefId, int holdSeconds, WorkflowExpression filter)
     {
         var workflowRefId = Guid.NewGuid();
-        // payload.celsius > 8
-        WorkflowExpression tooWarm = new BinaryExpression(
-            new BranchStateRefExpression("payload.celsius"),
-            BinaryOperator.GreaterThan,
-            new LiteralExpression(8));
 
         WorkflowDefinition definition = new WorkflowBuilder($"E2E-Hold-{workflowRefId:N}", workflowRefId)
-            .AddClientTrigger(clientRefId.ToString(), "temperature", WorkflowConcurrencyPolicy.AllowParallel, null, out _, filter: tooWarm, holdSeconds: holdSeconds)
+            .AddClientTrigger(clientRefId.ToString(), "temperature", WorkflowConcurrencyPolicy.AllowParallel, null, out _, filter: filter, holdSeconds: holdSeconds)
             .AddDelay(TimeSpan.FromMilliseconds(10))
             .BuildAndValidate();
 

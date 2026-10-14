@@ -39,14 +39,18 @@ public sealed class ClientPresenceTriggerE2ETests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("blip");
         var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, ClientPresenceState.Offline, forSeconds: 15);
+        // A sentinel on the same device: it runs once the device has stayed online for 20 seconds
+        // after coming back, so its run can only start after the offline check, due 15 seconds after
+        // the disconnect, has been judged by the same ticker.
+        var sentinelRefId = await PublishAsync(token, workspaceRef, clientRefId, ClientPresenceState.Online, forSeconds: 20);
 
         var first = await ConnectAsync(clientRefId, secret, deviceName);
         await first.DisposeAsync();
+        // The blip itself: the device is away for a moment, well inside the grace period.
         await Task.Delay(TimeSpan.FromSeconds(1));
         await using var second = await ConnectAsync(clientRefId, secret, deviceName);
 
-        // Well past the grace period, with the ticker checking every second.
-        await Task.Delay(TimeSpan.FromSeconds(25));
+        await fixture.WaitForFirstRunAsync(token, workspaceRef, sentinelRefId, TimeSpan.FromSeconds(90));
 
         var runs = await fixture.ListRunsAsync(token, workspaceRef, workflowRefId);
         runs.Should().BeEmpty("the device was back online before the grace period ran out");

@@ -82,33 +82,26 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
 
         // Wait for the trigger to be live, without a key: a keyed delivery that arrives before the
         // trigger exists is still a delivery, and its retries would be dropped.
-        var live = await ServicesFixture.PollAsync(async () =>
-        {
-            await fixture.SendWebhookAsync(workspace, path);
-            return (await fixture.ListRunsAsync(token, workspace, refId)).Count > 0;
-        }, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(1));
-        live.Should().BeTrue("the webhook trigger should go live after publishing");
-        await Task.Delay(TimeSpan.FromSeconds(2));
-        int baseline = (await fixture.ListRunsAsync(token, workspace, refId)).Count;
+        await fixture.FireWebhookUntilRunAsync(token, workspace, refId, path, TimeSpan.FromSeconds(30));
 
+        // Warm-up deliveries still on the queue can start runs after this point, so runs are counted
+        // by the key each delivery carries in its body (and so in the run's trigger data), not by
+        // the workflow's total.
         string key = $"delivery-{Guid.NewGuid():N}";
         for (var i = 0; i < 3; i++)
         {
             (await SendKeyedWebhookAsync(workspace, path, key)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         }
 
-        var started = await ServicesFixture.PollAsync(
-            async () => (await fixture.ListRunsAsync(token, workspace, refId)).Count == baseline + 1,
-            TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(500));
-        started.Should().BeTrue();
-        await Task.Delay(TimeSpan.FromSeconds(2));
-        (await fixture.ListRunsAsync(token, workspace, refId)).Count.Should().Be(baseline + 1);
+        await fixture.WaitForRunsCarryingAsync(token, workspace, refId, key, 1, TimeSpan.FromSeconds(30));
 
-        (await SendKeyedWebhookAsync(workspace, path, $"delivery-{Guid.NewGuid():N}")).StatusCode.Should().Be(HttpStatusCode.Accepted);
-        var another = await ServicesFixture.PollAsync(
-            async () => (await fixture.ListRunsAsync(token, workspace, refId)).Count == baseline + 2,
-            TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(500));
-        another.Should().BeTrue("a different key is a different delivery");
+        // A different key is a different delivery. It is queued after the three retries, so its run
+        // appearing is the signal that they have had their turn, instead of a wait of so many seconds.
+        string otherKey = $"delivery-{Guid.NewGuid():N}";
+        (await SendKeyedWebhookAsync(workspace, path, otherKey)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await fixture.WaitForRunsCarryingAsync(token, workspace, refId, otherKey, 1, TimeSpan.FromSeconds(30));
+
+        (await fixture.ListRunsCarryingAsync(token, workspace, refId, key)).Should().HaveCount(1, "the retries of one delivery start one run");
     }
 
     [SkippableFact]
@@ -149,7 +142,8 @@ public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
         using var http = new HttpClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, ServicesFixture.ManagementUrl($"/api/callbacks/webhook/{workspace}/{Uri.EscapeDataString(path)}"))
         {
-            Content = JsonContent.Create(new { test = "payload" })
+            // The key goes in the body too, so the run a delivery started can be told apart.
+            Content = JsonContent.Create(new { delivery = key })
         };
         request.Headers.TryAddWithoutValidation("Idempotency-Key", key);
         return await http.SendAsync(request);
