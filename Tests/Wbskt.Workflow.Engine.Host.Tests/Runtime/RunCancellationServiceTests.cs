@@ -132,6 +132,20 @@ public sealed class RunCancellationServiceTests
     }
 
     [Fact]
+    public async Task IsCancellationRequested_answers_a_local_cancel_without_reading_the_run()
+    {
+        var registry = new RunCancellationTokenRegistry();
+        var runProvider = new Mock<IRunProvider>(MockBehavior.Strict);
+        var service = new RunCancellationService(runProvider.Object, new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), registry);
+        registry.Cancel(42);
+
+        bool cancelled = await service.IsCancellationRequestedAsync(42, CancellationToken.None);
+
+        Assert.True(cancelled);
+        runProvider.Verify(p => p.GetByIdAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task RequestCancellation_deletes_bookmarks_and_cancels_waiting_branches()
     {
         var runProvider = new RecordingRunProvider("Running", transitionResult: true);

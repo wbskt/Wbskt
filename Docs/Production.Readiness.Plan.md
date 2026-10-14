@@ -709,7 +709,7 @@ Not part of Phases 1–3, but they will surface. Recorded so nobody rediscovers 
 - **`Docs/archive/Workflow.Engine.Gap.Report.md`** tracks 37 engine findings; **WF-10** (windowed
   `MaxConcurrency` on `ParallelForEach`) and **WF-29** (a durable record of inbound arrivals that
   produce no run) remain partly done, both by deliberate owner decision. That document explains both
-  in full and is the authority on the engine.
+  in full; it is archived and no longer matches the code elsewhere.
 - **`AddWorkflowEngine` is not independently usable** — see [Working in this repo](#working-in-this-repo).
   Worth revisiting as a design question, not a bug.
 - **No API versioning.** No `/v1` anywhere, so the first breaking change breaks every deployed

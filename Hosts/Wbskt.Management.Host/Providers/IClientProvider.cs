@@ -52,6 +52,11 @@ public interface IClientProvider : IReferenceProvider
     /// and returns them. Each row is claimed once, however many instances sweep at the same time.
     /// </summary>
     Task<IReadOnlyCollection<ExpiredPresence>> ExpirePresenceAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Clears the presence of every client <paramref name="hostId"/> held before it restarted under the
+    /// same id, and returns them. The heartbeat lease cannot clear these: the restarted host renews it.
+    /// </summary>
+    Task<IReadOnlyCollection<ExpiredPresence>> ResetPresenceByHostAsync(string hostId, CancellationToken cancellationToken = default);
     Task<ClientDetail?> FindDetailByRefIdAsync(Guid refId, CancellationToken cancellationToken = default);
     Task UpdateNameAsync(int id, string name, CancellationToken cancellationToken = default);
     Task UpdateRttAsync(int id, int lastRttMs, DateTime measuredAt, CancellationToken cancellationToken = default);

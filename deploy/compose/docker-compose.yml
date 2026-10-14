@@ -397,7 +397,8 @@ services:
     networks: [backend]
     restart: unless-stopped
     logging: *default-logging
-    # Keep at 1 until the engine remediation prerequisite lands (Docs\archive\Workflow.Engine.V3.Remediation.Plan.md).
+    # Active/standby: one process holds the engine-leader lease and does all the work; any further
+    # replica is a warm spare that takes over when the lease lapses.
     deploy:
       replicas: ${ENGINE_REPLICAS:-1}
     labels:

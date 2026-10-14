@@ -110,8 +110,15 @@ internal sealed class RunCancellationService : IRunCancellationService
 
     public async Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
     {
-        // Read from the run row every time: a cancel taken by another host only shows up there, and a
-        // cached answer kept this host running a cancelled run until the entry expired.
+        // A cancel taken on this host is answered from the token registry, so the branch loop's check
+        // after an interrupted executor needs no database. Otherwise read the run row every time: a
+        // cancel taken by another host only shows up there, and a cached answer kept this host running
+        // a cancelled run until the entry expired.
+        if (_tokenRegistry.IsCancelled(runId))
+        {
+            return true;
+        }
+
         string status = (await _runProvider.GetByIdAsync(runId, ct)).Status;
         return string.Equals(status, RunStatus.Cancelling, StringComparison.Ordinal)
             || string.Equals(status, RunStatus.Cancelled, StringComparison.Ordinal);
