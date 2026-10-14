@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
@@ -16,7 +15,7 @@ public sealed class RunCancellationServiceTests
     {
         var runProvider = new RecordingRunProvider("Running", transitionResult: true);
         var historyProvider = new RecordingHistoryEventProvider();
-        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
+        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
@@ -31,7 +30,7 @@ public sealed class RunCancellationServiceTests
     {
         var runProvider = new RecordingRunProvider("Succeeded", transitionResult: false);
         var historyProvider = new RecordingHistoryEventProvider();
-        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
+        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
@@ -46,7 +45,7 @@ public sealed class RunCancellationServiceTests
         // cancel that was silent and inexplicable from the outside.
         var runProvider = new RecordingRunProvider("Failing", transitionResult: true, onlyFrom: "Failing");
         var historyProvider = new RecordingHistoryEventProvider();
-        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
+        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
@@ -68,7 +67,6 @@ public sealed class RunCancellationServiceTests
         var service = new RunCancellationService(
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
-            new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
             branchProvider,
             bookmarkProvider,
@@ -116,7 +114,6 @@ public sealed class RunCancellationServiceTests
         return new RunCancellationService(
             new RecordingRunProvider("Running", transitionResult: true),
             new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
-            new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
             Mock.Of<IBranchProvider>(),
             Mock.Of<IBookmarkProvider>(),
@@ -127,7 +124,7 @@ public sealed class RunCancellationServiceTests
     [Fact]
     public async Task IsCancellationRequested_returns_true_for_cancelling()
     {
-        var service = new RunCancellationService(new RecordingRunProvider("Cancelling", transitionResult: false), new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
+        var service = new RunCancellationService(new RecordingRunProvider("Cancelling", transitionResult: false), new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
 
         bool cancelled = await service.IsCancellationRequestedAsync(42, CancellationToken.None);
 
@@ -144,7 +141,6 @@ public sealed class RunCancellationServiceTests
         var service = new RunCancellationService(
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
-            new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
             branchProvider,
             bookmarkProvider,
@@ -164,7 +160,7 @@ public sealed class RunCancellationServiceTests
         // cancel that left the operator with a run they could see running and could not stop.
         var runProvider = new RecordingRunProvider("Failing", transitionResult: true, onlyFrom: "Failing");
         var historyProvider = new RecordingHistoryEventProvider();
-        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new MemoryCache(new MemoryCacheOptions()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
+        var service = new RunCancellationService(runProvider, new RunJournal(historyProvider, new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
 
         bool cancelled = await service.RequestCancellationAsync(42, "operator", CancellationToken.None);
 
@@ -186,7 +182,6 @@ public sealed class RunCancellationServiceTests
         var service = new RunCancellationService(
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
-            new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
             branchProvider,
             bookmarkProvider,
@@ -212,7 +207,6 @@ public sealed class RunCancellationServiceTests
         var service = new RunCancellationService(
             runProvider,
             new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
-            new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
             new CancellationTestBranchProvider(),
             new CancellationTestBookmarkProvider(),
@@ -232,7 +226,6 @@ public sealed class RunCancellationServiceTests
         var service = new RunCancellationService(
             runProvider,
             new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
-            new MemoryCache(new MemoryCacheOptions()),
             new FixedClock(),
             new CancellationTestBranchProvider(),
             new CancellationTestBookmarkProvider(),

@@ -2,8 +2,7 @@ using Wbskt.EventBus.Abstractions;
 
 namespace Wbskt.Events.Hosting;
 
-// Published once when a socket host starts. The management host reacts by resetting stale
-// presence flags left behind by a hard crash (no ClientDisconnectedEvent was ever published
-// for those connections), scoped to this host's HostId so other live instances are untouched.
+// No longer published: stale presence is cleared by the heartbeat lease (SocketHostHeartbeat,
+// StalePresenceSweeper). Kept so the rows already in the event log still name a known type.
 [EventCriticality(EventCriticality.Info)]
 public sealed record SocketHostStartedEvent(string HostId) : BaseEvent;

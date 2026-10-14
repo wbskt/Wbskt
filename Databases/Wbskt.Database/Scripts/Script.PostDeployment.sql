@@ -22,7 +22,7 @@ GO
 
 -- 2. One-time fix-up for the horizontal-scale migration (added ConnectedHostId).
 -- Rows that were connected before this column existed have ConnectedHostId = NULL, which the
--- host-scoped WHERE clauses in Client_UpdatePresence/Client_ResetAllPresence (@HostId = ConnectedHostId)
+-- host-scoped WHERE clause in Client_UpdatePresence (@HostId = ConnectedHostId)
 -- can never match. Left alone, such a client would show IsConnected = 1 forever the moment its
 -- pre-migration connection ends without a clean disconnect. Clear those rows once; any client
 -- that is actually still connected reconnects and gets a real ConnectedHostId immediately.

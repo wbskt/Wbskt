@@ -7,7 +7,7 @@ using Wbskt.EventBus.Abstractions;
 namespace Wbskt.EventBus.RabbitMQ;
 
 // Also reused as the socket presence ConnectedHostId (see ConnectionSupersededHandler,
-// StartupPresenceResetPublisher, Client_UpdatePresence.sql) - a connection's owning instance is
+// SocketHostHeartbeat, Client_UpdatePresence.sql) - a connection's owning instance is
 // identified by the same value used for its MassTransit queue name.
 //
 // This is deliberately NOT Wbskt.Workflow.Abstraction.Runtime.IHostIdentity, and the two must not
@@ -15,16 +15,22 @@ namespace Wbskt.EventBus.RabbitMQ;
 // a workflow-engine lease holder never appears to "continue" as the same identity across a crash
 // - restarting must fence out the old instance, not reclaim it. BusInstanceId is the opposite: it
 // must stay STABLE across a socket-host's restart (defaults to Environment.MachineName, i.e. the
-// container's hostname) because StartupPresenceResetPublisher relies on the restarted instance
-// republishing the same id its previous run used, so Client_ResetAllPresence can find and clear
-// exactly the presence rows that instance left dangling after a crash. Giving either identity the
-// other's lifetime would break its own use case. (A container that is recreated, as every deploy
-// does, gets a new hostname and so a new id; presence it left behind is cleared instead by the
-// heartbeat lease, see SocketHostHeartbeat.)
+// container's hostname), so a restarted instance comes back on its own per-instance queue. Giving
+// either identity the other's lifetime would break its own use case. (A container that is
+// recreated, as every deploy does, gets a new hostname and so a new id; presence it left behind
+// is cleared by the heartbeat lease, see SocketHostHeartbeat.)
 public sealed record BusInstanceId(string Value);
 
 public static class EventBusExtensions
 {
+    /// <summary>
+    /// Registers the MassTransit bus over RabbitMQ, the <see cref="IEventBus"/> and the <see cref="ICommandSender"/>.
+    /// </summary>
+    /// <param name="consumerAssemblies">
+    /// The assemblies whose consumers (and their definitions) this host runs, usually just its own
+    /// (<c>typeof(Program).Assembly</c>). Left out, only the entry assembly is scanned. Nothing else is:
+    /// a consumer added to a shared library runs only in the hosts that name that library here.
+    /// </param>
     public static void AddRabbitMqEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -32,7 +38,8 @@ public static class EventBusExtensions
         Action<RabbitMQOptions>? configureOptions = null,
         Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureEndpoints = null,
         bool perInstanceEndpoints = false,
-        IReadOnlyCollection<string>? endpointsWithOwnRetry = null)
+        IReadOnlyCollection<string>? endpointsWithOwnRetry = null,
+        IReadOnlyCollection<Assembly>? consumerAssemblies = null)
         {
 
         var options = new RabbitMQOptions();
@@ -68,16 +75,12 @@ public static class EventBusExtensions
 
             x.AddDefaultConsumerRetry(endpointsWithOwnRetry);
 
-            // 2. Discover and Register Consumers from Host Assemblies
-            var entryAssembly = Assembly.GetEntryAssembly();
-            if (entryAssembly != null)
+            // 2. Register the consumers of the assemblies the host named
+            Assembly? entryAssembly = Assembly.GetEntryAssembly();
+            IReadOnlyCollection<Assembly> assemblies = consumerAssemblies
+                ?? (entryAssembly != null ? new[] { entryAssembly } : Array.Empty<Assembly>());
+            if (assemblies.Count > 0)
             {
-                var assemblies = entryAssembly.GetReferencedAssemblies()
-                    .Where(a => a.Name != null && a.Name.StartsWith("Wbskt"))
-                    .Select(Assembly.Load)
-                    .ToList();
-
-                assemblies.Add(entryAssembly);
                 x.AddConsumers(assemblies.ToArray());
             }
 

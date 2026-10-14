@@ -41,10 +41,9 @@ public static class Program
 
         // Event Bus — per-instance fan-out so every socket instance sees every client event
         // (ClientCommandEvent, ClientPingEvent, ClientStatusChangedEvent); see EventBusExtensions.
-        builder.Services.AddRabbitMqEventBus(builder.Configuration, perInstanceEndpoints: true);
+        builder.Services.AddRabbitMqEventBus(builder.Configuration, perInstanceEndpoints: true, consumerAssemblies: [typeof(Program).Assembly]);
 
         // Background services (registered after the bus so it starts first)
-        builder.Services.AddHostedService<StartupPresenceResetPublisher>();
         builder.Services.AddHostedService<HeartbeatPublisher>();
         builder.Services.AddHostedService<PingSampler>();
 
