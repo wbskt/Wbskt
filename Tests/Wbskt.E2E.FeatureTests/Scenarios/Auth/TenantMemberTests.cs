@@ -226,7 +226,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         var (adminB, tenantB) = await ArrangeAsync();
 
-        // The invariant ManagementService.ResolveUserAsync exists to enforce: an administrator
+        // The invariant TenantReferences.ResolveMemberAsync exists to enforce: an administrator
         // cannot reach an outside account and pull it into their tenant's permission graph.
         var response = await fixture.SendAsync(
             HttpMethod.Get,

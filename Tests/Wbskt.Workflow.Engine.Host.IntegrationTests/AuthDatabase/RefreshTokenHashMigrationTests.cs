@@ -58,7 +58,7 @@ public sealed class RefreshTokenHashMigrationTests
         string dbName = $"WbsktAuthRtMig_{Guid.NewGuid():N}";
         string connectionString = AuthSqlFixture.BuildDbConnectionString(dbName);
 
-        // Shaped like AuthService mints them: 64 random bytes, base64.
+        // Shaped like SessionTokens mints them: 64 random bytes, base64.
         string retired = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         string live = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
