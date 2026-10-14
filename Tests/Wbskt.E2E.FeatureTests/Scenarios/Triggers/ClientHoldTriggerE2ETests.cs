@@ -69,7 +69,7 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
 
     private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string DeviceName)> RegisterDeviceAsync(string label)
     {
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
         var deviceName = $"e2e-hold-{label}-{Guid.NewGuid():N}";
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, deviceName);

@@ -66,7 +66,7 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
         });
 
         // 2. Auth and setup
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceRetryTest");
         

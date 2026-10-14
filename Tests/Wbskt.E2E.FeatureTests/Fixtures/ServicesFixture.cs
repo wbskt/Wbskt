@@ -119,8 +119,13 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>
     /// Logs in as the seeded administrator (admin@wbskt.com / Password123!) which has the
     /// Admin role (all permissions) and owns the Default Workspace (internal Id = 1).
-    /// Returns the bearer token and the admin's workspace RefId. This is the privileged
-    /// identity used for permission-gated operations (policy creation, workflow publish).
+    /// Returns the bearer token and the admin's workspace RefId.
+    /// <para>
+    /// Only for scenarios about the seeded administrator or its tenant and Default Workspace
+    /// themselves (the Auth folder). A scenario that just needs somewhere to publish workflows,
+    /// register devices or start runs wants <see cref="CreateIsolatedWorkspaceAsync"/>: the
+    /// Default Workspace is shared by every run of the suite and nothing in it is ever cleaned up.
+    /// </para>
     /// </summary>
     public async Task<(string Token, Guid WorkspaceRef)> LoginAsAdminAsync()
     {
@@ -624,6 +629,39 @@ public sealed class ServicesFixture : IDisposable
             ?? throw new InvalidOperationException("Workspace creation returned empty response.");
 
         return workspace.RefId;
+    }
+
+    /// <summary>
+    /// A workspace created for one scenario, with the brand-new user who owns it. Deconstructs to
+    /// <c>(token, workspaceRef)</c> for the common case of a scenario that only needs those two.
+    /// </summary>
+    public sealed record WorkspaceHandle(string Token, Guid WorkspaceRef, TestUser User)
+    {
+        public void Deconstruct(out string token, out Guid workspaceRef)
+        {
+            token = Token;
+            workspaceRef = WorkspaceRef;
+        }
+    }
+
+    /// <summary>
+    /// Registers a brand-new user and creates a workspace they own, for one scenario to arrange
+    /// everything in. The user lands in a tenant of their own with the tenant's Admin role, so every
+    /// workspace-scoped operation a scenario arranges (policies, devices, workflow publish, runs,
+    /// integrations, event logs) is allowed.
+    /// <para>
+    /// This exists so scenarios never share the seeded Default Workspace (see
+    /// <see cref="LoginAsAdminAsync"/>): what a scenario publishes, the runs it starts and the
+    /// events it logs stay in a workspace no other scenario writes to, so assertions on lists and
+    /// feeds see only that scenario's rows and the per-workspace ceilings stay at their defaults.
+    /// </para>
+    /// </summary>
+    public async Task<WorkspaceHandle> CreateIsolatedWorkspaceAsync()
+    {
+        var user = await CreateUserAsync();
+        var workspaceRef = await CreateWorkspaceAsync(user.Token);
+
+        return new WorkspaceHandle(user.Token, workspaceRef, user);
     }
 
     /// <summary>The internal workspace ID and effective permission slugs a resolve call hands back.</summary>

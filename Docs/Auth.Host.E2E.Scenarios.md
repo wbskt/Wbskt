@@ -78,8 +78,14 @@ administrator of their own tenant instead.
   alongside the rest will cause unrelated 429s for the remainder of the window, which is why they
   are gated behind `E2E_RATE_LIMIT_TESTS=1` and meant to be run with a filter.
 - **Test data accumulates.** Registration, workspace creation and role creation have no cleanup path
-  (no delete-user endpoint). Every scenario must use a unique suffix, and the tenant member list will
-  grow monotonically across runs — assertions must be "contains", never "count equals".
+  (no delete-user endpoint). Every scenario must use a unique suffix. The rule that keeps this from
+  leaking between scenarios is **a fresh user and workspace per scenario**: anything that publishes
+  workflows, registers devices, starts runs or reads a workspace's lists and event feed arranges its
+  own with `ServicesFixture.CreateIsolatedWorkspaceAsync()` (or `RegisterAndLoginUserAsync()` /
+  `CreateUserAsync()` + `CreateWorkspaceAsync()`), never the seeded Default Workspace. Only scenarios
+  about the seeded administrator, its tenant or the Default Workspace themselves call
+  `LoginAsAdminAsync()`, and those still grow across runs — the seeded tenant's member, role and
+  workspace lists — so their assertions must be "contains", never "count equals".
 
 ---
 

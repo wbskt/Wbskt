@@ -28,7 +28,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
         var (clientRefId, secret) = await fixture.RegisterClientAsync(pin, "DeviceCancellation1");
 
@@ -100,7 +100,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (publishedRef, triggerNodeId) = await PublishTriggerOnlyAsync(token, workspaceRef);
 
         var runRefId = await StartAndWaitForRunAsync(token, workspaceRef, publishedRef, triggerNodeId);
@@ -120,7 +120,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (publishedRef, triggerNodeId) = await PublishAwaitingSignalAsync(token, workspaceRef);
         var runRefId = await StartAndWaitForRunAsync(token, workspaceRef, publishedRef, triggerNodeId);
 

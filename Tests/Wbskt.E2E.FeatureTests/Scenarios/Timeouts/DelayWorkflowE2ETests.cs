@@ -34,8 +34,8 @@ public sealed class DelayWorkflowE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
-        // ── 1. Admin auth + policy + client registration ─────────────────────
-        var (token, workspaceRef) = await fixture.LoginAsAdminAsync();
+        // ── 1. Own workspace + policy + client registration ─────────────────
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
         var (_, pin) = await fixture.CreatePolicyAsync(token, workspaceRef, autoApproval: true);
 
         var deviceName = $"e2e-delay-{Guid.NewGuid():N}";

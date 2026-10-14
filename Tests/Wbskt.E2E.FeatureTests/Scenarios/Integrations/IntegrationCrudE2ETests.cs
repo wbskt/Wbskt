@@ -244,7 +244,7 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
     public async Task INT_CRUD_09_InvalidIntegrations_AreRefusedWithTheirCode(string code, object body)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (token, ws) = await fixture.LoginAsAdminAsync();
+        var (token, ws) = await _api.NewWorkspaceAsync();
 
         using var response = await _api.CreateRawAsync(token, ws, body);
 
@@ -381,7 +381,7 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
     public async Task INT_CRUD_14_WithoutSigningIn_NothingIsServed()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
-        var (_, ws) = await fixture.LoginAsAdminAsync();
+        var (_, ws) = await _api.NewWorkspaceAsync();
 
         using var list = await fixture.SendAsync(HttpMethod.Get, IntegrationsApi.Url(ws));
         list.StatusCode.Should().Be(HttpStatusCode.Unauthorized);

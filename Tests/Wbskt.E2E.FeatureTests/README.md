@@ -109,23 +109,38 @@ All base URLs can be overridden so the tests can target non-default environments
 
 ---
 
-## Privileged identity (seeded admin)
+## Identities: a fresh user and workspace per scenario
 
-Permission-gated operations (registration-policy creation, workflow publish) are performed as the
-**seeded administrator** provisioned by `Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql`:
+Every scenario that publishes workflows, registers devices, starts runs or reads a workspace's lists
+and event feed arranges a **workspace of its own**:
+
+```csharp
+var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
+```
+
+`CreateIsolatedWorkspaceAsync()` registers a brand-new user and creates a workspace they own, and
+returns a `WorkspaceHandle` (`Token`, `WorkspaceRef`, `User`). Registration provisions the user's own
+tenant with them as its tenant-wide `Admin`, which holds every permission, so policy creation,
+workflow publish, run start/cancel, integrations and event-log reads are all allowed. Nothing a
+scenario creates is ever cleaned up, but because no two scenarios share a workspace, a scenario's
+run list and event feed hold only its own rows and the per-workspace ceilings (100 workflows,
+1000 devices) stay at their production defaults.
+
+### The seeded admin
+
+`LoginAsAdminAsync()` logs in as the **seeded administrator** provisioned by
+`Databases/Wbskt.Database.Auth/Scripts/Script.PostDeployment.sql` and resolves its Default Workspace
+`RefId` via `GET /api/workspaces`:
 
 - Username `root`, email `admin@wbskt.com`, password `Password123!` (the development password
   `Deploy-Databases.ps1` passes by default; a database deployed without it has no usable root password)
 - `Admin` role → **all** permissions
 - Owner of the **Default Workspace** (internal `Id = 1`)
 
-The fixture's `LoginAsAdminAsync()` logs in as this admin and resolves its Default Workspace `RefId`
-via `GET /api/workspaces`. A freshly-registered user only gets the `User` role and would be `403`-rejected
-on the policy/workspace-scoped endpoints, which is why the admin is used. Override the credentials with
-`E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` if your deployment seeds a different admin.
-
-Because the admin owns the workspace whose internal `Id = 1`, the published
-`WorkflowDefinition.WorkspaceId = 1` (and `PublishedBy = 1`, the root user id) correspond to real seeded rows.
+It is only for the scenarios under `Scenarios/Auth` that are about that administrator, its tenant or
+the Default Workspace themselves. Those lists grow across runs, so assertions on them are "contains",
+never "count equals". Override the credentials with `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` if your
+deployment seeds a different admin.
 
 ## Workflow definition published by Task 3
 
