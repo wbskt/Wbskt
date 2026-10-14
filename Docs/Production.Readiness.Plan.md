@@ -162,8 +162,9 @@ plumbing blocks password reset, email verification, and security notifications.
 **Where.**
 - `Wbskt.Workflow.Abstraction/Runtime/IEmailSender.cs` — the existing abstraction.
 - `Wbskt.Workflow/Runtime/SmtpEmailSender.cs` — the existing SMTP implementation.
-- `Wbskt.Workflow.Abstraction/Configuration/NotificationOptions.cs` — `EmailOptions`
-  (Host, Port, UseStartTls, UserName, Password, FromAddress, FromDisplayName, `IsConfigured`).
+- `Wbskt.Workflow/Integrations/IntegrationOptions.cs` — the engine's integration settings (the
+  old `NotificationOptions`/`EmailOptions` pair is gone; the shared `EmailOptions` is in
+  `Wbskt.Infrastructure/Email/`).
 - `Wbskt.Infrastructure/` — where the shared version should live.
 
 **Steps.**
@@ -260,8 +261,8 @@ endpoint for it.
 - `Hosts/Wbskt.Management.Host/` — provider, service, controller (CRUD, workspace-scoped).
 - `Wbskt.Primitives/Constants/Permissions.cs` — new slugs, e.g. `integrations.read` /
   `integrations.manage`. Note the existing read/manage split convention.
-- `Wbskt.Workflow.Abstraction/Configuration/NotificationOptions.cs` — the current
-  `EmailOptions`/`TelegramOptions` become the *fallback*, not the only source.
+- `Wbskt.Workflow/Integrations/IntegrationOptions.cs` — the engine's integration settings
+  (formerly `NotificationOptions` with `EmailOptions`/`TelegramOptions`).
 - `Wbskt.Workflow/NodeExecutors/Actions/` — executors resolve a credential by reference.
 
 **Steps.**
@@ -522,14 +523,15 @@ subject is a Guid while the identity middleware parses an int — an accident of
 a control. Read it before starting.
 
 **Where.** `Hosts/*/Program.cs` (`AddJwtBearer`), `Wbskt.Infrastructure/Security/JwtService.cs`,
-`Hosts/Wbskt.Socket.Host/Middleware/WebSocketAuthMiddleware.cs`.
+`Hosts/Wbskt.Socket.Host/Program.cs` (framework JWT bearer with `AcceptQueryToken("/ws")` and the
+`ClientOnly` policy on `/ws`).
 
 **Steps.** Asymmetric signing — Auth holds the private key, the others verify against a published
 JWKS. If that is too large a step, distinct audiences per host with validation **on** is most of the
 benefit for an afternoon.
 
-**Traps.** `WebSocketAuthMiddleware` calls `IJwtService.ValidateToken` directly, outside the ASP.NET
-authentication pipeline. It must be updated in lockstep or every device disconnects.
+**Traps.** Device tokens on `/ws` go through the same `AddWbsktJwtBearer` pipeline (the token taken
+from `?access_token=` by `AcceptQueryToken`). It must be updated in lockstep or every device disconnects.
 
 **Effort.** ~2–3 days asymmetric, ~0.5 day for audiences only.
 
@@ -541,7 +543,8 @@ authentication pipeline. It must be updated in lockstep or every device disconne
 "a deactivated account keeps working until its current access token expires." Disabling a compromised
 administrator leaves them fully operational for up to an hour.
 
-The shape is already solved for devices: `Hosts/Wbskt.Socket.Host/Infrastructure/RevocationCache.cs`
+The shape is already solved for devices: `Hosts/Wbskt.Socket.Host/Infrastructure/ClientAccessGate.cs`
+(this host's `RevocationCache` in front of the token cutoffs the management host keeps in Redis)
 exists precisely because a revoked client's JWT stays valid for an hour. Humans need the same.
 
 **Steps.** Shorten access tokens to 5–15 minutes (rotating refresh already works well, including
@@ -703,7 +706,7 @@ Ask before guessing — each changes the shape of the work.
 
 Not part of Phases 1–3, but they will surface. Recorded so nobody rediscovers them.
 
-- **`Docs/Workflow.Engine.Gap.Report.md`** tracks 37 engine findings; **WF-10** (windowed
+- **`Docs/archive/Workflow.Engine.Gap.Report.md`** tracks 37 engine findings; **WF-10** (windowed
   `MaxConcurrency` on `ParallelForEach`) and **WF-29** (a durable record of inbound arrivals that
   produce no run) remain partly done, both by deliberate owner decision. That document explains both
   in full and is the authority on the engine.

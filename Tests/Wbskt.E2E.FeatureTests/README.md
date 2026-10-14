@@ -10,7 +10,7 @@ All four dev hosts, RabbitMQ, Redis and SQL Edge must be running **before** exec
 ### 1. Start infrastructure (Docker)
 
 ```bat
-# From Scripts.bat — run SQL Edge and RabbitMQ containers
+# Run SQL Edge, RabbitMQ and Redis containers
 docker run -e "ACCEPT_EULA=1" -e "MSSQL_SA_PASSWORD=Welcome1234" -p 1433:1433 -d mcr.microsoft.com/azure-sql-edge
 docker run -d --hostname wbskt-rabbit --name wbskt-rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3-management
 docker run -d --name wbskt-redis -p 6379:6379 redis:7-alpine
