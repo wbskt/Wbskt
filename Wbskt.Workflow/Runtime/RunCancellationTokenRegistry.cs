@@ -26,6 +26,12 @@ internal sealed class RunCancellationTokenRegistry : IDisposable
         return _sources.GetOrAdd(runId, _ => new CancellationTokenSource()).Token;
     }
 
+    /// <summary>True when a cancel for the run was taken on this host; never creates an entry.</summary>
+    public bool IsCancelled(long runId)
+    {
+        return _sources.TryGetValue(runId, out CancellationTokenSource? source) && source.IsCancellationRequested;
+    }
+
     public void Cancel(long runId)
     {
         // Created already-cancelled when absent, so a cancel that arrives before the branch asks for its

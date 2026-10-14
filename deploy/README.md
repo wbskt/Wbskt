@@ -1,8 +1,7 @@
 # Deployment assets
 
-Docker-on-VMs deployment for Wbskt (K8s-ready images, no K8s yet). See
-`Docs\archive\Workflow.Engine.V3.Remediation.Plan.md` for the engine remediation prerequisite before
-running the engine with 2 replicas (Phase 4 below).
+Docker-on-VMs deployment for Wbskt (K8s-ready images, no K8s yet). The engine is active/standby:
+one leader does all the work and extra replicas are warm spares (Phase 4 below).
 
 Images are built in GitHub Actions and pushed to GHCR; the VM only ever pulls them. It has no
 inbound deploy endpoint — `.github/workflows/deploy.yml` SSHes in and runs `scripts/deploy.sh`
@@ -409,7 +408,7 @@ Replica counts are declared in `.env` (`SOCKET_REPLICAS`, `MANAGEMENT_REPLICAS`,
 ```bash
 SOCKET_REPLICAS=3    # Phase 1
 MANAGEMENT_REPLICAS=2 # Phase 3
-ENGINE_REPLICAS=1    # Phase 4 - needs the remediation prerequisite before going above 1
+ENGINE_REPLICAS=1    # Phase 4 - a second replica is a warm standby, not a second worker
 ```
 
 This is load-bearing, not a style preference. `docker compose up -d socket` converges to the

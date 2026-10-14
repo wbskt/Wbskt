@@ -15,10 +15,12 @@ namespace Wbskt.EventBus.RabbitMQ;
 // a workflow-engine lease holder never appears to "continue" as the same identity across a crash
 // - restarting must fence out the old instance, not reclaim it. BusInstanceId is the opposite: it
 // must stay STABLE across a socket-host's restart (defaults to Environment.MachineName, i.e. the
-// container's hostname), so a restarted instance comes back on its own per-instance queue. Giving
+// container's hostname), so a restarted instance comes back on its own per-instance queue and
+// StartupPresenceResetPublisher republishes the id its previous run used, letting
+// Client_ResetPresenceBy_HostId clear exactly the presence rows that run left dangling. Giving
 // either identity the other's lifetime would break its own use case. (A container that is
 // recreated, as every deploy does, gets a new hostname and so a new id; presence it left behind
-// is cleared by the heartbeat lease, see SocketHostHeartbeat.)
+// is cleared by the heartbeat lease instead, see SocketHostHeartbeat.)
 public sealed record BusInstanceId(string Value);
 
 public static class EventBusExtensions

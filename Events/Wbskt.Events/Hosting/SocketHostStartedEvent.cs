@@ -2,7 +2,7 @@ using Wbskt.EventBus.Abstractions;
 
 namespace Wbskt.Events.Hosting;
 
-// No longer published: stale presence is cleared by the heartbeat lease (SocketHostHeartbeat,
-// StalePresenceSweeper). Kept so the rows already in the event log still name a known type.
+// Published once by a socket host as it starts (StartupPresenceResetPublisher), so the management
+// host clears the presence that host id held before a crash and restart (SocketHostStartedHandler).
 [EventCriticality(EventCriticality.Info)]
 public sealed record SocketHostStartedEvent(string HostId) : BaseEvent;

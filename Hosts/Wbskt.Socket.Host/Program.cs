@@ -44,6 +44,7 @@ public static class Program
         builder.Services.AddRabbitMqEventBus(builder.Configuration, perInstanceEndpoints: true, consumerAssemblies: [typeof(Program).Assembly]);
 
         // Background services (registered after the bus so it starts first)
+        builder.Services.AddHostedService<StartupPresenceResetPublisher>();
         builder.Services.AddHostedService<HeartbeatPublisher>();
         builder.Services.AddHostedService<PingSampler>();
 
