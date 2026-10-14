@@ -58,7 +58,7 @@ public sealed class NodeExecutorsE2ETests
         var providers = new InMemoryProviders(definition, triggerNodeId);
         var dispatcher = new RecordingRunDispatcher();
         var finalizer = new RecordingRunFinalizer();
-        var loop = new BranchLoop(
+        var loop = TestBranchLoop.Create(
             providers,
             providers,
             providers,

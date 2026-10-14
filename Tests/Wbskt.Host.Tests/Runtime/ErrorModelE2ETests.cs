@@ -58,7 +58,7 @@ public sealed class ErrorModelE2ETests
         var cache = new StaticWorkflowDefinitionCache(definition);
         var orchestrator = new CompensationOrchestrator(runProvider, branchProvider, new RunJournal(historyEventProvider, new FixedClock()), cache, registry, state.Clock);
         var finalizer = new RunFinalizer(runProvider, branchProvider, new RunJournal(historyEventProvider, new FixedClock()), new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock, new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), cache);
-        var branchLoop = new BranchLoop(branchProvider, runProvider, runCountersProvider, bookmarkProvider, new RunJournal(historyEventProvider, new FixedClock()), cache, registry, runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, new SequenceIdGenerator(), new BranchTerminator(runCountersProvider, new Lazy<IRunFinalizer>(() => finalizer)), new NoOpRunCancellationService(), orchestrator, new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
+        var branchLoop = TestBranchLoop.Create(branchProvider, runProvider, runCountersProvider, bookmarkProvider, new RunJournal(historyEventProvider, new FixedClock()), cache, registry, runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, new SequenceIdGenerator(), new BranchTerminator(runCountersProvider, new Lazy<IRunFinalizer>(() => finalizer)), new NoOpRunCancellationService(), orchestrator, new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
 
         await branchLoop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 

@@ -11,6 +11,7 @@ using Wbskt.Workflow.Extensions;
 using Wbskt.Workflow.NodeExecutors.Actions;
 using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Runtime.BranchResults;
 using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Host.Tests.Runtime;
@@ -95,6 +96,9 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var registry2 = scope2.ServiceProvider.GetRequiredService<INodeExecutorRegistry>();
         var loop1 = scope1.ServiceProvider.GetRequiredService<IBranchLoop>();
         var loop2 = scope2.ServiceProvider.GetRequiredService<IBranchLoop>();
+        var resultDispatcher1 = scope1.ServiceProvider.GetRequiredService<IBranchResultDispatcher>();
+        var resultDispatcher2 = scope2.ServiceProvider.GetRequiredService<IBranchResultDispatcher>();
+        var resultHandlers1 = scope1.ServiceProvider.GetServices<IBranchResultHandler>().ToArray();
         var bookmarkResumer1 = scope1.ServiceProvider.GetRequiredService<IBookmarkResumer>();
         var bookmarkResumer2 = scope2.ServiceProvider.GetRequiredService<IBookmarkResumer>();
         var triggerConcurrencyEnforcer1 = scope1.ServiceProvider.GetRequiredService<ITriggerConcurrencyEnforcer>();
@@ -146,6 +150,13 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.Same(workflowMetrics1, workflowMetrics2);
         Assert.IsType<BranchLoop>(loop1);
         Assert.NotSame(loop1, loop2);
+        Assert.IsType<BranchResultDispatcher>(resultDispatcher1);
+        Assert.NotSame(resultDispatcher1, resultDispatcher2);
+        Assert.Contains(resultHandlers1, handler => handler is ContinueResultHandler);
+        Assert.Contains(resultHandlers1, handler => handler is ForkResultHandler);
+        Assert.Contains(resultHandlers1, handler => handler is WaitForBookmarkResultHandler);
+        Assert.Contains(resultHandlers1, handler => handler is FailResultHandler);
+        Assert.Contains(resultHandlers1, handler => handler is TerminalResultHandler);
         Assert.IsType<BookmarkResumer>(bookmarkResumer1);
         Assert.NotSame(bookmarkResumer1, bookmarkResumer2);
         Assert.IsType<TriggerConcurrencyEnforcer>(triggerConcurrencyEnforcer1);
