@@ -38,4 +38,10 @@ internal interface IWorkspaceProvider : IReferenceProvider
 
     /// <summary>Every workspace the user is a member of, suspended or not, for the audit log.</summary>
     Task<IReadOnlyCollection<int>> GetIdsByUserAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The ids of the workspaces deleted at or after <paramref name="sinceUtc"/> and before
+    /// <paramref name="untilUtc"/> (<c>dbo.Workspace_GetDeletedBetween</c>).
+    /// </summary>
+    Task<IReadOnlyCollection<int>> GetDeletedBetweenAsync(DateTime sinceUtc, DateTime untilUtc, CancellationToken cancellationToken = default);
 }

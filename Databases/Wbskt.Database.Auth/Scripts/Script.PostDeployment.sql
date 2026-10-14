@@ -321,6 +321,25 @@ BEGIN
 END
 GO
 
+-- DeletedWorkspaces backfill: the ids the pre-deployment script recorded, of workspaces deleted
+-- before the table existed, go in, and the scratch table goes. Through EXEC because the table is not
+-- part of the model. A row already present is skipped, so a re-run after a partial one cannot collide.
+IF OBJECT_ID('dbo.__DeletedWorkspacesBackfill', 'U') IS NOT NULL
+BEGIN
+    PRINT 'Backfilling dbo.DeletedWorkspaces with workspaces deleted before it existed.';
+    EXEC('
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+        INSERT INTO dbo.DeletedWorkspaces (WorkspaceId)
+        SELECT B.WorkspaceId
+        FROM dbo.__DeletedWorkspacesBackfill B
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.DeletedWorkspaces D WHERE D.WorkspaceId = B.WorkspaceId)
+          AND NOT EXISTS (SELECT 1 FROM dbo.Workspaces W WHERE W.Id = B.WorkspaceId);
+        DROP TABLE dbo.__DeletedWorkspacesBackfill;
+        COMMIT TRANSACTION;');
+END
+GO
+
 -- Login for the auth host: [wbskt_auth], which may execute this database's procedures and nothing else.
 -- Created here, not in the model, because a login is a server object and its password is a secret
 -- that varies per environment. The password arrives as the $(AuthHostPassword) SQLCMD variable; empty (the

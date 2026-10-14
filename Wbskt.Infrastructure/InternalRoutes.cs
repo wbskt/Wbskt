@@ -15,4 +15,18 @@ public static class InternalRoutes
 
     /// <summary>Auth host: the caller's internal user id, for a host whose records are keyed by it (see <c>WbsktClaims</c>).</summary>
     public const string CurrentUser = Prefix + "/users/me";
+
+    /// <summary>
+    /// Auth host: the ids of the workspaces deleted in a window (<c>?since=&amp;until=</c>), for the
+    /// management host's deleted workspace sweep. Called with no user behind it, so it takes
+    /// <see cref="ApiKeyHeader"/> instead of a token.
+    /// </summary>
+    public const string DeletedWorkspaces = Prefix + "/workspaces/deleted";
+
+    /// <summary>
+    /// The shared key an internal route called by a background job (no user token to forward) checks:
+    /// the auth host's <c>Internal:ApiKey</c>, sent by the management host from
+    /// <c>Services:AuthInternalApiKey</c>.
+    /// </summary>
+    public const string ApiKeyHeader = "X-Wbskt-Internal-Key";
 }

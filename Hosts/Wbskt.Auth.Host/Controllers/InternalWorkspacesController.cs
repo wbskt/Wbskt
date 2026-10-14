@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Wbskt.Auth.Host.Authorization;
 using Wbskt.Auth.Host.Models;
 using Wbskt.Auth.Models;
 using Wbskt.Auth.Host.Services;
@@ -63,5 +65,28 @@ public class InternalWorkspacesController : ApiControllerBase
         _metrics.RecordWorkspaceResolution(result.Error.Type == ErrorType.Forbidden ? "forbidden" : "error");
 
         return MapError(result.Error);
+    }
+
+    /// <summary>
+    /// The ids of the workspaces deleted at or after <paramref name="since"/> and before
+    /// <paramref name="until"/>, for the management host's deleted workspace sweep, which retires any
+    /// of them that still has live clients, policies or workflows. No user is behind that call, so it
+    /// carries the shared internal key in place of a token.
+    /// </summary>
+    [HttpGet("deleted")]
+    [AllowAnonymous]
+    [InternalApiKey]
+    public async Task<ActionResult<DeletedWorkspacesResponse>> GetDeleted(
+        [FromQuery, BindRequired] DateTimeOffset since,
+        [FromQuery, BindRequired] DateTimeOffset until,
+        CancellationToken cancellationToken)
+    {
+        var result = await _workspaceService.GetDeletedBetweenAsync(since.UtcDateTime, until.UtcDateTime, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapError(result.Error);
+        }
+
+        return Ok(new DeletedWorkspacesResponse(result.Value.ToArray()));
     }
 }

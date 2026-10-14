@@ -162,6 +162,19 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
         return await ExecuteCollectionAsync("dbo.Workspace_GetIdsBy_UserId", p => p.AddWithValue("@UserId", userId), MapId, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<int>> GetDeletedBetweenAsync(DateTime sinceUtc, DateTime untilUtc, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Workspace_GetDeletedBetween",
+            p =>
+            {
+                p.Add("@Since", SqlDbType.DateTime2).Value = sinceUtc;
+                p.Add("@Until", SqlDbType.DateTime2).Value = untilUtc;
+            },
+            r => r.GetInt32(r.GetOrdinal("WorkspaceId")),
+            cancellationToken);
+    }
+
     private static int MapId(SqlDataReader reader) => reader.GetInt32(reader.GetOrdinal("Id"));
 
     private static Workspace MapWorkspace(SqlDataReader reader)
