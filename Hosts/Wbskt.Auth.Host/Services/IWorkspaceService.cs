@@ -34,4 +34,12 @@ public interface IWorkspaceService
     /// workspace and <c>WORKSPACE_UNAUTHORIZED</c> when the user is not a member.
     /// </summary>
     Task<Result<WorkspaceAccessResolution>> ResolveAccessAsync(int userId, Guid workspaceRef, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The ids of the workspaces deleted in [<paramref name="sinceUtc"/>, <paramref name="untilUtc"/>),
+    /// for the management host's deleted workspace sweep. Not a user's question: the internal route
+    /// that asks it is authorized by the shared internal key. Fails Validation when the window is
+    /// empty or reversed.
+    /// </summary>
+    Task<Result<IReadOnlyCollection<int>>> GetDeletedBetweenAsync(DateTime sinceUtc, DateTime untilUtc, CancellationToken cancellationToken = default);
 }

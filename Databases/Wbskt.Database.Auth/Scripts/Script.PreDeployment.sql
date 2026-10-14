@@ -122,3 +122,27 @@ BEGIN
           WHERE r.Name IN (''Admin'', ''User'');');
 END
 GO
+
+-- DeletedWorkspaces: on the first deploy that adds the table, the workspaces already deleted are
+-- recorded so the management host's deleted workspace sweep can retire any of them whose
+-- WorkspaceDeletedEvent was lost (the event had no outbox before fab61a4). Workspaces are hard
+-- deleted, so the only trace of one is the gap it left in the identity range: every id up to the
+-- current identity value that no workspace holds. That also takes in ids no workspace ever had (a
+-- rolled-back insert, an identity cache jump); the sweep finds nothing to retire for those and
+-- leaves them alone. The post-deployment script moves the list into dbo.DeletedWorkspaces once the
+-- table exists, then drops it. Exactly once: once the table exists only Workspace_Delete writes it.
+-- Through EXEC for the same SQL70645 reason as above.
+IF OBJECT_ID('dbo.Workspaces', 'U') IS NOT NULL
+   AND OBJECT_ID('dbo.DeletedWorkspaces', 'U') IS NULL
+   AND OBJECT_ID('dbo.__DeletedWorkspacesBackfill', 'U') IS NULL
+BEGIN
+    PRINT 'Recording the ids of workspaces deleted before dbo.DeletedWorkspaces existed.';
+    EXEC('DECLARE @Last INT = CAST(ISNULL(IDENT_CURRENT(''dbo.Workspaces''), 0) AS INT);
+          WITH Ids AS (
+              SELECT TOP (@Last) CAST(ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS INT) AS Id
+              FROM sys.all_columns a CROSS JOIN sys.all_columns b)
+          SELECT Ids.Id AS WorkspaceId INTO dbo.__DeletedWorkspacesBackfill
+          FROM Ids
+          WHERE NOT EXISTS (SELECT 1 FROM dbo.Workspaces w WHERE w.Id = Ids.Id);');
+END
+GO

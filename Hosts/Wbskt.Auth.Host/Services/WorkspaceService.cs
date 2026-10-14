@@ -200,6 +200,18 @@ internal sealed class WorkspaceService : IWorkspaceService
         return Result.Success();
     }
 
+    public async Task<Result<IReadOnlyCollection<int>>> GetDeletedBetweenAsync(DateTime sinceUtc, DateTime untilUtc, CancellationToken cancellationToken = default)
+    {
+        if (untilUtc <= sinceUtc)
+        {
+            return Result<IReadOnlyCollection<int>>.Failure(Error.Validation("DELETED_WINDOW_INVALID", "'until' must be later than 'since'."));
+        }
+
+        var ids = await _workspaceProvider.GetDeletedBetweenAsync(sinceUtc, untilUtc, cancellationToken);
+        _logger.LogDebug("Listed {Count} workspace(s) deleted between {SinceUtc:o} and {UntilUtc:o}", ids.Count, sinceUtc, untilUtc);
+        return Result<IReadOnlyCollection<int>>.Success(ids);
+    }
+
     private async Task<int> ResolveUserIdAsync(Guid userRef, CancellationToken cancellationToken)
     {
         var userId = await _accounts.FindIdByRefIdAsync(userRef, cancellationToken);
