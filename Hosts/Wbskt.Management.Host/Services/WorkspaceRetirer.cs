@@ -9,8 +9,9 @@ namespace Wbskt.Management.Host.Services;
 
 /// <summary>
 /// Retires what the main database holds for a workspace the auth host has deleted, and does the parts
-/// that live outside the database. The one way a workspace is retired, so every caller leaves it in
-/// the same state.
+/// that live outside the database. The one way a workspace is retired, so the
+/// <c>WorkspaceDeletedEvent</c> handler and the deleted workspace sweep (<see cref="DeletedWorkspaceSweeper"/>)
+/// leave it in the same state.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,7 +27,7 @@ namespace Wbskt.Management.Host.Services;
 /// for as long as it is still running, so a cancel command that failed to send goes out next time.
 /// The engine treats a cancel for a run that is already cancelling, or finished, as a no-op, and
 /// clearing its caches twice is harmless. Everything is sent on the real bus, not the queued one: a
-/// failure throws, and the caller's retry (the event's redelivery) reports the
+/// failure throws, and the caller's retry (the event's redelivery, the sweep's next tick) reports the
 /// runs and definitions again.
 /// </para>
 /// </remarks>

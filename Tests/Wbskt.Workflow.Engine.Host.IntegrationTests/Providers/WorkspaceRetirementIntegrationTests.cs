@@ -59,6 +59,69 @@ public sealed class WorkspaceRetirementIntegrationTests(SqlEdgeFixture fixture)
         Assert.Empty(second.RevokedClients);
     }
 
+    /// <summary>
+    /// The deleted workspace sweep retires, and counts, only a workspace this answers yes for, so it
+    /// must answer no once a retirement has finished and yes for anything retiring would still change.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_workspace_has_live_content_until_it_is_retired_and_its_runs_end()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var ws = await SeedWorkspaceAsync();
+
+        Assert.True(await Provider().HasLiveContentAsync(ws.WorkspaceId));
+
+        await Provider().RetireAsync(ws.WorkspaceId);
+
+        // The run the retirement asked the engine to cancel is still going, so it still counts.
+        Assert.True(await Provider().HasLiveContentAsync(ws.WorkspaceId));
+
+        await ExecAsync("UPDATE dbo.Runs SET Status = N'Cancelled', CompletedAt = SYSUTCDATETIME() WHERE Id = @p0", ws.RunningRunId);
+
+        Assert.False(await Provider().HasLiveContentAsync(ws.WorkspaceId));
+
+        // The neighbouring workspace is still live.
+        Assert.True(await Provider().HasLiveContentAsync(ws.WorkspaceId - 1));
+    }
+
+    [SkippableFact]
+    public async Task A_workspace_with_nothing_here_has_no_live_content()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+
+        Assert.False(await Provider().HasLiveContentAsync(Random.Shared.Next(1_000_000, int.MaxValue)));
+    }
+
+    [SkippableFact]
+    public async Task Each_thing_retiring_would_change_counts_as_live_on_its_own()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+
+        // An enabled policy and nothing else.
+        int policyOnly = Random.Shared.Next(1_000_000, int.MaxValue);
+        await CreatePolicyAsync(policyOnly);
+        Assert.True(await Provider().HasLiveContentAsync(policyOnly));
+
+        // A registered client under a policy that is already disabled.
+        int clientOnly = Random.Shared.Next(1_000_000, int.MaxValue);
+        var (policyId, _) = await CreatePolicyAsync(clientOnly);
+        await ExecAsync("UPDATE dbo.RegistrationPolicies SET IsEnabled = 0 WHERE Id = @p0", policyId);
+        int clientId = await CreateClientAsync(clientOnly, policyId, status: 1);
+        Assert.True(await Provider().HasLiveContentAsync(clientOnly));
+        await ExecAsync("UPDATE dbo.Clients SET Status = 2 WHERE Id = @p0", clientId);
+        Assert.False(await Provider().HasLiveContentAsync(clientOnly));
+
+        // An enabled workflow and nothing else.
+        int workflowOnly = Random.Shared.Next(1_000_000, int.MaxValue);
+        int definitionId = await InsertAsync<int>("""
+            INSERT INTO dbo.WorkflowDefinitions (RefId, Version, WorkspaceId, Name, DefinitionJson, PublishedBy)
+            OUTPUT INSERTED.Id VALUES (NEWID(), 1, @p0, 'live-test', '{}', 1);
+            """, workflowOnly);
+        Assert.True(await Provider().HasLiveContentAsync(workflowOnly));
+        await ExecAsync("UPDATE dbo.WorkflowDefinitions SET IsEnabled = 0 WHERE Id = @p0", definitionId);
+        Assert.False(await Provider().HasLiveContentAsync(workflowOnly));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private sealed record SeededWorkspace(

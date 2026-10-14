@@ -27,4 +27,12 @@ internal sealed class WorkspaceRetirementProvider : BaseSqlProvider, IWorkspaceR
             rows.Where(r => r.Kind == "run").Select(r => r.Id).ToList(),
             rows.Where(r => r.Kind == "definition").Select(r => (int)r.Id).ToList());
     }
+
+    public async Task<bool> HasLiveContentAsync(int workspaceId, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<bool>(
+            "dbo.Workspace_HasLiveContent",
+            p => p.AddWithValue("@WorkspaceId", workspaceId),
+            cancellationToken);
+    }
 }
