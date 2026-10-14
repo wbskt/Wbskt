@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -40,8 +41,7 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
 
         // Listing roles requires tenant-wide roles.read. If the Admin assignment had been scoped to
         // the workspace instead of the tenant, this would be a 403.
-        var response = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles"), user.Token);
+        var response = await fixture.Auth.As(user.Token).GetRolesRawAsync(tenantRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
             "the tenant's creator holds Admin tenant-wide, otherwise nobody could ever administer it");
@@ -84,8 +84,7 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
         var userB = await fixture.CreateUserAsync();
         var tenantB = await fixture.GetTenantRefAsync(userB.Token);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl($"/api/tenants/{tenantB}/members"), userA.Token);
+        var response = await fixture.Auth.As(userA.Token).GetTenantMembersRawAsync(tenantB);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a tenant the caller is not a member of resolves the same as one that does not exist");
@@ -330,11 +329,7 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
 
         var user = await fixture.CreateUserAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/tenants"),
-            user.Token,
-            new { Name = $"e2e-tenant-{Guid.NewGuid():N}", Description = "Created by E2E." });
+        var response = await fixture.Auth.As(user.Token).CreateTenantRawAsync(new CreateTenantRequest(Name: $"e2e-tenant-{Guid.NewGuid():N}", Description: "Created by E2E."));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -391,11 +386,7 @@ public sealed class TenantLifecycleTests(ServicesFixture fixture)
         var owner = await fixture.CreateUserAsync();
         var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/invitations"),
-            owner.Token,
-            new { Email = owner.Email, RoleRef = (Guid?)null });
+        var response = await fixture.Auth.As(owner.Token).CreateInvitationRawAsync(tenantRef, new CreateInvitationRequest(Email: owner.Email, RoleRef: (Guid?)null));
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_ALREADY_MEMBER");

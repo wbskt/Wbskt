@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Wbskt.Api.Client;
 using Wbskt.Auth.Models;
 using Wbskt.Management.Models;
 using Wbskt.Management.Models.Workflow;
@@ -15,6 +15,15 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 
 /// <summary>
 /// xUnit collection fixture shared across all E2E feature tests.
+///
+/// <para>
+/// The hosts are spoken to through the typed clients in <c>Clients/Wbskt.Api.Client</c>:
+/// <see cref="Auth"/> and <see cref="Management"/>, over one cert-ignoring <see cref="HttpClient"/>.
+/// <c>client.As(token)</c> speaks for one user; every endpoint has an <c>XAsync</c> method that returns
+/// the contract type and throws <see cref="ApiException"/> on a failure status, and an <c>XRawAsync</c>
+/// twin for a scenario that asserts on the status. What is left here is arrangement: creating users,
+/// workspaces and devices, and waiting for what a scenario needs to observe.
+/// </para>
 ///
 /// <para>
 /// <b>The register-then-sign-in helpers below depend on a development setting.</b> Sign-in refuses an
@@ -35,14 +44,14 @@ public sealed class ServicesFixture : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    // JsonStringEnumConverter reads an enum written as a name and, by default, one written as a number.
-    private static readonly JsonSerializerOptions EnumTolerantJsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-    };
-
-    // Shared cert-ignoring HttpClient for all REST calls inside the fixture helpers.
+    // Shared cert-ignoring HttpClient under both typed clients and the bespoke raw helpers.
     private readonly HttpClient _http;
+
+    /// <summary>The auth host, anonymous. <c>Auth.As(token)</c> speaks for a user.</summary>
+    public WbsktAuthClient Auth { get; }
+
+    /// <summary>The management host, anonymous. <c>Management.As(token)</c> speaks for a user.</summary>
+    public WbsktManagementClient Management { get; }
 
     /// <summary>
     /// The three public-facing hosts (auth, management, socket) are reachable. This is the gate for
@@ -77,6 +86,8 @@ public sealed class ServicesFixture : IDisposable
         // How long a scenario waits for something is bounded by the PollUntilAsync timeouts, and the
         // host probes below carry their own short timeout.
         _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        Auth = new WbsktAuthClient(_http, new Uri(E2EConfig.AuthBaseUrl));
+        Management = new WbsktManagementClient(_http, new Uri(E2EConfig.ManagementBaseUrl));
 
         HostsAvailable = ProbePublicHostsAsync().GetAwaiter().GetResult();
         EngineAvailable = ProbeHostAsync(E2EConfig.WorkflowBaseUrl).GetAwaiter().GetResult();
@@ -140,14 +151,7 @@ public sealed class ServicesFixture : IDisposable
     /// </summary>
     public async Task<(string Token, Guid WorkspaceRef)> LoginAsAdminAsync()
     {
-        var loginResp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.AuthBaseUrl}/api/auth/login",
-            new { Email = E2EConfig.AdminEmail, Password = E2EConfig.AdminPassword });
-        loginResp.EnsureSuccessStatusCode();
-
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty admin login response.");
-
+        var login = await Auth.LoginAsync(new LoginRequest(E2EConfig.AdminEmail, E2EConfig.AdminPassword));
         var workspaceRef = await ResolveOrCreateWorkspaceAsync(login.AccessToken);
 
         return (login.AccessToken, workspaceRef);
@@ -161,24 +165,9 @@ public sealed class ServicesFixture : IDisposable
     public async Task<string> RegisterAndLoginNewUserAsync()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var email = $"e2e-{suffix}@test.local";
-        var password = $"P@ss{suffix}!";
-        var username = $"e2e-{suffix}";
+        var user = await RegisterAndLoginAsync($"e2e-{suffix}", $"e2e-{suffix}@test.local", $"P@ss{suffix}!", invitationToken: null);
 
-        var registerResp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.AuthBaseUrl}/api/auth/register",
-            new { Username = username, Email = email, Password = password });
-        registerResp.EnsureSuccessStatusCode();
-
-        var loginResp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.AuthBaseUrl}/api/auth/login",
-            new { Email = email, Password = password });
-        loginResp.EnsureSuccessStatusCode();
-
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty login response.");
-
-        return login.AccessToken;
+        return user.Token;
     }
 
     /// <summary>
@@ -188,90 +177,42 @@ public sealed class ServicesFixture : IDisposable
     /// </summary>
     public async Task<(string Token, Guid WorkspaceRef)> RegisterAndLoginUserAsync()
     {
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-        var email = $"e2e-{suffix}@test.local";
-        var password = $"P@ss{suffix}!";
-        var username = $"e2e-{suffix}";
+        var token = await RegisterAndLoginNewUserAsync();
+        var workspaceRef = await ResolveOrCreateWorkspaceAsync(token);
 
-        // 1. Register
-        var registerResp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.AuthBaseUrl}/api/auth/register",
-            new { Username = username, Email = email, Password = password });
-        registerResp.EnsureSuccessStatusCode();
-
-        // 2. Login
-        var loginResp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.AuthBaseUrl}/api/auth/login",
-            new { Email = email, Password = password });
-        loginResp.EnsureSuccessStatusCode();
-
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty login response.");
-
-        // 3. Resolve workspace (list or create)
-        var workspaceRef = await ResolveOrCreateWorkspaceAsync(login.AccessToken);
-
-        return (login.AccessToken, workspaceRef);
+        return (token, workspaceRef);
     }
 
     private async Task<Guid> ResolveOrCreateWorkspaceAsync(string token)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"{E2EConfig.AuthBaseUrl}/api/workspaces");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
-
-        var workspaces = await resp.Content.ReadFromJsonAsync<List<WorkspaceResponse>>(JsonOptions)
-            ?? [];
-
+        var auth = Auth.As(token);
+        var workspaces = await auth.GetWorkspacesAsync();
         if (workspaces.Count > 0)
         {
             return workspaces[0].RefId;
         }
 
         // No workspace exists yet — create one.
-        using var createReq = new HttpRequestMessage(HttpMethod.Post, $"{E2EConfig.AuthBaseUrl}/api/workspaces");
-        createReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        createReq.Content = JsonContent.Create(new { Name = "E2E Workspace", Description = (string?)null });
-        var createResp = await _http.SendAsync(createReq);
-        createResp.EnsureSuccessStatusCode();
-
-        var created = await createResp.Content.ReadFromJsonAsync<WorkspaceResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Workspace creation returned empty response.");
-
+        var created = await auth.CreateWorkspaceAsync(new CreateWorkspaceRequest("E2E Workspace", null));
         return created.RefId;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Raw request helpers
     //
-    // The typed helpers above all call EnsureSuccessStatusCode, which is right for
-    // arranging a scenario but destroys exactly what a negative scenario asserts.
-    // These return the response untouched so a test can read the status, the error
-    // body, or a header off it.
+    // For a request the typed clients cannot express: a URL a scenario builds itself (query strings
+    // under test, deprecated routes), a body the contract does not allow, a malformed header. These
+    // return the response untouched so a test can read the status, the error body, or a header off it.
+    // A request the contract can express goes through Auth/Management and its XRawAsync method.
     // ─────────────────────────────────────────────────────────────────────────
 
     public static string AuthUrl(string path) => $"{E2EConfig.AuthBaseUrl}{path}";
 
     public static string ManagementUrl(string path) => $"{E2EConfig.ManagementBaseUrl}{path}";
 
-    /// <summary>Sends a request and returns the raw response without throwing on a failure status.</summary>
-    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? token = null, object? body = null)
-    {
-        using var req = new HttpRequestMessage(method, url);
-
-        if (token is not null)
-        {
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-
-        if (body is not null)
-        {
-            req.Content = JsonContent.Create(body, options: JsonOptions);
-        }
-
-        return await _http.SendAsync(req);
-    }
+    /// <summary>Sends a request to an absolute URL and returns the raw response without throwing on a failure status.</summary>
+    public Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? token = null, object? body = null) =>
+        Auth.As(token).SendRawAsync(method, url, body);
 
     /// <summary>
     /// Sends a JSON request whose body is empty. This is what "no body" looks like from a JSON client:
@@ -280,6 +221,7 @@ public sealed class ServicesFixture : IDisposable
     /// </summary>
     public async Task<HttpResponseMessage> SendEmptyJsonAsync(HttpMethod method, string url, string? token = null)
     {
+        // Bespoke: an empty body under a JSON content type, which no serializer produces.
         using var req = new HttpRequestMessage(method, url);
 
         if (token is not null)
@@ -347,14 +289,11 @@ public sealed class ServicesFixture : IDisposable
 
     /// <summary>Registers without logging in, so the raw response stays assertable.</summary>
     public Task<HttpResponseMessage> RegisterAsync(string username, string email, string password, string? invitationToken = null) =>
-        SendAsync(
-            HttpMethod.Post,
-            AuthUrl("/api/auth/register"),
-            body: new { Username = username, Email = email, Password = password, InvitationToken = invitationToken });
+        Auth.RegisterRawAsync(new RegisterRequest(username, email, password, invitationToken));
 
     /// <summary>Attempts a login and returns the raw response, without throwing on refusal.</summary>
     public Task<HttpResponseMessage> LoginRawAsync(string email, string password) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/login"), body: new { Email = email, Password = password });
+        Auth.LoginRawAsync(new LoginRequest(email, password));
 
     /// <summary>A unique credential set that has not been registered.</summary>
     public static (string Username, string Email, string Password) NewCredentials()
@@ -364,20 +303,8 @@ public sealed class ServicesFixture : IDisposable
     }
 
     /// <summary>Reads the <c>code</c> off a Problem Details error body, or null when the body is not one.</summary>
-    public static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
-    {
-        try
-        {
-            var error = await response.Content.ReadFromJsonAsync<ErrorDto>(JsonOptions);
-            return error?.Code;
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            // An empty or non-JSON body has no code. Not an error here: the caller is asking "what
-            // code, if any", and the status assertion carries the weight.
-            return null;
-        }
-    }
+    public static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response) =>
+        (await ApiProblem.ReadAsync(response))?.Code;
 
     /// <summary>
     /// GETs a paged list endpoint and returns how many items came back alongside the X-Total-Count
@@ -385,11 +312,8 @@ public sealed class ServicesFixture : IDisposable
     /// </summary>
     public async Task<(int ItemCount, int? TotalCount)> GetPageAsync(string url, string token)
     {
-        var resp = await SendAsync(HttpMethod.Get, url, token);
-        resp.EnsureSuccessStatusCode();
-
-        var page = await resp.Content.ReadFromJsonAsync<Page<JsonElement>>(JsonOptions)
-            ?? throw new InvalidOperationException($"Empty list response from {url}.");
+        using var resp = await SendAsync(HttpMethod.Get, url, token);
+        var page = await WbsktApiClient.ReadAsync<Page<JsonElement>>(resp);
 
         int? total = null;
         if (resp.Headers.TryGetValues("X-Total-Count", out var values)
@@ -447,33 +371,14 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Issues an invitation and returns its raw token — the only time it is available.</summary>
     public async Task<string> InviteAsync(string adminToken, Guid tenantRef, string email, Guid? roleRef = null)
     {
-        var resp = await SendAsync(
-            HttpMethod.Post,
-            AuthUrl($"/api/tenants/{tenantRef}/invitations"),
-            adminToken,
-            new { Email = email, RoleRef = roleRef });
-        resp.EnsureSuccessStatusCode();
-
-        var invitation = await resp.Content.ReadFromJsonAsync<CreatedInvitationResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty invitation response.");
-
+        var invitation = await Auth.As(adminToken).CreateInvitationAsync(tenantRef, new CreateInvitationRequest(email, roleRef));
         return invitation.Token;
     }
 
     private async Task<TestUser> RegisterAndLoginAsync(string username, string email, string password, string? invitationToken)
     {
-        var registerResp = await _http.PostAsJsonAsync(
-            AuthUrl("/api/auth/register"),
-            new { Username = username, Email = email, Password = password, InvitationToken = invitationToken });
-        registerResp.EnsureSuccessStatusCode();
-
-        var loginResp = await _http.PostAsJsonAsync(
-            AuthUrl("/api/auth/login"),
-            new { Email = email, Password = password });
-        loginResp.EnsureSuccessStatusCode();
-
-        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty login response.");
+        await Auth.RegisterAsync(new RegisterRequest(username, email, password, invitationToken));
+        var login = await Auth.LoginAsync(new LoginRequest(email, password));
 
         return new TestUser(username, email, password, login.AccessToken);
     }
@@ -487,62 +392,44 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Logs in and returns both tokens. Throws if the credentials are refused.</summary>
     public async Task<Session> LoginAsync(string email, string password)
     {
-        var response = await SendAsync(
-            HttpMethod.Post, AuthUrl("/api/auth/login"), body: new { Email = email, Password = password });
-        response.EnsureSuccessStatusCode();
-
-        return await ReadSessionAsync(response);
+        var login = await Auth.LoginAsync(new LoginRequest(email, password));
+        return new Session(login.AccessToken, login.RefreshToken!);
     }
 
     /// <summary>Reads the token pair out of a successful login or rotation response.</summary>
     public static async Task<Session> ReadSessionAsync(HttpResponseMessage response)
     {
-        var login = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty session response.");
-
-        return new Session(login.AccessToken, login.RefreshToken);
+        var login = await WbsktApiClient.ReadAsync<LoginResponse>(response);
+        return new Session(login.AccessToken, login.RefreshToken!);
     }
 
     /// <summary>Exchanges a refresh token, returning the raw response so failures stay assertable.</summary>
     public Task<HttpResponseMessage> RefreshAsync(string refreshToken) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/refresh-token"), body: new { RefreshToken = refreshToken });
+        Auth.RefreshTokenRawAsync(new RefreshTokenRequest(refreshToken));
 
     /// <summary>Revokes a single refresh token. Answers 204 whether or not it was live, by design.</summary>
     public Task<HttpResponseMessage> LogoutAsync(string refreshToken) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/logout"), body: new { RefreshToken = refreshToken });
+        Auth.LogoutRawAsync(new RefreshTokenRequest(refreshToken));
 
     /// <summary>Revokes every refresh token the bearer holds.</summary>
     public Task<HttpResponseMessage> LogoutAllAsync(string accessToken) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/auth/logout-all"), accessToken);
+        Auth.As(accessToken).LogoutAllRawAsync();
 
     /// <summary>
     /// The workspaces the bearer can see. Used to establish *whose* access token was issued without
     /// decoding it — a token that lists user B's workspaces belongs to user B.
     /// </summary>
-    public async Task<IReadOnlyList<Guid>> GetWorkspaceRefsAsync(string accessToken)
-    {
-        var response = await SendAsync(HttpMethod.Get, AuthUrl("/api/workspaces"), accessToken);
-        response.EnsureSuccessStatusCode();
-
-        var workspaces = await response.Content.ReadFromJsonAsync<List<WorkspaceResponse>>(JsonOptions) ?? [];
-        return workspaces.Select(w => w.RefId).ToList();
-    }
+    public async Task<IReadOnlyList<Guid>> GetWorkspaceRefsAsync(string accessToken) =>
+        (await Auth.As(accessToken).GetWorkspacesAsync()).Select(w => w.RefId).ToList();
 
     /// <summary>Suspends a member in one tenant, or lifts it. Requires a caller with tenant-wide users.manage.</summary>
     public Task<HttpResponseMessage> SetMemberSuspendedAsync(string adminToken, Guid tenantRef, Guid userRef, bool isSuspended) =>
-        SendAsync(
-            HttpMethod.Put,
-            AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/suspended"),
-            adminToken,
-            new { IsSuspended = isSuspended });
+        Auth.As(adminToken).SetMemberSuspendedRawAsync(tenantRef, userRef, new SetMemberSuspendedRequest(isSuspended));
 
     /// <summary>The caller's first tenant reference — every /api/tenants route needs one.</summary>
     public async Task<Guid> GetTenantRefAsync(string token)
     {
-        var resp = await SendAsync(HttpMethod.Get, AuthUrl("/api/tenants"), token);
-        resp.EnsureSuccessStatusCode();
-
-        var tenants = await resp.Content.ReadFromJsonAsync<List<TenantResponse>>(JsonOptions) ?? [];
+        var tenants = await GetTenantsAsync(token);
         if (tenants.Count == 0)
         {
             throw new InvalidOperationException("Caller belongs to no tenant.");
@@ -551,61 +438,31 @@ public sealed class ServicesFixture : IDisposable
         return tenants[0].RefId;
     }
 
-    /// <summary>A pending invitation as an administrator sees it.</summary>
-    public sealed record Invitation(Guid RefId, string Email, Guid? RoleRef, string? RoleName, DateTime ExpiresAt, DateTime CreatedAt);
-
     /// <summary>Redeems an invitation for the bearer. Returns the raw response so callers can assert on rejections.</summary>
     public Task<HttpResponseMessage> AcceptInvitationAsync(string accessToken, string token) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/invitations/accept"), accessToken, new { Token = token });
+        Auth.As(accessToken).AcceptInvitationRawAsync(new AcceptInvitationRequest(token));
 
     /// <summary>The invitations a tenant has outstanding.</summary>
-    public async Task<IReadOnlyList<Invitation>> GetInvitationsAsync(string token, Guid tenantRef)
-    {
-        var resp = await SendAsync(HttpMethod.Get, AuthUrl($"/api/tenants/{tenantRef}/invitations?take=200"), token);
-        resp.EnsureSuccessStatusCode();
-
-        var page = await resp.Content.ReadFromJsonAsync<Page<Invitation>>(JsonOptions);
-        return page?.Items.ToList() ?? [];
-    }
+    public async Task<IReadOnlyList<InvitationResponse>> GetInvitationsAsync(string token, Guid tenantRef) =>
+        (await Auth.As(token).GetInvitationsAsync(tenantRef, limit: 200)).Items.ToList();
 
     /// <summary>Every tenant the caller belongs to, not just the first.</summary>
-    public async Task<IReadOnlyList<Tenant>> GetTenantsAsync(string token)
-    {
-        var resp = await SendAsync(HttpMethod.Get, AuthUrl("/api/tenants"), token);
-        resp.EnsureSuccessStatusCode();
-
-        var tenants = await resp.Content.ReadFromJsonAsync<List<Tenant>>(JsonOptions) ?? [];
-        return tenants;
-    }
-
-    /// <summary>A tenant as the API exposes it.</summary>
-    public sealed record Tenant(Guid RefId, string Name);
+    public Task<IReadOnlyList<TenantResponse>> GetTenantsAsync(string token) =>
+        Auth.As(token).GetTenantsAsync();
 
     /// <summary>Finds a tenant member's public reference by email, or null when absent.</summary>
     public async Task<Guid?> FindTenantMemberRefAsync(string token, Guid tenantRef, string email)
     {
-        var resp = await SendAsync(
-            HttpMethod.Get,
-            AuthUrl($"/api/tenants/{tenantRef}/members?search={Uri.EscapeDataString(email)}&take=200"),
-            token);
-        resp.EnsureSuccessStatusCode();
-
-        var page = await resp.Content.ReadFromJsonAsync<Page<TenantMemberResponse>>(JsonOptions);
-        return page?.Items.FirstOrDefault(m => string.Equals(m.Email, email, StringComparison.OrdinalIgnoreCase))?.RefId;
+        var page = await Auth.As(token).GetTenantMembersAsync(tenantRef, search: email, limit: 200);
+        return page.Items.FirstOrDefault(m => string.Equals(m.Email, email, StringComparison.OrdinalIgnoreCase))?.RefId;
     }
 
     /// <summary>Creates a tenant role and returns its reference.</summary>
     public async Task<Guid> CreateRoleAsync(string token, Guid tenantRef, string? name = null)
     {
-        var resp = await SendAsync(
-            HttpMethod.Post,
-            AuthUrl($"/api/tenants/{tenantRef}/roles"),
-            token,
-            new { Name = name ?? $"e2e-role-{Guid.NewGuid():N}", Description = "created by an E2E scenario" });
-        resp.EnsureSuccessStatusCode();
-
-        var role = await resp.Content.ReadFromJsonAsync<RoleResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Role creation returned empty response.");
+        var role = await Auth.As(token).CreateRoleAsync(
+            tenantRef,
+            new CreateRoleRequest(name ?? $"e2e-role-{Guid.NewGuid():N}", "created by an E2E scenario"));
 
         return role.RefId;
     }
@@ -613,32 +470,14 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Creates a tenant group and returns its reference.</summary>
     public async Task<Guid> CreateGroupAsync(string token, Guid tenantRef, string? name = null)
     {
-        var resp = await SendAsync(
-            HttpMethod.Post,
-            AuthUrl($"/api/tenants/{tenantRef}/groups"),
-            token,
-            new { Name = name ?? $"e2e-group-{Guid.NewGuid():N}", ParentGroupRef = (Guid?)null });
-        resp.EnsureSuccessStatusCode();
-
-        var group = await resp.Content.ReadFromJsonAsync<GroupResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Group creation returned empty response.");
-
+        var group = await Auth.As(token).CreateGroupAsync(tenantRef, new CreateGroupRequest(name ?? $"e2e-group-{Guid.NewGuid():N}", null));
         return group.RefId;
     }
 
     /// <summary>Creates a workspace owned by the caller and returns its reference.</summary>
     public async Task<Guid> CreateWorkspaceAsync(string token, string? name = null)
     {
-        var resp = await SendAsync(
-            HttpMethod.Post,
-            AuthUrl("/api/workspaces"),
-            token,
-            new { Name = name ?? $"e2e-ws-{Guid.NewGuid():N}", Description = (string?)null });
-        resp.EnsureSuccessStatusCode();
-
-        var workspace = await resp.Content.ReadFromJsonAsync<WorkspaceResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Workspace creation returned empty response.");
-
+        var workspace = await Auth.As(token).CreateWorkspaceAsync(new CreateWorkspaceRequest(name ?? $"e2e-ws-{Guid.NewGuid():N}", null));
         return workspace.RefId;
     }
 
@@ -675,113 +514,51 @@ public sealed class ServicesFixture : IDisposable
         return new WorkspaceHandle(user.Token, workspaceRef, user);
     }
 
-    /// <summary>The internal workspace ID and effective permission slugs a resolve call hands back.</summary>
-    public sealed record ResolvedWorkspace(int WorkspaceId, IReadOnlyList<string> Permissions);
-
     /// <summary>
     /// Calls the gate every other host depends on, returning the raw response. Most scenarios here
     /// are about which status comes back, so this deliberately does not throw on failure.
     /// </summary>
     public Task<HttpResponseMessage> ResolveWorkspaceAsync(string? token, Guid workspaceRef) =>
-        SendAsync(HttpMethod.Post, AuthUrl("/api/internal/workspaces/resolve"), token, new { WorkspaceRef = workspaceRef });
+        Auth.As(token).ResolveWorkspaceRawAsync(new ResolveWorkspaceRequest(workspaceRef));
 
-    /// <summary>Reads a successful resolve response.</summary>
-    public static async Task<ResolvedWorkspace> ReadResolvedWorkspaceAsync(HttpResponseMessage response)
-    {
-        var resolved = await response.Content.ReadFromJsonAsync<ResolvedWorkspaceResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Empty resolve response.");
-
-        return new ResolvedWorkspace(resolved.WorkspaceId, resolved.Permissions);
-    }
+    /// <summary>Reads a successful resolve response: the internal workspace ID and the effective permission slugs.</summary>
+    public static Task<ResolvedWorkspaceResponse> ReadResolvedWorkspaceAsync(HttpResponseMessage response) =>
+        WbsktApiClient.ReadAsync<ResolvedWorkspaceResponse>(response);
 
     /// <summary>The caller's effective permission slugs in a workspace. Throws if the resolve fails.</summary>
-    public async Task<IReadOnlyList<string>> GetEffectivePermissionsAsync(string token, Guid workspaceRef)
-    {
-        var response = await ResolveWorkspaceAsync(token, workspaceRef);
-        response.EnsureSuccessStatusCode();
-
-        return (await ReadResolvedWorkspaceAsync(response)).Permissions;
-    }
+    public async Task<IReadOnlyList<string>> GetEffectivePermissionsAsync(string token, Guid workspaceRef) =>
+        (await Auth.As(token).ResolveWorkspaceAsync(new ResolveWorkspaceRequest(workspaceRef))).Permissions;
 
     // ── Tenant administration read-back ──────────────────────────────────────
 
-    public sealed record Role(Guid RefId, string Name, string? Description);
-    public sealed record Group(Guid RefId, string Name, Guid? ParentGroupRefId);
+    public async Task<IReadOnlyList<RoleResponse>> GetRolesAsync(string token, Guid tenantRef) =>
+        (await Auth.As(token).GetRolesAsync(tenantRef, limit: 200)).Items.ToList();
 
-    /// <summary>A role held by a user or group, with the scope it was granted at.</summary>
-    public sealed record RoleAssignment(Guid RoleRef, string RoleName, Guid? WorkspaceRef);
+    public async Task<IReadOnlyList<GroupResponse>> GetGroupsAsync(string token, Guid tenantRef) =>
+        (await Auth.As(token).GetGroupsAsync(tenantRef, limit: 200)).Items.ToList();
 
-    /// <summary>A permission granted directly to a user, with its scope and whether it is a denial.</summary>
-    public sealed record UserPermission(string Slug, bool IsDeny, Guid? WorkspaceRef);
+    public Task<IReadOnlyList<RoleAssignmentResponse>> GetGroupRoleAssignmentsAsync(string token, Guid tenantRef, Guid groupRef) =>
+        Auth.As(token).GetGroupRolesAsync(tenantRef, groupRef);
 
-    /// <summary>A group a user belongs to.</summary>
-    public sealed record GroupMembership(Guid GroupRef, string GroupName);
+    public Task<IReadOnlyList<RoleAssignmentResponse>> GetUserRoleAssignmentsAsync(string token, Guid tenantRef, Guid userRef) =>
+        Auth.As(token).GetMemberRolesAsync(tenantRef, userRef);
 
-    public async Task<IReadOnlyList<Role>> GetRolesAsync(string token, Guid tenantRef)
-    {
-        var page = await ReadListAsync<RoleResponse>(AuthUrl($"/api/tenants/{tenantRef}/roles?take=200"), token);
-        return page.Select(r => new Role(r.RefId, r.Name, r.Description)).ToList();
-    }
+    public Task<IReadOnlyList<UserPermissionAssignmentResponse>> GetUserPermissionsAsync(string token, Guid tenantRef, Guid userRef) =>
+        Auth.As(token).GetMemberPermissionsAsync(tenantRef, userRef);
 
-    public async Task<IReadOnlyList<Group>> GetGroupsAsync(string token, Guid tenantRef)
-    {
-        var page = await ReadListAsync<GroupResponse>(AuthUrl($"/api/tenants/{tenantRef}/groups?take=200"), token);
-        return page.Select(g => new Group(g.RefId, g.Name, g.ParentGroupRefId)).ToList();
-    }
-
-    public Task<IReadOnlyList<RoleAssignment>> GetGroupRoleAssignmentsAsync(string token, Guid tenantRef, Guid groupRef) =>
-        ReadArrayAsync<RoleAssignment>(AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles"), token);
-
-    public Task<IReadOnlyList<RoleAssignment>> GetUserRoleAssignmentsAsync(string token, Guid tenantRef, Guid userRef) =>
-        ReadArrayAsync<RoleAssignment>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/roles"), token);
-
-    public Task<IReadOnlyList<UserPermission>> GetUserPermissionsAsync(string token, Guid tenantRef, Guid userRef) =>
-        ReadArrayAsync<UserPermission>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/permissions"), token);
-
-    public Task<IReadOnlyList<GroupMembership>> GetUserGroupsAsync(string token, Guid tenantRef, Guid userRef) =>
-        ReadArrayAsync<GroupMembership>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/groups"), token);
-
-    /// <summary>Reads a <c>Page</c>-shaped body (<c>{ "items": [...] }</c>).</summary>
-    private async Task<IReadOnlyList<T>> ReadListAsync<T>(string url, string token)
-    {
-        var response = await SendAsync(HttpMethod.Get, url, token);
-        response.EnsureSuccessStatusCode();
-
-        var page = await response.Content.ReadFromJsonAsync<Page<T>>(JsonOptions);
-        return page?.Items.ToList() ?? [];
-    }
-
-    /// <summary>Reads a bare JSON array body, which the read-back endpoints return unwrapped.</summary>
-    private async Task<IReadOnlyList<T>> ReadArrayAsync<T>(string url, string token)
-    {
-        var response = await SendAsync(HttpMethod.Get, url, token);
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadFromJsonAsync<List<T>>(JsonOptions) ?? [];
-    }
+    public Task<IReadOnlyList<GroupMembershipResponse>> GetUserGroupsAsync(string token, Guid tenantRef, Guid userRef) =>
+        Auth.As(token).GetMemberGroupsAsync(tenantRef, userRef);
 
     /// <summary>The slugs currently attached to a role definition.</summary>
-    public async Task<IReadOnlyList<string>> GetRolePermissionSlugsAsync(string token, Guid tenantRef, Guid roleRef)
-    {
-        var resp = await SendAsync(
-            HttpMethod.Get,
-            AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            token);
-        resp.EnsureSuccessStatusCode();
-
-        var permissions = await resp.Content.ReadFromJsonAsync<List<RolePermissionAssignmentResponse>>(JsonOptions) ?? [];
-        return permissions.Select(p => p.Slug).ToList();
-    }
-
-    /// <summary>A permission attached to a role definition. Role permissions carry no scope.</summary>
-    public sealed record RolePermission(string Slug, bool IsDeny);
+    public async Task<IReadOnlyList<string>> GetRolePermissionSlugsAsync(string token, Guid tenantRef, Guid roleRef) =>
+        (await GetRolePermissionsAsync(token, tenantRef, roleRef)).Select(p => p.Slug).ToList();
 
     /// <summary>
     /// The permissions on a role with their deny flags. The slug-only read above answers "is it
     /// attached"; a grant and a denial are both attached, so telling them apart needs this.
     /// </summary>
-    public Task<IReadOnlyList<RolePermission>> GetRolePermissionsAsync(string token, Guid tenantRef, Guid roleRef) =>
-        ReadArrayAsync<RolePermission>(AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"), token);
+    public Task<IReadOnlyList<RolePermissionAssignmentResponse>> GetRolePermissionsAsync(string token, Guid tenantRef, Guid roleRef) =>
+        Auth.As(token).GetRolePermissionsAsync(tenantRef, roleRef);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Policy helpers
@@ -793,18 +570,9 @@ public sealed class ServicesFixture : IDisposable
         Guid workspaceRef,
         bool autoApproval = true)
     {
-        var policyName = $"e2e-policy-{Guid.NewGuid():N}";
-        using var req = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/registration-policies");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        req.Content = JsonContent.Create(new { Name = policyName, MaxClients = (int?)null, AutoApproval = autoApproval });
-
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
-
-        var policy = await resp.Content.ReadFromJsonAsync<RegistrationPolicyResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Policy creation returned empty response.");
+        var policy = await Management.As(token).CreatePolicyAsync(
+            workspaceRef,
+            new RegistrationPolicyRequest($"e2e-policy-{Guid.NewGuid():N}", null, autoApproval));
 
         return (policy.RefId, policy.Pin);
     }
@@ -816,30 +584,13 @@ public sealed class ServicesFixture : IDisposable
     /// <summary>Initiates client registration via PIN and returns (clientRefId, secret).</summary>
     public async Task<(Guid ClientRefId, string Secret)> RegisterClientAsync(string pin, string name)
     {
-        var resp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.ManagementBaseUrl}/api/client-registrations/initiate",
-            new { Pin = pin, Name = name });
-        resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<ClientRegistrationResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Client registration returned empty response.");
-
+        var result = await Management.RegisterClientAsync(new ClientRegistrationRequest(pin, name));
         return (result.ClientRefId, result.Secret);
     }
 
     /// <summary>Obtains a client JWT (client-side auth).</summary>
-    public async Task<string> LoginClientAsync(Guid clientRefId, string secret)
-    {
-        var resp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.ManagementBaseUrl}/api/client-auth/login",
-            new { ClientRefId = clientRefId, Secret = secret });
-        resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<ClientLoginResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Client login returned empty response.");
-
-        return result.AccessToken;
-    }
+    public async Task<string> LoginClientAsync(Guid clientRefId, string secret) =>
+        (await Management.LoginClientAsync(new ClientLoginRequest(clientRefId, secret))).AccessToken;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Workflow helpers
@@ -850,17 +601,10 @@ public sealed class ServicesFixture : IDisposable
     {
         var definition = definitionElement.Deserialize<Wbskt.Workflow.Abstraction.Models.WorkflowDefinition>(JsonOptions)
             ?? throw new InvalidOperationException("Could not deserialize workflow definition in test.");
-        var request = new WorkflowPublishRequest(workflowRefId, name, null, definition);
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        req.Content = JsonContent.Create(request, options: JsonOptions);
-
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
-
-        var published = await resp.Content.ReadFromJsonAsync<WorkflowPublishResponse>(JsonOptions)
-            ?? throw new InvalidOperationException("Workflow publish returned empty response.");
+        var published = await Management.As(token).PublishWorkflowAsync(
+            workspaceRef,
+            new WorkflowPublishRequest(workflowRefId, name, null, definition));
 
         return published.RefId;
     }
@@ -869,26 +613,20 @@ public sealed class ServicesFixture : IDisposable
     public async Task<IReadOnlyList<RunSummaryDto>> ListRunsAsync(string token, Guid workspaceRef, Guid workflowRefId, int top = 50)
     {
         // The endpoint serves at most 200 runs a page, so follow nextCursor until `top` are read.
+        var management = Management.As(token);
         var runs = new List<RunSummaryDto>();
         string? cursor = null;
         while (runs.Count < top)
         {
-            var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs?limit={top - runs.Count}"
-                + (cursor is { } c ? $"&cursor={Uri.EscapeDataString(c)}" : "");
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            var resp = await _http.SendAsync(req);
+            using var resp = await management.GetRunsRawAsync(workspaceRef, workflowRefId, cursor: cursor, limit: top - runs.Count);
             if (resp.StatusCode == HttpStatusCode.NotFound)
             {
                 return runs;
             }
 
-            resp.EnsureSuccessStatusCode();
-
-            var result = await resp.Content.ReadFromJsonAsync<RunListResponse>(JsonOptions);
-            runs.AddRange(result?.Items ?? []);
-            if (result?.NextCursor is not { } next)
+            var result = await WbsktApiClient.ReadAsync<RunListResponse>(resp);
+            runs.AddRange(result.Items);
+            if (result.NextCursor is not { } next)
             {
                 break;
             }
@@ -903,25 +641,16 @@ public sealed class ServicesFixture : IDisposable
     /// Starts a manual run, optionally with an idempotency key (re-posting the same key dedupes), and
     /// returns the engine's answer: the run's RefId and whether it was started, deduplicated or queued.
     /// </summary>
-    public async Task<StartRunResponse> StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey)
-    {
-        using var resp = await StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerNodeId, idempotencyKey);
-        resp.EnsureSuccessStatusCode();
-        return await ReadStartRunResponseAsync(resp);
-    }
+    public Task<StartRunResponse> StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey) =>
+        Management.As(token).StartRunAsync(workspaceRef, workflowRefId, new StartRunRequest(triggerNodeId, null, idempotencyKey));
 
     /// <summary>Asks for a manual run and returns the raw response, for callers that expect it may be refused.</summary>
     public Task<HttpResponseMessage> StartManualRunRawAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey) =>
-        SendAsync(
-            HttpMethod.Post,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs",
-            token,
-            new { TriggerNodeId = triggerNodeId, Payload = (object?)null, IdempotencyKey = idempotencyKey });
+        Management.As(token).StartRunRawAsync(workspaceRef, workflowRefId, new StartRunRequest(triggerNodeId, null, idempotencyKey));
 
     /// <summary>Reads a manual start's answer. The outcome is read whether the host writes it as a name or a number.</summary>
-    public static async Task<StartRunResponse> ReadStartRunResponseAsync(HttpResponseMessage response) =>
-        await response.Content.ReadFromJsonAsync<StartRunResponse>(EnumTolerantJsonOptions)
-            ?? throw new InvalidOperationException("Manual start returned an empty response.");
+    public static Task<StartRunResponse> ReadStartRunResponseAsync(HttpResponseMessage response) =>
+        WbsktApiClient.ReadAsync<StartRunResponse>(response);
 
     /// <summary>
     /// POSTs to Management's public (anonymous) http-wake callback to resume a parked WaitForHttp
@@ -930,13 +659,8 @@ public sealed class ServicesFixture : IDisposable
     /// deliberately opaque (uniform 202, no match/run details), so callers observe the resume via
     /// its side effects rather than the response body.
     /// </summary>
-    public async Task SendHttpWakeAsync(string token, object? payload = null)
-    {
-        var resp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.ManagementBaseUrl}/api/callbacks/wake/{Uri.EscapeDataString(token)}",
-            payload ?? new { });
-        resp.EnsureSuccessStatusCode();
-    }
+    public Task SendHttpWakeAsync(string token, object? payload = null) =>
+        Management.SendHttpWakeAsync(token, payload);
 
     /// <summary>
     /// POSTs to Management's public (anonymous) workspace-scoped webhook callback, which relays to
@@ -944,45 +668,21 @@ public sealed class ServicesFixture : IDisposable
     /// trigger. The callback is opaque (uniform 202), so callers observe the started run via the
     /// runs API rather than the response body.
     /// </summary>
-    public async Task SendWebhookAsync(Guid workspaceRef, string path, object? payload = null)
-    {
-        var resp = await _http.PostAsJsonAsync(
-            $"{E2EConfig.ManagementBaseUrl}/api/callbacks/webhook/{workspaceRef}/{Uri.EscapeDataString(path)}",
-            payload ?? new { });
-        resp.EnsureSuccessStatusCode();
-    }
+    public Task SendWebhookAsync(Guid workspaceRef, string path, object? payload = null) =>
+        Management.SendWebhookAsync(workspaceRef, path, payload);
 
     /// <summary>Sends a named signal to a parked run via the workspace-scoped management endpoint.</summary>
     public async Task<(bool Matched, string Outcome)> SendSignalAsync(string token, Guid workspaceRef, Guid runRefId, string signalName, object? payload = null)
     {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/signals/{signalName}");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        req.Content = JsonContent.Create(new { SignalName = signalName, Payload = payload ?? new { } }, options: JsonOptions);
+        var request = new SignalRequest(signalName, JsonSerializer.SerializeToElement(payload ?? new { }, JsonOptions));
+        var result = await Management.As(token).SignalRunAsync(workspaceRef, runRefId, signalName, request);
 
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<SignalDto>(JsonOptions)
-            ?? throw new InvalidOperationException("Signal returned empty response.");
         return (result.Matched, result.Outcome);
     }
 
     /// <summary>Fetches the full run detail (summary + all branches, each carrying its LocalJson state).</summary>
-    public async Task<RunDetailDto> GetRunDetailAsync(string token, Guid workspaceRef, Guid runRefId)
-    {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
-
-        return await resp.Content.ReadFromJsonAsync<RunDetailDto>(JsonOptions)
-            ?? throw new InvalidOperationException("Run detail returned empty response.");
-    }
+    public Task<RunDetailDto> GetRunDetailAsync(string token, Guid workspaceRef, Guid runRefId) =>
+        Management.As(token).GetRunAsync(workspaceRef, runRefId);
 
     /// <summary>
     /// Asks for a run to be cancelled by RefId. The answer is 202: the engine carries the cancel out
@@ -991,37 +691,25 @@ public sealed class ServicesFixture : IDisposable
     public async Task CancelRunAsync(string token, Guid workspaceRef, Guid runRefId)
     {
         using var resp = await CancelRunRawAsync(token, workspaceRef, runRefId);
-        resp.EnsureSuccessStatusCode();
+        await WbsktApiClient.EnsureSuccessAsync(resp);
     }
 
     /// <summary>Asks for a run to be cancelled and returns the raw response, for the scenarios about which status comes back.</summary>
     public Task<HttpResponseMessage> CancelRunRawAsync(string token, Guid workspaceRef, Guid runRefId) =>
-        SendAsync(
-            HttpMethod.Post,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/cancel",
-            token,
-            new CancelRunRequest("test cancellation"));
+        Management.As(token).CancelRunRawAsync(workspaceRef, runRefId, new CancelRunRequest("test cancellation"));
 
     /// <summary>Fetches the ordered history events for a run (each carrying NodeCompleted/NodeFailed PayloadJson).</summary>
     public async Task<IReadOnlyList<HistoryEventDto>> GetHistoryAsync(string token, Guid workspaceRef, Guid runRefId, int top = 200)
     {
         // The endpoint serves at most 200 events a page, so follow nextCursor until `top` are read.
+        var management = Management.As(token);
         var events = new List<HistoryEventDto>();
         string? cursor = null;
         while (events.Count < top)
         {
-            using var req = new HttpRequestMessage(
-                HttpMethod.Get,
-                $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/runs/{runRefId}/history?limit={top - events.Count}"
-                + (cursor is { } c ? $"&cursor={Uri.EscapeDataString(c)}" : ""));
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            var resp = await _http.SendAsync(req);
-            resp.EnsureSuccessStatusCode();
-
-            var result = await resp.Content.ReadFromJsonAsync<HistoryListResponse>(JsonOptions);
-            events.AddRange(result?.Items ?? []);
-            if (result?.NextCursor is not { } next)
+            var result = await management.GetRunHistoryAsync(workspaceRef, runRefId, cursor, top - events.Count);
+            events.AddRange(result.Items);
+            if (result.NextCursor is not { } next)
             {
                 break;
             }
@@ -1277,22 +965,12 @@ public sealed class ServicesFixture : IDisposable
     }
 
     /// <summary>Reads the central event-log feed for a workspace, optionally filtered by event name.</summary>
-    public async Task<IReadOnlyList<EventLogItemDto>> GetEventLogsAsync(string token, Guid workspaceRef, string? eventName = null, int take = 200)
+    public async Task<IReadOnlyList<EventLogResponse>> GetEventLogsAsync(string token, Guid workspaceRef, string? eventName = null, int take = 200)
     {
-        var url = $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/event-logs?limit={take}";
-        if (!string.IsNullOrWhiteSpace(eventName))
-        {
-            url += $"&eventName={Uri.EscapeDataString(eventName)}";
-        }
+        var search = string.IsNullOrWhiteSpace(eventName) ? null : new EventLogSearch { EventName = eventName };
+        var page = await Management.As(token).GetEventLogsAsync(workspaceRef, search, limit: take);
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var resp = await _http.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
-
-        var result = await resp.Content.ReadFromJsonAsync<EventLogListDto>(JsonOptions);
-        return result?.Items ?? [];
+        return page.Items.ToList();
     }
 
     /// <summary>The set of run statuses that represent a finalized run.</summary>
@@ -1393,15 +1071,4 @@ public sealed class ServicesFixture : IDisposable
     // ─────────────────────────────────────────────────────────────────────────
 
     public void Dispose() => _http.Dispose();
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Local DTOs (mirrors of API response shapes — keeps the test project
-    // truly black-box without pulling in host assemblies)
-    // ─────────────────────────────────────────────────────────────────────────
-    private record ErrorDto(string Code, string Detail, string TraceId);
-    private record SignalDto(bool Matched, string Outcome);
-    private record EventLogListDto(IReadOnlyList<EventLogItemDto> Items);
 }
-
-/// <summary>Mirror of the Management Host's EventLogResponse (criticality serializes as a number: Info=0, Warning=1, Error=2).</summary>
-public sealed record EventLogItemDto(string EventName, string EventData, int Criticality, Guid? PolicyRefId, Guid? ClientRefId, Guid? WorkflowRefId, DateTime CreatedAtUtc, Guid? UserRefId = null);

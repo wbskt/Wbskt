@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -33,11 +34,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(admin.Token);
         var member = await fixture.CreateUserInTenantAsync(admin.Token, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            admin.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(admin.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
         var memberRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, member.Email);
         memberRef.Should().NotBeNull();
@@ -49,11 +46,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
     {
         var roleRef = await fixture.CreateRoleAsync(token, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            token,
-            new { Slug = slug, IsDeny = false });
+        await fixture.Auth.As(token).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: slug, IsDeny: false));
 
         return roleRef;
     }
@@ -130,8 +123,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (member, _, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members"), member.Token);
+        var response = await fixture.Auth.As(member.Token).GetTenantMembersRawAsync(tenantRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -147,11 +139,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (_, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
         var roleRef = await fixture.CreateRoleAsync(admin.Token, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)workspaceRef });
+        await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)workspaceRef));
 
         var assignments = await fixture.GetUserRoleAssignmentsAsync(admin.Token, tenantRef, memberRef);
 
@@ -166,11 +154,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            admin.Token,
-            new { Slug = "logs.read", IsDeny = true, WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.read", IsDeny: true, WorkspaceRef: (Guid?)null));
 
         var permissions = await fixture.GetUserPermissionsAsync(admin.Token, tenantRef, memberRef);
 
@@ -191,10 +175,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var before = await fixture.GetUserGroupsAsync(admin.Token, tenantRef, memberRef);
         before.Should().BeEmpty("an invited member joins no groups");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
-            admin.Token);
+        await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, groupRef);
 
         (await fixture.GetUserGroupsAsync(admin.Token, tenantRef, memberRef))
             .Should().ContainSingle(g => g.GroupRef == groupRef);
@@ -207,10 +188,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         var (admin, tenantRef) = await ArrangeAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{Guid.NewGuid()}/roles"),
-            admin.Token);
+        var response = await fixture.Auth.As(admin.Token).GetMemberRolesRawAsync(tenantRef, Guid.NewGuid());
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
@@ -228,10 +206,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         // The invariant TenantReferences.ResolveMemberAsync exists to enforce: an administrator
         // cannot reach an outside account and pull it into their tenant's permission graph.
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantB}/members/{foreignMemberRef}/roles"),
-            adminB.Token);
+        var response = await fixture.Auth.As(adminB.Token).GetMemberRolesRawAsync(tenantB, foreignMemberRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
@@ -245,10 +220,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles"),
-            member.Token);
+        var response = await fixture.Auth.As(member.Token).GetMemberRolesRawAsync(tenantRef, memberRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -264,10 +236,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
         // The groups read gates on users.read, not the roles.read that MEM_10 covers.
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups"),
-            member.Token);
+        var response = await fixture.Auth.As(member.Token).GetMemberGroupsRawAsync(tenantRef, memberRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("PERMISSION_UNAUTHORIZED");
@@ -282,17 +251,11 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
         var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
-            admin.Token);
+        var response = await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, groupRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var body = await (await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups"),
-            admin.Token)).Content.ReadAsStringAsync();
+        var body = await (await fixture.Auth.As(admin.Token).GetMemberGroupsRawAsync(tenantRef, memberRef)).Content.ReadAsStringAsync();
 
         body.Should().Contain(groupRef.ToString());
     }
@@ -307,20 +270,13 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, groupRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef))
             .Should().NotContain("logs.read", "the role is on the group, and they are not in it yet");
 
         // Joining the group is what delivers the role — the assignment never names the user.
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
-            admin.Token);
+        await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, groupRef);
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
     }
@@ -349,10 +305,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{Guid.NewGuid()}"),
-            admin.Token);
+        var response = await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, Guid.NewGuid());
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("GROUP_NOT_FOUND");
@@ -369,11 +322,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, groupRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
         var membershipUrl = ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}");
         await fixture.SendAsync(HttpMethod.Post, membershipUrl, admin.Token);
@@ -397,10 +346,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
         var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Delete,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
-            admin.Token);
+        var response = await fixture.Auth.As(admin.Token).RemoveMemberFromGroupRawAsync(tenantRef, memberRef, groupRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent, "delete is idempotent");
     }
@@ -414,19 +360,11 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, workspaceOne) = await ArrangeMemberAsync(admin, tenantRef);
 
         var workspaceTwo = await fixture.CreateWorkspaceAsync(admin.Token);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceTwo}/members"),
-            admin.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(admin.Token).AddWorkspaceMemberRawAsync(workspaceTwo, new AddMemberRequest(Email: member.Email));
 
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceOne)).Should().Contain("logs.read");
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceTwo)).Should().Contain("logs.read");
@@ -441,19 +379,11 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, workspaceOne) = await ArrangeMemberAsync(admin, tenantRef);
 
         var workspaceTwo = await fixture.CreateWorkspaceAsync(admin.Token);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceTwo}/members"),
-            admin.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(admin.Token).AddWorkspaceMemberRawAsync(workspaceTwo, new AddMemberRequest(Email: member.Email));
 
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)workspaceOne });
+        await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)workspaceOne));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceOne)).Should().Contain("logs.read");
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceTwo)).Should().NotContain("logs.read");
@@ -467,11 +397,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{Guid.NewGuid()}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        var response = await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, Guid.NewGuid(), new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("ROLE_NOT_FOUND");
@@ -491,11 +417,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         // The reference resolves — it is a real workspace — but the procedure refuses to scope a
         // tenant-B assignment to a tenant-A workspace.
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantB}/members/{memberRef}/roles/{roleRef}"),
-            adminB.Token,
-            new { WorkspaceRef = (Guid?)foreignWorkspace });
+        var response = await fixture.Auth.As(adminB.Token).AssignMemberRoleRawAsync(tenantB, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)foreignWorkspace));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
@@ -510,18 +432,11 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Delete,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token);
+        var response = await fixture.Auth.As(admin.Token).RemoveMemberRoleRawAsync(tenantRef, memberRef, roleRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().NotContain("logs.read");
@@ -558,11 +473,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            admin.Token,
-            new { Slug = "logs.read", IsDeny = false, WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.read", IsDeny: false, WorkspaceRef: (Guid?)null));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
     }
@@ -576,19 +487,11 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            admin.Token,
-            new { Slug = "logs.read", IsDeny = true, WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.read", IsDeny: true, WorkspaceRef: (Guid?)null));
 
         // User-Deny outranks Role-Allow — the override is how an administrator carves an exception
         // out of a role without editing the role for everyone.
@@ -604,17 +507,9 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, workspaceOne) = await ArrangeMemberAsync(admin, tenantRef);
 
         var workspaceTwo = await fixture.CreateWorkspaceAsync(admin.Token);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceTwo}/members"),
-            admin.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(admin.Token).AddWorkspaceMemberRawAsync(workspaceTwo, new AddMemberRequest(Email: member.Email));
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            admin.Token,
-            new { Slug = "logs.read", IsDeny = false, WorkspaceRef = (Guid?)workspaceOne });
+        await fixture.Auth.As(admin.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.read", IsDeny: false, WorkspaceRef: (Guid?)workspaceOne));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceOne)).Should().Contain("logs.read");
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceTwo)).Should().NotContain("logs.read");
@@ -628,11 +523,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (_, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            admin.Token,
-            new { Slug = "logs.raed", IsDeny = false, WorkspaceRef = (Guid?)null });
+        var response = await fixture.Auth.As(admin.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.raed", IsDeny: false, WorkspaceRef: (Guid?)null));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("AUTH_OPERATION_REJECTED");
@@ -650,27 +541,16 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (member, memberRef, workspaceRef) = await ArrangeMemberAsync(admin, tenantRef);
         var roleRef = await CreateRoleWithPermissionAsync(admin.Token, tenantRef, "logs.read");
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            admin.Token,
-            new { Slug = "logs.read", IsDeny = true, WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.read", IsDeny: true, WorkspaceRef: (Guid?)null));
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().NotContain("logs.read");
 
         // Deleting the override is not the same as allowing it: the decision goes back to the roles.
         // Without a delete, an accidental deny could never be undone — an allow would just be a
         // second user-level row, and deny wins within that level.
-        var response = await fixture.SendAsync(
-            HttpMethod.Delete,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions/logs.read"),
-            admin.Token);
+        var response = await fixture.Auth.As(admin.Token).RemoveMemberPermissionRawAsync(tenantRef, memberRef, "logs.read");
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain("logs.read");
@@ -692,10 +572,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
             .Where(p => p.Slug == "logs.read").Should().HaveCount(2, "scope is part of the row's identity");
 
         // Addressing the scoped row leaves the tenant-wide one standing.
-        await fixture.SendAsync(
-            HttpMethod.Delete,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions/logs.read?workspaceRef={workspaceRef}"),
-            admin.Token);
+        await fixture.Auth.As(admin.Token).RemoveMemberPermissionRawAsync(tenantRef, memberRef, "logs.read", workspaceRef: workspaceRef);
 
         (await fixture.GetUserPermissionsAsync(admin.Token, tenantRef, memberRef))
             .Where(p => p.Slug == "logs.read").Should().ContainSingle()
@@ -710,11 +587,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
         var (admin, tenantRef) = await ArrangeAsync();
         var (member, memberRef, _) = await ArrangeMemberAsync(admin, tenantRef);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            member.Token,
-            new { Slug = "logs.read", IsDeny = false, WorkspaceRef = (Guid?)null });
+        var response = await fixture.Auth.As(member.Token).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: "logs.read", IsDeny: false, WorkspaceRef: (Guid?)null));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -791,10 +664,7 @@ public sealed class TenantMemberTests(ServicesFixture fixture)
 
         await fixture.SetMemberSuspendedAsync(admin.Token, tenantRef, memberRef, isSuspended: true);
 
-        var body = await (await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members?search={Uri.EscapeDataString(member.Email)}"),
-            admin.Token)).Content.ReadAsStringAsync();
+        var body = await (await fixture.Auth.As(admin.Token).GetTenantMembersRawAsync(tenantRef, search: member.Email)).Content.ReadAsStringAsync();
 
         body.Should().Contain("\"isSuspended\":true").And.Contain("\"isActive\":true");
     }

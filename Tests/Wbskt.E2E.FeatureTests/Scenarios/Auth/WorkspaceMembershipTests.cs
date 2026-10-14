@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -30,11 +31,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
     }
 
     private Task<HttpResponseMessage> AddMemberAsync(string token, Guid workspaceRef, string email) =>
-        fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            token,
-            new { Email = email });
+        fixture.Auth.As(token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: email));
 
     // ── Adding ────────────────────────────────────────────────────────────────────────────
 
@@ -280,10 +277,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
         var (owner, _, workspaceRef, member) = await ArrangeAsync();
         await AddMemberAsync(owner.Token, workspaceRef, member.Email);
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            member.Token);
+        var response = await fixture.Auth.As(member.Token).GetWorkspaceMembersRawAsync(workspaceRef);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -295,10 +289,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
 
         var (owner, _, workspaceRef, _) = await ArrangeAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Get,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            owner.Token);
+        var response = await fixture.Auth.As(owner.Token).GetWorkspaceMembersRawAsync(workspaceRef);
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync();
@@ -358,10 +349,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
 
         var (owner, _, workspaceRef, _) = await ArrangeAsync();
 
-        var response = await fixture.SendAsync(
-            HttpMethod.Delete,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members/{Guid.NewGuid()}"),
-            owner.Token);
+        var response = await fixture.Auth.As(owner.Token).RemoveWorkspaceMemberRawAsync(workspaceRef, Guid.NewGuid());
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ServicesFixture.ReadErrorCodeAsync(response)).Should().Be("USER_NOT_FOUND");
@@ -398,11 +386,7 @@ public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
         var memberRef = await fixture.FindTenantMemberRefAsync(owner.Token, tenantRef, member.Email);
         var roleRef = await fixture.CreateRoleAsync(owner.Token, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            owner.Token,
-            new { Slug = "logs.read", IsDeny = false });
+        await fixture.Auth.As(owner.Token).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: "logs.read", IsDeny: false));
 
         await fixture.SendAsync(
             HttpMethod.Post,

@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Auth.Models;
@@ -16,7 +14,6 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 [Collection(E2ECollection.Name)]
 public sealed class AccountSecurityTests(ServicesFixture fixture)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     // ── Change password ───────────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -42,8 +39,8 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         // ends every session the user has, the new one included.
         var remaining = await ListSessionsAsync(fresh.AccessToken);
         remaining.Should().ContainSingle();
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, here.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, elsewhere.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await fixture.Auth.As(here.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await fixture.Auth.As(elsewhere.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await fixture.RefreshAsync(fresh.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await fixture.LoginRawAsync(user.Email, user.Password)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -96,7 +93,7 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         // the first sign-in. End it.
         before.Should().ContainSingle(s => s.IsCurrent);
         var target = before.Where(s => !s.IsCurrent).OrderByDescending(s => s.CreatedAt).First();
-        (await fixture.SendAsync(HttpMethod.Delete, $"{Sessions}/{target.Id}", second.AccessToken))
+        (await fixture.Auth.As(second.AccessToken).RevokeSessionRawAsync(target.Id))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var after = await ListSessionsAsync(second.AccessToken);
@@ -119,7 +116,7 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         var ownerSessions = await ListSessionsAsync(owner.Token);
         var target = ownerSessions.First();
 
-        var response = await fixture.SendAsync(HttpMethod.Delete, $"{Sessions}/{target.Id}", stranger.Token);
+        var response = await fixture.Auth.As(stranger.Token).RevokeSessionRawAsync(target.Id);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ListSessionsAsync(owner.Token)).Select(s => s.Id).Should().Contain(target.Id);
@@ -162,10 +159,10 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         var managementEndpoint = ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/registration-policies");
         var phoneSession = (await ListSessionsAsync(phone.AccessToken)).Single(s => s.IsCurrent);
 
-        (await fixture.SendAsync(HttpMethod.Delete, $"{Sessions}/{phoneSession.Id}", laptop.AccessToken))
+        (await fixture.Auth.As(laptop.AccessToken).RevokeSessionRawAsync(phoneSession.Id))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, phone.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await fixture.Auth.As(phone.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await TokenAcceptanceTests.EventuallyAsync(() => fixture.SendAsync(HttpMethod.Get, managementEndpoint, phone.AccessToken), HttpStatusCode.Unauthorized))
             .Should().Be(HttpStatusCode.Unauthorized, "the management host hears of the ended session over Redis");
         (await fixture.SendAsync(HttpMethod.Get, managementEndpoint, laptop.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -178,14 +175,14 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
 
         var user = await fixture.CreateUserAsync();
         var session = await fixture.LoginAsync(user.Email, user.Password);
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, session.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.Auth.As(session.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await fixture.LogoutAsync(session.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, session.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await fixture.Auth.As(session.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         // The account itself is fine: signing in again works and gets a token that is accepted.
         var again = await fixture.LoginAsync(user.Email, user.Password);
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, again.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.Auth.As(again.AccessToken).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ── Lockout ───────────────────────────────────────────────────────────────────────────
@@ -208,7 +205,7 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
         (await ServicesFixture.ReadErrorCodeAsync(locked)).Should().Be("AUTH_INVALID_CREDENTIALS");
 
         // Sessions issued before the lock are untouched by it.
-        (await fixture.SendAsync(HttpMethod.Get, Sessions, user.Token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await fixture.Auth.As(user.Token).GetSessionsRawAsync()).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [SkippableFact]
@@ -230,19 +227,9 @@ public sealed class AccountSecurityTests(ServicesFixture fixture)
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
-    private static string Sessions => ServicesFixture.AuthUrl("/api/auth/sessions");
-
     private Task<HttpResponseMessage> ChangePasswordAsync(string? accessToken, string current, string next) =>
-        fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl("/api/auth/change-password"),
-            accessToken,
-            new { CurrentPassword = current, NewPassword = next });
+        fixture.Auth.As(accessToken).ChangePasswordRawAsync(new ChangePasswordRequest(CurrentPassword: current, NewPassword: next));
 
-    private async Task<IReadOnlyList<SessionResponse>> ListSessionsAsync(string accessToken)
-    {
-        var response = await fixture.SendAsync(HttpMethod.Get, Sessions, accessToken);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<List<SessionResponse>>(JsonOptions) ?? [];
-    }
+    private Task<IReadOnlyList<SessionResponse>> ListSessionsAsync(string accessToken) =>
+        fixture.Auth.As(accessToken).GetSessionsAsync();
 }

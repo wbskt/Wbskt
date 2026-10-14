@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 
@@ -109,7 +110,7 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
         telegram.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("name").GetString())
             .Should().Equal("Mike bot", "Zulu bot");
 
-        using var badFilter = await fixture.SendAsync(HttpMethod.Get, IntegrationsApi.Url(ws, "?type=fax"), token);
+        using var badFilter = await _api.ListRawAsync(token, ws, "fax");
         badFilter.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ServicesFixture.ReadErrorCodeAsync(badFilter)).Should().Be("INTEGRATION_TYPE_INVALID");
     }
@@ -270,7 +271,7 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
                 await _api.GetRawAsync(token, ws, refId),
                 await _api.UpdateRawAsync(token, ws, refId, new { name = "Mine now" }),
                 await _api.DeleteRawAsync(token, ws, refId),
-                await fixture.SendAsync(HttpMethod.Get, IntegrationsApi.Url(ws, $"/{refId}/usage"), token),
+                await _api.UsageRawAsync(token, ws, refId),
                 await _api.TestRawAsync(token, ws, new { refId }),
             };
 
@@ -344,11 +345,7 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
         var userRole = (await fixture.GetRolesAsync(admin.Token, tenantRef)).Single(r => r.Name == "User");
 
         var (username, email, password) = ServicesFixture.NewCredentials();
-        using (var invited = await fixture.SendAsync(
-                   HttpMethod.Post,
-                   ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/invitations"),
-                   admin.Token,
-                   new { Email = email, RoleRef = userRole.RefId, WorkspaceRefs = new[] { ws } }))
+        using (var invited = await fixture.Auth.As(admin.Token).CreateInvitationRawAsync(tenantRef, new CreateInvitationRequest(Email: email, RoleRef: userRole.RefId, WorkspaceRefs: new[] { ws })))
         {
             invited.EnsureSuccessStatusCode();
             var invitation = JsonDocument.Parse(await invited.Content.ReadAsStringAsync()).RootElement;
@@ -383,9 +380,9 @@ public sealed class IntegrationCrudE2ETests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         var (_, ws) = await _api.NewWorkspaceAsync();
 
-        using var list = await fixture.SendAsync(HttpMethod.Get, IntegrationsApi.Url(ws));
+        using var list = await _api.ListRawAsync(null, ws);
         list.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        using var create = await fixture.SendAsync(HttpMethod.Post, IntegrationsApi.Url(ws), body: IntegrationsApi.Telegram("Anon"));
+        using var create = await _api.CreateRawAsync(null, ws, IntegrationsApi.Telegram("Anon"));
         create.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 

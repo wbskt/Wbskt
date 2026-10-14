@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -171,7 +172,7 @@ public sealed class RateLimitingTests(ServicesFixture fixture)
         var user = await fixture.CreateUserAsync();
 
         var statuses = await ExhaustAsync(
-            () => fixture.SendAsync(HttpMethod.Post, ServicesFixture.AuthUrl("/api/auth/verify-email"), body: new { Token = $"bogus-{Guid.NewGuid():N}" }),
+            () => fixture.Auth.VerifyEmailRawAsync(new VerifyEmailRequest(Token: $"bogus-{Guid.NewGuid():N}")),
             E2EConfig.VerificationPermitLimit);
         statuses.Should().Contain(HttpStatusCode.TooManyRequests);
 

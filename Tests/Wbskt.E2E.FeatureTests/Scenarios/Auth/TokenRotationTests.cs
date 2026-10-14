@@ -49,8 +49,7 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         var response = await fixture.RefreshAsync(session.RefreshToken);
         var rotated = await ServicesFixture.ReadSessionAsync(response);
 
-        var protectedCall = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl("/api/workspaces"), rotated.AccessToken);
+        var protectedCall = await fixture.Auth.As(rotated.AccessToken).GetWorkspacesRawAsync();
 
         protectedCall.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -98,8 +97,7 @@ public sealed class TokenRotationTests(ServicesFixture fixture)
         await fixture.RefreshAsync(session.RefreshToken);
 
         // Documents the intended window: rotation retires refresh tokens, never access tokens.
-        var protectedCall = await fixture.SendAsync(
-            HttpMethod.Get, ServicesFixture.AuthUrl("/api/workspaces"), session.AccessToken);
+        var protectedCall = await fixture.Auth.As(session.AccessToken).GetWorkspacesRawAsync();
 
         protectedCall.StatusCode.Should().Be(HttpStatusCode.OK,
             "an access token is self-contained and lives until it expires");

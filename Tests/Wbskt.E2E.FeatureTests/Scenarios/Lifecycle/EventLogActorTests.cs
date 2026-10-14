@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
@@ -23,7 +24,7 @@ public sealed class EventLogActorTests(ServicesFixture fixture)
         var (policyRef, _) = await fixture.CreatePolicyAsync(token, workspace);
 
         // Entries reach the log through the bus and a batched flush.
-        EventLogItemDto? created = null;
+        EventLogResponse? created = null;
         await ServicesFixture.PollAsync(async () =>
         {
             var logs = await fixture.GetEventLogsAsync(token, workspace, "PolicyCreatedEvent");

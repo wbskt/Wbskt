@@ -4,6 +4,7 @@ using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Validation;
+using Wbskt.Management.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 
@@ -43,11 +44,7 @@ public sealed class ListPagingTests(ServicesFixture fixture)
         var templates = new List<Guid>();
         for (var i = 0; i < 3; i++)
         {
-            var created = await fixture.SendAsync(
-                HttpMethod.Post,
-                ServicesFixture.ManagementUrl($"/api/workspaces/{workspace}/message-templates"),
-                token,
-                new { Name = $"paging-{i}", MessageType = "paging.test", PayloadJson = "{}", PolicyRefId = (Guid?)null });
+            var created = await fixture.Management.As(token).CreateMessageTemplateRawAsync(workspace, new MessageTemplateRequest(Name: $"paging-{i}", MessageType: "paging.test", PayloadJson: "{}", PolicyRefId: (Guid?)null));
             created.EnsureSuccessStatusCode();
             using var body = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
             templates.Add(body.RootElement.GetProperty("refId").GetGuid());

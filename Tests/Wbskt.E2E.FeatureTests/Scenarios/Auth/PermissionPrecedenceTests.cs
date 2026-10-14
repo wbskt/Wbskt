@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Auth.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 
@@ -29,11 +30,7 @@ public sealed class PermissionPrecedenceTests(ServicesFixture fixture)
         var workspaceRef = await fixture.CreateWorkspaceAsync(admin.Token);
 
         var member = await fixture.CreateUserInTenantAsync(admin.Token, tenantRef);
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/workspaces/{workspaceRef}/members"),
-            admin.Token,
-            new { Email = member.Email });
+        await fixture.Auth.As(admin.Token).AddWorkspaceMemberRawAsync(workspaceRef, new AddMemberRequest(Email: member.Email));
 
         var memberRef = await fixture.FindTenantMemberRefAsync(admin.Token, tenantRef, member.Email);
         memberRef.Should().NotBeNull();
@@ -46,28 +43,16 @@ public sealed class PermissionPrecedenceTests(ServicesFixture fixture)
     {
         var roleRef = await fixture.CreateRoleAsync(adminToken, tenantRef);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/roles/{roleRef}/permissions"),
-            adminToken,
-            new { Slug, IsDeny = isDeny });
+        await fixture.Auth.As(adminToken).GrantRolePermissionRawAsync(tenantRef, roleRef, new GrantRolePermissionRequest(Slug: Slug, IsDeny: isDeny));
 
         return roleRef;
     }
 
     private Task AssignRoleAsync(string adminToken, Guid tenantRef, Guid memberRef, Guid roleRef) =>
-        fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            adminToken,
-            new { WorkspaceRef = (Guid?)null });
+        fixture.Auth.As(adminToken).AssignMemberRoleRawAsync(tenantRef, memberRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
     private Task GrantDirectAsync(string adminToken, Guid tenantRef, Guid memberRef, bool isDeny) =>
-        fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/permissions"),
-            adminToken,
-            new { Slug, IsDeny = isDeny, WorkspaceRef = (Guid?)null });
+        fixture.Auth.As(adminToken).GrantMemberPermissionRawAsync(tenantRef, memberRef, new GrantPermissionRequest(Slug: Slug, IsDeny: isDeny, WorkspaceRef: (Guid?)null));
 
     [SkippableFact]
     public async Task PREC_01_NoAssignments_MeansAbsent()
@@ -170,16 +155,9 @@ public sealed class PermissionPrecedenceTests(ServicesFixture fixture)
         var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
         var roleRef = await CreateRoleAsync(admin.Token, tenantRef, isDeny: false);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, groupRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
-            admin.Token);
+        await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, groupRef);
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain(Slug);
     }
@@ -194,16 +172,9 @@ public sealed class PermissionPrecedenceTests(ServicesFixture fixture)
         var groupRef = await fixture.CreateGroupAsync(admin.Token, tenantRef);
         var roleRef = await CreateRoleAsync(admin.Token, tenantRef, isDeny: false);
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/groups/{groupRef}/roles/{roleRef}"),
-            admin.Token,
-            new { WorkspaceRef = (Guid?)null });
+        await fixture.Auth.As(admin.Token).AssignGroupRoleRawAsync(tenantRef, groupRef, roleRef, new AssignmentScopeRequest(WorkspaceRef: (Guid?)null));
 
-        await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/groups/{groupRef}"),
-            admin.Token);
+        await fixture.Auth.As(admin.Token).AddMemberToGroupRawAsync(tenantRef, memberRef, groupRef);
 
         await GrantDirectAsync(admin.Token, tenantRef, memberRef, isDeny: true);
 
@@ -225,10 +196,7 @@ public sealed class PermissionPrecedenceTests(ServicesFixture fixture)
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().Contain(Slug);
 
-        await fixture.SendAsync(
-            HttpMethod.Delete,
-            ServicesFixture.AuthUrl($"/api/tenants/{tenantRef}/members/{memberRef}/roles/{roleRef}"),
-            admin.Token);
+        await fixture.Auth.As(admin.Token).RemoveMemberRoleRawAsync(tenantRef, memberRef, roleRef);
 
         (await fixture.GetEffectivePermissionsAsync(member.Token, workspaceRef)).Should().NotContain(Slug);
     }

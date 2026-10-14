@@ -1,7 +1,7 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Wbskt.Api.Client;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Models;
@@ -10,7 +10,10 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 
 /// <summary>
 /// The integrations API as the console calls it, read as raw JSON so a scenario sees exactly what a
-/// client would, including anything that should not be there (a secret echoed back).
+/// client would, including anything that should not be there (a secret echoed back). A thin layer
+/// over <see cref="WbsktManagementClient"/>: bodies stay plain objects because the scenarios also send
+/// shapes the contract refuses (an unknown type, a stray secret field), which only
+/// <see cref="WbsktApiClient.SendRawAsync"/> can carry.
 /// </summary>
 internal sealed class IntegrationsApi(ServicesFixture fixture)
 {
@@ -19,19 +22,20 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public static string Url(Guid workspaceRef, string suffix = "") =>
-        ServicesFixture.ManagementUrl($"/api/workspaces/{workspaceRef}/integrations{suffix}");
+    private static string Path(Guid workspaceRef, string suffix = "") => $"/api/workspaces/{workspaceRef}/integrations{suffix}";
+
+    private WbsktManagementClient As(string? token) => fixture.Management.As(token);
 
     /// <summary>A brand-new user in a tenant of their own, with a fresh workspace they administer.</summary>
     public async Task<(string Token, Guid WorkspaceRef)> NewWorkspaceAsync()
     {
-        var user = await fixture.CreateUserAsync();
-        var workspaceRef = await fixture.CreateWorkspaceAsync(user.Token);
-        return (user.Token, workspaceRef);
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
+        return (token, workspaceRef);
     }
 
-    public Task<HttpResponseMessage> CreateRawAsync(string token, Guid workspaceRef, object body) =>
-        fixture.SendAsync(HttpMethod.Post, Url(workspaceRef), token, body);
+    /// <summary>Creates an integration from any body; a null <paramref name="token"/> calls anonymously.</summary>
+    public Task<HttpResponseMessage> CreateRawAsync(string? token, Guid workspaceRef, object body) =>
+        As(token).SendRawAsync(HttpMethod.Post, Path(workspaceRef), body);
 
     public async Task<JsonElement> CreateAsync(string token, Guid workspaceRef, object body)
     {
@@ -41,7 +45,7 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
     }
 
     public Task<HttpResponseMessage> UpdateRawAsync(string token, Guid workspaceRef, Guid integrationRef, object body) =>
-        fixture.SendAsync(HttpMethod.Patch, Url(workspaceRef, $"/{integrationRef}"), token, body);
+        As(token).SendRawAsync(HttpMethod.Patch, Path(workspaceRef, $"/{integrationRef}"), body);
 
     public async Task<JsonElement> UpdateAsync(string token, Guid workspaceRef, Guid integrationRef, object body)
     {
@@ -51,7 +55,7 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
     }
 
     public Task<HttpResponseMessage> GetRawAsync(string token, Guid workspaceRef, Guid integrationRef) =>
-        fixture.SendAsync(HttpMethod.Get, Url(workspaceRef, $"/{integrationRef}"), token);
+        As(token).GetIntegrationRawAsync(workspaceRef, integrationRef);
 
     public async Task<JsonElement> GetAsync(string token, Guid workspaceRef, Guid integrationRef)
     {
@@ -60,18 +64,25 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
         return await ReadAsync(response);
     }
 
+    /// <summary>Lists a workspace's integrations; a null <paramref name="token"/> calls anonymously.</summary>
+    public Task<HttpResponseMessage> ListRawAsync(string? token, Guid workspaceRef, string? type = null) =>
+        As(token).GetIntegrationsRawAsync(workspaceRef, type);
+
     public async Task<JsonElement> ListAsync(string token, Guid workspaceRef, string? type = null)
     {
-        using var response = await fixture.SendAsync(HttpMethod.Get, Url(workspaceRef, type is null ? "" : $"?type={type}"), token);
+        using var response = await ListRawAsync(token, workspaceRef, type);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await ReadAsync(response);
     }
 
     public Task<HttpResponseMessage> DeleteRawAsync(string token, Guid workspaceRef, Guid integrationRef) =>
-        fixture.SendAsync(HttpMethod.Delete, Url(workspaceRef, $"/{integrationRef}"), token);
+        As(token).DeleteIntegrationRawAsync(workspaceRef, integrationRef);
+
+    public Task<HttpResponseMessage> UsageRawAsync(string token, Guid workspaceRef, Guid integrationRef) =>
+        As(token).GetIntegrationUsageRawAsync(workspaceRef, integrationRef);
 
     public Task<HttpResponseMessage> TestRawAsync(string token, Guid workspaceRef, object body) =>
-        fixture.SendAsync(HttpMethod.Post, Url(workspaceRef, "/test"), token, body);
+        As(token).SendRawAsync(HttpMethod.Post, Path(workspaceRef, "/test"), body);
 
     public async Task<JsonElement> TestAsync(string token, Guid workspaceRef, object body)
     {
@@ -82,36 +93,23 @@ internal sealed class IntegrationsApi(ServicesFixture fixture)
 
     public async Task<JsonElement> UsageAsync(string token, Guid workspaceRef, Guid integrationRef)
     {
-        using var response = await fixture.SendAsync(HttpMethod.Get, Url(workspaceRef, $"/{integrationRef}/usage"), token);
+        using var response = await UsageRawAsync(token, workspaceRef, integrationRef);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await ReadAsync(response);
     }
 
     public Task<HttpResponseMessage> PublishRawAsync(string token, Guid workspaceRef, WorkflowDefinition definition) =>
-        fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.ManagementUrl($"/api/workspaces/{workspaceRef}/workflows"),
-            token,
-            new WorkflowPublishRequest(definition.WorkflowRefId, definition.Name, null, definition));
+        As(token).PublishWorkflowRawAsync(workspaceRef, new WorkflowPublishRequest(definition.WorkflowRefId, definition.Name, null, definition));
 
     public async Task<Guid> PublishAsync(string token, Guid workspaceRef, WorkflowDefinition definition)
     {
         using var response = await PublishRawAsync(token, workspaceRef, definition);
         response.IsSuccessStatusCode.Should().BeTrue(await response.Content.ReadAsStringAsync());
-        var published = await response.Content.ReadFromJsonAsync<WorkflowPublishResponse>(Json);
-        return published!.RefId;
+        return (await WbsktApiClient.ReadAsync<WorkflowPublishResponse>(response)).RefId;
     }
 
-    public async Task<WorkflowValidationResponse> ValidateAsync(string token, Guid workspaceRef, WorkflowDefinition definition)
-    {
-        using var response = await fixture.SendAsync(
-            HttpMethod.Post,
-            ServicesFixture.ManagementUrl($"/api/workspaces/{workspaceRef}/workflows/validate"),
-            token,
-            new WorkflowPublishRequest(definition.WorkflowRefId, definition.Name, null, definition));
-        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return (await response.Content.ReadFromJsonAsync<WorkflowValidationResponse>(Json))!;
-    }
+    public Task<WorkflowValidationResponse> ValidateAsync(string token, Guid workspaceRef, WorkflowDefinition definition) =>
+        As(token).ValidateWorkflowAsync(workspaceRef, new WorkflowPublishRequest(definition.WorkflowRefId, definition.Name, null, definition));
 
     /// <summary>Starts a manual run and waits for it to finish, returning its RefId and final status.</summary>
     public async Task<(Guid RunRef, string Status)> RunToEndAsync(string token, Guid workspaceRef, Guid workflowRef, Guid triggerNodeId)
