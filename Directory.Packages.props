@@ -43,7 +43,7 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
-    <!-- Coverage for `dotnet test --collect:"XPlat Code Coverage"` in CI -->
+    <!-- Coverage collector for the "XPlat Code Coverage" data collector that CI passes to dotnet test -->
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <!-- DO NOT UPGRADE "FluentAssertions" TO v8+ IT IS PAID AND NOT APACHE LICENSE -->
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
