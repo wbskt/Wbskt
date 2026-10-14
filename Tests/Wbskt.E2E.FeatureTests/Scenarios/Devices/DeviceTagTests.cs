@@ -208,14 +208,14 @@ public sealed class DeviceTagTests(ServicesFixture fixture)
     {
         var response = await Send(HttpMethod.Get, workspace, path ?? $"clients{query}", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<ListResponse<ClientResponse>>(JsonOptions))!.Items.ToList();
+        return (await response.Content.ReadFromJsonAsync<Page<ClientResponse>>(JsonOptions))!.Items.ToList();
     }
 
     private async Task<List<ClientTagCountResponse>> WorkspaceTagsAsync(Guid workspace, string token)
     {
         var response = await Send(HttpMethod.Get, workspace, "clients/tags", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<ListResponse<ClientTagCountResponse>>(JsonOptions))!.Items.ToList();
+        return (await response.Content.ReadFromJsonAsync<Page<ClientTagCountResponse>>(JsonOptions))!.Items.ToList();
     }
 
     private static string ClientsUrl(Guid workspace, string query) =>

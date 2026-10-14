@@ -227,7 +227,7 @@ public sealed partial class HostArchitectureTests
             return false;
         }
 
-        return type != typeof(string) && (typeof(IEnumerable).IsAssignableFrom(type) || type.Name.StartsWith("ListResponse", StringComparison.Ordinal));
+        return type != typeof(string) && typeof(IEnumerable).IsAssignableFrom(type);
     }
 
     private static IEnumerable<string> InternalIds(Type type, HashSet<Type> seen)

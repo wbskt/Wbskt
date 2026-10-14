@@ -48,7 +48,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
     {
         _logger.LogDebug("Querying run list for workflow RefId: '{WorkflowRefId}' in WorkspaceId: {WorkspaceId}", workflowRefId, workspaceId);
 
-        var ensureWorkflowResult = await EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
+        var ensureWorkflowResult = await WorkflowOwnershipCheck.EnsureCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
         {
             return Result<RunListResponse>.Failure(ensureWorkflowResult.Error);
@@ -101,7 +101,7 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
 
         var (fromUtc, toUtc) = range.Value;
 
-        var ensureWorkflowResult = await EnsureWorkflowInWorkspaceAsync(workspaceId, workflowRefId, ct);
+        var ensureWorkflowResult = await WorkflowOwnershipCheck.EnsureCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
         if (ensureWorkflowResult.IsFailure)
         {
             return Result<WorkflowStatsResponse>.Failure(ensureWorkflowResult.Error);
@@ -260,17 +260,6 @@ public sealed class WorkflowRunQueryService : IWorkflowRunQueryService
         }
 
         return Result<RunRow>.Success(run);
-    }
-
-    private async Task<Result> EnsureWorkflowInWorkspaceAsync(int workspaceId, Guid workflowRefId, CancellationToken ct)
-    {
-        WorkflowDefinitionRow? definition = await _workflowDefinitionProvider.FindCurrentByRefIdAsync(workflowRefId, ct);
-        if (definition is null || definition.WorkspaceId != workspaceId)
-        {
-            _logger.LogWarning("Workflow '{WorkflowRefId}' is not in WorkspaceId: {WorkspaceId}", workflowRefId, workspaceId);
-            return Result.Failure(WorkspaceOwnership.WorkflowNotFound);
-        }
-        return Result.Success();
     }
 
     private static RunSummaryDto MapRun(RunRow row)

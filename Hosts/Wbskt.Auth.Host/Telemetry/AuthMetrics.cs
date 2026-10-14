@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Wbskt.Infrastructure.Telemetry;
 
 namespace Wbskt.Auth.Host.Telemetry;
 
-public sealed class AuthMetrics : IDisposable
+public sealed class AuthMetrics : IWorkerTickMetrics, IDisposable
 {
     public const string MeterName = "Wbskt.Auth";
     private readonly Meter _meter;
@@ -20,6 +22,7 @@ public sealed class AuthMetrics : IDisposable
         MailSuppressed = _meter.CreateCounter<long>("wbskt_auth_mail_suppressed_total");
         
         PasswordHashDuration = _meter.CreateHistogram<double>("wbskt_auth_password_hash_duration_ms");
+        WorkerTicks = _meter.CreateCounter<long>("wbskt_auth_worker_ticks_total");
     }
 
     public Counter<long> LoginRequests { get; }
@@ -29,6 +32,9 @@ public sealed class AuthMetrics : IDisposable
     public Counter<long> PermissionChecks { get; }
     public Counter<long> MailSuppressed { get; }
     public Histogram<double> PasswordHashDuration { get; }
+
+    /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
+    public Counter<long> WorkerTicks { get; }
 
     public void RecordLogin(string outcome) => 
         LoginRequests.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
@@ -57,6 +63,9 @@ public sealed class AuthMetrics : IDisposable
 
     public void RecordPasswordHash(double durationMs) => 
         PasswordHashDuration.Record(durationMs);
+
+    public void RecordWorkerTick(string worker, string outcome) =>
+        WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
 
     public void Dispose() => _meter.Dispose();
 }

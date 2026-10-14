@@ -14,6 +14,8 @@ internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory) : IIn
 {
     private const string ServiceName = "Discord";
 
+    private static readonly JsonSerializerOptions MessageJsonOptions = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
+
     public IntegrationType Type => IntegrationType.Discord;
 
     public async Task<ChannelResult> TestAsync(ResolvedIntegration integration, IntegrationTestOptions? options, CancellationToken ct)
@@ -66,7 +68,7 @@ internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory) : IIn
                 content = message,
                 username = string.IsNullOrWhiteSpace(username) ? null : username,
                 allowed_mentions = new { parse = Array.Empty<string>() }
-            }, options: new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull })
+            }, options: MessageJsonOptions)
         };
 
         var (response, failure) = await HttpChannelSupport.SendAsync(Client(), request, null, ServiceName, ct);

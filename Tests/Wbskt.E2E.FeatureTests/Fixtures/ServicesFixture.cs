@@ -372,7 +372,7 @@ public sealed class ServicesFixture : IDisposable
         var resp = await SendAsync(HttpMethod.Get, url, token);
         resp.EnsureSuccessStatusCode();
 
-        var page = await resp.Content.ReadFromJsonAsync<ListResponse<JsonElement>>(JsonOptions)
+        var page = await resp.Content.ReadFromJsonAsync<Page<JsonElement>>(JsonOptions)
             ?? throw new InvalidOperationException($"Empty list response from {url}.");
 
         int? total = null;
@@ -548,7 +548,7 @@ public sealed class ServicesFixture : IDisposable
         var resp = await SendAsync(HttpMethod.Get, AuthUrl($"/api/tenants/{tenantRef}/invitations?take=200"), token);
         resp.EnsureSuccessStatusCode();
 
-        var page = await resp.Content.ReadFromJsonAsync<ListResponse<Invitation>>(JsonOptions);
+        var page = await resp.Content.ReadFromJsonAsync<Page<Invitation>>(JsonOptions);
         return page?.Items.ToList() ?? [];
     }
 
@@ -574,7 +574,7 @@ public sealed class ServicesFixture : IDisposable
             token);
         resp.EnsureSuccessStatusCode();
 
-        var page = await resp.Content.ReadFromJsonAsync<ListResponse<TenantMemberResponse>>(JsonOptions);
+        var page = await resp.Content.ReadFromJsonAsync<Page<TenantMemberResponse>>(JsonOptions);
         return page?.Items.FirstOrDefault(m => string.Equals(m.Email, email, StringComparison.OrdinalIgnoreCase))?.RefId;
     }
 
@@ -692,13 +692,13 @@ public sealed class ServicesFixture : IDisposable
     public Task<IReadOnlyList<GroupMembership>> GetUserGroupsAsync(string token, Guid tenantRef, Guid userRef) =>
         ReadArrayAsync<GroupMembership>(AuthUrl($"/api/tenants/{tenantRef}/members/{userRef}/groups"), token);
 
-    /// <summary>Reads a <c>ListResponse</c>-shaped body (<c>{ "items": [...] }</c>).</summary>
+    /// <summary>Reads a <c>Page</c>-shaped body (<c>{ "items": [...] }</c>).</summary>
     private async Task<IReadOnlyList<T>> ReadListAsync<T>(string url, string token)
     {
         var response = await SendAsync(HttpMethod.Get, url, token);
         response.EnsureSuccessStatusCode();
 
-        var page = await response.Content.ReadFromJsonAsync<ListResponse<T>>(JsonOptions);
+        var page = await response.Content.ReadFromJsonAsync<Page<T>>(JsonOptions);
         return page?.Items.ToList() ?? [];
     }
 

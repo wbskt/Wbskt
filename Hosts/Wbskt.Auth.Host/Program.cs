@@ -13,6 +13,7 @@ using Wbskt.Auth.Host.Telemetry;
 using Wbskt.EventBus.RabbitMQ;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Hosting;
+using Wbskt.Infrastructure.Authorization;
 using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Email;
 using Wbskt.Infrastructure.HealthChecks;
@@ -31,6 +32,7 @@ public static class Program
 
         // Add services to the container.
         builder.Services.AddSingleton<AuthMetrics>();
+        builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<AuthMetrics>());
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         // Signs user tokens and is the only host that can; validates them with its own keys.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Auth);
@@ -45,6 +47,7 @@ public static class Program
         builder.Services.AddScoped<IManagementService, ManagementService>();
         builder.Services.AddScoped<IWorkspaceProvider, WorkspaceProvider>();
         builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+        builder.Services.AddScoped<IWorkspaceAccessResolver, WorkspaceServiceAccessResolver>();
         builder.Services.AddScoped<IAuditWorkspaces, AuditWorkspaces>();
         builder.Services.AddScoped<ICredentialRetentionProvider, CredentialRetentionProvider>();
         builder.Services.AddHostedService<CredentialRetentionService>();

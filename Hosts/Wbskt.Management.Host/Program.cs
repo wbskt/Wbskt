@@ -50,6 +50,7 @@ public static class Program
         // Add services to the container.
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddSingleton<ManagementMetrics>();
+        builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<ManagementMetrics>());
         // Signs client (device) tokens for the socket host; accepts user tokens signed by the auth host,
         // whose public keys it fetches from Jwt:TrustedJwksUrl.
         builder.Services.AddWbsktTokenIssuer(JwtIssuers.Management);
@@ -120,6 +121,8 @@ public static class Program
         .AddHttpMessageHandler<AuthenticationForwardingHandler>();
         // A user token names its user by RefId; the id this host's records use comes from the auth host.
         builder.Services.AddUserIdLookup(sp => sp.GetRequiredService<IAuthServiceClient>());
+        // WorkspacePermissionFilter resolves each workspace route through the auth host.
+        builder.Services.AddScoped<IWorkspaceAccessResolver, AuthClientWorkspaceAccessResolver>();
         builder.Services.AddHttpClient<IWorkflowEngineClient, WorkflowEngineClient>(client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["Services:WorkflowEngine"]

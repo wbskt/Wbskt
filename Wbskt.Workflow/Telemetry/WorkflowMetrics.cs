@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Wbskt.Infrastructure.Telemetry;
 
 namespace Wbskt.Workflow.Telemetry;
 
-public sealed class WorkflowMetrics : IDisposable
+public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
 {
     public const string MeterName = "Wbskt.Workflow";
     private readonly Meter _meter;
@@ -126,6 +128,11 @@ public sealed class WorkflowMetrics : IDisposable
             cost,
             new KeyValuePair<string, object?>("workflow_ref", workflowRef),
             new KeyValuePair<string, object?>("workspace_id", workspaceId));
+    }
+
+    public void RecordWorkerTick(string worker, string outcome)
+    {
+        WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
     }
 
     public void Dispose()
