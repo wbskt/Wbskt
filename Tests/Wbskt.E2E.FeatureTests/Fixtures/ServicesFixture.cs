@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -33,6 +34,12 @@ namespace Wbskt.E2E.FeatureTests.Fixtures;
 public sealed class ServicesFixture : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    // JsonStringEnumConverter reads an enum written as a name and, by default, one written as a number.
+    private static readonly JsonSerializerOptions EnumTolerantJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
 
     // Shared cert-ignoring HttpClient for all REST calls inside the fixture helpers.
     private readonly HttpClient _http;
@@ -888,18 +895,29 @@ public sealed class ServicesFixture : IDisposable
         return runs;
     }
 
-    /// <summary>Starts a manual run, optionally with an idempotency key (re-posting the same key dedupes).</summary>
-    public async Task StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey)
+    /// <summary>
+    /// Starts a manual run, optionally with an idempotency key (re-posting the same key dedupes), and
+    /// returns the engine's answer: the run's RefId and whether it was started, deduplicated or queued.
+    /// </summary>
+    public async Task<StartRunResponse> StartManualRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey)
     {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        req.Content = JsonContent.Create(new { TriggerNodeId = triggerNodeId, Payload = (object?)null, IdempotencyKey = idempotencyKey }, options: JsonOptions);
-
-        var resp = await _http.SendAsync(req);
+        using var resp = await StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerNodeId, idempotencyKey);
         resp.EnsureSuccessStatusCode();
+        return await ReadStartRunResponseAsync(resp);
     }
+
+    /// <summary>Asks for a manual run and returns the raw response, for callers that expect it may be refused.</summary>
+    public Task<HttpResponseMessage> StartManualRunRawAsync(string token, Guid workspaceRef, Guid workflowRefId, string triggerNodeId, string? idempotencyKey) =>
+        SendAsync(
+            HttpMethod.Post,
+            $"{E2EConfig.ManagementBaseUrl}/api/workspaces/{workspaceRef}/workflows/{workflowRefId}/runs",
+            token,
+            new { TriggerNodeId = triggerNodeId, Payload = (object?)null, IdempotencyKey = idempotencyKey });
+
+    /// <summary>Reads a manual start's answer. The outcome is read whether the host writes it as a name or a number.</summary>
+    public static async Task<StartRunResponse> ReadStartRunResponseAsync(HttpResponseMessage response) =>
+        await response.Content.ReadFromJsonAsync<StartRunResponse>(EnumTolerantJsonOptions)
+            ?? throw new InvalidOperationException("Manual start returned an empty response.");
 
     /// <summary>
     /// POSTs to Management's public (anonymous) http-wake callback to resume a parked WaitForHttp
@@ -1010,60 +1028,248 @@ public sealed class ServicesFixture : IDisposable
         return events;
     }
 
-    /// <summary>Polls until the first run for a workflow appears, returning its RefId (or Guid.Empty on timeout).</summary>
+    // ─────────────────────────────────────────────────────────────────────────
+    // Observable waits
+    //
+    // Everything a scenario waits for is something it can observe: a run appearing, a status, a
+    // history event, a command arriving. Each wait polls for that signal with a generous timeout, so
+    // a fast runner moves on as soon as it is there and a slow one still gets it, and a timeout says
+    // what was last seen instead of failing a later assertion with nothing to go on.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Polls until a workflow has at least one run and returns the newest one's RefId. Throws a
+    /// <see cref="TimeoutException"/> naming what the run list last held when none appears in time.
+    /// </summary>
     public async Task<Guid> WaitForFirstRunAsync(string token, Guid workspaceRef, Guid workflowRefId, TimeSpan timeout)
     {
-        Guid runRefId = Guid.Empty;
-        await PollAsync(
+        var runs = await WaitForRunCountAsync(token, workspaceRef, workflowRefId, 1, timeout);
+        return runs[0].RefId;
+    }
+
+    /// <summary>
+    /// Polls a workflow's runs until there are at least <paramref name="count"/>, and returns them
+    /// (newest first). Throws a <see cref="TimeoutException"/> with the last count and statuses.
+    /// </summary>
+    public Task<IReadOnlyList<RunSummaryDto>> WaitForRunCountAsync(string token, Guid workspaceRef, Guid workflowRefId, int count, TimeSpan timeout) =>
+        PollUntilAsync<IReadOnlyList<RunSummaryDto>>(
+            $"at least {count} run(s) of workflow {workflowRefId}",
             async () =>
             {
-                var runs = await ListRunsAsync(token, workspaceRef, workflowRefId);
-                if (runs.Count > 0)
-                {
-                    runRefId = runs[0].RefId;
-                    return true;
-                }
-
-                return false;
+                var runs = await ListRunsAsync(token, workspaceRef, workflowRefId, top: Math.Max(50, count));
+                return (runs.Count >= count, runs, DescribeRuns(runs));
             },
             timeout,
             TimeSpan.FromSeconds(1));
 
-        return runRefId;
-    }
-
-    /// <summary>Polls a workflow's runs until one reaches the requested terminal status, returning it (or null on timeout).</summary>
+    /// <summary>
+    /// Polls a workflow's runs until one has the requested status, returning it. Throws a
+    /// <see cref="TimeoutException"/> with the statuses last seen and the newest run's latest history
+    /// events. The return type stays nullable for the callers written when it returned null on timeout.
+    /// </summary>
     public async Task<RunSummaryDto?> WaitForRunStatusAsync(string token, Guid workspaceRef, Guid workflowRefId, string status, TimeSpan timeout)
     {
-        RunSummaryDto? match = null;
-        await PollAsync(
-            async () =>
-            {
-                var runs = await ListRunsAsync(token, workspaceRef, workflowRefId);
-                match = runs.FirstOrDefault(r => string.Equals(r.Status, status, StringComparison.Ordinal));
-                return match is not null;
-            },
-            timeout,
-            TimeSpan.FromSeconds(2));
-
-        return match;
+        IReadOnlyList<RunSummaryDto> lastRuns = [];
+        try
+        {
+            return await PollUntilAsync<RunSummaryDto?>(
+                $"a run of workflow {workflowRefId} with status {status}",
+                async () =>
+                {
+                    lastRuns = await ListRunsAsync(token, workspaceRef, workflowRefId);
+                    var match = lastRuns.FirstOrDefault(r => string.Equals(r.Status, status, StringComparison.Ordinal));
+                    return (match is not null, match, DescribeRuns(lastRuns));
+                },
+                timeout,
+                TimeSpan.FromSeconds(2));
+        }
+        catch (TimeoutException ex) when (lastRuns.Count > 0)
+        {
+            throw new TimeoutException($"{ex.Message}; {await DescribeRecentHistoryAsync(token, workspaceRef, lastRuns[0].RefId)}", ex);
+        }
     }
 
-    /// <summary>Polls a specific run by RefId until it reaches any terminal status, returning its final summary (or null on timeout).</summary>
+    /// <summary>
+    /// Polls a run until it reaches any terminal status and returns its final summary. Throws a
+    /// <see cref="TimeoutException"/> with the status last seen and the run's latest history events.
+    /// The return type stays nullable for the callers written when it returned null on timeout.
+    /// </summary>
     public async Task<RunSummaryDto?> WaitForRunTerminalAsync(string token, Guid workspaceRef, Guid runRefId, TimeSpan timeout)
     {
-        RunSummaryDto? summary = null;
-        await PollAsync(
+        try
+        {
+            return await PollUntilAsync<RunSummaryDto?>(
+                $"run {runRefId} to finish",
+                async () =>
+                {
+                    var detail = await GetRunDetailAsync(token, workspaceRef, runRefId);
+                    return (IsTerminalStatus(detail.Summary.Status), detail.Summary, $"status {detail.Summary.Status}");
+                },
+                timeout,
+                TimeSpan.FromSeconds(1));
+        }
+        catch (TimeoutException ex)
+        {
+            throw new TimeoutException($"{ex.Message}; {await DescribeRecentHistoryAsync(token, workspaceRef, runRefId)}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Polls a run's history until an event matches <paramref name="match"/>, and returns that event.
+    /// Throws a <see cref="TimeoutException"/> listing the latest events seen.
+    /// </summary>
+    public Task<HistoryEventDto> WaitForHistoryEventAsync(
+        string token, Guid workspaceRef, Guid runRefId, Func<HistoryEventDto, bool> match, string what, TimeSpan timeout) =>
+        PollUntilAsync<HistoryEventDto>(
+            $"{what} in the history of run {runRefId}",
             async () =>
             {
-                var detail = await GetRunDetailAsync(token, workspaceRef, runRefId);
-                summary = detail.Summary;
-                return IsTerminalStatus(detail.Summary.Status);
+                var history = await GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
+                var found = history.FirstOrDefault(match);
+                return (found is not null, found!, DescribeHistory(history));
             },
             timeout,
-            TimeSpan.FromSeconds(2));
+            TimeSpan.FromSeconds(1));
 
-        return summary;
+    /// <summary>
+    /// Polls a run's history until a branch has parked on a bookmark (a <c>BranchParked</c> event:
+    /// AwaitSignal, WaitForHttp, Delay and the other waits all write one), and returns that event.
+    /// <para>
+    /// The engine records the park just before it writes the bookmark row, so a signal or wake sent
+    /// the instant this returns can still find nothing to resume. Send a signal with
+    /// <see cref="SendSignalUntilMatchedAsync"/>, and repeat an http wake until its effect shows.
+    /// </para>
+    /// </summary>
+    public Task<HistoryEventDto> WaitForBranchParkedAsync(string token, Guid workspaceRef, Guid runRefId, TimeSpan timeout) =>
+        WaitForHistoryEventAsync(
+            token, workspaceRef, runRefId,
+            e => string.Equals(e.EventKind, "BranchParked", StringComparison.Ordinal),
+            "a BranchParked event",
+            timeout);
+
+    /// <summary>
+    /// Sends a signal until the engine reports it resumed a bookmark, and returns the outcome. Safe
+    /// to repeat: every signal is its own inbound event, and one that finds no bookmark is dropped
+    /// rather than kept for later. Throws a <see cref="TimeoutException"/> with the last outcome.
+    /// </summary>
+    public Task<string> SendSignalUntilMatchedAsync(
+        string token, Guid workspaceRef, Guid runRefId, string signalName, TimeSpan timeout, object? payload = null) =>
+        PollUntilAsync<string>(
+            $"signal '{signalName}' to resume run {runRefId}",
+            async () =>
+            {
+                var (matched, outcome) = await SendSignalAsync(token, workspaceRef, runRefId, signalName, payload);
+                return (matched, outcome, $"outcome {outcome}");
+            },
+            timeout,
+            TimeSpan.FromMilliseconds(500));
+
+    /// <summary>
+    /// Waits for a workflow's manual trigger to be live in the engine by starting manual runs until
+    /// one is started (a trigger the engine has not picked up yet answers 409
+    /// WORKFLOW_HAS_NO_MANUAL_TRIGGER), and returns that run's RefId. It leaves exactly one run behind.
+    /// </summary>
+    public Task<Guid> WaitForManualTriggerLiveAsync(string token, Guid workspaceRef, Guid workflowRefId, Guid triggerNodeId, TimeSpan timeout) =>
+        PollUntilAsync<Guid>(
+            $"the manual trigger of workflow {workflowRefId} to start a run",
+            async () =>
+            {
+                using var resp = await StartManualRunRawAsync(token, workspaceRef, workflowRefId, triggerNodeId.ToString(), idempotencyKey: null);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return (false, Guid.Empty, $"HTTP {(int)resp.StatusCode} {await ReadErrorCodeAsync(resp)}");
+                }
+
+                var started = await ReadStartRunResponseAsync(resp);
+                return (started.Outcome == StartRunOutcome.Started, started.RunRefId, $"outcome {started.Outcome}");
+            },
+            timeout,
+            TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// Fires a webhook until a run of <paramref name="workflowRefId"/> appears, and returns the newest
+    /// run's RefId. Nothing reports when a newly published trigger is live in the engine (its trigger
+    /// registrations are cached there and dropped by an event after a publish), and the public
+    /// callback answers 202 either way, so a run appearing is the signal. Deliveries sent before the
+    /// trigger was live, or still on the queue, can start more runs after this returns: count runs by
+    /// a marker in their trigger data (<see cref="ListRunsCarryingAsync"/>) rather than by total.
+    /// </summary>
+    public Task<Guid> FireWebhookUntilRunAsync(string token, Guid workspaceRef, Guid workflowRefId, string path, TimeSpan timeout, object? payload = null) =>
+        PollUntilAsync<Guid>(
+            $"a webhook on '{path}' to start a run of workflow {workflowRefId}",
+            async () =>
+            {
+                await SendWebhookAsync(workspaceRef, path, payload);
+                var runs = await ListRunsAsync(token, workspaceRef, workflowRefId);
+                return (runs.Count > 0, runs.Count > 0 ? runs[0].RefId : Guid.Empty, DescribeRuns(runs));
+            },
+            timeout,
+            TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// The runs of a workflow whose branch state contains <paramref name="marker"/>. A run's root
+    /// branch keeps its trigger data under <c>trigger</c>, so a unique value sent in a webhook body or
+    /// device message identifies the runs that delivery started.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> ListRunsCarryingAsync(string token, Guid workspaceRef, Guid workflowRefId, string marker)
+    {
+        var carrying = new List<Guid>();
+        foreach (var run in await ListRunsAsync(token, workspaceRef, workflowRefId, top: 200))
+        {
+            var detail = await GetRunDetailAsync(token, workspaceRef, run.RefId);
+            if (detail.Branches.Any(b => b.LocalJson is { } json && json.Contains(marker, StringComparison.Ordinal)))
+            {
+                carrying.Add(run.RefId);
+            }
+        }
+
+        return carrying;
+    }
+
+    /// <summary>Polls until at least <paramref name="count"/> runs of a workflow carry <paramref name="marker"/>, and returns them.</summary>
+    public Task<IReadOnlyList<Guid>> WaitForRunsCarryingAsync(string token, Guid workspaceRef, Guid workflowRefId, string marker, int count, TimeSpan timeout) =>
+        PollUntilAsync<IReadOnlyList<Guid>>(
+            $"{count} run(s) of workflow {workflowRefId} carrying '{marker}'",
+            async () =>
+            {
+                var runs = await ListRunsCarryingAsync(token, workspaceRef, workflowRefId, marker);
+                return (runs.Count >= count, runs, $"{runs.Count} carrying it");
+            },
+            timeout,
+            TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// A bounded wait for the few cases with no observable signal to wait for instead. It is a plain
+    /// delay; <paramref name="reason"/> exists so every such wait says, where it is used, why nothing
+    /// better is available. Waiting for something that can be observed belongs in the helpers above.
+    /// </summary>
+    public static Task WaitWithoutSignalAsync(TimeSpan duration, string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        return Task.Delay(duration);
+    }
+
+    private static string DescribeRuns(IReadOnlyList<RunSummaryDto> runs) =>
+        runs.Count == 0
+            ? "no runs"
+            : $"{runs.Count} run(s): {string.Join(", ", runs.Take(10).Select(r => $"{r.RefId} {r.Status}"))}";
+
+    private static string DescribeHistory(IReadOnlyList<HistoryEventDto> history) =>
+        history.Count == 0
+            ? "no history events"
+            : $"{history.Count} history event(s), latest: {string.Join(", ", history.TakeLast(8).Select(e => e.EventKind))}";
+
+    // Best effort: this only adds detail to a failure that is already being reported.
+    private async Task<string> DescribeRecentHistoryAsync(string token, Guid workspaceRef, Guid runRefId)
+    {
+        try
+        {
+            return $"run {runRefId} has {DescribeHistory(await GetHistoryAsync(token, workspaceRef, runRefId, top: 1000))}";
+        }
+        catch (Exception ex)
+        {
+            return $"its history could not be read ({ex.GetType().Name}: {ex.Message})";
+        }
     }
 
     /// <summary>Reads the central event-log feed for a workspace, optionally filtered by event name.</summary>
@@ -1090,34 +1296,93 @@ public sealed class ServicesFixture : IDisposable
         status is "Succeeded" or "Failed" or "PartiallyFailed" or "Cancelled";
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Polling helper
+    // Polling helpers
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Polls <paramref name="predicate"/> every <paramref name="interval"/> until it returns true
-    /// or <paramref name="timeout"/> elapses, whichever comes first.
-    /// Returns true if the predicate became satisfied within the timeout.
+    /// Polls <paramref name="predicate"/> every <paramref name="interval"/> (2 s by default) until it
+    /// returns true or <paramref name="timeout"/> elapses, and returns whether it did. The predicate
+    /// is always checked once more at the deadline. Prefer <see cref="PollUntilAsync{T}"/>, whose
+    /// timeout says what was last seen.
     /// </summary>
     public static async Task<bool> PollAsync(
         Func<Task<bool>> predicate,
         TimeSpan timeout,
         TimeSpan? interval = null)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        var stopwatch = Stopwatch.StartNew();
         var delay = interval ?? TimeSpan.FromSeconds(2);
 
-        while (DateTime.UtcNow < deadline)
+        while (true)
         {
             if (await predicate())
             {
                 return true;
             }
 
-            await Task.Delay(delay);
-        }
+            var remaining = timeout - stopwatch.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                return false;
+            }
 
-        return false;
+            await Task.Delay(remaining < delay ? remaining : delay);
+        }
     }
+
+    /// <summary>
+    /// Polls <paramref name="probe"/> every <paramref name="interval"/> (1 s by default) until it
+    /// reports done, and returns the value it reported with it. Each probe also describes what it
+    /// saw; when <paramref name="timeout"/> elapses first this throws a <see cref="TimeoutException"/>
+    /// reading "Timed out after {elapsed} waiting for {what}; last state: {state}". The probe is
+    /// always run once more at the deadline.
+    /// </summary>
+    public static async Task<T> PollUntilAsync<T>(
+        string what,
+        Func<Task<(bool Done, T Value, string State)>> probe,
+        TimeSpan timeout,
+        TimeSpan? interval = null)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var delay = interval ?? TimeSpan.FromSeconds(1);
+
+        while (true)
+        {
+            var (done, value, state) = await probe();
+            if (done)
+            {
+                return value;
+            }
+
+            var remaining = timeout - stopwatch.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                throw new TimeoutException(
+                    $"Timed out after {stopwatch.Elapsed.TotalSeconds:0.0} s (limit {timeout.TotalSeconds:0.#} s) waiting for {what}; last state: {state}");
+            }
+
+            await Task.Delay(remaining < delay ? remaining : delay);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="PollUntilAsync{T}"/> for a probe with nothing to return: polls until it reports
+    /// done, or throws a <see cref="TimeoutException"/> naming <paramref name="what"/> and the last state.
+    /// </summary>
+    public static Task PollUntilAsync(
+        string what,
+        Func<Task<(bool Done, string State)>> probe,
+        TimeSpan timeout,
+        TimeSpan? interval = null) =>
+        PollUntilAsync<bool>(
+            what,
+            async () =>
+            {
+                var (done, state) = await probe();
+                return (done, done, state);
+            },
+            timeout,
+            interval);
 
     // ─────────────────────────────────────────────────────────────────────────
     // IDisposable
