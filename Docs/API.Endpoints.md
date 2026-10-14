@@ -30,7 +30,8 @@ anonymously and the anonymous surface is an explicit, auditable choice:
 - **Auth host** — every controller was already correctly attributed when the fallback was added, so
   it changed no behaviour. It exists for the next endpoint added to the host that owns tenants,
   roles and permissions. `AuthController`'s credential endpoints carry `[AllowAnonymous]`
-  individually.
+  individually, and so does the one internal route a background job calls with no user token
+  (`GET /api/internal/workspaces/deleted`), which `[InternalApiKey]` guards with a shared key instead.
 - **Socket host** — has no controllers at all. `/ws` requires the `ClientOnly` policy (a device
   token: `type=client`), validated by the same bearer handler as the other hosts. Browsers cannot set
   headers on a WebSocket, so on `/ws` the handler also reads `?access_token=` (`AcceptQueryToken`,
@@ -246,11 +247,12 @@ member's roles, groups and permissions) are unchanged until the console reads pa
 | Endpoint | Permission | What it does |
 |---|---|---|
 | `POST /api/internal/workspaces/resolve` | membership only | **Backend network only.** **The gate every other host depends on.** Resolves a workspace reference to its internal ID plus the caller's effective permission slugs there. The management host calls this before every workspace-scoped request. Answers 403 for both "not a member" and "no such workspace" and 401 only when the caller cannot be identified at all — the management host relies on that distinction, and treats any other status as a server fault. |
+| `GET /api/internal/workspaces/deleted?since=&until=` | shared internal key | **Backend network only.** The ids of the workspaces deleted in the window, for the management host's deleted workspace sweep. No user is behind that call, so the action is `[AllowAnonymous]` and `[InternalApiKey]` instead: `X-Wbskt-Internal-Key` must match the auth host's `Internal:ApiKey` (`AUTH_INTERNAL_API_KEY`; management sends it from `Services:AuthInternalApiKey`). Without a configured key Production answers 503, as the engine does. |
 | `GET /` | none | Lists workspaces the caller belongs to. |
 | `POST /` | none | Creates a workspace in the caller's tenant and makes them its owner. The owner automatically receives the tenant's `Admin` role scoped to it. |
 | `PUT {workspaceRef}` | `users.manage` **in that workspace** | Renames a workspace or changes its description. |
 | `PUT {workspaceRef}/owner` | `users.manage` in that workspace | Body `{ "userRef": guid }`. Makes another member of the workspace's tenant its owner, adding them to the workspace if needed. The previous owner stays a member and can then be removed. Someone outside the tenant is 404 `USER_NOT_FOUND`. |
-| `DELETE {workspaceRef}` | `users.manage` in that workspace | Deletes the workspace and every assignment scoped to it. What the management host holds for it (registration policies, clients, workflows, schedules, webhook triggers) is retired shortly after, by an event the delete queues in the same transaction, so it is sent even if the auth host stops or the broker is down at that moment. |
+| `DELETE {workspaceRef}` | `users.manage` in that workspace | Deletes the workspace and every assignment scoped to it. What the management host holds for it (registration policies, clients, workflows, schedules, webhook triggers) is retired shortly after, by an event the delete queues in the same transaction, so it is sent even if the auth host stops or the broker is down at that moment. The delete is also recorded in `dbo.DeletedWorkspaces`, and the management host's daily deleted workspace sweep (`DeletedWorkspaceSweeper`) retires any workspace deleted in the last week that still has live policies, clients, workflows or runs: the backstop for an event lost before the outbox existed, or one whose handler ran out of retries. Each repair is counted in `wbskt_management_workspaces_retired_by_sweep_total` and raises `DeletedWorkspaceRetiredBySweep`. |
 | `GET {workspaceRef}/members` | `users.read` in that workspace | Lists members, one page at a time. |
 | `POST {workspaceRef}/members` | `users.manage` in that workspace | Adds an existing **tenant member** to the workspace. It will not pull in a non-member: doing so used to let anyone with `users.manage` in one workspace capture any account in the system knowing only its email. An unknown address and a non-member are reported identically. |
 | `DELETE {workspaceRef}/members/{userRef}` | `users.manage` in that workspace | Removes a member and any assignment scoped to the workspace. The owner cannot be removed. |
