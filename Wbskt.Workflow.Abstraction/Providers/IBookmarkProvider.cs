@@ -7,7 +7,6 @@ public interface IBookmarkProvider
     Task<BookmarkRow> CreateAsync(BookmarkRow row, CancellationToken ct);
     Task<BookmarkRow> GetByRefIdAsync(Guid refId, CancellationToken ct);
     Task<BookmarkRow> GetByIdAsync(long bookmarkId, CancellationToken ct);
-    Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct);
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Array.Empty<BookmarkRow>());
     Task<IReadOnlyCollection<BookmarkRow>> GetAllByRunIdAsync(int runId, CancellationToken ct);

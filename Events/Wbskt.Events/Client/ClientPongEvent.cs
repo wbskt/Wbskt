@@ -7,5 +7,4 @@ namespace Wbskt.Events.Client;
 // Kept so the rows already in the event log still name a known type.
 [DeviceTraffic]
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientPongEvent")]
 public sealed record ClientPongEvent(Guid ClientRefId, int ClientId, int WorkspaceId, DateTime OriginalPingTime) : BaseEvent, IClientContext;

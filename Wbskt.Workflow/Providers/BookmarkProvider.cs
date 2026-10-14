@@ -67,16 +67,6 @@ internal sealed class BookmarkProvider : BaseSqlProvider, IBookmarkProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeyAsync(string matchKey, CancellationToken ct)
-    {
-        return await ExecuteCollectionAsync(
-            "dbo.Bookmark_GetAllBy_MatchKey",
-            p => p.AddWithValue("@MatchKey", matchKey),
-            Map,
-            ct
-        );
-    }
-
     public async Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct)
     {
         if (matchKeys == null || matchKeys.Count == 0)

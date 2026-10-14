@@ -6,7 +6,6 @@ using Wbskt.Infrastructure.Hosting;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
 using Wbskt.Primitives;
-using Wbskt.Infrastructure.Mappers;
 using Wbskt.Workflow.Abstraction.Engine;
 using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.Engine.Host.HealthChecks;

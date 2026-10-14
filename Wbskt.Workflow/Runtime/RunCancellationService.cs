@@ -45,11 +45,6 @@ internal sealed class RunCancellationService : IRunCancellationService
         return _tokenRegistry.GetToken(runId);
     }
 
-    public void RemoveCts(long runId)
-    {
-        _tokenRegistry.Remove(runId);
-    }
-
     // Cancellation is read through a short-lived cache, so the cancel overwrites the cached answer
     // rather than leaving IsCancellationRequestedAsync returning a stale false until the entry expires.
     private void MarkCancellationRequested(long runId)

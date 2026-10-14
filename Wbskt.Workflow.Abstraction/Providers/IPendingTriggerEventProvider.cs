@@ -9,7 +9,6 @@ public interface IPendingTriggerEventProvider
     // one workflow can share a correlation key, and draining across them would start a run from the
     // wrong trigger with the wrong payload.
     Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct);
-    Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct);
     Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
     Task<long> CountAllAsync(CancellationToken ct);
 }

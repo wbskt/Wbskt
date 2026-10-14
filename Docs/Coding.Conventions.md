@@ -12,7 +12,7 @@
     *   `Unauthorized` means "we cannot identify the caller". A caller who is known but lacks a permission is `Forbidden`. Using 401 there makes clients that redirect to login on 401 sign the user out over a missing permission.
     *   A `Failure` message is assumed to be internal detail (exception text). It is logged and replaced with a generic message before it reaches the client, so never rely on it being visible.
     *   The body is always Problem Details from `Problems` (`code`, `traceId`). Return an error through `MapError` or `ApiErrorResults.From`, never `BadRequest(error)`; middleware without an action result writes `Problems.WriteAsync`.
-*   **Thin controllers:** A controller binds the request, calls one service and maps its `Result`. Validation, ownership, publishing events and talking to the engine belong to services, where they can be unit-tested and reused. A controller never injects `IEventBus`, a provider or `IReferenceMapper`; `HostArchitectureTests` enforces it on every host. The only status a controller picks itself is between two successes (`200` vs `202`).
+*   **Thin controllers:** A controller binds the request, calls one service and maps its `Result`. Validation, ownership, publishing events and talking to the engine belong to services, where they can be unit-tested and reused. A controller never injects `IEventBus` or a provider; `HostArchitectureTests` enforces it on every host. The only status a controller picks itself is between two successes (`200` vs `202`).
 *   **One host shape:** a `Program` starts from `WbsktHost.CreateBuilder` and runs `app.UseWbsktPipeline()` (forwarded headers, exception handling, Problem Details for bare error statuses, CORS, rate limiter, authentication, identity, authorization, in that order). The error body comes from `AddWbsktProblemDetails` (and a limiter's 429 from `RejectWithProblem`). Default-deny, CORS, trusted proxies and per-IP limits come from `AddDefaultDenyAuthorization`, `AddWbsktCors`, `AddWbsktForwardedHeaders` and `RateLimiterOptions.AddPerIpPolicy`. A `Program` keeps only what is its own: its services, policies and endpoints.
 
 ---
@@ -65,13 +65,8 @@ Every new or changed endpoint follows these rules; `Docs/API.Endpoints.md` is th
 *   **Resources inside a workspace, 404:** Once the caller has been resolved as a member of the workspace in the route, a resource reference (client, policy, template, workflow, run, ...) that does not exist **or** belongs to another workspace is `Error.NotFound` (404) with the resource's `<RESOURCE>_NOT_FOUND` code and the same message in both cases. The caller learns nothing beyond "not in this workspace", which is all a member needs to know. The same holds for a reference used as a filter (`?clientRefId=`): it is a 404, never an empty page.
 *   **403 inside a workspace means a missing permission** (`PERMISSION_UNAUTHORIZED`), never an unknown or foreign reference.
 
-### Reference Mapping Pattern
-To decouple public GUIDs from internal integer IDs without polluting every service with lookup logic:
-
-1.  **`IReferenceProvider`**: An interface implemented by any Provider that can look up an ID by a GUID (`Task<int> FindByReferenceIdAsync(Guid referenceId)`).
-2.  **`IReferenceMapper`**: A high-level interface used by services and adapters (never by a controller).
-3.  **`ReferenceMapper<T>`**: A generic implementation that delegates lookups to a specific `IReferenceProvider`.
-4.  **Registration**: Mappers are registered as **Keyed Services** (e.g., `builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IProjectProvider>>("Project")`).
+### Resolving References
+A service resolves a public `RefId` to its internal `Id` itself, through a provider's `Find...` method (`FindIdByRefIdAsync` on an `IReferenceProvider`, or a scoped lookup such as `FindRoleIdByRefIdAsync`) or through `WorkspaceOwnership.LoadAsync`, so the ownership check happens in the same place. A controller never resolves a reference.
 
 ### Workspace Permissions (management host)
 *   **Declare, don't check:** A workspace-scoped action (`api/workspaces/{workspaceRef}/...`) states what it needs with `[RequiresPermission(PermissionNames.X)]` and takes `[FromWorkspace] int workspaceId`. `WorkspacePermissionFilter` resolves the workspace once, before model binding, and answers the refusal itself; controllers never call `ResolveWorkspaceAsync`. The auth host's tenant administration (`api/tenants/{tenantRef}/...`) works the same way with `[RequiresTenantPermission]` and `[FromTenant] int tenantId`, which needs the permission tenant-wide. Both filters derive from `ScopedPermissionFilter<TAttribute>` in `Wbskt.Infrastructure`; the services behind them take the resolved id and do not check again.

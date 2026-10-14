@@ -17,7 +17,6 @@ using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Email;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
-using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Infrastructure.Telemetry;
 using Wbskt.Primitives;
@@ -71,9 +70,6 @@ public static class Program
         builder.Services.AddSingleton<RefreshTokenCookie>();
 
         builder.AddWbsktTelemetry(AuthMetrics.MeterName, QueuedEventBus.MeterName);
-
-        // Register Keyed ReferenceMappers
-        builder.Services.AddKeyedScoped<IReferenceMapper, ReferenceMapper<IWorkspaceProvider>>(ReferenceType.Workspace);
 
         // Event Bus
         builder.Services.AddRabbitMqEventBus(builder.Configuration);

@@ -14,7 +14,7 @@ internal interface IAuthProvider : IReferenceProvider
     // Reference resolution. Each of these is scoped to the tenant (or, for tenants themselves, to the
     // caller's membership) rather than being a bare Guid lookup, so a reference belonging to another
     // tenant does not resolve and cannot be acted on or probed for. This is why they are explicit
-    // methods and not IReferenceMapper registrations - that interface takes only a Guid.
+    // methods and not IReferenceProvider.FindIdByRefIdAsync, which takes only a Guid.
     Task<int> FindTenantIdByRefIdForUserAsync(Guid tenantRef, int userId, CancellationToken cancellationToken = default);
     Task<int> FindRoleIdByRefIdAsync(Guid roleRef, int tenantId, CancellationToken cancellationToken = default);
     Task<int> FindGroupIdByRefIdAsync(Guid groupRef, int tenantId, CancellationToken cancellationToken = default);

@@ -14,5 +14,4 @@ public interface IRunCancellationService
 
     CancellationToken GetToken(long runId) => CancellationToken.None;
     void CancelCts(long runId) {}
-    void RemoveCts(long runId) {}
 }

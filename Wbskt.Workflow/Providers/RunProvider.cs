@@ -289,20 +289,6 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         return reader.IsDBNull(ordinal) ? 0d : Convert.ToDouble(reader.GetValue(ordinal));
     }
 
-    public async Task<IReadOnlyCollection<RunRow>> GetActiveByWorkflowRefIdCorrelationKeyAsync(Guid workflowRefId, string correlationKey, CancellationToken ct)
-    {
-        return await ExecuteCollectionAsync(
-            "dbo.Run_GetActiveBy_WorkflowRefId_CorrelationKey",
-            p =>
-            {
-                p.AddWithValue("@WorkflowRefId", workflowRefId);
-                p.AddWithValue("@CorrelationKey", correlationKey);
-            },
-            Map,
-            ct
-        );
-    }
-
     public async Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         return await ExecuteCollectionAsync(
