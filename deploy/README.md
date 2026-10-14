@@ -136,7 +136,7 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER   # log out/in, or keep using sudo
 
 # Checkout + registry login + .env - see One-time setup above. Fill in DOMAIN, ACME_EMAIL, and
-# generate real secrets for SQL_SA_PASSWORD, SQL_AUTH_PASSWORD, SQL_MANAGEMENT_PASSWORD, SQL_ENGINE_PASSWORD (see SQL logins below), RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, INTEGRATIONS_KEY_1 (see Integration master key below), GRAFANA_ADMIN_PASSWORD,
+# generate real secrets for SQL_SA_PASSWORD, SQL_AUTH_PASSWORD, SQL_MANAGEMENT_PASSWORD, SQL_ENGINE_PASSWORD (see SQL logins below), RABBITMQ_PASSWORD, ENGINE_INBOUND_API_KEY, AUTH_INTERNAL_API_KEY, INTEGRATIONS_KEY_1 (see Integration master key below), GRAFANA_ADMIN_PASSWORD,
 # AUTH_JWT_SIGNING_KEY and MANAGEMENT_JWT_SIGNING_KEY (see JWT signing keys below), CONSOLE_ORIGIN, and fill in the SMTP_* mail relay (see Mail relay below). Consider setting
 # ACME_CASERVER to the Let's Encrypt staging directory first (see .env.example) to avoid burning
 # production rate limits while you're still iterating.
@@ -392,6 +392,7 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
 | `EngineNotReporting` | no engine has reported metrics for 5 minutes |
+| `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
 
 Engine readiness is deliberately not alerted on: a standby engine is not ready by design.
 

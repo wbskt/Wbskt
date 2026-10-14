@@ -169,6 +169,9 @@ services:
       Auth__Email__FromAddress: ${SMTP_FROM_ADDRESS:-}
       Auth__Email__FromDisplayName: ${SMTP_FROM_NAME:-Wbskt}
       Auth__Email__ConsoleBaseUrl: ${CONSOLE_ORIGIN}
+      # The key GET /api/internal/workspaces/deleted requires: management's deleted workspace sweep
+      # has no user token to forward. Unset, that route answers 503 and the sweep fails each day.
+      Internal__ApiKey: ${AUTH_INTERNAL_API_KEY}
     volumes:
       - ../config:/Config:ro
     healthcheck:
@@ -229,6 +232,7 @@ services:
       Services__Auth: http://auth:8080
       Services__WorkflowEngine: http://traefik:8081
       Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY}
+      Services__AuthInternalApiKey: ${AUTH_INTERNAL_API_KEY}
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
       Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
     volumes:
