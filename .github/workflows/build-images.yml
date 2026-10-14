@@ -3,7 +3,8 @@ name: Build images
 # Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
 # deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests run only the
 # tests and the package scan: the image jobs are skipped there, so a broken Dockerfile first shows
-# up on the master push that would publish it. On master, once the tests, E2E and every image have
+# up on the master push that would publish it. On master, no image is built or pushed until the
+# tests, the scan and E2E have passed, so a red E2E never moves :latest; once every image has
 # succeeded, the deploy job hands that run's sha-<short> tag to deploy.yml.
 #
 # Every job stays on GitHub-hosted runners. The repository is public, and a self-hosted runner would
@@ -334,7 +335,7 @@ jobs:
           echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
 
   hosts:
-    needs: [meta, test, integration, scan]
+    needs: [meta, test, integration, scan, e2e]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -387,7 +388,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   migrator:
-    needs: [meta, test, integration, scan]
+    needs: [meta, test, integration, scan, e2e]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -417,8 +418,8 @@ jobs:
           cache-from: type=gha,scope=migrator
           cache-to: type=gha,mode=max,scope=migrator
 
-  # Every master push that gets this far lands on the VM. E2E gates only this job, not the image
-  # builds, so the images still publish while it runs and a red E2E stops the deploy alone.
+  # Every master push that gets this far lands on the VM. E2E already gates the image builds above;
+  # it stays listed here so the deploy cannot outrun it if that changes.
   deploy:
     needs: [meta, hosts, migrator, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
