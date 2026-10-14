@@ -33,7 +33,7 @@ jobs:
       # an Exe, not a test project, and `dotnet test` on the solution would try to run it.
       - name: Unit tests
         run: |
-          dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj \
+          dotnet test Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj \
             --nologo -v q --logger "console;verbosity=normal"
 
   integration:

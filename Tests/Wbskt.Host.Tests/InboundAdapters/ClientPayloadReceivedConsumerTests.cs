@@ -1,0 +1,174 @@
+using MassTransit;
+using Moq;
+using Wbskt.Events.Client;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Engine.Host.InboundAdapters;
+
+namespace Wbskt.Host.Tests.InboundAdapters;
+
+public sealed class ClientPayloadReceivedConsumerTests
+{
+    [Fact]
+    public async Task Consume_invokes_inbound_hub_with_device_channel_and_device_correlation_key()
+    {
+        // Arrange
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        ClientMessageReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{\"value\":1}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+
+        // Act
+        await consumer.Consume(context.Object);
+
+        // Assert
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e =>
+                e.ChannelKind == "client"
+                && e.MatchKeys.Contains($"client:{evt.ClientRefId}:{evt.Type}")
+                && e.InboundEventId.StartsWith($"client-message:{evt.ClientRefId}:", StringComparison.Ordinal)
+                && e.Payload["clientRefId"].GetString() == evt.ClientRefId.ToString()
+                && e.Payload["messageType"].GetString() == evt.Type
+                && e.Payload["clientRefId"].GetGuid() == evt.ClientRefId
+                && e.Payload["clientId"].GetInt32() == evt.ClientId
+                && e.Payload["workspaceId"].GetInt32() == evt.WorkspaceId
+                && e.Payload["payload"].GetRawText() == evt.Payload),
+            CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task Consume_marks_the_device_as_just_heard_from_before_dispatching()
+    {
+        // A run this message starts may command the device before its presence is recorded.
+        var activity = new RecentDeviceActivity(TimeProvider.System);
+        ClientMessageReceivedEvent evt = new(Guid.NewGuid(), 12, 34, "sensor", "{}");
+        bool heardAtDispatch = false;
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback(() => heardAtDispatch = activity.WasRecentlyActive(evt.ClientRefId))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+
+        await new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), activity).Consume(context.Object);
+
+        Assert.True(heardAtDispatch);
+    }
+
+    [Fact]
+    public async Task Consume_uses_device_ref_id_and_message_type_as_correlation_key()
+    {
+        // Arrange
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        ClientMessageReceivedEvent evt = new(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), 12, 34, "temperature", "{}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+
+        // Act
+        await consumer.Consume(context.Object);
+
+        // Assert
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e =>
+                e.ChannelKind == "client"
+                && e.MatchKeys.Contains("client:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:temperature")),
+            CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task Consume_includes_clientId_and_workspaceId_in_payload()
+    {
+        // Arrange
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        ClientMessageReceivedEvent evt = new(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), 99, 77, "humidity", "{}");
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+
+        // Act
+        await consumer.Consume(context.Object);
+
+        // Assert
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e =>
+                e.Payload["clientId"].GetInt32() == 99
+                && e.Payload["workspaceId"].GetInt32() == 77),
+            CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task Consume_uses_bus_message_id_so_redelivery_is_deduplicated()
+    {
+        // Two deliveries of the SAME message (same MessageId) must produce the SAME
+        // InboundEventId, so the downstream idempotency claim dedupes the redelivery.
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        ClientMessageReceivedEvent evt = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 12, 34, "sensor", "{}");
+        Guid messageId = Guid.Parse("11112222-3333-4444-5555-666677778888");
+
+        var capturedIds = new List<string>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<InboundEvent, CancellationToken>((e, _) => capturedIds.Add(e.InboundEventId))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+
+        await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
+        await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
+
+        Assert.Equal(2, capturedIds.Count);
+        Assert.Equal(capturedIds[0], capturedIds[1]);
+        Assert.EndsWith(messageId.ToString(), capturedIds[0]);
+    }
+
+    [Theory]
+    [InlineData(null, false)]   // no device time: treated as sent on arrival
+    [InlineData(5, false)]      // ordinary network delay
+    [InlineData(30, false)]     // right at the threshold
+    [InlineData(31, true)]
+    [InlineData(3600, true)]    // buffered for an hour while offline
+    public async Task Consume_adds_send_time_arrival_time_and_late_flag(int? secondsInTransit, bool expectedLate)
+    {
+        InboundEvent? captured = null;
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<InboundEvent, CancellationToken>((e, _) => captured = e)
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
+        DateTime receivedAt = new(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
+        DateTime? sentAt = secondsInTransit is { } s ? receivedAt.AddSeconds(-s) : null;
+        ClientMessageReceivedEvent evt = new(Guid.NewGuid(), 1, 2, "temperature", "{}") { CreatedAtUtc = receivedAt, SentAtUtc = sentAt };
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+
+        await consumer.Consume(context.Object);
+
+        Assert.NotNull(captured);
+        Assert.Equal(sentAt ?? receivedAt, captured.Payload["sentAt"].GetDateTime());
+        Assert.Equal(DateTimeKind.Utc, captured.Payload["sentAt"].GetDateTime().Kind);
+        Assert.Equal(receivedAt, captured.Payload["receivedAt"].GetDateTime());
+        Assert.Equal(expectedLate, captured.Payload["late"].GetBoolean());
+    }
+
+    private static Mock<ConsumeContext<ClientMessageReceivedEvent>> ContextWithMessageId(ClientMessageReceivedEvent evt, Guid messageId)
+    {
+        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
+        context.SetupGet(c => c.Message).Returns(evt);
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        context.SetupGet(c => c.MessageId).Returns(messageId);
+        return context;
+    }
+}
