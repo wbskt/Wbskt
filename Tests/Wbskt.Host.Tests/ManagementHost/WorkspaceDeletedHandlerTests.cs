@@ -10,6 +10,7 @@ using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Handlers;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 
 namespace Wbskt.Host.Tests.ManagementHost;
@@ -30,8 +31,7 @@ public sealed class WorkspaceDeletedHandlerTests
         var engine = new Mock<IWorkflowEngineGateway>();
         var cutoffs = new Mock<IClientTokenCutoffs>();
 
-        var handler = new WorkspaceDeletedHandler(
-            provider.Object, bus.Object, engine.Object, cutoffs.Object, NullLogger<WorkspaceDeletedHandler>.Instance);
+        var handler = Handler(provider.Object, bus.Object, engine.Object, cutoffs.Object);
 
         await handler.Consume(Context());
 
@@ -64,8 +64,7 @@ public sealed class WorkspaceDeletedHandlerTests
             .ReturnsAsync(new WorkspaceRetirement([], [], []));
         var bus = new Mock<IEventBus>();
 
-        var handler = new WorkspaceDeletedHandler(
-            provider.Object, bus.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceDeletedHandler>.Instance);
+        var handler = Handler(provider.Object, bus.Object, Mock.Of<IWorkflowEngineGateway>(), Mock.Of<IClientTokenCutoffs>());
 
         await handler.Consume(Context());
 
@@ -85,8 +84,7 @@ public sealed class WorkspaceDeletedHandlerTests
         var queued = new Mock<ICommandSender>(MockBehavior.Strict);
         var gateway = new WorkflowEngineGateway(Mock.Of<IWorkflowEngineClient>(), commands.Object, queued.Object);
 
-        var handler = new WorkspaceDeletedHandler(
-            provider.Object, bus.Object, gateway, Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceDeletedHandler>.Instance);
+        var handler = Handler(provider.Object, bus.Object, gateway, Mock.Of<IClientTokenCutoffs>());
 
         await handler.Consume(Context());
 
@@ -112,11 +110,13 @@ public sealed class WorkspaceDeletedHandlerTests
         engine.Setup(e => e.CancelRunAsync(301L, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker down"));
 
-        var handler = new WorkspaceDeletedHandler(
-            provider.Object, Mock.Of<IEventBus>(), engine.Object, Mock.Of<IClientTokenCutoffs>(), NullLogger<WorkspaceDeletedHandler>.Instance);
+        var handler = Handler(provider.Object, Mock.Of<IEventBus>(), engine.Object, Mock.Of<IClientTokenCutoffs>());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Consume(Context()));
     }
+
+    private static WorkspaceDeletedHandler Handler(IWorkspaceRetirementProvider provider, IEventBus bus, IWorkflowEngineGateway engine, IClientTokenCutoffs cutoffs) =>
+        new(new WorkspaceRetirer(provider, bus, engine, cutoffs, NullLogger<WorkspaceRetirer>.Instance));
 
     private static ConsumeContext<WorkspaceDeletedEvent> Context()
     {
