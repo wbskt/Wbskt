@@ -1,7 +1,9 @@
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Services;
+using Wbskt.Models;
 
 namespace Wbskt.Host.Tests.ManagementHost;
 

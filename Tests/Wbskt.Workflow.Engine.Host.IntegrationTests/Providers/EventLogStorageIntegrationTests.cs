@@ -5,6 +5,7 @@ using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
+using Wbskt.Models;
 
 namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 

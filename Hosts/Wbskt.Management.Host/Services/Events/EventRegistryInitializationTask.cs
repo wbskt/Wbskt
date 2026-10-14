@@ -2,6 +2,7 @@ using System.Reflection;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Primitives;
+using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Services.Events;
 

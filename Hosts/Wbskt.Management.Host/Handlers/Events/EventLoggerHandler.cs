@@ -8,6 +8,7 @@ using Wbskt.Events.Abstractions;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Management.Host.Services;
+using Wbskt.Models;
 
 namespace Wbskt.Management.Host.Handlers.Events;
 

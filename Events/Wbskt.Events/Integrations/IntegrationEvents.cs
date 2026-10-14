@@ -1,5 +1,6 @@
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Abstractions;
+using Wbskt.Models;
 
 namespace Wbskt.Events.Integrations;
 

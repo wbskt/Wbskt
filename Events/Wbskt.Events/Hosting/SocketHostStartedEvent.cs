@@ -1,4 +1,5 @@
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Models;
 
 namespace Wbskt.Events.Hosting;
 
