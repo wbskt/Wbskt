@@ -5,7 +5,10 @@ using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Management.Host.Services.Workflow;
 
-/// <summary>The workspace check both <see cref="WorkflowQueryService"/> and <see cref="WorkflowLifecycleService"/> make before touching a workflow.</summary>
+/// <summary>
+/// The workspace check <see cref="WorkflowQueryService"/>, <see cref="WorkflowLifecycleService"/> and
+/// <see cref="WorkflowRunQueryService"/> make before touching a workflow.
+/// </summary>
 internal static class WorkflowOwnershipCheck
 {
     /// <summary>
@@ -24,6 +27,16 @@ internal static class WorkflowOwnershipCheck
         return ensureWorkspaceResult.IsFailure
             ? Result<WorkflowDefinitionRow>.Failure(ensureWorkspaceResult.Error)
             : Result<WorkflowDefinitionRow>.Success(row);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="workspaceId"/> owns the workflow, when the caller needs only the answer
+    /// and not the row: <see cref="WorkspaceOwnership.WorkflowNotFound"/> otherwise.
+    /// </summary>
+    public static async Task<Result> EnsureCurrentAsync(IWorkflowDefinitionProvider provider, ILogger logger, int workspaceId, Guid refId, CancellationToken ct)
+    {
+        var load = await LoadCurrentAsync(provider, logger, workspaceId, refId, ct);
+        return load.IsFailure ? Result.Failure(load.Error) : Result.Success();
     }
 
     public static Result EnsureWorkspace(WorkflowDefinitionRow row, int workspaceId, Guid refId, ILogger logger)

@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text;
+using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -39,6 +39,6 @@ internal static class SecurityTokens
     /// </summary>
     public static byte[] Hash(string token)
     {
-        return SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return SecretHash.Sha256(token);
     }
 }

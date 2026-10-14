@@ -1,6 +1,7 @@
 using Wbskt.Auth.Host.Providers;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Auth;
+using Wbskt.Infrastructure.Hosting;
 
 namespace Wbskt.Auth.Host.Services;
 
@@ -10,7 +11,7 @@ namespace Wbskt.Auth.Host.Services;
 /// tables grew with every sign-in for the life of the deployment. Each sweep first logs the invitations
 /// that ran out unused since the last one, in the tenant's workspaces' audit logs.
 /// </summary>
-public sealed class CredentialRetentionService : BackgroundService
+public sealed class CredentialRetentionService : PeriodicWorker
 {
     internal const int BatchSize = 5000;
 
@@ -19,8 +20,6 @@ public sealed class CredentialRetentionService : BackgroundService
     /// recognised as rotated-away or revoked is evidence of theft, which an unknown one is not.
     /// </summary>
     internal static readonly TimeSpan Grace = TimeSpan.FromDays(30);
-
-    private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeProvider _timeProvider;
@@ -32,23 +31,40 @@ public sealed class CredentialRetentionService : BackgroundService
     }
 
     internal CredentialRetentionService(IServiceScopeFactory scopeFactory, TimeProvider timeProvider, ILogger<CredentialRetentionService> logger)
+        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, timeProvider)
     {
         _scopeFactory = scopeFactory;
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
-    /// <summary>One sweep: repeats until a pass deletes nothing. Returns the total deleted.</summary>
+    protected override string Name => "Credential retention";
+
+    // A failed sweep is retried on the next tick; it only lets the tables grow for an hour longer.
+    protected override TimeSpan Interval { get; } = TimeSpan.FromHours(1);
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
+    {
+        await SweepAsync(services, ct);
+    }
+
+    /// <summary>One sweep in a scope of its own; see <see cref="SweepAsync(IServiceProvider, CancellationToken)"/>.</summary>
     internal async Task<long> SweepAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider.GetRequiredService<ICredentialRetentionProvider>();
+        return await SweepAsync(scope.ServiceProvider, cancellationToken);
+    }
+
+    /// <summary>One sweep: repeats until a pass deletes nothing. Returns the total deleted.</summary>
+    private async Task<long> SweepAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var provider = services.GetRequiredService<ICredentialRetentionProvider>();
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
         var cutoffUtc = nowUtc - Grace;
 
         // Before the deletes, so an invitation that expired longer ago than the grace period (one from
         // before this sweep logged expiries) is logged before it is gone.
-        await AnnounceExpiredInvitationsAsync(scope.ServiceProvider, provider, nowUtc, cancellationToken);
+        await AnnounceExpiredInvitationsAsync(services, provider, nowUtc, cancellationToken);
 
         long total = 0;
         int deleted;
@@ -91,33 +107,5 @@ public sealed class CredentialRetentionService : BackgroundService
             }
         }
         while (expired.Count == BatchSize);
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        await SweepGuardedAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(Interval, _timeProvider);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            await SweepGuardedAsync(stoppingToken);
-        }
-    }
-
-    private async Task SweepGuardedAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            await SweepAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // The next tick retries; a failed sweep only lets the tables grow for an hour longer.
-            _logger.LogError(ex, "Credential retention sweep failed.");
-        }
     }
 }

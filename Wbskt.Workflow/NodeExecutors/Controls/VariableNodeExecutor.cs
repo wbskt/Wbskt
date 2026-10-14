@@ -23,6 +23,8 @@ internal sealed class VariableNodeExecutor : INodeExecutor
     /// <summary>Branch-state key carrying whether the last CompareAndSet on this branch won its race.</summary>
     internal const string CompareAndSetResultKey = "casSucceeded";
 
+    private static readonly JsonSerializerOptions ExpressionJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     private readonly ISharedVariableProvider _sharedVariableProvider;
     private readonly IExpressionEvaluator _expressionEvaluator;
     private readonly IVariableWritePublisher? _writes;
@@ -232,8 +234,7 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             && value.TryGetProperty("kind", out JsonElement kindProperty)
             && kindProperty.ValueKind == JsonValueKind.String)
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var expression = JsonSerializer.Deserialize<WorkflowExpression>(value.GetRawText(), options);
+            var expression = JsonSerializer.Deserialize<WorkflowExpression>(value.GetRawText(), ExpressionJsonOptions);
             if (expression is not null)
             {
                 value = await _expressionEvaluator.EvaluateAsync(expression, ctx.Branch, ct);

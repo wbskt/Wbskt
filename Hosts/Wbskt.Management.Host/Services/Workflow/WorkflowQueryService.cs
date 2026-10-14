@@ -133,8 +133,7 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
     {
         _logger.LogDebug("Verifying workflow '{WorkflowRefId}' belongs to WorkspaceId: {WorkspaceId}", workflowRefId, workspaceId);
 
-        var load = await WorkflowOwnershipCheck.LoadCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
-        return load.IsFailure ? Result.Failure(load.Error) : Result.Success();
+        return await WorkflowOwnershipCheck.EnsureCurrentAsync(_workflowDefinitionProvider, _logger, workspaceId, workflowRefId, ct);
     }
 
     private static WorkflowDefinitionDto Map(WorkflowDefinitionRow row)

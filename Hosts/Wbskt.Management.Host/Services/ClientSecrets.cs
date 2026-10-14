@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text;
+using Wbskt.Infrastructure.Security;
 using Wbskt.Management.Host.Models;
 
 namespace Wbskt.Management.Host.Services;
@@ -40,7 +40,7 @@ internal static class ClientSecrets
     /// </remarks>
     public static byte[] Hash(string secret)
     {
-        return SHA256.HashData(Encoding.UTF8.GetBytes(secret));
+        return SecretHash.Sha256(secret);
     }
 
     /// <summary>

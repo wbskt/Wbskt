@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events;
+using Wbskt.Infrastructure.Hosting;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
 
@@ -13,7 +14,7 @@ namespace Wbskt.Management.Host.Services;
 /// <see cref="EventLoggingOptions.DeviceTrafficRetentionDays"/>: it is most of the table, and the
 /// audit records (sign-ins, policy and workflow changes) are what is worth keeping longer.
 /// </summary>
-public sealed class EventLogRetentionService : BackgroundService
+public sealed class EventLogRetentionService : PeriodicWorker
 {
     internal const int BatchSize = 5000;
 
@@ -22,7 +23,6 @@ public sealed class EventLogRetentionService : BackgroundService
     private readonly ILogger<EventLogRetentionService> _logger;
     private readonly TimeSpan _retention;
     private readonly TimeSpan _deviceTrafficRetention;
-    private readonly TimeSpan _interval;
 
     public EventLogRetentionService(
         IServiceScopeFactory scopeFactory,
@@ -37,21 +37,38 @@ public sealed class EventLogRetentionService : BackgroundService
         TimeProvider timeProvider,
         IOptions<EventLoggingOptions> options,
         ILogger<EventLogRetentionService> logger)
+        : base(AlwaysOpenWorkGate.Instance, scopeFactory, logger, timeProvider)
     {
+        Interval = options.Value.RetentionInterval;
         _scopeFactory = scopeFactory;
         _timeProvider = timeProvider;
         _logger = logger;
         _retention = TimeSpan.FromDays(options.Value.RetentionDays);
         _deviceTrafficRetention = TimeSpan.FromDays(Math.Min(options.Value.DeviceTrafficRetentionDays, options.Value.RetentionDays));
-        _interval = options.Value.RetentionInterval;
     }
 
-    /// <summary>One sweep: device traffic past its window, then everything past the audit window. Returns the total.</summary>
+    protected override string Name => "Event log retention";
+
+    // A failed sweep is retried on the next tick; it only lets the table grow for an interval longer.
+    protected override TimeSpan Interval { get; }
+
+    protected override async Task RunOnceAsync(IServiceProvider services, CancellationToken ct)
+    {
+        await SweepAsync(services, ct);
+    }
+
+    /// <summary>One sweep in a scope of its own; see <see cref="SweepAsync(IServiceProvider, CancellationToken)"/>.</summary>
     internal async Task<long> SweepAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider.GetRequiredService<IEventProvider>();
-        var registry = scope.ServiceProvider.GetRequiredService<IEventRegistry>();
+        return await SweepAsync(scope.ServiceProvider, cancellationToken);
+    }
+
+    /// <summary>One sweep: device traffic past its window, then everything past the audit window. Returns the total.</summary>
+    private async Task<long> SweepAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var provider = services.GetRequiredService<IEventProvider>();
+        var registry = services.GetRequiredService<IEventRegistry>();
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
 
         long total = 0;
@@ -92,33 +109,5 @@ public sealed class EventLogRetentionService : BackgroundService
         }
 
         return total;
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        await SweepGuardedAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(_interval, _timeProvider);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            await SweepGuardedAsync(stoppingToken);
-        }
-    }
-
-    private async Task SweepGuardedAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            await SweepAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // The next tick retries; a failed sweep only lets the table grow for an interval longer.
-            _logger.LogError(ex, "Event log retention sweep failed.");
-        }
     }
 }

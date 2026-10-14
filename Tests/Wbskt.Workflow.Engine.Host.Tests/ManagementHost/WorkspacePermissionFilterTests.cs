@@ -214,6 +214,7 @@ public sealed class WorkspacePermissionFilterTests
 
         var services = new ServiceCollection()
             .AddSingleton(auth.Object)
+            .AddScoped<IWorkspaceAccessResolver, AuthClientWorkspaceAccessResolver>()
             .AddLogging()
             .BuildServiceProvider();
         var http = new DefaultHttpContext { RequestServices = services };
