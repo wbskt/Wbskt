@@ -13,7 +13,6 @@ using Wbskt.Infrastructure.Configuration;
 using Wbskt.Infrastructure.Events;
 using Wbskt.Infrastructure.HealthChecks;
 using Wbskt.Infrastructure.Json;
-using Wbskt.Infrastructure.Mappers;
 using Wbskt.Infrastructure.Security;
 using Wbskt.Infrastructure.Authorization;
 using Wbskt.Management.Host.Authorization;

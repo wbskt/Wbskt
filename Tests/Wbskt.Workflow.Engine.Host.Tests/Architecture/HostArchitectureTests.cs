@@ -113,7 +113,7 @@ public sealed partial class HostArchitectureTests
     }
 
     [Fact]
-    public void No_controller_injects_an_event_bus_provider_or_reference_mapper()
+    public void No_controller_injects_an_event_bus_or_provider()
     {
         // A controller binds, calls one service and maps the result. Publishing and reaching the
         // database belong to services, where the choice of the real or the queued bus is made once.
@@ -121,7 +121,7 @@ public sealed partial class HostArchitectureTests
             .Where(c => c.GetConstructors()
                 .SelectMany(ctor => ctor.GetParameters())
                 .Select(p => p.ParameterType)
-                .Any(t => t == typeof(IEventBus) || t == typeof(IReferenceMapper) || t.Name.EndsWith("Provider", StringComparison.Ordinal)))
+                .Any(t => t == typeof(IEventBus) || t.Name.EndsWith("Provider", StringComparison.Ordinal)))
             .Select(c => c.Name);
 
         AssertOnlyKnown(offending, LayeringExceptions);

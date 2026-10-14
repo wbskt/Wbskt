@@ -73,26 +73,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         );
     }
 
-    public async Task<IReadOnlyCollection<BranchRow>> GetActiveByRunIdAsync(int runId, CancellationToken ct)
-    {
-        return await ExecuteCollectionAsync(
-            "dbo.Branch_GetActiveBy_RunId",
-            p => p.AddWithValue("@RunId", runId),
-            Map,
-            ct
-        );
-    }
-
-    public async Task<IReadOnlyCollection<BranchRow>> GetAllActiveAsync(CancellationToken ct)
-    {
-        return await ExecuteCollectionAsync(
-            "dbo.Branch_GetAllActive",
-            null,
-            Map,
-            ct
-        );
-    }
-
     public async Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct)
     {
         return await ExecuteCollectionAsync(

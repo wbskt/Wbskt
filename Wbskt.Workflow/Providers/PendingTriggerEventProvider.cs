@@ -52,20 +52,6 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
         }
     }
 
-    public async Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
-    {
-        await ExecuteNonQueryAsync(
-            "dbo.PendingTriggerEvent_DeleteAllBy_RunKey",
-            p =>
-            {
-                p.AddWithValue("@WorkflowRefId", workflowRefId);
-                p.AddWithValue("@TriggerNodeId", triggerNodeId);
-                p.AddWithValue("@CorrelationKey", correlationKey);
-            },
-            ct
-        );
-    }
-
     public async Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

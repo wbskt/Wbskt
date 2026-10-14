@@ -107,7 +107,6 @@ public sealed class PendingTriggerEventDrainerTests
             DequeueCalls++;
             return Task.FromResult(rows.Count > 0 ? rows.Dequeue() : null);
         }
-        public Task DeleteAllByRunKeyAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
         public Task<long> CountAllAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
 

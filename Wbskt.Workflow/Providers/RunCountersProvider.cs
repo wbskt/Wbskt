@@ -53,21 +53,6 @@ internal sealed class RunCountersProvider : BaseSqlProvider, IRunCountersProvide
         );
     }
 
-    public async Task<decimal> AddCreditsConsumedAsync(int runId, decimal cost, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.RunCounters_AddCreditsConsumed",
-            p =>
-            {
-                p.AddWithValue("@RunId", runId);
-                p.AddWithValue("@Cost", cost);
-            },
-            r => r.GetDecimal(0),
-            new InvalidOperationException("RunCounters_AddCreditsConsumed did not return a value."),
-            ct
-        );
-    }
-
     public async Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(
