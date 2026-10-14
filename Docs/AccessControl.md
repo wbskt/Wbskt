@@ -62,7 +62,7 @@ Consequences worth knowing:
 | Membership gate + set resolution | `Hosts/Wbskt.Auth.Host/Services/WorkspaceService.cs` (`ResolveAccessAsync`) |
 | Resolve API | `POST /api/internal/workspaces/resolve` → `{ workspaceId, permissions[] }` |
 | Consumer client | `Hosts/Wbskt.Management.Host/Services/Clients/IAuthServiceClient.cs` (`WorkspaceAccess`, single/multi-permission overloads) |
-| Tenant administration | `Hosts/Wbskt.Auth.Host/Services/ManagementService.cs` — owns the permission gate and the tenant-scoped reference resolution |
+| Tenant administration | `Hosts/Wbskt.Auth.Host/Services/TenantService.cs` (members, invitations) and `AccessControlService.cs` (roles, groups, grants) — own the tenant-scoped reference resolution; the permission gate is `TenantPermissionFilter` |
 
 ## Tenant lifecycle
 
@@ -177,7 +177,7 @@ It refuses self-suspension (`AUTH_CANNOT_SUSPEND_SELF`) and suspending the last 
 Everything lives under `api/tenants/{tenantRef}` and is addressed by opaque `Guid` reference, never
 by internal integer ID. `GET /api/tenants` lists the caller's tenants and is the entry point.
 
-Reference resolution is **tenant-scoped**, which is why it sits in `ManagementService` rather than
+Reference resolution is **tenant-scoped**, which is why it sits in `TenantService` and `AccessControlService` rather than
 the controller: a role, group or user reference belonging to another tenant simply does not resolve,
 so a cross-tenant reference is reported the same as one that does not exist. Resolving a user is
 additionally gated on their `TenantMembers` row, so an administrator cannot pull an outsider into

@@ -203,8 +203,8 @@ signup.
 
 **Where.**
 - `Hosts/Wbskt.Auth.Host/Controllers/AuthController.cs` — new anonymous endpoints.
-- `Hosts/Wbskt.Auth.Host/Services/AuthService.cs`, `IAuthService.cs`.
-- `Hosts/Wbskt.Auth.Host/Providers/SqlAuthProvider.cs`, `IAuthProvider.cs`.
+- `Hosts/Wbskt.Auth.Host/Services/RegistrationService.cs`, `PasswordService.cs` and their interfaces.
+- `Hosts/Wbskt.Auth.Host/Providers/AccountProvider.cs`, `IAccountProvider.cs`.
 - `Hosts/Wbskt.Auth.Host/Services/InvitationTokens.cs` — **copy this pattern exactly.**
 - `Databases/Wbskt.Database.Auth/Tables/` — new tables. `TenantInvitations.sql` is the model to
   follow (`TokenHash VARBINARY(32)`, expiry, single-use).
