@@ -1,3 +1,5 @@
+using Wbskt.Models;
+
 namespace Wbskt.EventBus.Abstractions;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]

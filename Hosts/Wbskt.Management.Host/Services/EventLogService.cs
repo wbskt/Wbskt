@@ -2,6 +2,7 @@ using Wbskt.Events;
 using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Management.Host.Providers;
 using Wbskt.Models;
 
