@@ -7,7 +7,7 @@ using Wbskt.Workflow.Abstraction.Models;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class ScheduleTriggerE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

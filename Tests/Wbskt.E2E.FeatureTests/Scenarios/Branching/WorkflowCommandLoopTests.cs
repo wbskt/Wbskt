@@ -23,7 +23,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Branching;
 ///  5. Asserts the client receives an "OpenVent" command within 30 s.
 ///  6. Polls the run list until the run reaches a terminal status within 30 s.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class WorkflowCommandLoopTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

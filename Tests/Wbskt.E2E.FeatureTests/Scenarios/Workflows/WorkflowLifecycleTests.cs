@@ -13,7 +13,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Workflows;
 ///
 /// Requires the auth, management and engine hosts running. Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class WorkflowLifecycleTests(ServicesFixture fixture)
 {
     [SkippableFact]

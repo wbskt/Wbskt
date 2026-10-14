@@ -21,12 +21,17 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// E2E_RATE_LIMIT_TESTS=1 E2E_AUTH_PERMIT_LIMIT=10 dotnet test --filter FullyQualifiedName~RateLimitingTests.AUTH_RL_01
 /// </code>
 /// <para>
+/// Alone matters more now that the suite's three collections run side by side: with the gate set and
+/// no filter, these would spend the budget while the devices and engine collections are signing in.
+/// The filter above is what keeps them alone, as CI's rate-limit pass does.
+/// </para>
+/// <para>
 /// The limit is a brake on bulk attempts from one address — the point is that the password hasher
 /// cannot be used as a work amplifier. Guessing one account's password from many addresses is what
 /// the per-account lockout (AccountSecurityTests) is for.
 /// </para>
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class RateLimitingTests(ServicesFixture fixture)
 {
     private void SkipUnlessEnabled()

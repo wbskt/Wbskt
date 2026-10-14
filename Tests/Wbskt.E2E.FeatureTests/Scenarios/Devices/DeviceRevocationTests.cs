@@ -17,11 +17,12 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 /// The socket host learns of revocations by event and keeps them in memory, so the restart scenario
 /// checks the part that has to outlive both: the cutoff the management host records in Redis. It
 /// needs <c>E2E_SOCKET_RESTART_COMMAND</c> (see <see cref="E2EConfig.SocketRestartCommand"/>) and
-/// skips without it.
+/// skips without it. Run it alone, with <c>--filter</c>, as CI does: the suite's three collections run
+/// side by side, and the restart would drop the engine collection's device connections too.
 ///
 /// Requires the auth, management and socket hosts running. Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(DevicesCollection.Name)]
 public sealed class DeviceRevocationTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

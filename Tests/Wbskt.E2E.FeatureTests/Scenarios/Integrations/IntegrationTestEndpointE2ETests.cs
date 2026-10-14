@@ -9,7 +9,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 /// "Test connection": each type tried against a local stand-in for its service, the outcomes the
 /// console shows, and the rule that only a test of the saved integration is recorded on it.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class IntegrationTestEndpointE2ETests(ServicesFixture fixture)
 {
     private readonly IntegrationsApi _api = new(fixture);

@@ -12,7 +12,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// Requires the auth host running against a database with the tenant procedures deployed. Skips
 /// gracefully when the hosts are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class TenantLifecycleTests(ServicesFixture fixture)
 {
     // ── Registration gives every account a tenant of its own ──────────────────────────────

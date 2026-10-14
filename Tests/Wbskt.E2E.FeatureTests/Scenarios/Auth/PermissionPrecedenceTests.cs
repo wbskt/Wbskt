@@ -17,7 +17,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 ///
 /// Requires the auth host running. Skips gracefully when it is down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class PermissionPrecedenceTests(ServicesFixture fixture)
 {
     private const string Slug = "logs.read";

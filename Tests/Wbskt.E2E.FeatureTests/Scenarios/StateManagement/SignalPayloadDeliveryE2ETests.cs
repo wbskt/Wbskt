@@ -23,7 +23,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.StateManagement;
 /// the run succeeds AND the completed branch's LocalJson contains the delivered payload marker —
 /// proving payload delivery end-to-end via the new branch-local-state observability.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class SignalPayloadDeliveryE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

@@ -18,7 +18,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 ///
 /// Requires the auth host running. Skips gracefully when it is down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class RegistrationTests(ServicesFixture fixture)
 {
     private static string RegisterUrl => ServicesFixture.AuthUrl("/api/auth/register");

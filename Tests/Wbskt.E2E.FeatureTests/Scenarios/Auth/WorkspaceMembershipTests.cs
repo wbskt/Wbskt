@@ -16,7 +16,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 ///
 /// Requires the auth host running. Skips gracefully when it is down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class WorkspaceMembershipTests(ServicesFixture fixture)
 {
     /// <summary>An owner with a tenant, a workspace, and one invited tenant member.</summary>

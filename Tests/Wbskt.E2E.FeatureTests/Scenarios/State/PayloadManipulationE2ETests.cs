@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Expressions;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.State;
 
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public class PayloadManipulationE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

@@ -15,7 +15,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 ///
 /// Requires the auth host running. Skips gracefully when it is down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class RefreshCookieTests(ServicesFixture fixture) : IDisposable
 {
     private const string CookieName = "wbskt_refresh";

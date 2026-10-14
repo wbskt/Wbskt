@@ -5,7 +5,7 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Performance;
 
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public class ConcurrencyStressE2ETests
 {
     private readonly ServicesFixture _fixture;

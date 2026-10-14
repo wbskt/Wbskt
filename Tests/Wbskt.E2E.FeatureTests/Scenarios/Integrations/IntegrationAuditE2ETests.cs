@@ -11,7 +11,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 /// The event log's record of integrations: each change is logged with who made it and what changed,
 /// replacing or deleting a credential reads as a security event, and no entry ever carries a secret.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class IntegrationAuditE2ETests(ServicesFixture fixture)
 {
     private readonly IntegrationsApi _api = new(fixture);

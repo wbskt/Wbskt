@@ -14,7 +14,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 /// procedures deployed (REG_07 through REG_10 assert behaviour that lives in SQL). Skips gracefully
 /// when the hosts are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class AuthRegressionTests(ServicesFixture fixture)
 {
     // ── Fix 1: an unresolvable workspace reference is Forbidden, not NotFound ──────────────

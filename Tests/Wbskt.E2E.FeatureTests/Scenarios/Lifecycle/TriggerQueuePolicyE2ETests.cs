@@ -13,7 +13,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 /// a single dequeue per run-terminal, with a re-minted InboundEventId so the drained event isn't
 /// treated as a duplicate of the original (already-Succeeded) idempotency claim.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class TriggerQueuePolicyE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

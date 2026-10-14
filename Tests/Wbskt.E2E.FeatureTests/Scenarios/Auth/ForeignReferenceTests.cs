@@ -12,7 +12,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Auth;
 ///
 /// Requires the auth and management hosts running. Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(AuthCollection.Name)]
 public sealed class ForeignReferenceTests(ServicesFixture fixture)
 {
     private static readonly object PolicyUpdate = new { Name = "renamed", MaxClients = (int?)null, AutoApproval = true, IsEnabled = true };

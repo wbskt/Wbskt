@@ -15,7 +15,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Devices;
 ///
 /// Requires the auth and management hosts running. Skips gracefully when they are down.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(DevicesCollection.Name)]
 public sealed class DeviceTagTests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

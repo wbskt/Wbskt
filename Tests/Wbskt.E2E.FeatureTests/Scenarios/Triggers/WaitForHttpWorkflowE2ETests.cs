@@ -20,7 +20,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// token. The command must NOT fire yet. An external caller POSTs the public wake callback with that
 /// token, which the engine maps to the same key, resumes the branch, and sends the command.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class WaitForHttpWorkflowE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

@@ -8,7 +8,7 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.ErrorHandling;
 
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class NodeRetryE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

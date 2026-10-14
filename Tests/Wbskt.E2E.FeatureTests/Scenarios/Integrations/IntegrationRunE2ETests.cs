@@ -9,7 +9,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 /// credential, a rotated credential applies without republishing, and Call a URL keeps an
 /// integration's credential on the origin it was saved for.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
 {
     private readonly IntegrationsApi _api = new(fixture);

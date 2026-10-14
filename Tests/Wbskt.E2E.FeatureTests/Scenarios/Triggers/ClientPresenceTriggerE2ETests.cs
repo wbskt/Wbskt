@@ -12,7 +12,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// A device going offline (or coming online) and staying that way for the trigger's grace period
 /// starts a run; a device that comes back within it does not.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class ClientPresenceTriggerE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

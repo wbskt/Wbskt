@@ -19,7 +19,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Lifecycle;
 /// Why this is the cleanest idempotency E2E: transport redeliveries and crash recovery can't be
 /// forced from a black-box client, but a caller-supplied idempotency key is fully controllable.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class IdempotentManualStartE2ETests(ServicesFixture fixture)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

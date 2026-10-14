@@ -11,7 +11,7 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Integrations;
 /// integrations of the right kind, what is published reads as using them, and an integration a
 /// published workflow uses cannot be deleted out from under it.
 /// </summary>
-[Collection(E2ECollection.Name)]
+[Collection(EngineCollection.Name)]
 public sealed class IntegrationUsageE2ETests(ServicesFixture fixture)
 {
     private readonly IntegrationsApi _api = new(fixture);
