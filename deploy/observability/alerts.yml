@@ -98,6 +98,20 @@ groups:
             More abnormal disconnects in 10 minutes than half the connected devices. Look for a
             network or proxy problem in front of ws.<domain>, or a socket host restarting.
 
+      - alert: DeletedWorkspaceRetiredBySweep
+        # Management's daily deleted workspace sweep found a workspace the auth host had deleted that
+        # still had live policies, clients, workflows or runs, and retired it. Each one is a
+        # WorkspaceDeletedEvent that was lost or whose handling gave up. 25h: one daily sweep's worth.
+        expr: sum(increase(wbskt_management_workspaces_retired_by_sweep_total[25h])) > 0
+        labels:
+          severity: warn
+        annotations:
+          summary: "The deleted workspace sweep retired {{ $value }} workspace(s) the delete event missed"
+          description: >-
+            The sweep has already repaired them. Find out why the event did not: the management
+            log's "was deleted but still had live content" warning names each workspace, and a
+            WorkspaceDeletedEvent dead-lettered in a management _error queue is the usual cause.
+
       - alert: BackupMissing
         # backup.sh pushes this timestamp only after a verified backup has been uploaded.
         expr: time() - max(wbskt_backup_last_success_timestamp_seconds) > 26 * 3600
