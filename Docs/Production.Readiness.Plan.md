@@ -49,7 +49,7 @@
 
 ```bash
 dotnet build Wbskt.slnx -v q --nologo
-dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests/Wbskt.Workflow.Engine.Host.Tests.csproj --nologo -v q
+dotnet test Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj --nologo -v q
 dotnet build Databases/Wbskt.Database/Wbskt.Database.sqlproj -c Debug --nologo
 ```
 
@@ -90,10 +90,9 @@ Assume your change must pass all three.
   (or `Wbskt.Database.Auth/`), tables under `Tables/`. Providers extend `BaseSqlProvider` and never
   depend on other providers; orchestration lives in services.
 - **Providers are Scoped**; engine core is Singleton resolving providers via `IServiceScopeFactory`.
-- **Tests**: xUnit + Moq + FluentAssertions. Unit tests in `Tests/Wbskt.Workflow.Engine.Host.Tests`
-  (despite the name, it covers the Management, Socket and Auth hosts too — see its `ManagementHost/`,
-  `SocketHost/` and `AuthHost/` folders), DB integration in
-  `Tests/Wbskt.Workflow.Engine.Host.IntegrationTests`, full-stack E2E in `Tests/Wbskt.E2E.FeatureTests`.
+- **Tests**: xUnit + Moq + FluentAssertions. Unit tests in `Tests/Wbskt.Host.Tests`
+  (every host: its `ManagementHost/`, `SocketHost/` and `AuthHost/` folders sit beside the engine's),
+  DB integration in `Tests/Wbskt.Workflow.Engine.Host.IntegrationTests`, full-stack E2E in `Tests/Wbskt.E2E.FeatureTests`.
 - **A secret or credential never lives in a workflow definition.** A definition is readable by the
   whole workspace and frozen into every published version.
 - **Licence pins are deliberate.** Do not upgrade MassTransit past v8 or FluentAssertions past v7 —

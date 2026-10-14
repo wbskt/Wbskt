@@ -10,7 +10,7 @@
 
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-            <_Parameter1>Wbskt.Workflow.Engine.Host.Tests</_Parameter1>
+            <_Parameter1>Wbskt.Host.Tests</_Parameter1>
         </AssemblyAttribute>
         <!-- Moq proxies internal interfaces (IAuthProvider, IAuthMailer) through Castle, which emits
              them into this assembly. Without the grant the proxy is refused at runtime and every test

@@ -83,7 +83,7 @@ You can also run the whole stack in containers with `deploy/compose/docker-compo
 ## Tests
 
 ```bash
-dotnet test Tests/Wbskt.Workflow.Engine.Host.Tests              # unit tests, no infrastructure
+dotnet test Tests/Wbskt.Host.Tests                              # unit tests, no infrastructure
 dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests
 dotnet test Tests/Wbskt.E2E.FeatureTests                        # needs the hosts running
 ```

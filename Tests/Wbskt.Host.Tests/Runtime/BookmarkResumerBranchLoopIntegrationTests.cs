@@ -1,0 +1,512 @@
+using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
+using Wbskt.Workflow.Abstraction.Providers;
+using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Channels;
+using Wbskt.Workflow.Engine;
+using Wbskt.Workflow.Engine.Host.HostedServices;
+using Wbskt.Host.Tests.HostedServices;
+using Wbskt.Workflow.NodeExecutors.Actions;
+using Wbskt.Workflow.Runtime;
+
+namespace Wbskt.Host.Tests.Runtime;
+
+public sealed class BookmarkResumerBranchLoopIntegrationTests
+{
+    [Fact]
+    public async Task WaitForBookmark_then_inbound_resume_completes_branch()
+    {
+        // Arrange
+        Guid nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        WorkflowDefinition definition = new(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "bookmark-e2e",
+            null,
+            true,
+            [new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
+            [],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var providers = new InMemoryProviders(definition, nodeId);
+        var dispatcher = new LoopBackDispatcher();
+        var loop = new BranchLoop(
+            providers,
+            providers,
+            providers,
+            providers,
+            new RunJournal(providers, new FixedClock()),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new WaitThenCompleteExecutor()),
+            dispatcher,
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
+        dispatcher.Handler = request => loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
+        var resumer = new BookmarkResumer(providers, providers, providers, dispatcher);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(
+            new InboundEvent(HttpWakeChannel.Name, [HttpWakeChannel.Key("client-1")], "event-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc)),
+            hasRegistrations: false,
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.Matched);
+        Assert.True(providers.Branches[1001].Status == "Completed");
+        Assert.Empty(providers.Bookmarks);
+        Assert.Contains(dispatcher.Requests, request => request.Reason == BranchExecutionReason.BookmarkResumed);
+    }
+
+    [Theory]
+    [InlineData(CommandChannel.Acked)]
+    [InlineData(CommandChannel.Failed)]
+    public async Task A_command_step_waiting_for_the_device_leaves_by_what_became_of_the_command(string outcome)
+    {
+        (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, BookmarkResumer resumer) = CommandStepRun();
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Parked first, then sent: the command's id is the bookmark the outcome comes back to.
+        Guid commandId = Assert.Single(publisher.Sent);
+        BookmarkRow bookmark = Assert.Single(providers.Bookmarks);
+        Assert.Equal(CommandChannel.Key(commandId), bookmark.MatchKey);
+
+        InboundEvent evt = CommandChannel.Event(commandId, outcome, outcome == CommandChannel.Failed ? "The device is not connected." : null);
+        BookmarkMatchResult result = await resumer.MatchInboundAsync(evt, hasRegistrations: false, CancellationToken.None);
+
+        Assert.True(result.Matched);
+        Assert.Equal(outcome, ExitPort(providers));
+        Assert.Equal(BranchStatus.Completed, providers.Branches[1001].Status);
+        Assert.Single(publisher.Sent);
+    }
+
+    [Fact]
+    public async Task A_command_step_waiting_for_the_device_leaves_by_timeout_when_no_answer_comes()
+    {
+        (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, _) = CommandStepRun();
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // The real scheduler, a minute after the step parked: the 30-second wait is over.
+        var scheduler = new BookmarkScheduler(
+            new LaterClock(),
+            new AlwaysActiveLeadershipGate(),
+            WorkerTestServices.Scopes(providers),
+            _dispatcher!,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BookmarkScheduler>.Instance,
+            WorkerTestServices.Options());
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.Equal(CommandNodeExecutor.TimeoutPort, ExitPort(providers));
+        Assert.Equal(BranchStatus.Completed, providers.Branches[1001].Status);
+        Assert.Empty(providers.Bookmarks);
+        Assert.Single(publisher.Sent);
+    }
+
+    private LoopBackDispatcher? _dispatcher;
+
+    [Fact]
+    public async Task A_command_step_whose_command_cannot_be_sent_leaves_by_failed_at_once()
+    {
+        (BranchLoop loop, InMemoryProviders providers, RecordingCommandPublisher publisher, _) = CommandStepRun();
+        publisher.FailWith = new InvalidOperationException("broker down");
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // No scheduler tick: the step did not wait out its ack timeout.
+        Assert.Equal(CommandChannel.Failed, ExitPort(providers));
+        Assert.Equal(BranchStatus.Completed, providers.Branches[1001].Status);
+        Assert.Empty(providers.Bookmarks);
+    }
+
+    private (BranchLoop Loop, InMemoryProviders Providers, RecordingCommandPublisher Publisher, BookmarkResumer Resumer) CommandStepRun()
+    {
+        Guid nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var step = new SendClientMessageNode
+        {
+            NodeId = nodeId,
+            Name = "open vent",
+            Ports = [],
+            Config = new SendClientMessageConfig { ClientRef = Guid.NewGuid().ToString(), Type = "vent.open", AwaitAck = true }
+        };
+        WorkflowDefinition definition = new(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "command-ack-e2e",
+            null,
+            true,
+            [step],
+            // Each exit leads to its own (absent) node, so where the branch ends says which it took.
+            ExitTargets.Select(exit => new Edge((nodeId, exit.Key), (exit.Value, "in"))).ToArray(),
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var providers = new InMemoryProviders(definition, nodeId);
+        var publisher = new RecordingCommandPublisher();
+        _dispatcher = new LoopBackDispatcher();
+        var resumer = new BookmarkResumer(providers, providers, providers, _dispatcher);
+        var loop = new BranchLoop(
+            providers,
+            providers,
+            providers,
+            providers,
+            new RunJournal(providers, new FixedClock()),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new CommandNodeExecutor(publisher, resumer)),
+            _dispatcher,
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new NoOpRunCancellationService(),
+            new NoOpCompensationOrchestrator(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
+        _dispatcher.Handler = request => loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
+        return (loop, providers, publisher, resumer);
+    }
+
+    private static readonly Dictionary<string, Guid> ExitTargets = new()
+    {
+        [CommandChannel.Acked] = Guid.Parse("a0000000-0000-4000-8000-0000000000ac"),
+        [CommandChannel.Failed] = Guid.Parse("f0000000-0000-4000-8000-0000000000fa"),
+        [CommandNodeExecutor.TimeoutPort] = Guid.Parse("70000000-0000-4000-8000-000000000070")
+    };
+
+    private static string ExitPort(InMemoryProviders providers) =>
+        ExitTargets.Single(exit => exit.Value == providers.Branches[1001].NodeId).Key;
+
+    private sealed class RecordingCommandPublisher : IDeviceCommandPublisher
+    {
+        public List<Guid> Sent { get; } = [];
+
+        public Exception? FailWith { get; set; }
+
+        public Task PublishCommandAsync(Guid commandId, Guid clientRefId, int workspaceId, string command, string payload, TimeSpan expiresIn, CommandSender? sentBy, CancellationToken ct)
+        {
+            if (FailWith is not null)
+            {
+                return Task.FromException(FailWith);
+            }
+
+            Sent.Add(commandId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class LaterClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
+        public DateTime UtcNow => new(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc);
+    }
+
+    private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
+
+    private sealed class WaitThenCompleteExecutor : INodeExecutor
+    {
+        private int _calls;
+
+        public string Kind => "test";
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            _calls++;
+            if (_calls == 1)
+            {
+                return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.WaitForBookmark(
+                    new HttpWakeCondition("client-1"),
+                    new Dictionary<string, JsonElement>()));
+            }
+
+            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        }
+    }
+
+    private sealed class StubNodeExecutorRegistry(INodeExecutor executor) : INodeExecutorRegistry
+    {
+        public INodeExecutor For(string kind) => executor;
+    }
+
+    private sealed class StubWorkflowDefinitionCache(WorkflowDefinition definition) : IWorkflowDefinitionCache
+    {
+        public Task<WorkflowDefinition> GetAsync(int workflowDefinitionId, CancellationToken ct) => Task.FromResult(definition);
+        public void Invalidate(int workflowDefinitionId) { }
+    }
+
+    private sealed class LoopBackDispatcher : IRunDispatcher
+    {
+        public List<BranchExecutionRequest> Requests { get; } = [];
+        public Func<BranchExecutionRequest, Task>? Handler { get; set; }
+
+        public async ValueTask DispatchAsync(BranchExecutionRequest request, CancellationToken ct)
+        {
+            Requests.Add(request);
+            if (Handler is not null)
+            {
+                await Handler(request);
+            }
+        }
+    }
+
+    private sealed class InMemoryProviders : IBranchProvider, IRunProvider, IRunCountersProvider, IBookmarkProvider, IHistoryEventProvider, IWorkflowDefinitionProvider, IIdempotencyKeyProvider
+    {
+        public Task<IReadOnlyCollection<WorkflowVersionRow>> GetVersionsAsync(Guid refId, int workspaceId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDeletion?> DeleteAsync(Guid refId, int workspaceId, int deletedBy, CancellationToken ct) => throw new NotSupportedException();
+        private readonly WorkflowDefinition _definition;
+        private int _activeBranches = 1;
+
+        public InMemoryProviders(WorkflowDefinition definition, Guid nodeId)
+        {
+            _definition = definition;
+            Runs[42] = new RunRow
+            {
+                Id = 42,
+                RefId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                WorkflowDefinitionId = 9,
+                WorkflowRefId = definition.WorkflowRefId,
+                WorkflowVersion = definition.Version,
+                TriggerNodeId = nodeId,
+                CorrelationKey = "corr-42",
+                Status = "Running",
+                StartedAt = definition.CreatedAt,
+                CompletedAt = null,
+                CancellationRequestedAt = null,
+                CancellationReason = null,
+                CreditBudget = 100,
+                CreatedAt = definition.CreatedAt
+            };
+            Branches[1001] = new BranchRow
+            {
+                Id = 1001,
+                RefId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                RunId = 42,
+                ParentBranchId = null,
+                ForkCohortId = null,
+                NodeId = nodeId,
+                Status = "Active",
+                PendingTakePort = null,
+                LocalJson = "{}",
+                LastOutputJson = null,
+                CompensationStackJson = null,
+                CreatedAt = definition.CreatedAt,
+                UpdatedAt = definition.CreatedAt,
+                RowVersion = [1]
+            };
+        }
+
+        public Dictionary<long, BranchRow> Branches { get; } = [];
+        public Dictionary<long, RunRow> Runs { get; } = [];
+        public List<BookmarkRow> Bookmarks { get; } = [];
+        private Dictionary<string, IdempotencyKeyRow> IdempotencyKeys { get; } = [];
+
+        public Task<BranchRow> CreateAsync(BranchRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task<BranchRow> UpsertAsync(BranchRow row, CancellationToken ct)
+        {
+            Branches[row.Id] = row;
+            return Task.FromResult(row);
+        }
+        public Task<BranchRow> GetByIdAsync(long branchId, CancellationToken ct) => Task.FromResult(Branches[branchId]);
+        public Task<BranchRow> GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Branches.Values.Single(branch => branch.RefId == refId));
+        public Task<IReadOnlyCollection<BranchRow>> GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BranchRow>>(Branches.Values.ToArray());
+        public Task<IReadOnlyCollection<BranchRow>> GetRunningBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
+        {
+            // Like the ROWVERSION column, every write changes it - it is what tells one visit of a node from the next.
+            BranchRow current = Branches[branchId];
+            BranchRow updated = current with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson, PendingTakePort = null, RowVersion = [(byte)(current.RowVersion[0] + 1)] };
+            Branches[branchId] = updated;
+            return Task.FromResult(updated);
+        }
+
+        public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
+        {
+            BranchRow updated = Branches[branchId] with { Status = "Completed" };
+            Branches[branchId] = updated;
+            return Task.FromResult(updated);
+        }
+
+        public Task<BranchRow> SetFailedAsync(long branchId, string? lastOutputJson, CancellationToken ct) => throw new NotSupportedException();
+        Task<RunRow> IRunProvider.CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        Task<RunRow> IRunProvider.GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(Runs[runId]);
+        Task<RunRow?> IRunProvider.FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunStatsRow> GetStatsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunFailureBucketRow>> GetTopFailuresAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<NodeTimingRow>> GetNodeTimingsAsync(Guid workflowRefId, DateTime fromUtc, DateTime toUtc, int top, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetActiveByCorrelationAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct) => throw new NotSupportedException();
+        public Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct) => throw new NotSupportedException();
+        public Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct)
+        {
+            RunRow updated = Runs[runId] with { Status = status, CompletedAt = completedAt };
+            Runs[runId] = updated;
+            return Task.FromResult((true, updated));
+        }
+
+        public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct)
+        {
+            return Task.FromResult(new RunCountersRow
+            {
+                RunId = runId,
+                ActiveBranchCount = _activeBranches,
+                CreditsConsumed = 0m,
+                UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)
+            });
+        }
+
+        public Task<int> IncrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+        {
+            _activeBranches += delta;
+            return Task.FromResult(_activeBranches);
+        }
+
+        public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+        {
+            _activeBranches -= delta;
+            return Task.FromResult(_activeBranches);
+        }
+
+        public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult((long)_activeBranches);
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
+        Task<BookmarkRow> IBookmarkProvider.CreateAsync(BookmarkRow row, CancellationToken ct)
+        {
+            Bookmarks.Add(row);
+            return Task.FromResult(row);
+        }
+
+        Task<BookmarkRow> IBookmarkProvider.GetByRefIdAsync(Guid refId, CancellationToken ct) => Task.FromResult(Bookmarks.Single(bookmark => bookmark.RefId == refId));
+        Task<BookmarkRow> IBookmarkProvider.GetByIdAsync(long bookmarkId, CancellationToken ct) => Task.FromResult(Bookmarks.Single(bookmark => bookmark.Id == bookmarkId));
+        public Task<IReadOnlyCollection<BookmarkRow>> GetAllByMatchKeysAsync(IReadOnlyCollection<string> matchKeys, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => matchKeys.Contains(bookmark.MatchKey)).ToArray());
+        Task<IReadOnlyCollection<BookmarkRow>> IBookmarkProvider.GetAllByRunIdAsync(int runId, CancellationToken ct) => Task.FromResult<IReadOnlyCollection<BookmarkRow>>(Bookmarks.Where(bookmark => bookmark.RunId == runId).ToArray());
+        public Task<bool> TryClaimAsync(Guid refId, CancellationToken ct)
+        {
+            int removed = Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
+            return Task.FromResult(removed > 0);
+        }
+
+        public Task<IReadOnlyCollection<BookmarkRow>> ClaimDueAsync(DateTime nowUtc, int batchSize, CancellationToken ct)
+        {
+            var due = Bookmarks.Where(bookmark => bookmark.ExpiresAt <= nowUtc).Take(batchSize).ToArray();
+            foreach (var bookmark in due)
+            {
+                Bookmarks.Remove(bookmark);
+            }
+            return Task.FromResult<IReadOnlyCollection<BookmarkRow>>(due);
+        }
+
+        public Task DeleteAsync(Guid refId, CancellationToken ct)
+        {
+            Bookmarks.RemoveAll(bookmark => bookmark.RefId == refId);
+            return Task.CompletedTask;
+        }
+
+        public Task<long> CountAsync(CancellationToken ct) => Task.FromResult((long)Bookmarks.Count);
+        public Task<int> DeleteOrphansAsync(CancellationToken ct) => Task.FromResult(0);
+        public Task DeleteAllByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
+        public List<HistoryEventRow> History { get; } = [];
+
+        public Task InsertBatchAsync(IReadOnlyCollection<HistoryEventRow> events, CancellationToken ct)
+        {
+            History.AddRange(events);
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyCollection<HistoryEventRow>> GetByRunIdAsync(int runId, long afterEventId, int pageSize, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<int> DeleteForRetiredRunsAsync(DateTime cutoffUtc, int batchSize, DateTime? elevatedCutoffUtc, CancellationToken ct) => throw new NotSupportedException();
+        public Task<Wbskt.Models.IPagedList<WorkflowDefinitionRow>> GetAllSummariesAsync(int workspaceId, int skip, int take, CancellationToken ct) => Task.FromResult<Wbskt.Models.IPagedList<WorkflowDefinitionRow>>(new Wbskt.Models.PagedList<WorkflowDefinitionRow>(Array.Empty<WorkflowDefinitionRow>(), 0));
+        public Task<int?> FindByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDefinitionRow> GetByIdAsync(int id, CancellationToken ct)
+        {
+            return Task.FromResult(new WorkflowDefinitionRow
+            {
+                Id = 9,
+                RefId = _definition.WorkflowRefId,
+                Version = _definition.Version,
+                WorkspaceId = _definition.WorkspaceId,
+                Name = _definition.Name,
+                Description = _definition.Description,
+                IsEnabled = _definition.IsEnabled,
+                DefinitionJson = JsonSerializer.Serialize(_definition, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                PublishedBy = _definition.PublishedBy,
+                CreatedAt = _definition.CreatedAt
+            });
+        }
+
+        public Task<WorkflowDefinitionRow?> FindRowByRefIdVersionAsync(Guid refId, int version, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDefinitionRow?> FindCurrentByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, IReadOnlyCollection<Wbskt.Workflow.Abstraction.Integrations.WorkflowIntegrationRef> integrationRefs, CancellationToken ct) => InsertAsync(row, ct);
+
+        public Task<WorkflowDefinitionRow> InsertAsync(WorkflowDefinitionRow row, CancellationToken ct) => throw new NotSupportedException();
+        public Task DeprecateAsync(int id, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> DeleteUnreferencedAsync(int id, CancellationToken ct) => Task.FromResult(true);
+        public Task SetEnabledAsync(int id, bool isEnabled, CancellationToken ct) => Task.CompletedTask;
+        public Task<IdempotencyKeyRow> UpsertPendingAsync(string keyValue, int runId, Guid branchRefId, Guid nodeId, int attempt, CancellationToken ct)
+        {
+            if (!IdempotencyKeys.TryGetValue(keyValue, out IdempotencyKeyRow? row))
+            {
+                row = new IdempotencyKeyRow
+                {
+                    Id = IdempotencyKeys.Count + 1,
+                    KeyValue = keyValue,
+                    RunId = runId,
+                    BranchRefId = branchRefId,
+                    NodeId = nodeId,
+                    Attempt = attempt,
+                    Status = "Pending",
+                    ResultJson = null,
+                    ErrorJson = null,
+                    CreatedAt = _definition.CreatedAt,
+                    CompletedAt = null
+                };
+                IdempotencyKeys[keyValue] = row;
+            }
+
+            return Task.FromResult(row);
+        }
+
+        public Task<IdempotencyKeyRow> GetByKeyAsync(string keyValue, CancellationToken ct) => Task.FromResult(IdempotencyKeys[keyValue]);
+        public Task<IdempotencyKeyRow> MarkSucceededAsync(string keyValue, string resultJson, CancellationToken ct) => Task.FromResult<IdempotencyKeyRow>(null!);
+        public Task<IdempotencyKeyRow> MarkFailedAsync(string keyValue, string errorJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IdempotencyKeyRow> ReclaimFailedAsync(string keyValue, Guid newBranchRefId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    private sealed class FixedClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
+        public DateTime UtcNow => new(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc);
+    }
+
+    private sealed class SequentialIdGenerator : IIdGenerator
+    {
+        private readonly Queue<Guid> _ids = new([
+            Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")]);
+
+        public Guid NewId() => _ids.Dequeue();
+    }
+}
+
+
+
+
+
+

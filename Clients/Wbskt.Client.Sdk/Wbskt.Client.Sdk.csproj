@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Wbskt.Workflow.Engine.Host.Tests" />
+    <InternalsVisibleTo Include="Wbskt.Host.Tests" />
   </ItemGroup>
 
 </Project>
