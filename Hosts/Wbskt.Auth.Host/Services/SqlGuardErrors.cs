@@ -49,4 +49,35 @@ internal static class SqlGuardErrors
 
         return error is not null;
     }
+
+    // These wrap a provider call so that each operation does not repeat the same guard translation.
+    // Only the database's guards become results; a fault propagates to GlobalExceptionMiddleware.
+    // Unique-constraint violations are a Conflict when the caller passes one, since "that name is
+    // taken" is a client error rather than a server fault.
+    public static async Task<Result> GuardAsync(ILogger logger, string operation, Func<Task> action, Error? conflictError = null)
+    {
+        try
+        {
+            await action();
+            return Result.Success();
+        }
+        catch (Exception ex) when (TryTranslate(ex, conflictError, out var error))
+        {
+            logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
+            return Result.Failure(error);
+        }
+    }
+
+    public static async Task<Result<T>> GuardAsync<T>(ILogger logger, string operation, Func<Task<T>> action, Error? conflictError = null)
+    {
+        try
+        {
+            return Result<T>.Success(await action());
+        }
+        catch (Exception ex) when (TryTranslate(ex, conflictError, out var error))
+        {
+            logger.LogWarning("{Operation} rejected: {Message}", operation, ex.Message);
+            return Result<T>.Failure(error);
+        }
+    }
 }

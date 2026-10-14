@@ -4,7 +4,7 @@ using Wbskt.Infrastructure.Security;
 namespace Wbskt.Auth.Host.Services;
 
 /// <summary>The auth host owns users, so it reads the id from its own database.</summary>
-internal sealed class AuthUserIdLookup(IAuthProvider provider) : IUserIdLookup
+internal sealed class AuthUserIdLookup(IAccountProvider provider) : IUserIdLookup
 {
     public async Task<int?> FindUserIdAsync(Guid userRef, CancellationToken cancellationToken)
     {

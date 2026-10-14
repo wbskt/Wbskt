@@ -21,7 +21,7 @@ namespace Wbskt.Auth.Host.Controllers;
 [AnnouncesWorkspaceAccessChange]
 [ApiController]
 [Authorize]
-public class ManagementController(IManagementService managementService) : ApiControllerBase
+public class ManagementController(ITenantService tenantService, IAccessControlService accessControlService) : ApiControllerBase
 {
     private const int DefaultPageSize = 100;
 
@@ -33,7 +33,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     public async Task<ActionResult<IReadOnlyCollection<TenantResponse>>> GetTenants(CancellationToken cancellationToken)
     {
         var caller = CurrentUserId();
-        return caller.IsFailure ? MapError(caller.Error) : MapResult(await managementService.GetTenantsForUserAsync(caller.Value, cancellationToken));
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.GetTenantsForUserAsync(caller.Value, cancellationToken));
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     public async Task<ActionResult<TenantResponse>> CreateTenant([FromBody] CreateTenantRequest request, CancellationToken cancellationToken)
     {
         var caller = CurrentUserId();
-        return caller.IsFailure ? MapError(caller.Error) : MapResult(await managementService.CreateTenantAsync(caller.Value, request, cancellationToken));
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.CreateTenantAsync(caller.Value, request, cancellationToken));
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> UpdateTenant([FromTenant] int tenantId, [FromBody] UpdateTenantRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.UpdateTenantAsync(tenantId, request, cancellationToken));
+        return MapResult(await tenantService.UpdateTenantAsync(tenantId, request, cancellationToken));
     }
 
     // ----- Invitations -------------------------------------------------------------------------
@@ -66,7 +66,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersRead)]
     public async Task<ActionResult<Page<InvitationResponse>>> GetInvitations([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(page, (s, t) => managementService.GetInvitationsAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => tenantService.GetInvitationsAsync(tenantId, s, t, cancellationToken));
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     public async Task<ActionResult<CreatedInvitationResponse>> CreateInvitation([FromTenant] int tenantId, [FromBody] CreateInvitationRequest request, CancellationToken cancellationToken)
     {
         var caller = CurrentUserId();
-        return caller.IsFailure ? MapError(caller.Error) : MapResult(await managementService.CreateInvitationAsync(caller.Value, tenantId, request, cancellationToken));
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.CreateInvitationAsync(caller.Value, tenantId, request, cancellationToken));
     }
 
     /// <summary>Withdraws an outstanding invitation.</summary>
@@ -86,7 +86,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> RevokeInvitation([FromTenant] int tenantId, Guid invitationRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.RevokeInvitationAsync(tenantId, invitationRef, cancellationToken));
+        return MapResult(await tenantService.RevokeInvitationAsync(tenantId, invitationRef, cancellationToken));
     }
 
     // ----- Roles -------------------------------------------------------------------------------
@@ -96,7 +96,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesRead)]
     public async Task<ActionResult<Page<RoleResponse>>> GetRoles([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(page, (s, t) => managementService.GetRolesAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => accessControlService.GetRolesAsync(tenantId, s, t, cancellationToken));
     }
 
     /// <summary>Creates a role.</summary>
@@ -104,7 +104,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<ActionResult<RoleResponse>> CreateRole([FromTenant] int tenantId, [FromBody] CreateRoleRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.CreateRoleAsync(tenantId, request, cancellationToken));
+        return MapResult(await accessControlService.CreateRoleAsync(tenantId, request, cancellationToken));
     }
 
     /// <summary>Renames a role or changes its description.</summary>
@@ -112,7 +112,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> UpdateRole([FromTenant] int tenantId, Guid roleRef, [FromBody] UpdateRoleRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.UpdateRoleAsync(tenantId, roleRef, request, cancellationToken));
+        return MapResult(await accessControlService.UpdateRoleAsync(tenantId, roleRef, request, cancellationToken));
     }
 
     /// <summary>Deletes a role along with its permissions and every assignment of it.</summary>
@@ -120,7 +120,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> DeleteRole([FromTenant] int tenantId, Guid roleRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.DeleteRoleAsync(tenantId, roleRef, cancellationToken));
+        return MapResult(await accessControlService.DeleteRoleAsync(tenantId, roleRef, cancellationToken));
     }
 
     /// <summary>Lists the permissions attached to a role.</summary>
@@ -128,7 +128,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesRead)]
     public async Task<ActionResult<IReadOnlyCollection<RolePermissionAssignmentResponse>>> GetRolePermissions([FromTenant] int tenantId, Guid roleRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GetRolePermissionsAsync(tenantId, roleRef, cancellationToken));
+        return MapResult(await accessControlService.GetRolePermissionsAsync(tenantId, roleRef, cancellationToken));
     }
 
     /// <summary>
@@ -139,7 +139,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> GrantRolePermission([FromTenant] int tenantId, Guid roleRef, [FromBody] GrantRolePermissionRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GrantRolePermissionAsync(tenantId, roleRef, request, cancellationToken));
+        return MapResult(await accessControlService.GrantRolePermissionAsync(tenantId, roleRef, request, cancellationToken));
     }
 
     /// <summary>Detaches a permission from a role, as distinct from denying it.</summary>
@@ -147,7 +147,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> RemoveRolePermission([FromTenant] int tenantId, Guid roleRef, string slug, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.RemoveRolePermissionAsync(tenantId, roleRef, slug, cancellationToken));
+        return MapResult(await accessControlService.RemoveRolePermissionAsync(tenantId, roleRef, slug, cancellationToken));
     }
 
     // ----- Groups ------------------------------------------------------------------------------
@@ -157,7 +157,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersRead)]
     public async Task<ActionResult<Page<GroupResponse>>> GetGroups([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(page, (s, t) => managementService.GetGroupsAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => accessControlService.GetGroupsAsync(tenantId, s, t, cancellationToken));
     }
 
     /// <summary>Creates a group, optionally nested under a parent.</summary>
@@ -165,7 +165,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<ActionResult<GroupResponse>> CreateGroup([FromTenant] int tenantId, [FromBody] CreateGroupRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.CreateGroupAsync(tenantId, request, cancellationToken));
+        return MapResult(await accessControlService.CreateGroupAsync(tenantId, request, cancellationToken));
     }
 
     /// <summary>Renames a group.</summary>
@@ -173,7 +173,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> UpdateGroup([FromTenant] int tenantId, Guid groupRef, [FromBody] UpdateGroupRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.UpdateGroupAsync(tenantId, groupRef, request, cancellationToken));
+        return MapResult(await accessControlService.UpdateGroupAsync(tenantId, groupRef, request, cancellationToken));
     }
 
     /// <summary>Deletes a group. Rejected if it still has child groups.</summary>
@@ -181,7 +181,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> DeleteGroup([FromTenant] int tenantId, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.DeleteGroupAsync(tenantId, groupRef, cancellationToken));
+        return MapResult(await accessControlService.DeleteGroupAsync(tenantId, groupRef, cancellationToken));
     }
 
     /// <summary>Lists the roles assigned to a group.</summary>
@@ -189,7 +189,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesRead)]
     public async Task<ActionResult<IReadOnlyCollection<RoleAssignmentResponse>>> GetGroupRoles([FromTenant] int tenantId, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GetGroupRolesAsync(tenantId, groupRef, cancellationToken));
+        return MapResult(await accessControlService.GetGroupRolesAsync(tenantId, groupRef, cancellationToken));
     }
 
     /// <summary>Assigns a role to a group. A null <c>workspaceRef</c> in the body means tenant-wide.</summary>
@@ -197,7 +197,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> AssignGroupRole([FromTenant] int tenantId, Guid groupRef, Guid roleRef, [FromBody] AssignmentScopeRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.AssignGroupRoleAsync(tenantId, groupRef, roleRef, request.WorkspaceRef, cancellationToken));
+        return MapResult(await accessControlService.AssignGroupRoleAsync(tenantId, groupRef, roleRef, request.WorkspaceRef, cancellationToken));
     }
 
     /// <summary>Removes a role assignment from a group.</summary>
@@ -205,7 +205,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> RemoveGroupRole([FromTenant] int tenantId, Guid groupRef, Guid roleRef, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.RemoveGroupRoleAsync(tenantId, groupRef, roleRef, workspaceRef, cancellationToken));
+        return MapResult(await accessControlService.RemoveGroupRoleAsync(tenantId, groupRef, roleRef, workspaceRef, cancellationToken));
     }
 
     // ----- Permissions catalogue ---------------------------------------------------------------
@@ -218,7 +218,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesRead)]
     public async Task<ActionResult<Page<PermissionResponse>>> GetPermissions([FromTenant] int tenantId, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(page, (s, t) => managementService.GetPermissionsAsync(tenantId, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => accessControlService.GetPermissionsAsync(tenantId, s, t, cancellationToken));
     }
 
     // ----- Members -----------------------------------------------------------------------------
@@ -231,7 +231,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersRead)]
     public async Task<ActionResult<Page<TenantMemberResponse>>> GetMembers([FromTenant] int tenantId, [FromQuery] string? search, [FromQuery] PageRequest page, CancellationToken cancellationToken)
     {
-        return await PagedAsync(page, (s, t) => managementService.GetMembersAsync(tenantId, search, s, t, cancellationToken));
+        return await PagedAsync(page, (s, t) => tenantService.GetMembersAsync(tenantId, search, s, t, cancellationToken));
     }
 
     /// <summary>Lists the roles a user holds and the scope of each.</summary>
@@ -239,7 +239,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesRead)]
     public async Task<ActionResult<IReadOnlyCollection<RoleAssignmentResponse>>> GetUserRoles([FromTenant] int tenantId, Guid userRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GetUserRolesAsync(tenantId, userRef, cancellationToken));
+        return MapResult(await accessControlService.GetUserRolesAsync(tenantId, userRef, cancellationToken));
     }
 
     /// <summary>
@@ -250,7 +250,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesRead)]
     public async Task<ActionResult<IReadOnlyCollection<UserPermissionAssignmentResponse>>> GetUserPermissions([FromTenant] int tenantId, Guid userRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GetUserPermissionsAsync(tenantId, userRef, cancellationToken));
+        return MapResult(await accessControlService.GetUserPermissionsAsync(tenantId, userRef, cancellationToken));
     }
 
     /// <summary>Lists the groups a user belongs to.</summary>
@@ -258,7 +258,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersRead)]
     public async Task<ActionResult<IReadOnlyCollection<GroupMembershipResponse>>> GetUserGroups([FromTenant] int tenantId, Guid userRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GetUserGroupsAsync(tenantId, userRef, cancellationToken));
+        return MapResult(await accessControlService.GetUserGroupsAsync(tenantId, userRef, cancellationToken));
     }
 
     /// <summary>Adds a user to a group.</summary>
@@ -266,7 +266,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> AddUserToGroup([FromTenant] int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.AddUserToGroupAsync(tenantId, userRef, groupRef, cancellationToken));
+        return MapResult(await accessControlService.AddUserToGroupAsync(tenantId, userRef, groupRef, cancellationToken));
     }
 
     /// <summary>Removes a user from a group.</summary>
@@ -274,7 +274,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.UsersManage)]
     public async Task<IActionResult> RemoveUserFromGroup([FromTenant] int tenantId, Guid userRef, Guid groupRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.RemoveUserFromGroupAsync(tenantId, userRef, groupRef, cancellationToken));
+        return MapResult(await accessControlService.RemoveUserFromGroupAsync(tenantId, userRef, groupRef, cancellationToken));
     }
 
     /// <summary>Assigns a role to a user. A null <c>workspaceRef</c> in the body means tenant-wide.</summary>
@@ -282,7 +282,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> AssignUserRole([FromTenant] int tenantId, Guid userRef, Guid roleRef, [FromBody] AssignmentScopeRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.AssignUserRoleAsync(tenantId, userRef, roleRef, request.WorkspaceRef, cancellationToken));
+        return MapResult(await accessControlService.AssignUserRoleAsync(tenantId, userRef, roleRef, request.WorkspaceRef, cancellationToken));
     }
 
     /// <summary>Removes a role assignment from a user.</summary>
@@ -290,7 +290,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> RemoveUserRole([FromTenant] int tenantId, Guid userRef, Guid roleRef, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.RemoveUserRoleAsync(tenantId, userRef, roleRef, workspaceRef, cancellationToken));
+        return MapResult(await accessControlService.RemoveUserRoleAsync(tenantId, userRef, roleRef, workspaceRef, cancellationToken));
     }
 
     /// <summary>Grants or denies a permission directly to a user.</summary>
@@ -298,7 +298,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> GrantUserPermission([FromTenant] int tenantId, Guid userRef, [FromBody] GrantPermissionRequest request, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.GrantUserPermissionAsync(tenantId, userRef, request, cancellationToken));
+        return MapResult(await accessControlService.GrantUserPermissionAsync(tenantId, userRef, request, cancellationToken));
     }
 
     /// <summary>
@@ -310,7 +310,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     [RequiresTenantPermission(PermissionNames.RolesManage)]
     public async Task<IActionResult> RemoveUserPermission([FromTenant] int tenantId, Guid userRef, string slug, [FromQuery] Guid? workspaceRef, CancellationToken cancellationToken)
     {
-        return MapResult(await managementService.RemoveUserPermissionAsync(tenantId, userRef, slug, workspaceRef, cancellationToken));
+        return MapResult(await accessControlService.RemoveUserPermissionAsync(tenantId, userRef, slug, workspaceRef, cancellationToken));
     }
 
     /// <summary>
@@ -323,7 +323,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
     public async Task<IActionResult> RemoveMember([FromTenant] int tenantId, Guid userRef, CancellationToken cancellationToken)
     {
         var caller = CurrentUserId();
-        return caller.IsFailure ? MapError(caller.Error) : MapResult(await managementService.RemoveTenantMemberAsync(caller.Value, tenantId, userRef, cancellationToken));
+        return caller.IsFailure ? MapError(caller.Error) : MapResult(await tenantService.RemoveTenantMemberAsync(caller.Value, tenantId, userRef, cancellationToken));
     }
 
     /// <summary>
@@ -348,7 +348,7 @@ public class ManagementController(IManagementService managementService) : ApiCon
         }
 
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return MapResult(await managementService.SetMemberSuspendedAsync(caller.Value, tenantId, userRef, request.IsSuspended, ipAddress, cancellationToken));
+        return MapResult(await tenantService.SetMemberSuspendedAsync(caller.Value, tenantId, userRef, request.IsSuspended, ipAddress, cancellationToken));
     }
 
     // ----- Shared plumbing ---------------------------------------------------------------------

@@ -36,10 +36,10 @@ public sealed class AuthLogRedactionTests
     public async Task An_unknown_address_is_logged_as_a_fingerprint()
     {
         var harness = new Harness();
-        harness.Provider.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new SecurityException($"No user with email {Email}."));
 
-        await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+        await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
         harness.AssertNoAddressLogged();
         Assert.Contains(harness.Logger.Messages, m => m.Contains(EmailFingerprint.Of(Email)));
@@ -54,7 +54,7 @@ public sealed class AuthLogRedactionTests
         var harness = new Harness();
         harness.WithUser(AUser(verified: verified));
 
-        await harness.Service.LoginAsync(Email, rightPassword ? Password : "wrong", "10.0.0.1");
+        await harness.SignIn.LoginAsync(Email, rightPassword ? Password : "wrong", "10.0.0.1");
 
         harness.AssertNoAddressLogged();
     }
@@ -64,10 +64,10 @@ public sealed class AuthLogRedactionTests
     {
         var harness = new Harness();
         harness.WithUser(AUser(verified: true));
-        harness.Provider.Setup(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException($"Violation of UNIQUE KEY constraint. The duplicate key value is ({Email})."));
 
-        await Assert.ThrowsAsync<SignInFaultException>(() => harness.Service.LoginAsync(Email, Password, "10.0.0.1"));
+        await Assert.ThrowsAsync<SignInFaultException>(() => harness.SignIn.LoginAsync(Email, Password, "10.0.0.1"));
 
         var alert = Assert.Single(harness.Published.OfType<SecurityAlertEvent>());
         Assert.Equal("LoginFailure", alert.AlertType);
@@ -86,11 +86,11 @@ public sealed class AuthLogRedactionTests
     {
         var harness = new Harness();
         harness.WithUser(AUser(verified: true));
-        harness.Provider.Setup(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()))
+        harness.Accounts.Setup(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()))
             .Returns(() => FailsDeepInTheProvider());
         var logger = new RecordingLogger<GlobalExceptionMiddleware>();
         var middleware = new GlobalExceptionMiddleware(
-            async _ => await harness.Service.LoginAsync(Email, Password, "10.0.0.1"),
+            async _ => await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1"),
             logger);
         var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
 
@@ -119,7 +119,7 @@ public sealed class AuthLogRedactionTests
     [InlineData(true)]
     public async Task Adding_an_unknown_member_keeps_the_address_out_of_the_logs(bool inAnotherTenant)
     {
-        var auth = new Mock<IAuthProvider>();
+        var auth = new Mock<IAccountProvider>();
         var workspaces = new Mock<IWorkspaceProvider>();
         if (inAnotherTenant)
         {
@@ -134,7 +134,7 @@ public sealed class AuthLogRedactionTests
         }
 
         var serviceLogger = new RecordingLogger<WorkspaceService>();
-        var service = new WorkspaceService(workspaces.Object, auth.Object, Mock.Of<IEventBus>(), serviceLogger, new AuthMetrics());
+        var service = new WorkspaceService(workspaces.Object, auth.Object, Mock.Of<ITenantProvider>(), Mock.Of<IAccessControlProvider>(), Mock.Of<IEventBus>(), serviceLogger, new AuthMetrics());
 
         var result = await service.AddUserToWorkspaceAsync(7, new AddMemberRequest(Email));
 
@@ -177,46 +177,31 @@ public sealed class AuthLogRedactionTests
         IsEmailVerified = verified
     };
 
-    private sealed class Harness
+    private sealed class Harness : AccountServices
     {
-        public Harness()
+        public Harness() : this(new RecordingLogger<SignInService>(), new Mock<IEventBus>())
         {
-            var jwt = new Mock<IJwtService>();
-            jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns("access-token");
+        }
 
-            var bus = new Mock<IEventBus>();
+        private Harness(RecordingLogger<SignInService> logger, Mock<IEventBus> bus) : base(bus: bus.Object, signInLogger: logger)
+        {
+            Logger = logger;
             Bus = bus.Object;
             bus.Setup(b => b.PublishAsync(It.IsAny<BaseEvent>(), It.IsAny<CancellationToken>()))
                 .Callback<BaseEvent, CancellationToken>((e, _) => Published.Add(e))
                 .Returns(Task.CompletedTask);
-
-            Service = new AuthService(
-                Provider.Object,
-                jwt.Object,
-                bus.Object,
-                Mock.Of<IAuthMailer>(),
-                Options.Create(new AuthEmailOptions()),
-                Logger,
-                new AuthMetrics(),
-                Mock.Of<IAccessTokenRevocation>(),
-                Options.Create(new AccessTokenOptions()),
-                MailCooldownTests.InProcess());
         }
 
-        public Mock<IAuthProvider> Provider { get; } = new();
-
-        public RecordingLogger<AuthService> Logger { get; } = new();
+        public RecordingLogger<SignInService> Logger { get; }
 
         public IEventBus Bus { get; }
 
         public List<BaseEvent> Published { get; } = [];
 
-        public AuthService Service { get; }
-
         public void WithUser(User user)
         {
-            Provider.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
-            Provider.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         }
 
         public void AssertNoAddressLogged()

@@ -57,7 +57,7 @@ public sealed class InvitationMailTests
 
         // What is stored is the hash of exactly that string. A token returned to the caller that did
         // not hash to the stored value would be unredeemable, and nothing else would notice.
-        harness.Provider.Verify(
+        harness.Tenants.Verify(
             p => p.CreateInvitationAsync(
                 It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(),
                 It.Is<byte[]>(h => h.SequenceEqual(SecurityTokens.Hash(result.Value.Token))),
@@ -69,24 +69,25 @@ public sealed class InvitationMailTests
     {
         public Harness(string tenantName = "Acme Ltd")
         {
-            Provider.Setup(p => p.CreateInvitationAsync(
+            Tenants.Setup(p => p.CreateInvitationAsync(
                     It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<byte[]>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new CreatedInvitation(Guid.NewGuid(), tenantName));
 
-            Service = new ManagementService(
-                Provider.Object,
+            Service = new TenantService(
+                Tenants.Object,
+                Mock.Of<IAccessControlProvider>(),
+                Mock.Of<IAccountProvider>(),
                 Mock.Of<IWorkspaceProvider>(),
                 Mock.Of<IEventBus>(),
                 Mailer,
-                NullLogger<ManagementService>.Instance,
-                Mock.Of<IAccessTokenRevocation>());
+                NullLogger<TenantService>.Instance);
         }
 
-        public Mock<IAuthProvider> Provider { get; } = new();
+        public Mock<ITenantProvider> Tenants { get; } = new();
 
         public RecordingMailer Mailer { get; } = new();
 
-        public ManagementService Service { get; }
+        public TenantService Service { get; }
     }
 
     /// <summary>Records recipient and tenant name; the token is deliberately not captured.</summary>

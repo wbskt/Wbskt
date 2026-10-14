@@ -19,20 +19,26 @@ namespace Wbskt.Auth.Host.Services;
 internal sealed class WorkspaceService : IWorkspaceService
 {
     private readonly IWorkspaceProvider _workspaceProvider;
-    private readonly IAuthProvider _authProvider;
+    private readonly IAccountProvider _accounts;
+    private readonly ITenantProvider _tenants;
+    private readonly IAccessControlProvider _accessControl;
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly AuthMetrics _metrics;
 
     public WorkspaceService(
         IWorkspaceProvider workspaceProvider,
-        IAuthProvider authProvider,
+        IAccountProvider accounts,
+        ITenantProvider tenants,
+        IAccessControlProvider accessControl,
         IEventBus eventBus,
         ILogger<WorkspaceService> logger,
         AuthMetrics metrics)
     {
         _workspaceProvider = workspaceProvider;
-        _authProvider = authProvider;
+        _accounts = accounts;
+        _tenants = tenants;
+        _accessControl = accessControl;
         _eventBus = eventBus;
         _logger = logger;
         _metrics = metrics;
@@ -43,7 +49,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         _logger.LogInformation("Attempting to create workspace '{WorkspaceName}' for owner ID: {OwnerId}", request.Name, ownerId);
 
         // TODO(arch): multi-tenant users will need an explicit tenant choice; today a user has exactly one tenant.
-        var tenants = await _authProvider.GetTenantsForUserAsync(ownerId, cancellationToken);
+        var tenants = await _tenants.GetTenantsForUserAsync(ownerId, cancellationToken);
         var tenant = tenants.FirstOrDefault();
         if (tenant is null)
         {
@@ -79,7 +85,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             User user;
             try
             {
-                user = await _authProvider.GetByEmailAsync(request.Email, cancellationToken);
+                user = await _accounts.GetByEmailAsync(request.Email, cancellationToken);
             }
             catch (SecurityException)
             {
@@ -109,7 +115,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         try
         {
-            var user = await _authProvider.GetByIdAsync(await ResolveUserIdAsync(userRef, cancellationToken), cancellationToken);
+            var user = await _accounts.GetByIdAsync(await ResolveUserIdAsync(userRef, cancellationToken), cancellationToken);
             await _workspaceProvider.RemoveUserFromWorkspaceAsync(workspaceId, user.Id, cancellationToken);
             _logger.LogInformation("Removed user ID {UserId} from workspace ID: {WorkspaceId}", user.Id, workspaceId);
             await AnnounceAsync(new WorkspaceMemberRemovedEvent(workspaceId, user.RefId), cancellationToken);
@@ -168,7 +174,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             await _workspaceProvider.SetOwnerAsync(workspaceId, newOwnerId, cancellationToken);
             _logger.LogInformation("Workspace ID {WorkspaceId} transferred to user ID {UserId} by user ID {CallerId}", workspaceId, newOwnerId, callerId);
 
-            var previousOwnerRef = before is null ? (Guid?)null : (await _authProvider.GetByIdAsync(before.OwnerUserId, cancellationToken)).RefId;
+            var previousOwnerRef = before is null ? (Guid?)null : (await _accounts.GetByIdAsync(before.OwnerUserId, cancellationToken)).RefId;
             await AnnounceAsync(
                 new WorkspaceOwnershipTransferredEvent(workspaceId, newOwnerRef) { Changes = [new FieldChange("owner", previousOwnerRef?.ToString(), newOwnerRef.ToString())] },
                 cancellationToken);
@@ -196,7 +202,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
     private async Task<int> ResolveUserIdAsync(Guid userRef, CancellationToken cancellationToken)
     {
-        var userId = await _authProvider.FindIdByRefIdAsync(userRef, cancellationToken);
+        var userId = await _accounts.FindIdByRefIdAsync(userRef, cancellationToken);
         if (userId <= 0)
         {
             throw new SecurityException($"User with reference {userRef} not found.");
@@ -221,7 +227,7 @@ internal sealed class WorkspaceService : IWorkspaceService
             }
 
             // 2. Compute the effective permission set (an empty set is still a successful resolution)
-            var permissions = await _authProvider.GetEffectivePermissionsAsync(userId, workspaceId, cancellationToken);
+            var permissions = await _accessControl.GetEffectivePermissionsAsync(userId, workspaceId, cancellationToken);
 
             _logger.LogDebug("User ID {UserId} resolved {Count} effective permissions in workspace ID: {WorkspaceId}", userId, permissions.Count, workspaceId);
             _metrics.RecordPermissionCheck("effective-set", "resolved");

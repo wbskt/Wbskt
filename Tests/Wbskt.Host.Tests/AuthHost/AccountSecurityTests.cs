@@ -33,13 +33,13 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser(lockedUntil: DateTime.UtcNow.AddMinutes(5)));
 
-        var result = await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+        var result = await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
         Assert.True(result.IsFailure);
         // The ordinary answer, so a lock says nothing about whether the address has an account.
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
-        harness.Provider.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-        harness.Provider.Verify(p => p.RecordLoginFailureAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -48,10 +48,10 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser(lockedUntil: DateTime.UtcNow.AddMinutes(-1)));
 
-        var result = await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+        var result = await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
-        harness.Provider.Verify(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(42, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -60,11 +60,11 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser());
 
-        var result = await harness.Service.LoginAsync(Email, "not the password", "10.0.0.1");
+        var result = await harness.SignIn.LoginAsync(Email, "not the password", "10.0.0.1");
 
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
-        harness.Provider.Verify(p => p.RecordLoginFailureAsync(42, AuthService.MaxFailedLogins, AuthService.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
-        harness.Provider.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -79,10 +79,10 @@ public sealed class AccountSecurityTests
         user.PasswordHash = "";
         harness.WithUser(user);
 
-        var result = await harness.Service.LoginAsync(Email, password, "10.0.0.1");
+        var result = await harness.SignIn.LoginAsync(Email, password, "10.0.0.1");
 
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
-        harness.Provider.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.RecordLoginSuccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- rehash on sign-in
@@ -96,12 +96,12 @@ public sealed class AccountSecurityTests
         user.PasswordHash = weak.HashPassword(new User(), Password);
         harness.WithUser(user);
         string? newHash = null;
-        harness.Provider
+        harness.Accounts
             .Setup(p => p.UpgradePasswordHashAsync(42, user.PasswordHash, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Callback<int, string, string, CancellationToken>((_, _, hash, _) => newHash = hash)
             .ReturnsAsync(true);
 
-        var result = await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+        var result = await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(newHash);
@@ -115,9 +115,9 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser());
 
-        await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+        await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
-        harness.Provider.Verify(p => p.UpgradePasswordHashAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.UpgradePasswordHashAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -127,11 +127,11 @@ public sealed class AccountSecurityTests
         var user = AUser();
         user.PasswordHash = new PasswordHasher<User>(Options.Create(new PasswordHasherOptions { IterationCount = 1_000 })).HashPassword(new User(), Password);
         harness.WithUser(user);
-        harness.Provider
+        harness.Accounts
             .Setup(p => p.UpgradePasswordHashAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TimeoutException());
 
-        var result = await harness.Service.LoginAsync(Email, Password, "10.0.0.1");
+        var result = await harness.SignIn.LoginAsync(Email, Password, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
     }
@@ -144,12 +144,12 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser());
         string? storedHash = null;
-        harness.Provider
+        harness.Accounts
             .Setup(p => p.ChangePasswordAsync(42, It.IsAny<string>(), "10.0.0.1", It.IsAny<CancellationToken>()))
             .Callback<int, string, string?, CancellationToken>((_, hash, _, _) => storedHash = hash)
             .Returns(Task.CompletedTask);
 
-        var result = await harness.Service.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         Assert.False(string.IsNullOrEmpty(result.Value.RefreshToken));
@@ -158,7 +158,7 @@ public sealed class AccountSecurityTests
             PasswordVerificationResult.Failed,
             new PasswordHasher<User>().VerifyHashedPassword(new User(), storedHash!, "a brand new passphrase"));
         harness.AccessTokens.Verify(a => a.RevokeUserAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), It.IsAny<CancellationToken>()), Times.Once);
-        harness.Provider.Verify(p => p.InsertRefreshTokenAsync(It.Is<RefreshToken>(t => t.UserId == 42), "10.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
+        harness.Sessions.Verify(p => p.InsertRefreshTokenAsync(It.Is<RefreshToken>(t => t.UserId == 42), "10.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -167,14 +167,14 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser());
 
-        var result = await harness.Service.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, "not the password", "a brand new passphrase", "10.0.0.1");
 
         Assert.True(result.IsFailure);
         Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", result.Error.Code);
         // Not 401: the session is fine, and a client would sign the user out on one.
         Assert.Equal(ErrorType.Validation, result.Error.Type);
-        harness.Provider.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
-        harness.Provider.Verify(p => p.RecordLoginFailureAsync(42, AuthService.MaxFailedLogins, AuthService.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
+        harness.Accounts.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.RecordLoginFailureAsync(42, AccountLockout.MaxFailedLogins, AccountLockout.LoginLockout, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -183,11 +183,11 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         harness.WithUser(AUser(lockedUntil: DateTime.UtcNow.AddMinutes(5)));
 
-        var result = await harness.Service.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
+        var result = await harness.Passwords.ChangePasswordAsync(42, Password, "a brand new passphrase", "10.0.0.1");
 
         Assert.Equal("AUTH_ACCOUNT_LOCKED", result.Error.Code);
         Assert.Equal(ErrorType.Forbidden, result.Error.Type);
-        harness.Provider.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Accounts.Verify(p => p.ChangePasswordAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---------------------------------------------------------------- sessions
@@ -198,11 +198,11 @@ public sealed class AccountSecurityTests
     public async Task Ending_a_session_that_is_not_yours_reads_as_not_found()
     {
         var harness = new Harness();
-        harness.Provider
+        harness.Sessions
             .Setup(p => p.RevokeSessionAsync(SessionId, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        var result = await harness.Service.RevokeSessionAsync(42, SessionId, "10.0.0.1");
+        var result = await harness.SignIn.RevokeSessionAsync(42, SessionId, "10.0.0.1");
 
         Assert.Equal("AUTH_SESSION_NOT_FOUND", result.Error.Code);
         Assert.Equal(ErrorType.NotFound, result.Error.Type);
@@ -217,11 +217,11 @@ public sealed class AccountSecurityTests
     public async Task Ending_your_own_session_ends_its_access_token_too()
     {
         var harness = new Harness();
-        harness.Provider
+        harness.Sessions
             .Setup(p => p.RevokeSessionAsync(SessionId, 42, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var result = await harness.Service.RevokeSessionAsync(42, SessionId, "10.0.0.1");
+        var result = await harness.SignIn.RevokeSessionAsync(42, SessionId, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         harness.AccessTokens.Verify(a => a.RevokeSessionAsync(SessionId, It.IsAny<CancellationToken>()), Times.Once);
@@ -231,11 +231,11 @@ public sealed class AccountSecurityTests
     public async Task Logging_out_ends_the_sessions_access_token()
     {
         var harness = new Harness();
-        harness.Provider
+        harness.Sessions
             .Setup(p => p.RevokeRefreshTokenAsync("refresh", It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(SessionId);
 
-        var result = await harness.Service.LogoutAsync("refresh", "10.0.0.1");
+        var result = await harness.SignIn.LogoutAsync("refresh", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         harness.AccessTokens.Verify(a => a.RevokeSessionAsync(SessionId, It.IsAny<CancellationToken>()), Times.Once);
@@ -245,11 +245,11 @@ public sealed class AccountSecurityTests
     public async Task Logging_out_with_a_dead_token_ends_nothing_and_still_succeeds()
     {
         var harness = new Harness();
-        harness.Provider
+        harness.Sessions
             .Setup(p => p.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var result = await harness.Service.LogoutAsync("dead", "10.0.0.1");
+        var result = await harness.SignIn.LogoutAsync("dead", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         harness.AccessTokens.Verify(a => a.RevokeSessionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -261,11 +261,11 @@ public sealed class AccountSecurityTests
         var harness = new Harness();
         var other = Guid.NewGuid();
         var now = DateTime.UtcNow;
-        harness.Provider
+        harness.Sessions
             .Setup(p => p.GetActiveSessionsAsync(42, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new SessionResponse(other, now, now, now.AddDays(7), null), new SessionResponse(SessionId, now, now, now.AddDays(7), null)]);
 
-        var result = await harness.Service.GetSessionsAsync(42, SessionId);
+        var result = await harness.SignIn.GetSessionsAsync(42, SessionId);
 
         Assert.Equal([false, true], result.Value.Select(s => s.IsCurrent));
     }
@@ -282,36 +282,12 @@ public sealed class AccountSecurityTests
         LockedUntil = lockedUntil
     };
 
-    private sealed class Harness
+    private sealed class Harness : AccountServices
     {
-        public Harness()
-        {
-            var jwt = new Mock<IJwtService>();
-            jwt.Setup(j => j.GenerateToken(It.IsAny<IEnumerable<Claim>>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns("access-token");
-
-            Service = new AuthService(
-                Provider.Object,
-                jwt.Object,
-                Mock.Of<IEventBus>(),
-                Mock.Of<IAuthMailer>(),
-                Options.Create(new AuthEmailOptions()),
-                NullLogger<AuthService>.Instance,
-                new AuthMetrics(),
-                AccessTokens.Object,
-                Options.Create(new AccessTokenOptions()),
-                MailCooldownTests.InProcess());
-        }
-
-        public Mock<IAuthProvider> Provider { get; } = new();
-
-        public Mock<IAccessTokenRevocation> AccessTokens { get; } = new();
-
-        public AuthService Service { get; }
-
         public void WithUser(User user)
         {
-            Provider.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
-            Provider.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.GetByEmailAsync(user.Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+            Accounts.Setup(p => p.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         }
     }
 }

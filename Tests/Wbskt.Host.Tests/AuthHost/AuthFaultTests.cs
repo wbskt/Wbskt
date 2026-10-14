@@ -21,20 +21,20 @@ public sealed class AuthFaultTests
 {
     private const int TenantId = 5;
 
-    private readonly Mock<IAuthProvider> _provider = new();
-    private readonly ManagementService _service;
+    private readonly Mock<ITenantProvider> _tenants = new();
+    private readonly TenantService _service;
 
     public AuthFaultTests()
     {
-        _service = new ManagementService(
-            _provider.Object, Mock.Of<IWorkspaceProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
-            NullLogger<ManagementService>.Instance, Mock.Of<IAccessTokenRevocation>(), Mock.Of<IAuditWorkspaces>());
+        _service = new TenantService(
+            _tenants.Object, Mock.Of<IAccessControlProvider>(), Mock.Of<IAccountProvider>(), Mock.Of<IWorkspaceProvider>(), Mock.Of<IEventBus>(), Mock.Of<IAuthMailer>(),
+            NullLogger<TenantService>.Instance, Mock.Of<IAuditWorkspaces>());
     }
 
     [Fact]
     public async Task A_database_guard_reads_back_as_a_rejected_operation()
     {
-        _provider.Setup(p => p.UpdateTenantAsync(TenantId, "Acme", null, It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.UpdateTenantAsync(TenantId, "Acme", null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(50008, "Cannot remove the last administrator."));
 
         var result = await _service.UpdateTenantAsync(TenantId, new UpdateTenantRequest("Acme", null), CancellationToken.None);
@@ -46,7 +46,7 @@ public sealed class AuthFaultTests
     [Fact]
     public async Task A_fault_propagates_instead_of_becoming_a_result()
     {
-        _provider.Setup(p => p.UpdateTenantAsync(TenantId, "Acme", null, It.IsAny<CancellationToken>()))
+        _tenants.Setup(p => p.UpdateTenantAsync(TenantId, "Acme", null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(SqlExceptions.WithNumber(-2, "Execution Timeout Expired."));
 
         await Assert.ThrowsAsync<SqlException>(() => _service.UpdateTenantAsync(TenantId, new UpdateTenantRequest("Acme", null), CancellationToken.None));

@@ -24,10 +24,11 @@ public sealed class AccountAuditEventTests
     private const string Password = "correct horse battery";
     private const string Email = "someone@example.test";
 
-    private readonly Mock<IAuthProvider> _provider = new();
     private readonly Mock<IAuditWorkspaces> _audit = new();
     private readonly List<object> _published = [];
-    private readonly AuthService _service;
+    private readonly Mock<IAccountProvider> _accounts;
+    private readonly SignInService _signIn;
+    private readonly PasswordService _passwords;
 
     public AccountAuditEventTests()
     {
@@ -45,18 +46,10 @@ public sealed class AccountAuditEventTests
         bus.Setup(b => b.PublishAsync(It.IsAny<AccountEvent>(), It.IsAny<CancellationToken>()))
             .Callback<AccountEvent, CancellationToken>((e, _) => _published.Add(e)).Returns(Task.CompletedTask);
 
-        _service = new AuthService(
-            _provider.Object,
-            jwt.Object,
-            bus.Object,
-            Mock.Of<IAuthMailer>(),
-            Options.Create(new AuthEmailOptions()),
-            NullLogger<AuthService>.Instance,
-            new AuthMetrics(),
-            Mock.Of<IAccessTokenRevocation>(),
-            Options.Create(new AccessTokenOptions()),
-            MailCooldownTests.InProcess(),
-            _audit.Object);
+        var services = new AccountServices(bus: bus.Object, jwt: jwt.Object, audit: _audit.Object);
+        _accounts = services.Accounts;
+        _signIn = services.SignIn;
+        _passwords = services.Passwords;
 
         var user = new User
         {
@@ -68,14 +61,14 @@ public sealed class AccountAuditEventTests
             IsActive = true,
             IsEmailVerified = true
         };
-        _provider.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
-        _provider.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _accounts.Setup(p => p.GetByEmailAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _accounts.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>())).ReturnsAsync(user);
     }
 
     [Fact]
     public async Task A_wrong_password_is_logged_in_each_of_the_accounts_workspaces()
     {
-        await _service.LoginAsync(Email, "not the password", "10.0.0.1");
+        await _signIn.LoginAsync(Email, "not the password", "10.0.0.1");
 
         var failed = Assert.IsType<UserLoginFailedEvent>(Assert.Single(_published));
         Assert.Equal([10, 11], failed.WorkspaceIds);
@@ -85,9 +78,9 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task A_sign_in_with_no_account_is_logged_nowhere()
     {
-        _provider.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
+        _accounts.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
 
-        var result = await _service.LoginAsync("nobody@example.test", Password, "10.0.0.1");
+        var result = await _signIn.LoginAsync("nobody@example.test", Password, "10.0.0.1");
 
         Assert.Equal("AUTH_INVALID_CREDENTIALS", result.Error.Code);
 
@@ -98,7 +91,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task Changing_a_password_is_logged_with_where_it_came_from()
     {
-        var result = await _service.ChangePasswordAsync(42, Password, "a brand new password", "10.0.0.1");
+        var result = await _passwords.ChangePasswordAsync(42, Password, "a brand new password", "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         var changed = Assert.IsType<PasswordChangedEvent>(Assert.Single(_published));
@@ -111,7 +104,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task A_reset_link_mailed_to_an_account_is_logged_with_where_the_request_came_from()
     {
-        var result = await _service.ForgotPasswordAsync(Email, "10.0.0.1");
+        var result = await _passwords.ForgotPasswordAsync(Email, "10.0.0.1");
 
         Assert.True(result.IsSuccess);
         var requested = Assert.IsType<PasswordResetRequestedEvent>(Assert.Single(_published));
@@ -122,9 +115,9 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task A_reset_request_for_an_unknown_address_is_logged_nowhere()
     {
-        _provider.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
+        _accounts.Setup(p => p.GetByEmailAsync("nobody@example.test", It.IsAny<CancellationToken>())).ThrowsAsync(new SecurityException("no such user"));
 
-        await _service.ForgotPasswordAsync("nobody@example.test", "10.0.0.1");
+        await _passwords.ForgotPasswordAsync("nobody@example.test", "10.0.0.1");
 
         Assert.Empty(_published);
     }
@@ -132,8 +125,8 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task A_reset_request_held_back_by_the_mail_cooldown_is_not_logged_again()
     {
-        await _service.ForgotPasswordAsync(Email, "10.0.0.1");
-        await _service.ForgotPasswordAsync(Email, "10.0.0.1");
+        await _passwords.ForgotPasswordAsync(Email, "10.0.0.1");
+        await _passwords.ForgotPasswordAsync(Email, "10.0.0.1");
 
         Assert.Single(_published);
     }
@@ -141,7 +134,7 @@ public sealed class AccountAuditEventTests
     [Fact]
     public async Task Signing_out_everywhere_is_logged()
     {
-        await _service.LogoutAllAsync(42, "10.0.0.1");
+        await _signIn.LogoutAllAsync(42, "10.0.0.1");
 
         var revoked = Assert.IsType<SessionsRevokedEvent>(Assert.Single(_published));
         Assert.Equal("all", revoked.Which);

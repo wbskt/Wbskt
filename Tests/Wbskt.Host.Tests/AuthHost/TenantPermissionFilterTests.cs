@@ -30,11 +30,12 @@ public sealed class TenantPermissionFilterTests
     private const int TenantId = 5;
     private static readonly Guid TenantRef = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
-    private readonly Mock<IAuthProvider> _provider = new();
+    private readonly Mock<ITenantProvider> _tenants = new();
+    private readonly Mock<IAccessControlProvider> _accessControl = new();
 
     public TenantPermissionFilterTests()
     {
-        _provider.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
+        _tenants.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(TenantId);
     }
 
     [Fact]
@@ -69,20 +70,20 @@ public sealed class TenantPermissionFilterTests
     [Fact]
     public async Task A_tenant_the_caller_does_not_belong_to_reads_as_not_found()
     {
-        _provider.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _tenants.Setup(p => p.FindTenantIdByRefIdForUserAsync(TenantRef, CallerId, It.IsAny<CancellationToken>())).ReturnsAsync(0);
         var (context, _) = Context(nameof(ManagementController.GetMembers));
 
         await new TenantPermissionFilter().OnAuthorizationAsync(context);
 
         Forbidden(context).Code.Should().Be("TENANT_NOT_FOUND");
-        _provider.Verify(p => p.VerifyPermissionAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _accessControl.Verify(p => p.VerifyPermissionAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Only_a_tenant_wide_grant_counts()
     {
         // A grant in one workspace of the tenant does not make its holder a tenant administrator.
-        _provider.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, It.Is<int?>(w => w != null), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, It.Is<int?>(w => w != null), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var (context, _) = Context(nameof(ManagementController.GetMembers));
 
         await new TenantPermissionFilter().OnAuthorizationAsync(context);
@@ -133,7 +134,7 @@ public sealed class TenantPermissionFilterTests
     {
         foreach (string permission in permissions)
         {
-            _provider.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, permission, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            _accessControl.Setup(p => p.VerifyPermissionAsync(CallerId, TenantId, null, permission, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         }
     }
 
@@ -151,7 +152,8 @@ public sealed class TenantPermissionFilterTests
 
         var services = new ServiceCollection()
             .AddSingleton(identity.Object)
-            .AddSingleton(_provider.Object)
+            .AddSingleton(_tenants.Object)
+            .AddSingleton(_accessControl.Object)
             .AddLogging()
             .BuildServiceProvider();
         var http = new DefaultHttpContext { RequestServices = services };
