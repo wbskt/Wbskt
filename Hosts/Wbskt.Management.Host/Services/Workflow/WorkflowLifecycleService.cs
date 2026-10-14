@@ -20,9 +20,10 @@ using Wbskt.Workflow.Abstraction.Validation;
 namespace Wbskt.Management.Host.Services.Workflow;
 
 // Publish, deprecate, reinstate, rollback and delete write definitions and trigger registrations
-// directly, and evict nothing from any definition cache: this host keeps none, and the engine's cache
-// is its own (evicting a copy here never reached it). A WorkflowDefinitionChanged event, for the engine
-// to react to, is the planned follow-up in place of a shared cache contract.
+// directly. This host caches neither; the engine caches both, and is told to drop them by a
+// WorkflowDefinitionChangedEvent published after each change (and after a failed publish is undone,
+// since the registrations moved in between). The event is queued like the others, so the engine also
+// keeps its entries for a bounded time only.
 public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
@@ -166,9 +167,12 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         catch (Exception ex)
         {
             await CompensateFailedPublishAsync(inserted, existing, workspaceRef, ex, ct);
+            // The registrations were removed and put back in between, and the engine may have read them then.
+            await TryAnnounceChangedAsync(workspaceId, inserted.RefId, [inserted.Id, existing?.Id], ct);
             throw;
         }
 
+        await AnnounceChangedAsync(workspaceId, inserted.RefId, [inserted.Id, existing?.Id], ct);
         _logger.LogInformation("Workflow '{WorkflowName}' (RefId: '{RefId}') version {Version} published successfully", request.Name, request.RefId, inserted.Version);
         await _eventBus.PublishAsync(new WorkflowPublishedEvent(inserted.RefId, inserted.Id, workspaceId, inserted.Version, request.Name, restoredFromVersion)
         {
@@ -225,9 +229,11 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             // Registrations without an enabled definition would fire a workflow the operator
             // believes is off - worse than leaving it off.
             await TryDeregisterAsync(row.Id, ct);
+            await TryAnnounceChangedAsync(workspaceId, row.RefId, [row.Id], ct);
             throw;
         }
 
+        await AnnounceChangedAsync(workspaceId, row.RefId, [row.Id], ct);
         _logger.LogInformation("Workflow '{RefId}' version {Version} reinstated", refId, row.Version);
         await _eventBus.PublishAsync(new WorkflowReinstatedEvent(row.RefId, row.Id, workspaceId, row.Version)
         {
@@ -296,6 +302,32 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
                 : $"[{issue.Code}] {issue.Message}"));
         _logger.LogWarning("Workflow publish failed: Validation issues: {Issues}", message);
         return Error.Validation("WORKFLOW_VALIDATION_FAILED", message);
+    }
+
+    /// <summary>
+    /// Tells the engine that these versions' definitions or trigger registrations changed, so it drops
+    /// what it cached of them (<see cref="WorkflowDefinitionChangedEvent"/>).
+    /// </summary>
+    private Task AnnounceChangedAsync(int workspaceId, Guid refId, IEnumerable<int?> definitionIds, CancellationToken ct)
+    {
+        int[] ids = definitionIds.OfType<int>().Distinct().ToArray();
+        return _eventBus.PublishAsync(new WorkflowDefinitionChangedEvent(refId, workspaceId, ids), ct);
+    }
+
+    /// <summary>
+    /// <see cref="AnnounceChangedAsync"/> on a path that is already failing: the original failure is what
+    /// the caller reports, so a problem here is logged rather than thrown.
+    /// </summary>
+    private async Task TryAnnounceChangedAsync(int workspaceId, Guid refId, IEnumerable<int?> definitionIds, CancellationToken ct)
+    {
+        try
+        {
+            await AnnounceChangedAsync(workspaceId, refId, definitionIds, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not announce the change to workflow '{RefId}' to the engine; its cached registrations expire on their own.", refId);
+        }
     }
 
     private async Task TryDeregisterAsync(int definitionId, CancellationToken ct)
@@ -396,6 +428,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         WorkflowDefinitionRow row = load.Value;
         await _workflowDefinitionProvider.DeprecateAsync(row.Id, ct);
         await _triggerRegistrationService.OnDeprecatedAsync(row.Id, ct);
+        await AnnounceChangedAsync(workspaceId, row.RefId, [row.Id], ct);
 
         _logger.LogInformation("Workflow '{RefId}' deprecated successfully", refId);
         await _eventBus.PublishAsync(new WorkflowDeprecatedEvent(row.RefId, row.Id, workspaceId, row.Version)
@@ -425,6 +458,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
             await _engine.QueueCancelRunAsync(runId, DeletedCancellationReason, ct);
         }
 
+        await AnnounceChangedAsync(workspaceId, refId, deletion.DefinitionIds.Select(id => (int?)id), ct);
         _logger.LogInformation("Workflow '{RefId}' deleted: {Versions} version(s) disabled, {Runs} run(s) cancelling", refId, deletion.DefinitionIds.Count, deletion.ActiveRunIds.Count);
         await _eventBus.PublishAsync(new WorkflowDeletedEvent(refId, deletion.DefinitionIds.DefaultIfEmpty().Max(), workspaceId, deletion.ActiveRunIds.Count), ct);
         return Result.Success();
