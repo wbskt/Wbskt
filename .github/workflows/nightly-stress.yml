@@ -1,0 +1,175 @@
+name: Nightly stress
+
+# The load the pull-request gate (build-images.yml) leaves out because it takes minutes: the
+# thousand-run ConcurrencyStressE2ETests scenario and Tests/Wbskt.LoadTester holding a few hundred
+# devices on the socket host. Same hosts, started from source as Development, against the same
+# services as the e2e job in build-images.yml; the setup is copied from there, so keep the two in
+# step. Nothing here gates a merge or an image.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-stress
+  cancel-in-progress: false
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Welcome1234
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Welcome1234 -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+      rabbitmq:
+        image: rabbitmq:4-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 20s
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ConnectionStrings__Redis: localhost:6379
+      HOST_SQL_PASSWORD: Wb1-e2e-Host-Login
+      ConnectionStrings__AuthDBConnection: Server=localhost;Database=Wbskt.Database.Auth;User ID=wbskt_auth;Password=Wb1-e2e-Host-Login;Encrypt=False;
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_management;Password=Wb1-e2e-Host-Login;Encrypt=False;
+      # The stress scenario fires a thousand webhooks at one path from one address, past both public
+      # callback limits (600 per workspace and path, 1200 per address). start-hosts.sh passes these
+      # through to the hosts.
+      RateLimiting__Webhook__PermitLimit: "10000"
+      RateLimiting__PublicCallbacks__PermitLimit: "10000"
+      E2E_STRESS_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install sqlpackage
+        run: |
+          dotnet tool list -g | grep -qi '^microsoft\.sqlpackage ' || dotnet tool install -g microsoft.sqlpackage
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Deploy databases
+        run: pwsh ./Deploy-Databases.ps1 -HostLoginPassword "$HOST_SQL_PASSWORD"
+
+      - name: Trust the development certificate
+        run: |
+          dotnet dev-certs https
+          dotnet dev-certs https --export-path "$RUNNER_TEMP/aspnet-dev.crt" --format PEM
+          sudo cp "$RUNNER_TEMP/aspnet-dev.crt" /usr/local/share/ca-certificates/aspnet-dev.crt
+          sudo update-ca-certificates
+
+      - name: Start hosts
+        run: Tests/Wbskt.E2E.FeatureTests/start-hosts.sh
+
+      - name: Concurrency stress test
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj \
+            --filter "FullyQualifiedName~ConcurrencyStressE2ETests" \
+            --nologo -v q --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=stress.trx" --results-directory TestResults 2>&1 | tee stress-output.txt
+
+      # The scenario is a [SkippableFact], and a skipped run exits 0.
+      - name: Fail if the stress test did not run
+        run: |
+          passed=$(grep -oP 'Passed:\s*\K\d+' stress-output.txt | head -1)
+          if [[ "${passed:-0}" -lt 1 ]]; then
+            echo "::error::ConcurrencyStressE2ETests did not pass (skipped or not found)"
+            exit 1
+          fi
+
+      # 200 devices register under a fresh policy, connect, and send telemetry for five minutes. The
+      # load tester runs until stopped, so `timeout` ends it; exit 124 is that, and is the expected
+      # outcome. It fails on a device that could not start, or on a host that went down under it.
+      - name: Load tester
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          auth=https://localhost:7000
+          management=https://localhost:7010
+          token=$(curl -fsS -X POST "$auth/api/auth/login" -H 'Content-Type: application/json' \
+            -d '{"email":"admin@wbskt.com","password":"Password123!"}' | jq -r .accessToken)
+          workspace=$(curl -fsS -X POST "$auth/api/workspaces" -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' -d "{\"name\":\"nightly-load-$GITHUB_RUN_ID\"}" | jq -r .refId)
+          pin=$(curl -fsS -X POST "$management/api/workspaces/$workspace/registration-policies" \
+            -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+            -d '{"name":"nightly-load","maxClients":null,"autoApproval":true}' | jq -r .pin)
+          if [[ -z "$pin" || "$pin" == "null" ]]; then
+            echo "::error::could not create a registration policy for the load tester"
+            exit 1
+          fi
+
+          dotnet build Tests/Wbskt.LoadTester/Wbskt.LoadTester.csproj --nologo -v q
+          status=0
+          timeout --signal=INT --kill-after=30 300 \
+            dotnet Tests/Wbskt.LoadTester/bin/Debug/net10.0/Wbskt.LoadTester.dll 200 "$pin" "$management" ws://localhost:5020 \
+            > load-output.txt 2>&1 || status=$?
+          tail -n 50 load-output.txt
+          if [[ "$status" -ne 124 ]]; then
+            echo "::error::the load tester exited with $status before its time was up"
+            exit 1
+          fi
+          if ! grep -q 'Client spin-up process finished' load-output.txt; then
+            echo "::error::the load tester did not finish starting its devices"
+            exit 1
+          fi
+          failed=$(grep -c 'Failed to start client' load-output.txt || true)
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::error::${failed} load-tester devices failed to start"
+            exit 1
+          fi
+          for port in 5000 5010 5020 5030; do
+            curl -fs -o /dev/null "http://localhost:$port/healthz" || { echo "::error::the host on $port is down after the load"; exit 1; }
+          done
+
+      - name: Host logs
+        if: failure()
+        run: |
+          for f in e2e-hosts/*.log; do
+            echo "::group::$f"
+            tail -n 300 "$f"
+            echo "::endgroup::"
+          done
+
+      - name: Upload host logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-stress
+          path: |
+            e2e-hosts/*.log
+            *-output.txt
+            TestResults/**/*.trx
+          if-no-files-found: ignore

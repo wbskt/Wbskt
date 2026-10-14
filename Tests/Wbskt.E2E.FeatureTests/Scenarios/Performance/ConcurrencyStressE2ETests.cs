@@ -5,6 +5,12 @@ using Wbskt.Workflow.Abstraction.Enums;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.Performance;
 
+/// <summary>
+/// A thousand webhook-started runs, each forking five ways and joining, all at once: the engine must
+/// neither deadlock nor lose a run. Opt-in (<c>E2E_STRESS_TESTS=1</c>): it takes minutes and needs the
+/// public callback rate limits raised, so it runs nightly (.github/workflows/nightly-stress.yml), not
+/// on the pull-request gate.
+/// </summary>
 [Collection(EngineCollection.Name)]
 public class ConcurrencyStressE2ETests
 {
@@ -16,10 +22,11 @@ public class ConcurrencyStressE2ETests
         _fixture = fixture;
     }
 
-    // [SkippableFact]
+    [SkippableFact]
     public async Task MassiveConcurrency_DoesNotDeadlock_AndAllRunsSucceed()
     {
-        Skip.IfNot(_fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        Skip.IfNot(_fixture.HostsAvailable && E2EConfig.StressTestsEnabled,
+            "Fires a thousand webhooks and waits minutes for the runs. Set E2E_STRESS_TESTS=1 (with the hosts running) to run it.");
 
         // 1. A workspace of its own
         var (token, workspaceRef) = await _fixture.CreateIsolatedWorkspaceAsync();
@@ -44,7 +51,10 @@ public class ConcurrencyStressE2ETests
         // 3. Publish
         var definitionElement = JsonSerializer.SerializeToElement(builder.BuildAndValidate(), JsonOptions);
         await _fixture.PublishWorkflowAsync(token, workspaceRef, workflowRefId, "StressTest", definitionElement);
-        await Task.Delay(1000); // Give TriggerDispatcher cache time to invalidate
+
+        // Wait for the trigger to be live, so none of the thousand lands before it. The warm-up can
+        // start a run or two of its own, so the count below is a floor, not an exact figure.
+        await _fixture.FireWebhookUntilRunAsync(token, workspaceRef, workflowRefId, "stress", TimeSpan.FromSeconds(60), new { warmup = true });
 
         // 4. Fire 1,000 webhooks concurrently (100 tasks * 10 webhooks)
         int numTasks = 100;
@@ -74,8 +84,7 @@ public class ConcurrencyStressE2ETests
             async () =>
             {
                 var runs = await _fixture.ListRunsAsync(token, workspaceRef, workflowRefId, top: 1500);
-                int succeeded = runs.Count(r => r.Status == "Succeeded");
-                return succeeded == totalRunsExpected;
+                return runs.Count >= totalRunsExpected && runs.All(r => r.Status == "Succeeded");
             },
             timeout: TimeSpan.FromSeconds(500),
             interval: TimeSpan.FromSeconds(5)
@@ -92,13 +101,13 @@ public class ConcurrencyStressE2ETests
             {
                 var history = await _fixture.GetHistoryAsync(token, workspaceRef, firstStuckRun.RefId, top: 100);
                 string histJson = JsonSerializer.Serialize(history, JsonOptions);
-                allSucceeded.Should().BeTrue($"expected exactly {totalRunsExpected} runs to succeed. Actual counts: {counts}. Sample stuck run history: {histJson}");
+                allSucceeded.Should().BeTrue($"expected at least {totalRunsExpected} runs, all succeeded. Actual counts: {counts}. Sample stuck run history: {histJson}");
             }
         }
-        allSucceeded.Should().BeTrue($"expected exactly {totalRunsExpected} runs to succeed. Actual counts: {counts}");
+        allSucceeded.Should().BeTrue($"expected at least {totalRunsExpected} runs, all succeeded. Actual counts: {counts}");
 
-        // 7. Verify exactly 1,000 runs exist and 0 failures
-        finalRuns.Should().HaveCount(totalRunsExpected);
+        // 7. Verify every one of the 1,000 (and the warm-up's) exists and none failed
+        finalRuns.Should().HaveCountGreaterThanOrEqualTo(totalRunsExpected);
         finalRuns.Should().OnlyContain(r => r.Status == "Succeeded");
     }
 }

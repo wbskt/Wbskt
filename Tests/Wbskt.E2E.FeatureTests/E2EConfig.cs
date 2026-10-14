@@ -38,6 +38,13 @@ internal static class E2EConfig
         Environment.GetEnvironmentVariable("E2E_RATE_LIMIT_TESTS") is "1" or "true";
 
     /// <summary>
+    /// Opt-in: the stress scenarios (Scenarios/Performance), which fire a thousand webhooks and wait
+    /// minutes for the runs. Off the pull-request gate; .github/workflows/nightly-stress.yml sets it.
+    /// </summary>
+    public static bool StressTestsEnabled =>
+        Environment.GetEnvironmentVariable("E2E_STRESS_TESTS") is "1" or "true";
+
+    /// <summary>
     /// Opt-in: a shell command that restarts the socket host and returns once it is serving again,
     /// e.g. <c>Tests/Wbskt.E2E.FeatureTests/start-hosts.sh socket</c>. The device-revocation
     /// scenarios that need a restart skip without it; they drop every live device connection, so
