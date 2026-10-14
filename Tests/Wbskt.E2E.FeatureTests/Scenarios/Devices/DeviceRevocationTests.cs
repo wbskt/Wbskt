@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
@@ -110,16 +109,9 @@ public sealed class DeviceRevocationTests(ServicesFixture fixture)
 
     private static async Task RestartSocketHostAsync()
     {
-        using var restart = Process.Start(new ProcessStartInfo("bash", ["-c", E2EConfig.SocketRestartCommand!])
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        })!;
-        var output = restart.StandardOutput.ReadToEndAsync();
-        var error = restart.StandardError.ReadToEndAsync();
-        await restart.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2));
+        var restart = await ShellCommand.RunAsync(E2EConfig.SocketRestartCommand!, TimeSpan.FromMinutes(2));
 
-        restart.ExitCode.Should().Be(0, $"the socket host restart failed:\n{await output}\n{await error}");
+        restart.ExitCode.Should().Be(0, $"the socket host restart failed:\n{restart.Output}\n{restart.Error}");
     }
 
     private Task<HttpResponseMessage> RevokeAsync(Guid workspace, Guid clientRef, string token) =>
