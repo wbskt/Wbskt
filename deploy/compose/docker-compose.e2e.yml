@@ -1,0 +1,261 @@
+# The E2E environment: SQL Server, RabbitMQ, Redis and Mailpit, the database migrator, and the five
+# hosts built from source, as Development, on the ports Tests/Wbskt.E2E.FeatureTests expects.
+# Self-contained, deliberately: it shares no file with docker-compose.yml, so nothing here can leak
+# into production (Traefik, the observability stack, real secrets), and production's required
+# variables are not required here. Every password and key below is a development value.
+#
+# Start it with the wrapper, which also exports the development certificate and the device token key:
+#   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh          # infrastructure, migrator and hosts
+#   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh infra    # infrastructure and migrator only (run the hosts yourself)
+#   Tests/Wbskt.E2E.FeatureTests/e2e-up.sh down     # stop everything and drop the database volume
+#
+# The hosts use the host's network (network_mode: host), so they behave exactly as start-hosts.sh
+# runs them: they bind localhost:5000-5030 and 7000-7030 from appsettings.Development.json, reach
+# SQL, RabbitMQ, Redis and Mailpit on localhost, and reach the fakes the suite starts on 127.0.0.1
+# (Scenarios/Integrations, NodeRetryE2ETests). On Docker Desktop (macOS, Windows) host networking
+# has to be turned on in its settings first. The infrastructure publishes on 127.0.0.1 only.
+name: wbskt-e2e
+
+volumes:
+  sql-data:
+
+x-healthcheck: &host-healthcheck
+  interval: 5s
+  timeout: 5s
+  retries: 30
+  start_period: 30s
+
+x-host-build: &host-build
+  context: ../..
+  dockerfile: deploy/docker/Dockerfile
+
+x-host-env: &host-env
+  ASPNETCORE_ENVIRONMENT: Development
+  RabbitMQ__HostName: localhost
+  RabbitMQ__UserName: guest
+  RabbitMQ__Password: guest
+  ConnectionStrings__Redis: localhost:6379
+  # The HTTPS dev ports need a certificate. The wrapper exports the developer's own ASP.NET Core
+  # development certificate here, the one the machine running the tests already trusts.
+  Kestrel__Certificates__Default__Path: /https/aspnetcore-dev.pfx
+  Kestrel__Certificates__Default__Password: ${E2E_DEV_CERT_PASSWORD:-wbskt-e2e-dev}
+
+# The migrator creates each host's least-privilege SQL login with these, as in production and CI.
+x-sql-logins: &sql-logins
+  SQL_AUTH_PASSWORD: Wb1-e2e-Host-Login
+  SQL_MANAGEMENT_PASSWORD: Wb1-e2e-Host-Login
+  SQL_ENGINE_PASSWORD: Wb1-e2e-Host-Login
+
+x-host-depends: &host-depends
+  migrator:
+    condition: service_completed_successfully
+  rabbitmq:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  # --- Infrastructure ------------------------------------------------------------------------------
+
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      # The sa password Config/connectionstrings.json uses, so hosts run from source work against it too.
+      MSSQL_SA_PASSWORD: Welcome1234
+    volumes:
+      - sql-data:/var/opt/mssql
+    ports:
+      - "127.0.0.1:1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Welcome1234 -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    # guest/guest, the image's default; the image allows guest from outside the container.
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Catches the auth host's mail (verification, password reset, invitations). Read it at
+  # http://localhost:8025, or through its API at http://localhost:8025/api/v1/messages.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Publishes both DACPACs on every `up`: incremental, so a local database always matches the
+  # schema in the checkout instead of drifting. `e2e-up.sh down` drops the volume for a fresh start.
+  migrator:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.migrator
+    environment:
+      <<: *sql-logins
+      AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=Welcome1234;TrustServerCertificate=True;Encrypt=True;
+      DEFAULT_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database;User Id=sa;Password=Welcome1234;TrustServerCertificate=True;Encrypt=True;
+      # Password123!, the development and E2E root password (the same default as Deploy-Databases.ps1).
+      ROOT_ADMIN_PASSWORD_HASH: AQAAAAIAAYagAAAAEFpR/CYNxe2N5aUZv3U+eodymZIb6BfMSJKxovngFs/yXsN7ozQu/K2ajy8olqDZLQ==
+    depends_on:
+      sql:
+        condition: service_healthy
+
+  # --- Hosts (profile "hosts") ---------------------------------------------------------------------
+  # The production image (deploy/docker/Dockerfile, a Release publish) run as Development, so each
+  # host reads its appsettings.Development.json: the dev ports, the raised rate limits, sign-in
+  # without a confirmed address. The Dockerfile drops the shared Config/*.json the publish copies, so
+  # what they would have said is given here: the console-only Serilog config production uses, the
+  # engine's fast development tick intervals, and the settings below.
+
+  auth:
+    profiles: ["hosts"]
+    image: wbskt-e2e-auth:local
+    build:
+      <<: *host-build
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Auth.Host/Wbskt.Auth.Host.csproj
+        HOST_DLL: Wbskt.Auth.Host.dll
+    network_mode: host
+    environment:
+      <<: *host-env
+      ConnectionStrings__AuthDBConnection: Server=localhost;Database=Wbskt.Database.Auth;User ID=wbskt_auth;Password=Wb1-e2e-Host-Login;Encrypt=False;
+      Auth__Email__Host: localhost
+      Auth__Email__Port: "1025"
+      Auth__Email__UseStartTls: "false"
+      Auth__Email__FromAddress: no-reply@wbskt.local
+    volumes:
+      - ../config/serilog.json:/Config/serilog.json:ro
+      - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
+    healthcheck:
+      <<: *host-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:5000/healthz/ready"]
+    depends_on:
+      <<: *host-depends
+      mailpit:
+        condition: service_healthy
+
+  management:
+    profiles: ["hosts"]
+    image: wbskt-e2e-management:local
+    build:
+      <<: *host-build
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
+        HOST_DLL: Wbskt.Management.Host.dll
+    network_mode: host
+    environment: &management-env
+      <<: *host-env
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_management;Password=Wb1-e2e-Host-Login;Encrypt=False;
+      # Management and devices sign device tokens with one key, and the socket host trusts only
+      # management's JWKS. Left unset, each would generate its own and the socket host would refuse
+      # every token devices issues. The wrapper generates it once and keeps it under e2e-hosts/.
+      Jwt__SigningKey: ${E2E_DEVICE_TOKEN_KEY:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}
+      # Plain HTTP to the engine: the container does not trust the development certificate that
+      # appsettings.Development.json's https://localhost:7030 would need.
+      Services__WorkflowEngine: http://localhost:5030
+    volumes:
+      - ../config/serilog.json:/Config/serilog.json:ro
+      - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
+    healthcheck:
+      <<: *host-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:5010/healthz/ready"]
+    depends_on:
+      <<: *host-depends
+      auth:
+        condition: service_healthy
+
+  # A second management host serving only device registration and login, as in production.
+  devices:
+    profiles: ["hosts"]
+    image: wbskt-e2e-management:local
+    build:
+      <<: *host-build
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Management.Host/Wbskt.Management.Host.csproj
+        HOST_DLL: Wbskt.Management.Host.dll
+    network_mode: host
+    environment:
+      <<: *management-env
+      Host__Role: Devices
+      Kestrel__Endpoints__Http__Url: http://localhost:5015
+      Kestrel__Endpoints__Https__Url: https://localhost:7015
+    volumes:
+      - ../config/serilog.json:/Config/serilog.json:ro
+      - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
+    healthcheck:
+      <<: *host-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:5015/healthz/ready"]
+    depends_on:
+      <<: *host-depends
+      auth:
+        condition: service_healthy
+
+  socket:
+    profiles: ["hosts"]
+    image: wbskt-e2e-socket:local
+    build:
+      <<: *host-build
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Socket.Host/Wbskt.Socket.Host.csproj
+        HOST_DLL: Wbskt.Socket.Host.dll
+    network_mode: host
+    environment:
+      <<: *host-env
+    volumes:
+      - ../config/serilog.json:/Config/serilog.json:ro
+      - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
+    healthcheck:
+      <<: *host-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:5020/healthz/ready"]
+    depends_on:
+      <<: *host-depends
+
+  engine:
+    profiles: ["hosts"]
+    image: wbskt-e2e-engine:local
+    build:
+      <<: *host-build
+      args:
+        HOST_PROJECT: Hosts/Wbskt.Workflow.Engine.Host/Wbskt.Workflow.Engine.Host.csproj
+        HOST_DLL: Wbskt.Workflow.Engine.Host.dll
+    network_mode: host
+    environment:
+      <<: *host-env
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=Wbskt.Database;User ID=wbskt_engine;Password=Wb1-e2e-Host-Login;Encrypt=False;
+    volumes:
+      - ../config/serilog.json:/Config/serilog.json:ro
+      # One-second schedule, presence and bookmark ticks: the timing scenarios depend on them.
+      - ../../Config/workflow-engine.json:/Config/workflow-engine.json:ro
+      - ${E2E_DEV_CERT_DIR:?run Tests/Wbskt.E2E.FeatureTests/e2e-up.sh, which sets it}:/https:ro
+    # Liveness, as in production: only the leader reports ready.
+    healthcheck:
+      <<: *host-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:5030/healthz"]
+    depends_on:
+      <<: *host-depends
