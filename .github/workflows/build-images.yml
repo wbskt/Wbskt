@@ -35,7 +35,34 @@ jobs:
       - name: Unit tests
         run: |
           dotnet test Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj \
-            --nologo -v q --logger "console;verbosity=normal"
+            --nologo -v q --logger "console;verbosity=normal" \
+            --logger trx --results-directory TestResults --collect:"XPlat Code Coverage"
+
+      # Coverage and per-test results, kept whether or not the run above passed.
+      - name: Coverage report
+        if: always()
+        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        with:
+          reports: '**/coverage.cobertura.xml'
+          targetdir: coverage-report
+          reporttypes: 'HtmlInline;MarkdownSummaryGithub'
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [[ -f coverage-report/SummaryGithub.md ]]; then
+            cat coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-tests-results
+          path: |
+            TestResults/**/*.trx
+            coverage-report/
+          if-no-files-found: ignore
 
   integration:
     runs-on: ubuntu-latest
@@ -94,7 +121,8 @@ jobs:
         run: |
           set -o pipefail
           dotnet test Tests/Wbskt.Workflow.Engine.Host.IntegrationTests/Wbskt.Workflow.Engine.Host.IntegrationTests.csproj \
-            --nologo -v q --logger "console;verbosity=detailed" 2>&1 | tee test-output.txt
+            --nologo -v q --logger "console;verbosity=detailed" \
+            --logger trx --results-directory TestResults --collect:"XPlat Code Coverage" 2>&1 | tee test-output.txt
 
       # Every test here is a [SkippableFact] that skips itself when SQL Edge is unreachable, and a
       # fully-skipped run still exits 0. Without this check CI would report green for a suite that
@@ -113,6 +141,32 @@ jobs:
             echo "::error::no integration tests executed"
             exit 1
           fi
+
+      # Coverage and per-test results, kept whether or not the run above passed.
+      - name: Coverage report
+        if: always()
+        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        with:
+          reports: '**/coverage.cobertura.xml'
+          targetdir: coverage-report
+          reporttypes: 'HtmlInline;MarkdownSummaryGithub'
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [[ -f coverage-report/SummaryGithub.md ]]; then
+            cat coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-tests-results
+          path: |
+            TestResults/**/*.trx
+            coverage-report/
+          if-no-files-found: ignore
 
   # The black-box suite in Tests/Wbskt.E2E.FeatureTests, against all four hosts started from source
   # as Development. That environment is what raises the auth host's per-IP rate limit (every test
@@ -214,7 +268,8 @@ jobs:
         run: |
           set -o pipefail
           dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj \
-            --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee e2e-output.txt
+            --nologo -v q --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=e2e.trx" --results-directory TestResults 2>&1 | tee e2e-output.txt
 
       # Then the device-revocation scenario that restarts the socket host, which the run above
       # skips: a revoked device's token must still be refused once the host has forgotten every
@@ -227,7 +282,8 @@ jobs:
           set -o pipefail
           dotnet test Tests/Wbskt.E2E.FeatureTests/Wbskt.E2E.FeatureTests.csproj --no-build \
             --filter "FullyQualifiedName~DeviceRevocationTests.DEV_REV_02" \
-            --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee sr-output.txt
+            --nologo -v q --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=sr.trx" --results-directory TestResults 2>&1 | tee sr-output.txt
 
       # Then the rate-limit scenarios, which the run above skips. They exhaust the shared per-IP budget
       # on purpose, and the budget outlives a test (AUTH_RL_01 leaves the next one unable to even
@@ -256,7 +312,8 @@ jobs:
           for t in $tests; do
             Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
             dotnet test "$project" --no-build --filter "FullyQualifiedName~RateLimitingTests.$t" \
-              --nologo -v q --logger "console;verbosity=normal" 2>&1 | tee -a rl-output.txt || status=1
+              --nologo -v q --logger "console;verbosity=normal" \
+              --logger "trx;LogFileName=rl-$t.trx" --results-directory TestResults 2>&1 | tee -a rl-output.txt || status=1
           done
           # The 429 row of the error-shape contract theory, which the main pass skips for the same reason.
           Tests/Wbskt.E2E.FeatureTests/start-hosts.sh auth
@@ -293,6 +350,23 @@ jobs:
             tail -n 300 "$f"
             echo "::endgroup::"
           done
+
+      # Per failing test, the host log lines written while it ran (the window comes from the trx).
+      # The tail above is the whole job's last moments; this is what each red test actually saw.
+      - name: Host logs per failing test
+        if: failure()
+        run: python3 Tests/Wbskt.E2E.FeatureTests/host-log-tail.py TestResults e2e-hosts
+
+      - name: Upload host logs and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            e2e-hosts/*.log
+            *-output.txt
+            TestResults/**/*.trx
+          if-no-files-found: ignore
 
   scan:
     runs-on: ubuntu-latest
