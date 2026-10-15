@@ -601,6 +601,66 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "PARALLEL_FOREACH_WITHOUT_JOIN");
     }
 
+    // ----------------------------------------------- Joins without a cohort
+
+    [Fact]
+    public void Validate_rejects_a_Join_placed_after_a_Forks_Join()
+    {
+        // The first Join's winner carries no token on, so the second was reached by a branch with
+        // no cohort to count it in: the engine fails it with JOIN_NO_TOKEN.
+        var forkId = Guid.NewGuid();
+        var joinId = Guid.NewGuid();
+        var secondJoinId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId), Join(secondJoinId)],
+            [
+                new Edge((forkId, "a"), (joinId, "in")),
+                new Edge((forkId, "b"), (joinId, "in")),
+                new Edge((joinId, "default"), (secondJoinId, "in"))
+            ]);
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "JOIN_WITHOUT_COHORT" && i.NodeId == secondJoinId);
+        Assert.DoesNotContain(result.Issues, i => i.Code == "JOIN_WITHOUT_COHORT" && i.NodeId == joinId);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_Join_that_no_fan_out_feeds()
+    {
+        var gateId = Guid.NewGuid();
+        var joinId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Gate(gateId), Join(joinId)],
+            [
+                new Edge((gateId, "true"), (joinId, "in")),
+                new Edge((gateId, "false"), (joinId, "in"))
+            ]);
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "JOIN_WITHOUT_COHORT" && i.NodeId == joinId);
+    }
+
+    [Fact]
+    public void Validate_accepts_the_Joins_of_a_Fork_nested_in_another_Forks_branch()
+    {
+        var outerFork = Guid.NewGuid();
+        var innerFork = Guid.NewGuid();
+        var innerJoin = Guid.NewGuid();
+        var outerJoin = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(outerFork, "a", "b"), Fork(innerFork, "x", "y"), Join(innerJoin), Join(outerJoin)],
+            [
+                new Edge((outerFork, "a"), (innerFork, "in")),
+                new Edge((innerFork, "x"), (innerJoin, "in")),
+                new Edge((innerFork, "y"), (innerJoin, "in")),
+                new Edge((innerJoin, "default"), (outerJoin, "in")),
+                new Edge((outerFork, "b"), (outerJoin, "in"))
+            ]);
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "JOIN_WITHOUT_COHORT");
+    }
+
     // ----------------------------------------------- Fork/Join pairing
 
     [Fact]

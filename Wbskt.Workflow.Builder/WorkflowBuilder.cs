@@ -552,9 +552,18 @@ public sealed class WorkflowBuilder
 
         if (scope.BodyTail is { } bodyTail)
         {
-            // Leaves the head on the Join's "default" port, so whatever follows runs once, after the
-            // cohort converges - rather than once per item.
-            AddJoin(joinMode, bodyTail);
+            // A body that already converges on a Join of its own - one it added itself, or one a gate
+            // or fork inside it was given at the loop's own level - keeps it: a second Join after the
+            // first would be reached by the first's winner with no cohort left to count it in, and the
+            // engine fails that branch with JOIN_NO_TOKEN. A Join that belongs to a construct nested in
+            // the body (a Fork's own) is one level down and does not count; the walk the engine uses
+            // to find a cohort's Join tells the two apart.
+            if (WorkflowGraph.FindJoinForCohort(Build(), pfeId, [PortNames.Body]) is null)
+            {
+                // Leaves the head on the Join's "default" port, so whatever follows runs once, after
+                // the cohort converges - rather than once per item.
+                AddJoin(joinMode, bodyTail);
+            }
         }
         else
         {

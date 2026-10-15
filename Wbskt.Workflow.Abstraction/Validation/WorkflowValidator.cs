@@ -48,6 +48,7 @@ public sealed class WorkflowValidator
         ValidateRetryPolicies(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
         ValidateForkJoinPairing(definition, issues);
+        ValidateJoinsBelongToCohorts(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
         ValidateSubWorkflowSelfReference(definition, workflowRefId, issues);
         ValidateLocalVariableNames(definition, issues);
@@ -325,6 +326,47 @@ public sealed class WorkflowValidator
                     $"Fork node '{fork.NodeId}' has branches that reach different Join nodes ({string.Join(", ", walk.Joins.Select(join => $"'{join.NodeId}'"))}); every branch of a Fork must converge on the same Join.",
                     fork.NodeId));
             }
+        }
+    }
+
+    /// <summary>
+    /// Every Join must be the Join some Fork or ParallelForEach converges on at its own level. A Join
+    /// that is not - one placed after another Join, or on a path no fan-out feeds - is reached by a
+    /// branch carrying no join token, and the engine fails that branch with JOIN_NO_TOKEN. Until the
+    /// winner of a Join dropped its token, the second Join silently ended the branch instead, and
+    /// everything after it was skipped, so this shape could be published and look like it ran.
+    /// </summary>
+    private static void ValidateJoinsBelongToCohorts(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        var cohortJoins = new HashSet<Guid>();
+        foreach (var node in def.Nodes)
+        {
+            IEnumerable<string>? ports = node switch
+            {
+                ForkNode { Config: not null } fork => fork.Config.Branches,
+                ParallelForEachNode => [BodyPortId],
+                _ => null
+            };
+            if (ports is null)
+            {
+                continue;
+            }
+
+            // Every Join reached at the cohort's level counts here; a Fork whose branches reach
+            // different Joins is reported by its own rule, not twice.
+            foreach (JoinNode join in WorkflowGraph.WalkCohort(def, node.NodeId, ports).Joins)
+            {
+                cohortJoins.Add(join.NodeId);
+            }
+        }
+
+        foreach (var join in def.Nodes.OfType<JoinNode>().Where(join => !cohortJoins.Contains(join.NodeId)))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "JOIN_WITHOUT_COHORT",
+                $"Join node '{join.NodeId}' is not the Join of any Fork or ParallelForEach at its level, so no branch that reaches it carries a cohort to join; remove it, or place it where a fan-out's branches converge.",
+                join.NodeId));
         }
     }
 
