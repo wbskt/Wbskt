@@ -34,6 +34,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly IBranchResultDispatcher _resultDispatcher;
     private readonly BranchEndings _endings;
     private readonly int _maxBranchLocalStateBytes;
+    private readonly TimeSpan _retryParkThreshold;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<BranchLoop>? _logger;
 
@@ -67,6 +68,7 @@ internal sealed class BranchLoop : IBranchLoop
         _resultDispatcher = resultDispatcher;
         _endings = endings;
         _maxBranchLocalStateBytes = options?.Value.MaxBranchLocalStateBytes ?? new WorkflowEngineOptions().MaxBranchLocalStateBytes;
+        _retryParkThreshold = options?.Value.RetryParkThreshold ?? new WorkflowEngineOptions().RetryParkThreshold;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }
@@ -125,6 +127,10 @@ internal sealed class BranchLoop : IBranchLoop
                 return;
             }
 
+            // The attempt a retry park left is taken off the branch before the node sees it. Every
+            // result is then written from a row without it - a retry park puts it back with the next
+            // number - so it goes whichever way the node leaves: on, failed, forked or parked for real.
+            (branchRow, int? parkedAttempt) = TakeParkedAttempt(branchRow);
             BranchContext branchContext = BuildBranchContext(branchRow, runRow, definition.WorkspaceId);
 
             NodeExecutionResult? result;
@@ -138,7 +144,7 @@ internal sealed class BranchLoop : IBranchLoop
             }
             else
             {
-                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, linkedToken, ct);
+                result = await ExecuteNodeAsync(runId, branchId, runRow, branchRow, definition, node, branchContext, parkedAttempt, linkedToken, ct);
                 if (result is null)
                 {
                     // Host shutdown interrupted the executor; the branch stays Active for recovery.
@@ -186,6 +192,7 @@ internal sealed class BranchLoop : IBranchLoop
         WorkflowDefinition definition,
         BaseNode node,
         BranchContext branchContext,
+        int? parkedAttempt,
         CancellationToken linkedToken,
         CancellationToken ct)
     {
@@ -201,8 +208,11 @@ internal sealed class BranchLoop : IBranchLoop
 
         // The resumer and the timer leave a parked branch Waiting at its node and only dispatch it; the
         // node flips it back to Active when it moves on. So a branch that arrives here Waiting is on the
-        // resume visit of a node it already paid to park on.
-        bool isResumeVisit = string.Equals(branchRow.Status, BranchStatus.Waiting, StringComparison.Ordinal);
+        // resume visit of a node it already paid to park on. Not so a branch parked for a retry
+        // backoff: what wakes it is the next attempt, real work that the in-process wait it replaces
+        // was charged for too, so making it free would have turned every long backoff into a free retry.
+        bool isResumeVisit = string.Equals(branchRow.Status, BranchStatus.Waiting, StringComparison.Ordinal)
+            && parkedAttempt is null;
         try
         {
             // Resolving the executor MUST stay inside this try. An unregistered node kind throws,
@@ -233,7 +243,9 @@ internal sealed class BranchLoop : IBranchLoop
                 // Summed rather than written per attempt: a row per charge would roughly double
                 // history volume for a number that belongs on the outcome event anyway.
                 onCharge: cost => creditsCharged += cost,
-                isResumeVisit: isResumeVisit);
+                isResumeVisit: isResumeVisit,
+                firstAttempt: parkedAttempt ?? 1,
+                retryParkThreshold: _retryParkThreshold);
         }
         catch (Exception ex)
         {
@@ -334,6 +346,28 @@ internal sealed class BranchLoop : IBranchLoop
     private static long SizeOf(IReadOnlyDictionary<string, JsonElement> localState)
     {
         return System.Text.Encoding.UTF8.GetByteCount(BranchLocalState.Serialize(localState));
+    }
+
+    /// <summary>
+    /// Removes a retry park's attempt marker from <paramref name="branchRow"/> (in memory; the row is
+    /// written by whichever handler takes the node's result) and returns the attempt it held, or null
+    /// when the branch is not parked for a retry.
+    /// </summary>
+    private static (BranchRow Branch, int? ParkedAttempt) TakeParkedAttempt(BranchRow branchRow)
+    {
+        IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);
+        if (!localState.ContainsKey(RetryExecutor.RetryAttemptKey))
+        {
+            return (branchRow, null);
+        }
+
+        // Only a Waiting branch is on a retry park's wake. On any other the marker is left over from a
+        // write that was cut short, and the attempt is not one this visit is owed.
+        int? attempt = string.Equals(branchRow.Status, BranchStatus.Waiting, StringComparison.Ordinal)
+            ? RetryExecutor.ReadParkedAttempt(localState)
+            : null;
+        string localJson = BranchLocalState.Serialize(BranchLocalState.Merge(branchRow.LocalJson, new Dictionary<string, JsonElement>(), [RetryExecutor.RetryAttemptKey]));
+        return (branchRow with { LocalJson = localJson }, attempt);
     }
 
     internal static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)

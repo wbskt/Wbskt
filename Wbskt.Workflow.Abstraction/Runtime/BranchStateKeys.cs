@@ -32,6 +32,9 @@ public static class BranchStateKeys
     public const string CommandAwaiting = "__command_awaiting";
     public const string DelayUntil = "__delay_until";
 
+    /// <summary>The attempt a node parked for a retry backoff runs next when its timer wakes it.</summary>
+    public const string RetryAttempt = "__retry_attempt";
+
     /// <summary>The counts a Join continuation carries; written without the engine prefix.</summary>
     public const string JoinContributed = "joinContributed";
     public const string JoinSucceeded = "joinSucceeded";
@@ -56,6 +59,7 @@ public static class BranchStateKeys
         SubWorkflow,
         CommandAwaiting,
         DelayUntil,
+        RetryAttempt,
         JoinContributed,
         JoinSucceeded,
         JoinFailed
