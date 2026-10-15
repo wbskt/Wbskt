@@ -28,29 +28,6 @@ public sealed class NodeExecutorRegistryTests
     }
 
     /// <summary>
-    /// The validator rejects kinds outside <see cref="NodeKind.Executable"/> at publish time, so that
-    /// set must match what the engine can actually run. Without this the two drift and either a
-    /// runnable node gets rejected, or an unrunnable one publishes and fails mid-run.
-    /// </summary>
-    [Fact]
-    public void Every_executable_kind_has_a_registered_executor()
-    {
-        using ServiceProvider provider = BuildRuntime();
-        using IServiceScope scope = provider.CreateScope();
-
-        var registeredKinds = scope.ServiceProvider
-            .GetServices<INodeExecutor>()
-            .Select(executor => executor.Kind)
-            .ToHashSet(StringComparer.Ordinal);
-
-        string[] missing = NodeKind.Executable.Where(kind => !registeredKinds.Contains(kind)).ToArray();
-        Assert.True(missing.Length == 0, $"No executor registered for executable kind(s): {string.Join(", ", missing)}");
-
-        string[] unknown = registeredKinds.Where(kind => !NodeKind.All.Contains(kind)).ToArray();
-        Assert.True(unknown.Length == 0, $"Executor registered for kind(s) missing from NodeKind.All: {string.Join(", ", unknown)}");
-    }
-
-    /// <summary>
     /// Pins every registered executor's replay answer, so a new executor - or a change to one - has to
     /// take a position here. A node wrongly called replay-safe repeats its effect after a crash (a
     /// shared Increment counted twice); one wrongly left at the default only writes idempotency rows
@@ -108,7 +85,8 @@ public sealed class NodeExecutorRegistryTests
             : new EndNode { NodeId = Guid.NewGuid(), Name = kind, Ports = [] };
     }
 
-    private static ServiceProvider BuildRuntime()
+    /// <summary>The engine runtime as the host wires it, with its outbound publishers mocked.</summary>
+    internal static ServiceProvider BuildRuntime()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

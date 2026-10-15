@@ -80,27 +80,19 @@ public sealed class WorkflowValidator
     }
 
     /// <summary>
-    /// Rejects kinds the engine cannot run, so an author finds out at publish rather than watching a
-    /// run fail partway through.
+    /// Rejects a kind with no descriptor in <see cref="NodeKinds.All"/>. Such a node has no expected
+    /// ports, no price and no executor, so it would publish with nothing checked and fail mid-run.
     /// </summary>
     private static void ValidateNodeKinds(WorkflowDefinition def, List<ValidationIssue> issues)
     {
         foreach (var node in def.Nodes)
         {
-            if (!NodeKind.All.Contains(node.Kind))
+            if (!NodeKinds.TryGet(node.Kind, out _))
             {
                 issues.Add(new ValidationIssue(
                     ValidationSeverity.Error,
                     "UNKNOWN_NODE_KIND",
                     $"Node '{node.NodeId}' has unknown kind '{node.Kind}'.",
-                    node.NodeId));
-            }
-            else if (NodeKind.NotYetImplemented.Contains(node.Kind))
-            {
-                issues.Add(new ValidationIssue(
-                    ValidationSeverity.Error,
-                    "NODE_KIND_NOT_IMPLEMENTED",
-                    $"Node '{node.NodeId}' uses kind '{node.Kind}', which is not implemented yet and would fail at runtime.",
                     node.NodeId));
             }
         }
@@ -768,8 +760,15 @@ public sealed class WorkflowValidator
     {
         foreach (var node in def.Nodes)
         {
-            var expectedPorts = GetExpectedPorts(node);
-            
+            // A kind with no descriptor has no port table to check against; ValidateNodeKinds already
+            // reports it as an error, and listing each of its ports as unexpected would only add noise.
+            if (!NodeKinds.TryGet(node.Kind, out NodeKindDescriptor? descriptor))
+            {
+                continue;
+            }
+
+            var expectedPorts = descriptor.ExpectedPorts(node);
+
             // Check for missing ports
             foreach (var expected in expectedPorts)
             {
@@ -781,7 +780,7 @@ public sealed class WorkflowValidator
 
             // Check for extra ports. Any action node MAY declare an optional "error" output - it is
             // what an OnFailure of ContinueOnError leaves through - so it is never "unexpected".
-            bool allowsOptionalErrorPort = node.Kind.StartsWith("action:", StringComparison.Ordinal);
+            bool allowsOptionalErrorPort = descriptor.Category == NodeCategory.Action;
 
             foreach (var actual in node.Ports)
             {
@@ -800,82 +799,7 @@ public sealed class WorkflowValidator
         }
     }
 
-    private static IReadOnlyCollection<PortDefinition> GetExpectedPorts(Models.Nodes.BaseNode node)
-    {
-        var inputIn = new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" };
-        var outputDefault = new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" };
-        var outputTrue = new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" };
-        var outputFalse = new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" };
-        var outputBody = new PortDefinition { PortId = "body", Direction = PortDirection.Output, Label = "Body" };
-        var outputDone = new PortDefinition { PortId = "done", Direction = PortDirection.Output, Label = "Done" };
-        var outputEmpty = new PortDefinition { PortId = "empty", Direction = PortDirection.Output, Label = "Empty" };
-
-        if (node.Kind.StartsWith("trigger:"))
-        {
-            return [outputDefault];
-        }
-        
-        if (node.Kind.StartsWith("action:"))
-        {
-            // A send-command step that waits for the device leaves by what became of the command.
-            if (node is SendClientMessageNode { Config.AwaitAck: true })
-            {
-                return [inputIn,
-                    new PortDefinition { PortId = "acked", Direction = PortDirection.Output, Label = "Acked" },
-                    new PortDefinition { PortId = "failed", Direction = PortDirection.Output, Label = "Failed" },
-                    new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }];
-            }
-
-            if (node.Kind == "action:webhook")
-            {
-                return [inputIn, outputDefault, new PortDefinition { PortId = "error", Direction = PortDirection.Output, Label = "Error" }
-                ];
-            }
-            return [inputIn, outputDefault];
-        }
-
-        switch (node.Kind)
-        {
-            case Models.Nodes.NodeKind.ControlLogic:
-                return [inputIn, outputTrue, outputFalse];
-            
-            case Models.Nodes.NodeKind.ControlForEach:
-                return [inputIn, outputBody, outputDone];
-
-            case Models.Nodes.NodeKind.ControlParallelForEach:
-                return [inputIn, outputBody, outputEmpty];
-            
-            case Models.Nodes.NodeKind.ControlFork:
-                var forkOutputs = new List<PortDefinition> { inputIn };
-                if (node is Models.Nodes.Controls.ForkNode { Config: not null } forkNode)
-                {
-                    foreach (var branch in forkNode.Config.Branches)
-                    {
-                        forkOutputs.Add(new PortDefinition { PortId = branch, Direction = PortDirection.Output, Label = branch });
-                    }
-                }
-                return forkOutputs;
-                
-            case Models.Nodes.NodeKind.ControlAwaitSignal:
-                if (node is Models.Nodes.Controls.AwaitSignalNode awaitNode && awaitNode.Config?.Ttl is not null)
-                {
-                    return [inputIn, outputDefault, new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }];
-                }
-                return [inputIn, outputDefault];
-
-            case Models.Nodes.NodeKind.ControlWaitForHttp:
-                // WaitForHttp always has a mandatory Ttl, so the timeout port is always present.
-                return [inputIn, outputDefault, new PortDefinition { PortId = "timeout", Direction = PortDirection.Output, Label = "Timeout" }];
-                
-            case Models.Nodes.NodeKind.ControlEnd:
-            case Models.Nodes.NodeKind.ControlFailRun:
-                return [inputIn];
-
-            default:
-                // Delay, Join, Variable, SubWorkflow
-                return [inputIn, outputDefault];
-        }
-    }
+    /// <summary>The node's expected ports from its kind's descriptor; none for an unknown kind.</summary>
+    private static IReadOnlyCollection<PortDefinition> GetExpectedPorts(BaseNode node) =>
+        NodeKinds.TryGet(node.Kind, out NodeKindDescriptor? descriptor) ? descriptor.ExpectedPorts(node) : [];
 }
-
-

@@ -14,19 +14,6 @@ namespace Wbskt.Workflow.Runtime;
 /// </remarks>
 internal sealed class DefaultCreditCostCalculator : ICreditCostCalculator
 {
-    // A run's root branch starts at its trigger node, which only hands the inbound payload on. With no
-    // entry in the price list every trigger fell through to DefaultCost, so every run paid a full
-    // credit before its first real node. Excluded here rather than priced at zero in the table, which
-    // keeps the table's rule that every kind it prices costs something.
-    private static readonly IReadOnlySet<string> TriggerKinds = new HashSet<string>(StringComparer.Ordinal)
-    {
-        NodeKind.TriggerClient,
-        NodeKind.TriggerClientPresence,
-        NodeKind.TriggerSchedule,
-        NodeKind.TriggerWebhook,
-        NodeKind.TriggerManual
-    };
-
     private readonly CreditCostOptions _options;
 
     /// <param name="options">Optional so hand-built test callers get the default price list.</param>
@@ -37,6 +24,13 @@ internal sealed class DefaultCreditCostCalculator : ICreditCostCalculator
 
     public decimal Calculate(BaseNode node)
     {
-        return TriggerKinds.Contains(node.Kind) ? 0m : _options.CostFor(node.Kind);
+        // A run's root branch starts at its trigger node, which only hands the inbound payload on. With no
+        // entry in the price list every trigger fell through to DefaultCost, so every run paid a full
+        // credit before its first real node. Excluded here by category rather than priced at zero in the
+        // table, which keeps the table's rule that every kind it prices costs something - and a trigger
+        // stays free even if configuration names it.
+        return NodeKinds.TryGet(node.Kind, out NodeKindDescriptor? descriptor) && descriptor.Category == NodeCategory.Trigger
+            ? 0m
+            : _options.CostFor(node.Kind);
     }
 }
