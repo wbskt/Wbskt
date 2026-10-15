@@ -27,26 +27,10 @@ public static class NodeKind
     public const string ActionDiscord = "action:discord";
     public const string ActionNtfy = "action:ntfy";
 
-    /// <summary>Every kind the definition model can express.</summary>
-    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
-    {
-        TriggerClient, TriggerClientPresence, TriggerSchedule, TriggerWebhook, TriggerManual,
-        ControlLogic, ControlForEach, ControlParallelForEach, ControlJoin, ControlFork,
-        ControlDelay, ControlVariable, ControlSubWorkflow, ControlWaitForHttp, ControlAwaitSignal,
-        ControlFailRun, ControlEnd,
-        ActionClientMessage, ActionEmail, ActionWebhook, ActionTelegram, ActionToast, ActionDiscord, ActionNtfy
-    };
-
     /// <summary>
-    /// Kinds the model can express but the engine cannot execute. The validator rejects them at
-    /// publish, so an author gets an error instead of a run that fails partway through.
-    ///
-    /// Keep this in sync with the executors: when one of these is implemented, remove it here.
-    /// <c>NodeExecutorRegistryTests</c> pins the relationship between this set and the registry.
+    /// Every kind the definition model can express, read off <see cref="NodeKinds.All"/> so the two
+    /// cannot drift.
     /// </summary>
-    public static readonly IReadOnlySet<string> NotYetImplemented = new HashSet<string>(StringComparer.Ordinal);
-
-    /// <summary>Kinds that can actually run - what a published definition may contain.</summary>
-    public static IEnumerable<string> Executable => All.Where(kind => !NotYetImplemented.Contains(kind));
+    public static readonly IReadOnlySet<string> All =
+        NodeKinds.All.Select(descriptor => descriptor.Kind).ToHashSet(StringComparer.Ordinal);
 }
-

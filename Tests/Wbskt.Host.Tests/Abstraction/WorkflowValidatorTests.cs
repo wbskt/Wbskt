@@ -247,8 +247,7 @@ public sealed class WorkflowValidatorRuleTests
     public void Validate_accepts_email_now_that_it_has_an_executor()
     {
         // action:email used to publish cleanly and then fail the run at execution, so the validator
-        // rejected it. WF-08 implemented the executor and emptied NotYetImplemented, so it must now
-        // publish - this is the test that would catch removing a kind from that set without wiring one.
+        // rejected it until its executor landed. It must now publish with no kind error.
         var def = ValidWorkflowBuilder.Build();
         var email = new EmailNotificationNode
         {
@@ -260,17 +259,32 @@ public sealed class WorkflowValidatorRuleTests
 
         var result = Validator.Validate(def with { Nodes = [.. def.Nodes, email] });
 
-        Assert.DoesNotContain(result.Issues, i => i.Code == "NODE_KIND_NOT_IMPLEMENTED");
+        Assert.DoesNotContain(result.Issues, i => i.Code == "UNKNOWN_NODE_KIND");
     }
 
     [Fact]
-    public void Every_modelled_kind_is_currently_executable()
+    public void Validate_rejects_a_kind_with_no_descriptor()
     {
-        // The NODE_KIND_NOT_IMPLEMENTED rule stays for the next kind that lands ahead of its executor;
-        // right now the set is empty, and NodeExecutorRegistryTests pins that every executable kind
-        // really does have an executor behind it.
-        Assert.Empty(NodeKind.NotYetImplemented);
-        Assert.Equal(NodeKind.All.OrderBy(k => k), NodeKind.Executable.OrderBy(k => k));
+        // A kind missing from the descriptor list has no port table, no price and no executor. It used
+        // to be validated with no port check at all; now it is an error, and only that one error - its
+        // ports are not also each reported as unexpected.
+        var def = ValidWorkflowBuilder.Build();
+        var unknown = new UndescribedNode
+        {
+            NodeId = Guid.NewGuid(),
+            Name = "mystery",
+            Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = "whatever", Direction = PortDirection.Output, Label = "Out" }]
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, unknown] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "UNKNOWN_NODE_KIND" && i.NodeId == unknown.NodeId);
+        Assert.DoesNotContain(result.Issues, i => i.Code is "EXTRA_PORT" or "MISSING_PORT");
+    }
+
+    private sealed record UndescribedNode : BaseNode
+    {
+        public override string Kind => "action:undescribed";
     }
 
     [Fact]
@@ -287,7 +301,7 @@ public sealed class WorkflowValidatorRuleTests
 
         var result = Validator.Validate(def with { Nodes = [.. def.Nodes, toast] });
 
-        Assert.DoesNotContain(result.Issues, i => i.Code is "NODE_KIND_NOT_IMPLEMENTED" or "UNKNOWN_NODE_KIND");
+        Assert.DoesNotContain(result.Issues, i => i.Code == "UNKNOWN_NODE_KIND");
     }
 
     // ------------------------------------------------- WF-19.2/.4 onFailure

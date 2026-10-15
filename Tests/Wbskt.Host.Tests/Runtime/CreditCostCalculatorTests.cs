@@ -64,11 +64,30 @@ public sealed class CreditCostCalculatorTests
     [Fact]
     public void Every_executable_kind_has_a_price()
     {
-        // A kind that silently prices at the default is fine; one that prices at zero is not, because
-        // it would be invisible to the budget and to the meter.
-        var options = new CreditCostOptions();
+        // Every non-trigger kind is priced by its own descriptor rather than falling through to the
+        // default, and priced above zero, because a free kind would be invisible to the budget and to
+        // the meter. Triggers are the one exception, and are free by category, not by table entry.
+        var options = new CreditCostOptions { DefaultCost = 0m };
 
-        Assert.All(NodeKind.Executable, kind => Assert.True(options.CostFor(kind) > 0m, $"{kind} priced at {options.CostFor(kind)}"));
+        Assert.All(NodeKinds.All.Where(descriptor => descriptor.Category != NodeCategory.Trigger), descriptor =>
+        {
+            Assert.True(CreditCostOptions.BuiltIn.ContainsKey(descriptor.Kind), $"{descriptor.Kind} has no built-in price");
+            Assert.True(options.CostFor(descriptor.Kind) > 0m, $"{descriptor.Kind} priced at {options.CostFor(descriptor.Kind)}");
+        });
+
+        Assert.All(NodeKinds.All.Where(descriptor => descriptor.Category == NodeCategory.Trigger), descriptor =>
+            Assert.False(CreditCostOptions.BuiltIn.ContainsKey(descriptor.Kind), $"{descriptor.Kind} is a trigger but is in the price list"));
+    }
+
+    [Fact]
+    public void A_trigger_stays_free_even_when_configuration_prices_it()
+    {
+        var calculator = new DefaultCreditCostCalculator(Options.Create(new CreditCostOptions
+        {
+            PerKind = new Dictionary<string, decimal> { [NodeKind.TriggerManual] = 3m }
+        }));
+
+        Assert.Equal(0m, calculator.Calculate(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ManualTriggerConfig { Description = "d" } }));
     }
 
     private static BaseNode Webhook() => new WebhookNotificationNode

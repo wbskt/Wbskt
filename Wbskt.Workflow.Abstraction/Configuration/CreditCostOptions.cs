@@ -29,39 +29,17 @@ public sealed class CreditCostOptions
     public IReadOnlyDictionary<string, decimal> PerKind { get; init; } = new Dictionary<string, decimal>(StringComparer.Ordinal);
 
     /// <summary>
-    /// The default price list. Roughly: outbound I/O 5, in-process messaging 1, bookkeeping 0.1.
+    /// The default price list, read off each kind's <see cref="NodeKindDescriptor.DefaultCreditCost"/>.
+    /// Roughly: outbound I/O 5, in-process messaging 1, bookkeeping 0.1.
     /// </summary>
-    public static readonly IReadOnlyDictionary<string, decimal> BuiltIn = new Dictionary<string, decimal>(StringComparer.Ordinal)
-    {
-        // Leaves the process, over somebody else's network, and can be retried.
-        [NodeKind.ActionWebhook] = 5.0m,
-        [NodeKind.ActionEmail] = 5.0m,
-        [NodeKind.ActionTelegram] = 5.0m,
-        [NodeKind.ActionDiscord] = 5.0m,
-        [NodeKind.ActionNtfy] = 5.0m,
-
-        // Crosses the bus but stays inside the platform.
-        [NodeKind.ActionClientMessage] = 1.0m,
-        [NodeKind.ActionToast] = 0.5m,
-
-        // A child run is charged against its own budget, so the parent pays only for dispatching it.
-        [NodeKind.ControlSubWorkflow] = 1.0m,
-
-        // Bookkeeping: a row write at most, usually a dictionary write.
-        [NodeKind.ControlLogic] = 0.1m,
-        [NodeKind.ControlForEach] = 0.1m,
-        [NodeKind.ControlParallelForEach] = 0.1m,
-        [NodeKind.ControlJoin] = 0.1m,
-        [NodeKind.ControlFork] = 0.1m,
-        [NodeKind.ControlVariable] = 0.1m,
-        [NodeKind.ControlEnd] = 0.1m,
-        [NodeKind.ControlFailRun] = 0.1m,
-
-        // Parking is cheap to enter; the waiting itself costs nothing, since nothing is running.
-        [NodeKind.ControlDelay] = 0.1m,
-        [NodeKind.ControlWaitForHttp] = 0.1m,
-        [NodeKind.ControlAwaitSignal] = 0.1m
-    };
+    /// <remarks>
+    /// Triggers are left out rather than listed at zero: they are never charged (the calculator
+    /// excludes them), and leaving them out keeps this table's rule that every kind it prices costs
+    /// something.
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<string, decimal> BuiltIn = NodeKinds.All
+        .Where(descriptor => descriptor.Category != NodeCategory.Trigger)
+        .ToDictionary(descriptor => descriptor.Kind, descriptor => descriptor.DefaultCreditCost, StringComparer.Ordinal);
 
     /// <summary>Resolves the cost of a kind: explicit override, then built-in, then the default.</summary>
     public decimal CostFor(string kind)

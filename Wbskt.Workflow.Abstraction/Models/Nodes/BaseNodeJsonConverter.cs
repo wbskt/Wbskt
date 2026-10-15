@@ -1,8 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
-using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes;
 
@@ -39,32 +36,9 @@ public sealed class BaseNodeJsonConverter : JsonConverter<BaseNode>
         writer.WriteEndObject();
     }
 
-    private static Type ResolveNodeType(string? kind) => kind switch
-    {
-        NodeKind.ControlLogic => typeof(LogicGateNode),
-        NodeKind.ControlDelay => typeof(DelayNode),
-        NodeKind.ControlForEach => typeof(ForEachNode),
-        NodeKind.ControlParallelForEach => typeof(ParallelForEachNode),
-        NodeKind.ControlJoin => typeof(JoinNode),
-        NodeKind.ControlFork => typeof(ForkNode),
-        NodeKind.ControlVariable => typeof(VariableNode),
-        NodeKind.ControlSubWorkflow => typeof(SubWorkflowNode),
-        NodeKind.ControlWaitForHttp => typeof(WaitForHttpNode),
-        NodeKind.ControlAwaitSignal => typeof(AwaitSignalNode),
-        NodeKind.ControlFailRun => typeof(FailRunNode),
-        NodeKind.ControlEnd => typeof(EndNode),
-        NodeKind.TriggerClient => typeof(ClientTriggerNode),
-        NodeKind.TriggerClientPresence => typeof(ClientPresenceTriggerNode),
-        NodeKind.TriggerSchedule => typeof(ScheduleTriggerNode),
-        NodeKind.TriggerWebhook => typeof(WebhookTriggerNode),
-        NodeKind.TriggerManual => typeof(ManualTriggerNode),
-        NodeKind.ActionClientMessage => typeof(SendClientMessageNode),
-        NodeKind.ActionEmail => typeof(EmailNotificationNode),
-        NodeKind.ActionWebhook => typeof(WebhookNotificationNode),
-        NodeKind.ActionTelegram => typeof(TelegramNotificationNode),
-        NodeKind.ActionToast => typeof(ToastNotificationNode),
-        NodeKind.ActionDiscord => typeof(DiscordNotificationNode),
-        NodeKind.ActionNtfy => typeof(NtfyNotificationNode),
-        _ => throw new JsonException($"Unsupported node kind '{kind}'.")
-    };
+    // The model type comes from the kind's descriptor, so a kind added there needs no edit here.
+    private static Type ResolveNodeType(string? kind) =>
+        NodeKinds.TryGet(kind, out NodeKindDescriptor? descriptor)
+            ? descriptor.ModelType
+            : throw new JsonException($"Unsupported node kind '{kind}'.");
 }
