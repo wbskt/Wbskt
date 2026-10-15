@@ -21,7 +21,9 @@ BEGIN
         r.CancellationRequestedAt,
         r.CancellationReason,
         r.CreditBudget,
-        r.CreatedAt
+        r.CreatedAt,
+        r.ParentRunRefId,
+        r.OutputJson
     FROM dbo.Runs r
     WHERE r.Status = @Status
     ORDER BY r.Id;

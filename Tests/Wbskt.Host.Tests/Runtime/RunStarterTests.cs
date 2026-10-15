@@ -212,6 +212,41 @@ public sealed class RunStarterTests
         Assert.Equal((decimal)expected, runProvider.CreatedRun!.CreditBudget);
     }
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task Start_records_the_parent_a_sub_workflow_step_named_and_only_for_such_a_start(bool startsChildRun, bool recorded)
+    {
+        // A manual start from the API can put anything in its body; a run that claimed another's run as
+        // its parent would be cancelled with it. Only the step's own start is believed.
+        Guid parent = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+        InboundEvent evt = new InboundEvent(
+            "manual",
+            [],
+            "evt-child",
+            new Dictionary<string, JsonElement> { ["body"] = JsonSerializer.SerializeToElement(new { parentRunRefId = parent, depth = 1 }) },
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)) { CorrelationKey = "c", StartsChildRun = startsChildRun };
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), evt, null, CancellationToken.None);
+
+        Assert.Equal(recorded ? parent : null, runProvider.CreatedRun!.ParentRunRefId);
+    }
+
+    [Fact]
+    public async Task Start_of_a_run_with_no_parent_records_none()
+    {
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions());
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent() with { StartsChildRun = true }, null, CancellationToken.None);
+
+        Assert.Null(runProvider.CreatedRun!.ParentRunRefId);
+    }
+
     private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null) => new(
         runProvider,
         new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),

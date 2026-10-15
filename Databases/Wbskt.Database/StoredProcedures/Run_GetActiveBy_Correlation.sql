@@ -20,7 +20,9 @@ BEGIN
         CancellationRequestedAt,
         CancellationReason,
         CreditBudget,
-        CreatedAt
+        CreatedAt,
+        ParentRunRefId,
+        OutputJson
     FROM dbo.Runs
     WHERE WorkflowRefId = @WorkflowRefId
       AND TriggerNodeId = @TriggerNodeId

@@ -17,6 +17,13 @@ CREATE TABLE dbo.Runs
     -- Which inbound event and trigger registration started this run (Run_Start). Null for a run
     -- started any other way.
     TriggerStartKey          NVARCHAR(200)    NULL,
+    -- The run whose sub-workflow step started this one (Run_Start). Null for a run started any other
+    -- way. Cancelling or failing the parent cancels the children it names, so a child is not left
+    -- running for a parent that will never read its result.
+    ParentRunRefId           UNIQUEIDENTIFIER NULL,
+    -- What the run's control:end node handed back (Run_SetOutput), delivered to a parent's
+    -- sub-workflow step as childResult.output. Null when no End node set one.
+    OutputJson               NVARCHAR(MAX)    NULL,
     CONSTRAINT UQ_Runs_RefId UNIQUE (RefId),
     CONSTRAINT FK_Runs_WorkflowDefinitions
         FOREIGN KEY (WorkflowDefinitionId) REFERENCES dbo.WorkflowDefinitions (Id)
@@ -64,4 +71,11 @@ GO
 CREATE INDEX IX_Runs_CompletedAt
     ON dbo.Runs (CompletedAt)
     WHERE CompletedAt IS NOT NULL;
+GO
+
+-- Run_GetActiveChildrenBy_ParentRefId: the cancel cascade reads the children still going under a
+-- parent. Filtered to children that are active, so it never reads the retained ones.
+CREATE INDEX IX_Runs_ParentRunRefId_Active
+    ON dbo.Runs (ParentRunRefId)
+    WHERE ParentRunRefId IS NOT NULL AND Status IN (N'Running', N'Failing', N'Cancelling');
 GO

@@ -26,6 +26,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@CorrelationKey", (object?)row.CorrelationKey ?? DBNull.Value);
                 p.AddWithValue("@StartedAt", row.StartedAt);
                 p.AddWithValue("@CreditBudget", row.CreditBudget);
+                p.AddWithValue("@ParentRunRefId", (object?)row.ParentRunRefId ?? DBNull.Value);
             },
             Map,
             new InvalidOperationException("Run_Create did not return a row."),
@@ -53,6 +54,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@TriggerStartKey", (object?)triggerStartKey ?? DBNull.Value);
                 p.AddWithValue("@BranchRefId", rootBranch.RefId);
                 p.AddWithValue("@BranchLocalJson", rootBranch.LocalJson);
+                p.AddWithValue("@ParentRunRefId", (object?)run.ParentRunRefId ?? DBNull.Value);
                 if (maxActiveRuns is not null)
                 {
                     p.AddWithValue("@WorkspaceId", workspaceId);
@@ -345,6 +347,29 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<RunRow>> GetActiveChildrenAsync(Guid parentRunRefId, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetActiveChildrenBy_ParentRefId",
+            p => p.AddWithValue("@ParentRunRefId", parentRunRefId),
+            Map,
+            ct
+        );
+    }
+
+    public async Task SetOutputAsync(long runId, string outputJson, CancellationToken ct)
+    {
+        await ExecuteNonQueryAsync(
+            "dbo.Run_SetOutput",
+            p =>
+            {
+                p.AddWithValue("@RunId", checked((int)runId));
+                p.AddWithValue("@OutputJson", outputJson);
+            },
+            ct
+        );
+    }
+
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(
@@ -400,7 +425,24 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             CancellationRequestedAt = reader.IsDBNull(reader.GetOrdinal("CancellationRequestedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CancellationRequestedAt")),
             CancellationReason = reader.IsDBNull(reader.GetOrdinal("CancellationReason")) ? null : reader.GetString(reader.GetOrdinal("CancellationReason")),
             CreditBudget = reader.GetDecimal(reader.GetOrdinal("CreditBudget")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            ParentRunRefId = TryGetOrdinal(reader, "ParentRunRefId") is { } parentOrdinal && !reader.IsDBNull(parentOrdinal) ? reader.GetGuid(parentOrdinal) : null,
+            OutputJson = TryGetOrdinal(reader, "OutputJson") is { } outputOrdinal && !reader.IsDBNull(outputOrdinal) ? reader.GetString(outputOrdinal) : null
         };
+    }
+
+    // The run-list procs leave OutputJson out (it is unbounded and no page shows it), so these two are
+    // read only where the result set carries them rather than making every proc return them.
+    private static int? TryGetOrdinal(DbDataReader reader, string column)
+    {
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            if (string.Equals(reader.GetName(i), column, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return null;
     }
 }

@@ -21,7 +21,8 @@ BEGIN
         CancellationRequestedAt,
         CancellationReason,
         CreditBudget,
-        CreatedAt
+        CreatedAt,
+        ParentRunRefId
     FROM dbo.Runs
     WHERE WorkflowRefId = @WorkflowRefId
       AND (@StatusFilter IS NULL OR Status = @StatusFilter)

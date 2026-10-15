@@ -2,7 +2,9 @@ using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.NodeExecutors.Controls;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Host.Tests.NodeExecutors.Controls;
 
@@ -19,6 +21,41 @@ public sealed class EndAndFailRunNodeExecutorTests
 
         var terminal = Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(BranchTerminalReason.Completed, terminal.Reason);
+    }
+
+    [Fact]
+    public async Task End_with_no_output_carries_none()
+    {
+        var executor = new EndNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
+        var node = new EndNode { NodeId = Guid.NewGuid(), Name = "end", Ports = [], Config = new EndConfig() };
+
+        var terminal = Assert.IsType<NodeExecutionResult.Terminal>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+        Assert.Null(terminal.Output);
+    }
+
+    [Fact]
+    public async Task End_evaluates_its_output_against_the_branch_and_carries_it_on_the_terminal_result()
+    {
+        // Evaluated here, where the branch's local state is at hand: by the time the run finalizes,
+        // the branch that reached this node is gone.
+        var executor = new EndNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
+        var node = new EndNode { NodeId = Guid.NewGuid(), Name = "end", Ports = [], Config = new EndConfig { Output = new BranchStateRefExpression("total") } };
+        NodeContext ctx = Context(node, new Dictionary<string, JsonElement> { ["total"] = JsonSerializer.SerializeToElement(42) });
+
+        var terminal = Assert.IsType<NodeExecutionResult.Terminal>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal(BranchTerminalReason.Completed, terminal.Reason);
+        Assert.Equal(42, terminal.Output!.Value.GetInt32());
+    }
+
+    [Fact]
+    public async Task End_fails_the_branch_when_its_output_cannot_be_evaluated()
+    {
+        var executor = new EndNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
+        var node = new EndNode { NodeId = Guid.NewGuid(), Name = "end", Ports = [], Config = new EndConfig { Output = new JsonPathExpression(new LiteralExpression("{}"), "$[[") } };
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(Context(node), CancellationToken.None));
+        Assert.Equal("END_OUTPUT_EVALUATION_ERROR", fail.ErrorCode);
+        Assert.False(fail.Retryable);
     }
 
     [Fact]
@@ -48,11 +85,11 @@ public sealed class EndAndFailRunNodeExecutorTests
         Assert.False(string.IsNullOrWhiteSpace(fail.Message));
     }
 
-    private static NodeContext Context(Wbskt.Workflow.Abstraction.Models.Nodes.BaseNode node)
+    private static NodeContext Context(Wbskt.Workflow.Abstraction.Models.Nodes.BaseNode node, Dictionary<string, JsonElement>? localState = null)
     {
         return new NodeContext
         {
-            Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow, 9),
+            Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState ?? new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow, 9),
             Node = node,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };

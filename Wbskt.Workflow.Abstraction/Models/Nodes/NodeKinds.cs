@@ -54,7 +54,7 @@ public static class NodeKinds
         ControlKind(NodeKind.ControlJoin, typeof(JoinNode), typeof(JoinConfig), 0.1m, Fixed(PassThroughPorts)),
         ControlKind(NodeKind.ControlFork, typeof(ForkNode), typeof(ForkConfig), 0.1m, ForkPorts),
         ControlKind(NodeKind.ControlVariable, typeof(VariableNode), typeof(VariableConfig), 0.1m, Fixed(PassThroughPorts)),
-        ControlKind(NodeKind.ControlEnd, typeof(EndNode), null, 0.1m, Fixed(TerminalPorts)),
+        ControlKind(NodeKind.ControlEnd, typeof(EndNode), typeof(EndConfig), 0.1m, Fixed(TerminalPorts)),
         ControlKind(NodeKind.ControlFailRun, typeof(FailRunNode), typeof(FailRunConfig), 0.1m, Fixed(TerminalPorts)),
 
         // Parking is cheap to enter; the waiting itself costs nothing, since nothing is running.

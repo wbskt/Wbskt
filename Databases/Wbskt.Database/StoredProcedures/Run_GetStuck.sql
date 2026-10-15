@@ -23,7 +23,9 @@ BEGIN
         r.CancellationRequestedAt,
         r.CancellationReason,
         r.CreditBudget,
-        r.CreatedAt
+        r.CreatedAt,
+        r.ParentRunRefId,
+        r.OutputJson
     FROM dbo.Runs r
     WHERE r.Status IN (N'Running', N'Cancelling', N'Failing')
       AND r.CreatedAt < @CutoffUtc

@@ -48,7 +48,14 @@ public abstract record NodeExecutionResult
 
     public sealed record Fail(string ErrorCode, string Message, bool Retryable, [property: JsonIgnore] Exception? Cause) : NodeExecutionResult;
 
-    public sealed record Terminal(BranchTerminalReason Reason) : NodeExecutionResult;
+    public sealed record Terminal(BranchTerminalReason Reason) : NodeExecutionResult
+    {
+        /// <summary>
+        /// The run's output, from a <c>control:end</c> node that declares one: recorded on the run before
+        /// the branch completes, so the finalizer hands it to a waiting parent. Null for any other end.
+        /// </summary>
+        public JsonElement? Output { get; init; }
+    }
 }
 
 public sealed record ForkSpec(string OutboundPort, IReadOnlyDictionary<string, JsonElement> LocalState);
