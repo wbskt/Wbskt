@@ -178,6 +178,30 @@ public sealed class CommandNodeExecutorTests
         Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
     }
 
+    [Fact]
+    public async Task A_wake_tagged_for_another_node_is_cleared_and_the_step_waits_on_without_sending_again()
+    {
+        // It used to be taken for a fresh visit: the step parked on a new command and sent it again.
+        var publisher = new Mock<IDeviceCommandPublisher>();
+        var executor = new CommandNodeExecutor(publisher.Object, Mock.Of<IBookmarkResumer>());
+        Guid commandId = Guid.NewGuid();
+        NodeContext ctx = BuildContext(ClientRefId.ToString(), "OpenVent", null, AwaitAck(), new Dictionary<string, JsonElement>
+        {
+            ["__command_awaiting"] = JsonSerializer.SerializeToElement(new { nodeId = "11111111-1111-1111-1111-111111111111", waitingOn = commandId.ToString() }),
+            ["__wake"] = JsonSerializer.SerializeToElement(new { commandId, outcome = "acked" }),
+            ["__wake_node"] = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString())
+        });
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        Assert.Equal(commandId, Assert.IsType<CommandOutcomeWakeCondition>(wait.Condition).CommandId);
+        Assert.Equal(CommandNodeExecutor.TimeoutPort, wait.Condition.TtlPort);
+        Assert.Empty(wait.LocalStatePatch);
+        Assert.Equal(["__wake", "__wake_node"], wait.RemoveKeys);
+        Assert.Null(wait.AfterParked);
+        publisher.VerifyNoOtherCalls();
+    }
+
     private static SendClientMessageConfig AwaitAck() => new() { ClientRef = ClientRefId.ToString(), Type = "OpenVent", AwaitAck = true };
 
     private static NodeContext BuildContext(string clientRef, string command, JsonElement? nodePayload, SendClientMessageConfig? config = null, Dictionary<string, JsonElement>? localState = null)

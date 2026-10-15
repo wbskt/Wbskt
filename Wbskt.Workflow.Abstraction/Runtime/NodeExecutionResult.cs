@@ -37,6 +37,12 @@ public abstract record NodeExecutionResult
     public sealed record WaitForBookmark(WakeCondition Condition, IReadOnlyDictionary<string, JsonElement> LocalStatePatch) : NodeExecutionResult
     {
         /// <summary>
+        /// Keys to delete from local state as the branch parks, before the patch is applied. A parking
+        /// node drops a stale wake this way, so the wake that ends this park is the only one on the branch.
+        /// </summary>
+        public IReadOnlyCollection<string>? RemoveKeys { get; init; }
+
+        /// <summary>
         /// Runs once the branch is parked and its bookmark exists: for a node whose wake answers
         /// something it sends, sending it any earlier would let a fast answer arrive with nothing
         /// waiting for it. Not part of a cached result, so a node replayed from its idempotency key

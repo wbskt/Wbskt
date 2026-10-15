@@ -24,7 +24,7 @@ internal sealed class WaitForBookmarkResultHandler(
 {
     public override async Task<BranchResultOutcome> HandleAsync(NodeExecutionResult.WaitForBookmark result, BranchResultContext context, CancellationToken ct)
     {
-        string localJson = BranchLocalState.Serialize(BranchLocalState.Merge(context.Branch.LocalJson, result.LocalStatePatch));
+        string localJson = BranchLocalState.Serialize(BranchLocalState.Merge(context.Branch.LocalJson, result.LocalStatePatch, result.RemoveKeys));
         BranchRow branchRow = await branchProvider.UpdatePointerAsync(context.BranchId, context.Branch.NodeId, BranchStatus.Waiting, localJson, context.Branch.LastOutputJson, ct);
         await journal.AppendBranchEventAsync(context.Run.Id, branchRow.RefId, branchRow.NodeId, HistoryEventKind.BranchParked, ct);
 

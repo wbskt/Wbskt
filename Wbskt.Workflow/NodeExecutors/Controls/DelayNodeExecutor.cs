@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -10,66 +9,59 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// <summary>
 /// Durable delay. On first visit it parks the branch with a <see cref="TimerWakeCondition"/>
 /// at now + duration (the BookmarkScheduler resumes the branch when the timer is due). On the
-/// resume visit it continues. First-visit vs resume is distinguished by a local-state marker,
-/// because the engine re-executes the same node when a bookmark fires.
+/// resume visit it continues. First-visit vs resume is told apart by the park marker, as for every
+/// parking node (see <see cref="ParkingNodeExecutor"/>), because the engine re-executes the same node
+/// when a bookmark fires.
 /// </summary>
-internal sealed class DelayNodeExecutor(TimeProvider clock) : INodeExecutor
+internal sealed class DelayNodeExecutor(TimeProvider clock) : ParkingNodeExecutor(clock)
 {
-    internal const string DelayUntilKey = "__delay_until";
+    internal const string DelayUntilKey = BranchStateKeys.DelayUntil;
 
-    public string Kind => NodeKind.ControlDelay;
+    private const string DefaultPort = "default";
+
+    public override string Kind => NodeKind.ControlDelay;
 
     // Only computes a wake time from branch state; the bookmark is registered by the engine from the
     // result, so a replay simply parks again (on a first visit, from a slightly later instant).
-    public bool IsReplaySafe(BaseNode node) => true;
+    public override bool IsReplaySafe(BaseNode node) => true;
 
-    public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+    protected override string ParkedKey => BranchStateKeys.Delay;
+
+    protected override string DeadlineKey => DelayUntilKey;
+
+    protected override Task<NodeExecutionResult> FirstVisitAsync(NodeContext ctx, CancellationToken ct)
     {
-        _ = ct;
         var node = (DelayNode)ctx.Node;
-
-        // A marker from a previous visit means this is a resume (the timer bookmark fired).
-        if (ctx.Branch.LocalState.TryGetValue(DelayUntilKey, out JsonElement until)
-            && until.ValueKind == JsonValueKind.String
-            && DateTime.TryParse(until.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime wakeAt))
-        {
-            if (clock.GetUtcNow().UtcDateTime >= wakeAt)
-            {
-                // Clear the deadline on the way out. Without this a Delay revisited in a loop sees a
-                // deadline already in the past and continues immediately - so it waits on the first
-                // lap only and the loop then spins.
-                return Continue(clearMarker: true);
-            }
-
-            // Re-dispatched before the timer was actually due: re-park on the same instant.
-            return Park(wakeAt, includeMarker: false);
-        }
-
         TimeSpan duration = node.Config?.Duration ?? TimeSpan.Zero;
         if (duration <= TimeSpan.Zero)
         {
-            return Continue();
+            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue(DefaultPort, new Dictionary<string, JsonElement>()));
         }
 
-        return Park(clock.GetUtcNow().UtcDateTime + duration, includeMarker: true);
+        DateTime wakeAt = Clock.GetUtcNow().UtcDateTime + duration;
+        return Task.FromResult<NodeExecutionResult>(Park(ctx, new ParkPlan(new TimerWakeCondition(wakeAt), wakeAt.ToString("O"), wakeAt)));
     }
 
-    private static Task<NodeExecutionResult> Continue(bool clearMarker = false)
+    // A timer carries no payload, so no wake is ever the answer to a Delay; one on the branch is stale.
+    protected override ResumeStep.Leave? OnWake(NodeContext ctx, string? waitingOn, JsonElement wake) => null;
+
+    // The timer fired: continue. Re-dispatched before it was actually due: re-park on the same instant.
+    // The exit clears the deadline. Without that a Delay revisited in a loop sees a deadline already in
+    // the past and continues immediately - so it waits on the first lap only and the loop then spins.
+    protected override ResumeStep OnNoWake(NodeContext ctx, string? waitingOn, bool deadlinePassed)
     {
-        return Task.FromResult<NodeExecutionResult>(
-            new NodeExecutionResult.Continue(
-                "default",
-                new Dictionary<string, JsonElement>(),
-                RemoveKeys: clearMarker ? [DelayUntilKey] : null));
+        return deadlinePassed ? new ResumeStep.Leave(DefaultPort) : ResumeStep.KeepWaiting;
     }
 
-    private static Task<NodeExecutionResult> Park(DateTime wakeAt, bool includeMarker)
+    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
     {
-        Dictionary<string, JsonElement> patch = includeMarker
-            ? new Dictionary<string, JsonElement> { [DelayUntilKey] = JsonSerializer.SerializeToElement(wakeAt.ToString("O")) }
-            : new Dictionary<string, JsonElement>();
+        return deadline is DateTime wakeAt ? new TimerWakeCondition(wakeAt) : null;
+    }
 
-        return Task.FromResult<NodeExecutionResult>(
-            new NodeExecutionResult.WaitForBookmark(new TimerWakeCondition(wakeAt), patch));
+    // A Delay parked before it wrote a marker left only its deadline. Every exit clears the deadline,
+    // so a deadline with no marker beside it is still that park.
+    protected override bool HasUnmarkedPark(IReadOnlyDictionary<string, JsonElement> state)
+    {
+        return !state.ContainsKey(ParkedKey) && state.ContainsKey(DelayUntilKey);
     }
 }

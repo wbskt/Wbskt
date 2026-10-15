@@ -29,46 +29,42 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// <param name="options">
 /// Optional so the executor's unit tests need no configuration; without it the default depth ceiling applies.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null) : INodeExecutor
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null) : ParkingNodeExecutor(clock)
 {
     private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
 
-    internal const string ParkedKey = "__subworkflow";
     internal const string ChildResultKey = "childResult";
     private const string DefaultPort = "default";
 
-    public string Kind => NodeKind.ControlSubWorkflow;
+    public override string Kind => NodeKind.ControlSubWorkflow;
 
-    public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+    // The marker holds the child run's RefId. There is no deadline: the wait has no TTL.
+    protected override string ParkedKey => BranchStateKeys.SubWorkflow;
+
+    // The child's result, delivered under "__wake" when it finalizes.
+    protected override ResumeStep.Leave? OnWake(NodeContext ctx, string? waitingOn, JsonElement wake)
+    {
+        return new ResumeStep.Leave(DefaultPort, new Dictionary<string, JsonElement> { [ChildResultKey] = wake.Clone() });
+    }
+
+    protected override ResumeStep OnNoWake(NodeContext ctx, string? waitingOn, bool deadlinePassed)
+    {
+        return new ResumeStep.Leave(DefaultPort);
+    }
+
+    // A stale wake is not this child's result: keep waiting on the same child run rather than starting another.
+    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
+    {
+        return Guid.TryParse(waitingOn, out Guid parkedOn) ? new ChildRunCompletedWakeCondition(parkedOn) : null;
+    }
+
+    protected override async Task<NodeExecutionResult> FirstVisitAsync(NodeContext ctx, CancellationToken ct)
     {
         var node = (SubWorkflowNode)ctx.Node;
         SubWorkflowConfig config = node.Config
             ?? throw new InvalidOperationException($"SubWorkflow node {node.NodeId} is missing config.");
 
-        // Resume visit: this node's own marker is present, and the child's result was delivered under
-        // "__wake". The exit clears the marker and the wake, so a later await on this branch (or this
-        // node on its next loop lap) parks afresh rather than reading them as its own.
-        if (ParkMarker.TryReadOwn(ctx.Branch.LocalState, ParkedKey, node.NodeId, out string? childRunRefId))
-        {
-            IReadOnlyCollection<string> removeKeys = [ParkedKey, .. ParkMarker.WakeKeys];
-            switch (ParkMarker.ReadWake(ctx.Branch.LocalState, node.NodeId, out JsonElement wake))
-            {
-                case ParkMarker.WakeOwner.This:
-                    return new NodeExecutionResult.Continue(
-                        DefaultPort,
-                        new Dictionary<string, JsonElement> { [ChildResultKey] = wake.Clone() },
-                        removeKeys);
-
-                case ParkMarker.WakeOwner.Other when Guid.TryParse(childRunRefId, out Guid parkedOn):
-                    // A wake delivered for another node's bookmark is not this child's result: keep
-                    // waiting on the same child run rather than starting another.
-                    return new NodeExecutionResult.WaitForBookmark(new ChildRunCompletedWakeCondition(parkedOn), new Dictionary<string, JsonElement>());
-            }
-
-            return new NodeExecutionResult.Continue(DefaultPort, new Dictionary<string, JsonElement>(), removeKeys);
-        }
-
-        // First visit: start the child run via its manual trigger.
+        // Start the child run via its manual trigger.
         Guid childRefId = config.WorkflowRefId;
 
         // A child is started past the workspace run ceiling, so nothing else stops a workflow that
@@ -103,7 +99,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
 
         // The parent already holds a place under the workspace's active-run ceiling, so its child is
         // started past it (InboundEvent.StartsChildRun).
-        InboundEvent evt = ManualChannel.Event(childRefId, body, null, clock.GetUtcNow().UtcDateTime) with { StartsChildRun = true };
+        InboundEvent evt = ManualChannel.Event(childRefId, body, null, Clock.GetUtcNow().UtcDateTime) with { StartsChildRun = true };
 
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
         if (result.Outcome == TriggerDispatchOutcome.Refused)
@@ -129,13 +125,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         }
 
         RunRow childRun = await runProvider.GetByIdAsync(result.RunId.Value, ct);
-        var condition = new ChildRunCompletedWakeCondition(childRun.RefId);
-        var patch = new Dictionary<string, JsonElement>
-        {
-            [ParkedKey] = ParkMarker.Create(node.NodeId, childRun.RefId.ToString())
-        };
-
-        return new NodeExecutionResult.WaitForBookmark(condition, patch);
+        return Park(ctx, new ParkPlan(new ChildRunCompletedWakeCondition(childRun.RefId), childRun.RefId.ToString(), null));
     }
 
     /// <summary>

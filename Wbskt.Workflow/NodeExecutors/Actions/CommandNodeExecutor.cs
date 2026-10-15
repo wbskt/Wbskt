@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Channels;
+using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
@@ -18,20 +19,20 @@ namespace Wbskt.Workflow.NodeExecutors.Actions;
 /// "failed" when the platform reports it undelivered or it could not be sent at all, or "timeout" when
 /// neither comes in time (the bookmark's TTL takes that port without running the step again).</para>
 /// </summary>
-internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBookmarkResumer bookmarkResumer) : INodeExecutor
+internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBookmarkResumer bookmarkResumer, TimeProvider? clock = null)
+    : ParkingNodeExecutor(clock ?? TimeProvider.System)
 {
     public const string AckedPort = CommandChannel.Acked;
     public const string FailedPort = CommandChannel.Failed;
     public const string TimeoutPort = "timeout";
 
-    // The command id this step parked on, and the key the bookmark resumer writes the wake under.
-    private const string AwaitingKey = "__command_awaiting";
-    private const string WakeKey = BookmarkResumer.WakeKey;
-    private const string WakeNodeKey = BookmarkResumer.WakeNodeKey;
+    public override string Kind => NodeKind.ActionClientMessage;
 
-    public string Kind => NodeKind.ActionClientMessage;
+    // The marker holds the command id this step parked on. There is no deadline key: the ack timeout
+    // lives on the bookmark, whose TTL takes the "timeout" port without running the step again.
+    protected override string ParkedKey => BranchStateKeys.CommandAwaiting;
 
-    public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+    protected override async Task<NodeExecutionResult> FirstVisitAsync(NodeContext ctx, CancellationToken ct)
     {
         SendClientMessageNode node = (SendClientMessageNode)ctx.Node;
         if (!Guid.TryParse(node.Config.ClientRef, out Guid clientRefId))
@@ -45,7 +46,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
 
         if (node.Config.AwaitAck)
         {
-            return TryResume(ctx) ?? Park(ctx, node.Config, clientRefId);
+            return Park(ctx, node.Config, clientRefId);
         }
 
         try
@@ -59,15 +60,13 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
         }
     }
 
-    // A wake for the command this step is waiting on. Anything else - no marker, or a "__wake" left by
-    // an earlier wait, or by this step's previous lap - means this is a fresh visit.
-    private static NodeExecutionResult? TryResume(NodeContext ctx)
+    // A wake is this step's answer only when it is for the command the step is waiting on. Anything
+    // else - a "__wake" left by an earlier wait, or by this step's previous lap - is stale.
+    protected override ResumeStep.Leave? OnWake(NodeContext ctx, string? waitingOn, JsonElement wake)
     {
-        if (!ctx.Branch.LocalState.TryGetValue(AwaitingKey, out JsonElement awaiting)
-            || !ctx.Branch.LocalState.TryGetValue(WakeKey, out JsonElement wake)
-            || wake.ValueKind != JsonValueKind.Object
+        if (wake.ValueKind != JsonValueKind.Object
             || !wake.TryGetProperty("commandId", out JsonElement wokenFor)
-            || !string.Equals(wokenFor.ToString(), awaiting.GetString(), StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(wokenFor.ToString(), waitingOn, StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -75,24 +74,38 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
         string port = wake.TryGetProperty("outcome", out JsonElement outcome) && outcome.GetString() == CommandChannel.Acked
             ? AckedPort
             : FailedPort;
-        return new NodeExecutionResult.Continue(
-            port,
-            new Dictionary<string, JsonElement> { ["command"] = wake.Clone() },
-            [AwaitingKey, WakeKey, WakeNodeKey]);
+        return new ResumeStep.Leave(port, new Dictionary<string, JsonElement> { ["command"] = wake.Clone() });
+    }
+
+    // Run again with no answer on the branch, the step's wait has nothing left to end it (its timeout
+    // is taken without running it), so it sends a new command and waits for that one.
+    protected override ResumeStep OnNoWake(NodeContext ctx, string? waitingOn, bool deadlinePassed)
+    {
+        return ResumeStep.StartOver;
+    }
+
+    // Kept waiting after a stale wake, the step waits on the same command and sends nothing. Having no
+    // deadline on the branch, it waits a whole ack timeout again.
+    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
+    {
+        return Guid.TryParse(waitingOn, out Guid commandId)
+            ? Condition(commandId, ((SendClientMessageNode)ctx.Node).Config)
+            : null;
+    }
+
+    private static CommandOutcomeWakeCondition Condition(Guid commandId, SendClientMessageConfig config)
+    {
+        return new CommandOutcomeWakeCondition(commandId)
+        {
+            Ttl = config.AckTimeout ?? SendClientMessageConfig.DefaultAckTimeout,
+            TtlPort = TimeoutPort
+        };
     }
 
     private NodeExecutionResult Park(NodeContext ctx, SendClientMessageConfig config, Guid clientRefId)
     {
         var commandId = Guid.NewGuid();
-        var condition = new CommandOutcomeWakeCondition(commandId)
-        {
-            Ttl = config.AckTimeout ?? SendClientMessageConfig.DefaultAckTimeout,
-            TtlPort = TimeoutPort
-        };
-
-        return new NodeExecutionResult.WaitForBookmark(
-            condition,
-            new Dictionary<string, JsonElement> { [AwaitingKey] = JsonSerializer.SerializeToElement(commandId) })
+        return Park(ctx, new ParkPlan(Condition(commandId, config), commandId.ToString(), null)) with
         {
             // Sent only once the bookmark exists: an ack can come back faster than the branch parks.
             AfterParked = sendCt => SendWhileParkedAsync(ctx, config, commandId, clientRefId, sendCt)

@@ -119,6 +119,33 @@ public sealed class DelayNodeExecutorTests
         Assert.Equal(T0.AddMinutes(5), timer.At);
     }
 
+    [Fact]
+    public async Task A_stale_wake_neither_ends_the_delay_early_nor_stays_on_the_branch()
+    {
+        // A timer carries no payload, so a "__wake" on a parked Delay was left for another node. It is
+        // cleared, and the Delay goes on waiting for its own instant; once that has passed it continues.
+        var clock = new MutableClock(T0);
+        var executor = new DelayNodeExecutor(clock);
+        var node = new DelayNode { NodeId = Guid.NewGuid(), Name = "delay", Ports = CreatePorts(), Config = new DelayConfig { Duration = TimeSpan.FromMinutes(5) } };
+        var state = new Dictionary<string, JsonElement>();
+        var park = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(CreateContext(node, state), CancellationToken.None));
+        ApplyPatch(state, park.LocalStatePatch);
+        state["__wake"] = JsonSerializer.SerializeToElement(new { body = new { meantFor = "someone else" } });
+        state["__wake_node"] = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString());
+
+        clock.UtcNow = T0.AddMinutes(1);
+        var stillWaiting = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(CreateContext(node, state), CancellationToken.None));
+        Assert.Equal(T0.AddMinutes(5), Assert.IsType<TimerWakeCondition>(stillWaiting.Condition).At);
+        Assert.Empty(stillWaiting.LocalStatePatch);
+        Assert.Equal(["__wake", "__wake_node"], stillWaiting.RemoveKeys);
+
+        clock.UtcNow = T0.AddMinutes(6);
+        var resumed = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(CreateContext(node, state), CancellationToken.None));
+        Assert.Equal("default", resumed.OutboundPort);
+        Assert.Empty(resumed.LocalStatePatch);
+        Assert.Equal(["__delay", DelayUntilKey, "__wake", "__wake_node"], resumed.RemoveKeys);
+    }
+
     private static NodeContext CreateContext(DelayNode node, IReadOnlyDictionary<string, JsonElement> localState)
     {
         return new NodeContext

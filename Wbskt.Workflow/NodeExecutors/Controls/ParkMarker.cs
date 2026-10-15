@@ -4,7 +4,7 @@ using Wbskt.Workflow.Runtime;
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
-/// The local-state marker an await-style node (AwaitSignal, WaitForHttp, SubWorkflow) leaves when it
+/// The local-state marker a parking node (see <see cref="ParkingNodeExecutor"/>) leaves when it
 /// parks, and the test for whether a wake on the branch is addressed to it.
 ///
 /// <para>The marker names the node that parked. It used to be a bare value under a key shared by every

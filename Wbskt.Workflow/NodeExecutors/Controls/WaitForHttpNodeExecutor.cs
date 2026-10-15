@@ -18,8 +18,8 @@ internal sealed class WaitForHttpNodeExecutor(TimeProvider clock) : AwaitInbound
 {
     public override string Kind => NodeKind.ControlWaitForHttp;
 
-    protected override string ParkedKey => "__http_wait";
-    protected override string DeadlineKey => "__http_deadline";
+    protected override string ParkedKey => BranchStateKeys.HttpWait;
+    protected override string DeadlineKey => BranchStateKeys.HttpDeadline;
     protected override string WakePayloadKey => "wakePayload";
 
     protected override ParkPlan CreateParkPlan(NodeContext ctx)
