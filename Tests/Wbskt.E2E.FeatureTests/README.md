@@ -54,7 +54,7 @@ docker run -d --hostname wbskt-rabbit --name wbskt-rabbit -p 5672:5672 -p 15672:
 docker run -d --name wbskt-redis -p 6379:6379 redis:7-alpine
 ```
 
-The hosts find Redis through `ConnectionStrings__Redis=localhost:6379`. It carries access-token revocations between the auth and management hosts, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`) fail.
+The auth, management and socket hosts find Redis at `localhost:6379` through `ConnectionStrings:Redis` in their `appsettings.Development.json` (override it with `ConnectionStrings__Redis`). It carries access-token revocations between the auth and management hosts and device revocations from the management host to the socket host, so without it the revocation scenarios (`AUTH_TK_10`, `AUTH_OUT_11`, `DEV_REV_01`) fail.
 
 ### 2. Deploy databases
 

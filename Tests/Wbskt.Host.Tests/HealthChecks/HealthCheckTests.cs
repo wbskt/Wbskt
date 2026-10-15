@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Wbskt.Infrastructure.HealthChecks;
@@ -138,7 +139,9 @@ public sealed class ReadinessEndpointTests
 
     private static async Task<WebApplication> StartAsync(Action<IHealthChecksBuilder> configure)
     {
-        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        // Pinned, so an ambient ASPNETCORE_ENVIRONMENT=Development cannot load a host's
+        // appsettings.Development.json from the output folder and its Kestrel endpoints with it.
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
         configure(builder.Services.AddHealthChecks());
