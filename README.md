@@ -23,6 +23,8 @@ production they run behind Traefik with an OpenTelemetry stack (Prometheus, Loki
 
 [Docs/API.Endpoints.md](Docs/API.Endpoints.md) lists every endpoint by host, and
 [Docs/AccessControl.md](Docs/AccessControl.md) explains the permission model.
+[Docs/Workflow.Engine](Docs/Workflow.Engine/README.md) documents the workflow engine: its
+architecture, what workflows can do, and the design patterns it is built from.
 
 ## Repository layout
 

@@ -294,7 +294,7 @@ mints a unique **PIN**.
 ## 9. Entity: **Workflows** (the highlight — node editor + executions)
 
 Two primary surfaces per workflow: the **node editor** and the **executions** view.
-Ground the terminology in the WBSKT Workflow Engine V3 design (see companion doc). Node
+Ground the terminology in the workflow engine docs (`Docs/Workflow.Engine/`). Node
 families are **Trigger / Control / Action**.
 
 **Explorer:** workflows list; each shows enabled/disabled, version (e.g. `v3`), and a
