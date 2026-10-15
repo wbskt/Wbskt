@@ -87,10 +87,11 @@ public sealed class RunRecoveryServiceTests
         await service.RecoverAsync(CancellationToken.None);
 
         // Assert: a Cancelling run gets the cancellation re-applied, which is what clears its bookmarks
-        // and waiting branches. A Failing run is winding down on its own and must not be turned into a
-        // cancelled one - only its token is cancelled.
+        // and waiting branches. A Failing run must not be turned into a cancelled one, but its failure
+        // is re-applied the same way, so a sibling parked on a signal cannot keep it alive after the
+        // failover.
         Assert.Equal([171L], cancellationService.ReappliedCancellations);
-        Assert.Equal([172L], cancellationService.CancelledRuns);
+        Assert.Equal([172L], cancellationService.ReappliedFailures);
     }
 
     private static RunRow CreateRunRow(int id, string status)
@@ -204,10 +205,17 @@ public sealed class RunRecoveryServiceTests
     {
         public List<long> CancelledRuns { get; } = new();
         public List<long> ReappliedCancellations { get; } = new();
+        public List<long> ReappliedFailures { get; } = new();
 
         public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct)
         {
             ReappliedCancellations.Add(runId);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct)
+        {
+            ReappliedFailures.Add(runId);
             return Task.FromResult(true);
         }
 

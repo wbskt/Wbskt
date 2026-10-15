@@ -11,10 +11,11 @@ using Wbskt.Workflow.Abstraction.Validation;
 namespace Wbskt.E2E.FeatureTests.Scenarios.ErrorHandling;
 
 /// <summary>
-/// Failure-path E2E — proves the two terminal failure aggregations:
+/// Failure-path E2E — proves a FailRun node fails the whole run:
 ///   • A single FailRun branch escalates the whole run to "Failed".
-///   • A fan-out where one branch fails and another completes (failFast=false) aggregates to
-///     "PartiallyFailed" — the failing branch does NOT cancel its healthy sibling.
+///   • A fan-out where one branch reaches a FailRun node ends "Failed" even with failFast=false and
+///     a healthy sibling: the node fails the run, not just its branch, and the run says Failed rather
+///     than Cancelled or PartiallyFailed.
 /// </summary>
 [Collection(EngineCollection.Name)]
 public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
@@ -63,7 +64,7 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
     }
 
     [SkippableFact]
-    public async Task ForkedFailure_WithHealthySibling_AggregatesToPartiallyFailed()
+    public async Task ForkedFailRun_WithHealthySibling_EndsFailed()
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
@@ -85,17 +86,7 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
         var storage = new InMemoryClientStorage(clientRefId, secret);
         var clientConfig = new ClientConfig(E2EConfig.ManagementBaseUrl, E2EConfig.SocketWsBaseUrl, deviceName, null);
 
-        var commandLock = new object();
-        var commands = new List<string>();
-
         await using var wbsktClient = new WbsktClient(clientConfig, storage);
-        wbsktClient.OnMessageReceived += (action, _, _) =>
-        {
-            lock (commandLock)
-            {
-                commands.Add(action);
-            }
-        };
         await wbsktClient.StartAsync();
 
         await wbsktClient.SendAsync("telemetry", new { sensor = "partial-test", value = 1 });
@@ -105,34 +96,20 @@ public sealed class FailRunWorkflowE2ETests(ServicesFixture fixture)
 
         var summary = await fixture.WaitForRunTerminalAsync(token, workspaceRef, runRefId, TimeSpan.FromSeconds(40));
         summary.Should().NotBeNull("the run must finalize");
-        summary!.Status.Should().Be("PartiallyFailed",
-            "one body branch fails while the healthy sibling completes (failFast is off, so no cancellation)");
+        summary!.Status.Should().Be("Failed",
+            "a FailRun node fails the whole run, whether or not its healthy sibling completed first");
 
-        // The healthy sibling must still have delivered its command despite the sibling failure.
-        var arrived = await ServicesFixture.PollAsync(
-            () =>
-            {
-                lock (commandLock)
-                {
-                    return Task.FromResult(commands.Count >= 1);
-                }
-            },
-            timeout: TimeSpan.FromSeconds(15),
-            interval: TimeSpan.FromSeconds(1));
-        arrived.Should().BeTrue("the healthy branch must send its command even though its sibling failed");
-
-        // A command from the wrong branch would have been sent before the run finished, so the
-        // finished run's history shows it even if it is still in flight to the device.
-        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        // The run failed by its own rule: it records a run-level failure and is never cancelled.
+        // Whether the healthy sibling sent its command first is a race, so it is not asserted.
         var history = await fixture.GetHistoryAsync(token, workspaceRef, runRefId, top: 1000);
-        history.Count(e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId)
-            .Should().Be(1, "only the true-routed branch runs the command node");
+        history.Should().Contain(e => e.EventKind == "RunFailureRequested",
+            "the FailRun node takes the run-level failure path");
+        history.Should().NotContain(e => e.EventKind == "RunCancellationRequested",
+            "failing the run must not route it through a cancel");
 
-        lock (commandLock)
-        {
-            commands.Should().ContainSingle("only the true-routed branch sends a command")
-                .Which.Should().Be("OpenVent");
-        }
+        var commandNodeId = definition.Nodes.OfType<SendClientMessageNode>().Single().NodeId;
+        history.Count(e => e.EventKind == "NodeCompleted" && e.NodeId == commandNodeId)
+            .Should().BeLessThanOrEqualTo(1, "only the true-routed branch runs the command node");
     }
 
     private static WorkflowDefinition BuildFailRunDefinition(Guid workflowRefId, string clientRef)

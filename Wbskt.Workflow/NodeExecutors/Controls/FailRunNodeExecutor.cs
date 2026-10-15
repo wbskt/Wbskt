@@ -5,9 +5,9 @@ using Wbskt.Workflow.Abstraction.Runtime;
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
-/// Explicitly fails the branch with a non-retryable error. On a fail-fast workflow this escalates
-/// the run to Failing (cancelling the remaining branches); otherwise the run aggregates to Failed
-/// or PartiallyFailed at finalization.
+/// Explicitly fails the run with a non-retryable error. FailResultHandler recognises the node and
+/// fails the whole run - Failing, the remaining branches stopped, Failed at finalization - whether
+/// or not the workflow is fail-fast.
 /// </summary>
 internal sealed class FailRunNodeExecutor : INodeExecutor
 {

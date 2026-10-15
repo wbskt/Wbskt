@@ -2,6 +2,7 @@ using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime.BranchResults;
@@ -22,7 +23,6 @@ public sealed class FailResultHandlerTests
     private readonly List<string> _log = [];
     private readonly RecordingRunJournal _journal;
     private readonly RecordingRunDispatcher _dispatcher;
-    private readonly Mock<IRunProvider> _runs = new();
     private readonly Mock<IRunCancellationService> _cancellation = new();
     private readonly Mock<ICompensationOrchestrator> _compensation = new();
     private readonly Mock<IJoinAggregatorProvider> _joins = new();
@@ -31,9 +31,9 @@ public sealed class FailResultHandlerTests
     {
         _journal = new RecordingRunJournal(_log);
         _dispatcher = new RecordingRunDispatcher(_log);
-        _runs
-            .Setup(runs => runs.TransitionStatusAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
-            .Callback((long _, string from, string to, DateTime? _, string? _, CancellationToken _) => _log.Add($"run:{from}->{to}"))
+        _cancellation
+            .Setup(cancellation => cancellation.FailRunAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((long _, string reason, CancellationToken _) => _log.Add($"fail-run:{reason}"))
             .ReturnsAsync(true);
         _cancellation
             .Setup(cancellation => cancellation.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -79,8 +79,10 @@ public sealed class FailResultHandlerTests
     }
 
     [Fact]
-    public async Task FailRun_fails_the_branch_then_the_run_then_cancels_the_rest()
+    public async Task FailRun_fails_the_branch_then_fails_the_run()
     {
+        // Failing the run, not cancelling it: the cancel moved the run to 'Cancelling', so a run that
+        // failed by its own rule finalized as Cancelled.
         var node = ActionNode(ErrorOutcome.FailRun);
         var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
 
@@ -90,8 +92,82 @@ public sealed class FailResultHandlerTests
             new[]
             {
                 "failed",
-                $"run:{RunStatus.Running}->{RunStatus.Failing}",
-                $"cancel-run:FailRun cascade triggered by node {FailingNode}",
+                $"fail-run:Node {FailingNode} failed (BOOM) with onFailure FailRun",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                $"release:{RunId}:1"
+            },
+            _log);
+        Assert.Contains("BOOM", Assert.Single(branches.Failed).ErrorJson);
+        JsonElement payload = JsonSerializer.SerializeToElement(Assert.Single(_journal.Entries).Payload);
+        Assert.Equal("FailRun", payload.GetProperty("onFailure").GetString());
+        _cancellation.Verify(cancellation => cancellation.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FailRun_compensates_first_when_the_workflow_asks_for_it()
+    {
+        // onFailure FailRun and a control:failRun node are one rule, so both compensate first when
+        // the workflow compensates on failure; FailRun used to skip it.
+        var node = ActionNode(ErrorOutcome.FailRun);
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+
+        await CreateHandler(branches).HandleAsync(Boom, Context(node, Definition([node], [], runCompensationOnFailure: true), branches.Current), CancellationToken.None);
+
+        Assert.Equal(
+            new[]
+            {
+                $"update:{BranchStatus.Compensating}:{FailingNode}",
+                "compensate",
+                "failed",
+                $"fail-run:Node {FailingNode} failed (BOOM) with onFailure FailRun",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                $"release:{RunId}:1"
+            },
+            _log);
+    }
+
+    [Fact]
+    public async Task A_FailRun_node_fails_the_run_with_its_reason()
+    {
+        // control:failRun has no onFailure, so it used to fail only its own branch: siblings kept
+        // running and the run could end PartiallyFailed. It now takes the run-level path.
+        var node = FailRun();
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+        var failRun = new NodeExecutionResult.Fail("FAIL_RUN", "inventory issue", false, null);
+
+        await CreateHandler(branches).HandleAsync(failRun, Context(node, Definition([node], []), branches.Current), CancellationToken.None);
+
+        Assert.Equal(
+            new[]
+            {
+                "failed",
+                "fail-run:inventory issue",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                $"release:{RunId}:1"
+            },
+            _log);
+        Assert.Contains("FAIL_RUN", Assert.Single(branches.Failed).ErrorJson);
+        JsonElement payload = JsonSerializer.SerializeToElement(Assert.Single(_journal.Entries).Payload);
+        Assert.Equal("FailRun", payload.GetProperty("onFailure").GetString());
+        _cancellation.Verify(cancellation => cancellation.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_FailRun_node_still_compensates_first_when_the_workflow_asks_for_it()
+    {
+        var node = FailRun();
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+        var failRun = new NodeExecutionResult.Fail("FAIL_RUN", "inventory issue", false, null);
+
+        await CreateHandler(branches).HandleAsync(failRun, Context(node, Definition([node], [], runCompensationOnFailure: true), branches.Current), CancellationToken.None);
+
+        Assert.Equal(
+            new[]
+            {
+                $"update:{BranchStatus.Compensating}:{FailingNode}",
+                "compensate",
+                "failed",
+                "fail-run:inventory issue",
                 $"journal:{HistoryEventKind.BranchFailed}",
                 $"release:{RunId}:1"
             },
@@ -121,8 +197,42 @@ public sealed class FailResultHandlerTests
     }
 
     [Fact]
-    public async Task FailFast_fails_the_run_and_running_out_of_credits_cancels_it()
+    public async Task FailFast_fails_the_run()
     {
+        // FailFast used to move the run to 'Failing' and nothing else, so a sibling parked on a signal
+        // kept the run alive until the signal or its TTL. Failing the run stops that work too.
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+
+        await CreateHandler(branches).HandleAsync(Boom, Context(Node(FailingNode), Definition([Node(FailingNode)], [], failFast: true), branches.Current), CancellationToken.None);
+
+        Assert.Equal(
+            new[]
+            {
+                "failed",
+                $"fail-run:Node {FailingNode} failed (BOOM) on a fail-fast workflow",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                $"release:{RunId}:1"
+            },
+            _log);
+        _cancellation.Verify(cancellation => cancellation.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FailFast_does_not_apply_to_a_compensated_failure()
+    {
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+
+        await CreateHandler(branches).HandleAsync(Boom, Context(Node(FailingNode), Definition([Node(FailingNode)], [], runCompensationOnFailure: true, failFast: true), branches.Current), CancellationToken.None);
+
+        Assert.DoesNotContain(_log, entry => entry.StartsWith("fail-run:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Running_out_of_credits_on_a_fail_fast_workflow_cancels_the_run_instead_of_failing_it()
+    {
+        // The cancel alone stops the run's work: the finalizer maps a cancel with this reason to
+        // OutOfCredits. Failing the run first stopped the same work twice and journalled both a
+        // failure and a cancel for one event.
         var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
         var outOfCredits = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "budget spent", false, null);
 
@@ -132,7 +242,27 @@ public sealed class FailResultHandlerTests
             new[]
             {
                 "failed",
-                $"run:{RunStatus.Running}->{RunStatus.Failing}",
+                "cancel-run:OUT_OF_CREDITS",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                $"release:{RunId}:1"
+            },
+            _log);
+        _cancellation.Verify(cancellation => cancellation.FailRunAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Running_out_of_credits_with_onFailure_FailRun_cancels_the_run_instead_of_failing_it()
+    {
+        var node = ActionNode(ErrorOutcome.FailRun);
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
+        var outOfCredits = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "budget spent", false, null);
+
+        await CreateHandler(branches).HandleAsync(outOfCredits, Context(node, Definition([node], []), branches.Current), CancellationToken.None);
+
+        Assert.Equal(
+            new[]
+            {
+                "failed",
                 "cancel-run:OUT_OF_CREDITS",
                 $"journal:{HistoryEventKind.BranchFailed}",
                 $"release:{RunId}:1"
@@ -197,7 +327,6 @@ public sealed class FailResultHandlerTests
     {
         return new FailResultHandler(
             branches,
-            _runs.Object,
             new RecordingRunCountersProvider(_log),
             _dispatcher,
             new SequentialIdGenerator(),
@@ -208,6 +337,14 @@ public sealed class FailResultHandlerTests
             _journal,
             new RecordingBranchTerminator(_log));
     }
+
+    private static FailRunNode FailRun() => new()
+    {
+        NodeId = FailingNode,
+        Name = "fail",
+        Ports = [],
+        Config = new FailRunConfig { Reason = "inventory issue" }
+    };
 
     private static TestActionNode ActionNode(ErrorOutcome outcome) => new()
     {

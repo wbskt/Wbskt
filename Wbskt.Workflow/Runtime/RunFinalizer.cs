@@ -135,6 +135,11 @@ internal sealed class RunFinalizer : IRunFinalizer
             return hasCancelledBranch && hasCompletedDespiteCancellation ? RunStatus.PartiallyFailed : RunStatus.Cancelled;
         }
 
+        // A run that failed by its own rule (onFailure FailRun, a control:failRun node, FailFast) is
+        // 'Failing', and ends Failed however its siblings ended - completed, or cancelled when the
+        // failure stopped them. It must say Failed, not Cancelled: the console shows the status and
+        // the reason, and "Cancelled" for a FailRun used to read as if someone had pressed cancel.
+        // Only an explicit cancel taken while it was failing moves it on to 'Cancelling' above.
         if (string.Equals(run.Status, RunStatus.Failing, StringComparison.Ordinal))
         {
             return RunStatus.Failed;

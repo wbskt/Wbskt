@@ -151,6 +151,8 @@ public sealed class RunReaperTests
             return Task.FromResult(true);
         }
 
+        public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct) => throw new NotSupportedException();
+
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
         {
             return Task.FromResult(false);

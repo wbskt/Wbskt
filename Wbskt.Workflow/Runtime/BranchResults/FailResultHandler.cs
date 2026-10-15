@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -17,7 +18,6 @@ namespace Wbskt.Workflow.Runtime.BranchResults;
 /// </summary>
 internal sealed class FailResultHandler(
     IBranchProvider branchProvider,
-    IRunProvider runProvider,
     IRunCountersProvider runCountersProvider,
     IRunDispatcher runDispatcher,
     IIdGenerator idGenerator,
@@ -57,43 +57,55 @@ internal sealed class FailResultHandler(
         ErrorOutcome outcome = config?.Outcome ?? ErrorOutcome.FailBranch;
         bool shouldCompensate = (outcome == ErrorOutcome.Compensate) || (context.Definition.RunCompensationOnFailure);
 
-        if (outcome == ErrorOutcome.FailRun)
-        {
-            await branchProvider.SetFailedAsync(branchId, errorJson, ct);
-            await runProvider.TransitionStatusAsync(runRow.Id, RunStatus.Running, RunStatus.Failing, null, null, ct);
-            await runCancellationService.RequestCancellationAsync(runRow.Id, $"FailRun cascade triggered by node {nodeId}", ct);
-        }
-        else if (shouldCompensate)
+        // A control:failRun node says "fail the run" just as an onFailure of FailRun does, so both
+        // take one run-level path rather than the node failing only its own branch - otherwise its
+        // siblings kept running and the run could end PartiallyFailed. Both compensate first when
+        // asked to, like any other failure.
+        bool failsRun = outcome == ErrorOutcome.FailRun || context.Node is FailRunNode;
+        bool outOfCredits = string.Equals(result.ErrorCode, "OUT_OF_CREDITS", StringComparison.Ordinal);
+
+        if (shouldCompensate)
         {
             branchRow = await branchProvider.UpdatePointerAsync(branchId, nodeId, BranchStatus.Compensating, branchRow.LocalJson, branchRow.LastOutputJson, ct);
             await compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
-            await branchProvider.SetFailedAsync(branchId, errorJson, ct);
-        }
-        else
-        {
-            await branchProvider.SetFailedAsync(branchId, errorJson, ct);
-            if (context.Definition.FailFast)
-            {
-                await runProvider.TransitionStatusAsync(runRow.Id, RunStatus.Running, RunStatus.Failing, null, null, ct);
-            }
         }
 
-        if (string.Equals(result.ErrorCode, "OUT_OF_CREDITS", StringComparison.Ordinal))
+        await branchProvider.SetFailedAsync(branchId, errorJson, ct);
+
+        if (outOfCredits)
         {
             // Credit exhaustion is a run-wide constraint - cascade cancellation so sibling
-            // branches stop instead of continuing to burn (already-exhausted) budget.
+            // branches stop instead of continuing to burn (already-exhausted) budget. It stays a
+            // cancel, and replaces failing the run rather than following it: the finalizer maps a
+            // cancel with this reason to OutOfCredits, and failing the run first would stop the
+            // same work twice and journal a failure and a cancel for one event.
             await runCancellationService.RequestCancellationAsync(runRow.Id, "OUT_OF_CREDITS", ct);
+        }
+        else if (failsRun)
+        {
+            string reason = context.Node is FailRunNode
+                ? result.Message
+                : $"Node {nodeId} failed ({result.ErrorCode}) with onFailure FailRun";
+            await runCancellationService.FailRunAsync(runRow.Id, reason, ct);
+        }
+        else if (context.Definition.FailFast && !shouldCompensate)
+        {
+            // FailFast escalates a plain branch failure to the run; it has never applied to a
+            // compensated one.
+            await runCancellationService.FailRunAsync(runRow.Id, $"Node {nodeId} failed ({result.ErrorCode}) on a fail-fast workflow", ct);
         }
 
         // The branch is over. Only NodeFailed was recorded before, so a reader could see
         // which node failed but not that the branch itself ended, nor how it was handled -
-        // FailBranch, FailRun and Compensate look identical from NodeFailed alone.
+        // FailBranch, FailRun and Compensate look identical from NodeFailed alone. A
+        // control:failRun node has no onFailure of its own but fails the run all the same.
+        string handledAs = failsRun ? nameof(ErrorOutcome.FailRun) : outcome.ToString();
         await journal.AppendBranchEventAsync(
             runRow.Id,
             branchRow.RefId,
             nodeId,
             HistoryEventKind.BranchFailed,
-            new { result.ErrorCode, result.Message, onFailure = outcome.ToString(), compensated = shouldCompensate },
+            new { result.ErrorCode, result.Message, onFailure = handledAs, compensated = shouldCompensate },
             ct);
 
         // This branch is dying, so it will never reach its Join. Contribute on its behalf,
