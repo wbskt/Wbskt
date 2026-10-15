@@ -35,6 +35,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly BranchEndings _endings;
     private readonly int _maxBranchLocalStateBytes;
     private readonly TimeSpan _retryParkThreshold;
+    private readonly int _cancellationCheckInterval;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<BranchLoop>? _logger;
 
@@ -69,6 +70,7 @@ internal sealed class BranchLoop : IBranchLoop
         _endings = endings;
         _maxBranchLocalStateBytes = options?.Value.MaxBranchLocalStateBytes ?? new WorkflowEngineOptions().MaxBranchLocalStateBytes;
         _retryParkThreshold = options?.Value.RetryParkThreshold ?? new WorkflowEngineOptions().RetryParkThreshold;
+        _cancellationCheckInterval = Math.Max(1, options?.Value.CancellationCheckInterval ?? new WorkflowEngineOptions().CancellationCheckInterval);
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }
@@ -112,9 +114,10 @@ internal sealed class BranchLoop : IBranchLoop
             ct);
         _logger?.LogInformation("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
+        long step = 0;
         while (true)
         {
-            if (await _runCancellationService.IsCancellationRequestedAsync(runId, ct))
+            if (await IsRunStoppedAsync(runId, step++, runToken, ct))
             {
                 await _endings.CancelAsync(runRow.Id, branchId, branchRow, ct);
                 return;
@@ -177,6 +180,26 @@ internal sealed class BranchLoop : IBranchLoop
 
             branchRow = advanced;
         }
+    }
+
+    /// <summary>
+    /// Whether the branch must stop before its next node because its run was cancelled or failed. The
+    /// run row is read on the first step of a dispatch and every
+    /// <see cref="WorkflowEngineOptions.CancellationCheckInterval"/> steps after it: the first, because a
+    /// cancel taken while the branch was parked, or by another host, or before a restart is only on the
+    /// row; the later ones, because a cancel taken by another host mid-branch never reaches this host's
+    /// token. Every step in between trusts the run's token, which a cancel or failure taken on this host
+    /// trips at once, so reading the row before every node bought nothing on this host but a round trip.
+    /// </summary>
+    private async Task<bool> IsRunStoppedAsync(long runId, long step, CancellationToken runToken, CancellationToken ct)
+    {
+        if (runToken.IsCancellationRequested)
+        {
+            return true;
+        }
+
+        return step % _cancellationCheckInterval == 0
+            && await _runCancellationService.IsCancellationRequestedAsync(runId, ct);
     }
 
     /// <summary>

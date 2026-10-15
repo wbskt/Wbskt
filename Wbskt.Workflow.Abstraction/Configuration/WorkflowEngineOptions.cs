@@ -47,6 +47,17 @@ public sealed class WorkflowEngineOptions
     public TimeSpan RetryParkThreshold { get; init; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
+    /// How many nodes a branch runs between reads of its run row to ask whether the run was cancelled
+    /// or failed. The first node of every dispatch (a start, a bookmark wake, a recovery) always reads
+    /// the row, so a cancel taken while the branch was parked or on another host is seen before any
+    /// work. In between, the loop trusts the run's cancellation token, which a cancel or failure taken
+    /// on this host trips at once; the row is read again only every this many nodes, which bounds how
+    /// long a cancel taken by another host goes unseen. Reading it before every node was the largest
+    /// per-node cost after the pointer write. One or less reads it before every node.
+    /// </summary>
+    public int CancellationCheckInterval { get; init; } = 10;
+
+    /// <summary>
     /// Hard ceiling on how many branches one ParallelForEach may fan out to. A collection that arrives
     /// larger than this fails the node with a descriptive error instead of writing a branch row and a
     /// dispatcher entry per element - which is one workflow's payload deciding the throughput of every
