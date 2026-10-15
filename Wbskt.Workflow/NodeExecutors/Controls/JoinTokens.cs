@@ -36,7 +36,9 @@ internal static class JoinTokens
 
     /// <summary>
     /// What the winner of a Join carries on: the enclosing cohort's token, popped off the stack. At
-    /// the outermost level there is nothing to restore and the state is left as it is.
+    /// the outermost level there is nothing to restore, and the closed cohort's token is removed: left
+    /// in place, a continuation that reached another Join without a new Fork, or failed later on,
+    /// contributed again to the aggregator this Join had just claimed.
     /// </summary>
     public static (Dictionary<string, JsonElement> Patch, List<string> RemoveKeys) AfterJoin(
         IReadOnlyDictionary<string, JsonElement> state)
@@ -47,6 +49,7 @@ internal static class JoinTokens
         List<string> outer = ReadOuter(state);
         if (outer.Count == 0)
         {
+            remove.Add(TokenKey);
             return (patch, remove);
         }
 

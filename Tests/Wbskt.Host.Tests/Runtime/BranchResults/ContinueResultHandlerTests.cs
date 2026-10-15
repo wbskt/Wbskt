@@ -17,7 +17,7 @@ public sealed class ContinueResultHandlerTests
     public async Task Moves_the_branch_along_the_port_with_the_patch_merged_and_removed_keys_dropped()
     {
         var branches = new RecordingBranchProvider(_log, Branch(NodeA, """{"keep":1,"drop":2}"""));
-        var handler = new ContinueResultHandler(branches, new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)));
+        var handler = new ContinueResultHandler(branches, new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), new RecordingRunJournal(_log)));
         var definition = Definition([Node(NodeA), Node(NodeB)], [new Edge((NodeA, "default"), (NodeB, "in"))]);
         var result = new NodeExecutionResult.Continue("default", Patch("added", 3), ["drop"]);
 
@@ -39,7 +39,7 @@ public sealed class ContinueResultHandlerTests
     public async Task Follows_a_port_that_names_a_node_as_a_jump()
     {
         var branches = new RecordingBranchProvider(_log, Branch(NodeA));
-        var handler = new ContinueResultHandler(branches, new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)));
+        var handler = new ContinueResultHandler(branches, new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), new RecordingRunJournal(_log)));
         var definition = Definition([Node(NodeA), Node(NodeB)], []);
 
         BranchResultOutcome outcome = await handler.HandleAsync(NodeExecutionResult.JumpTo(NodeB, Patch("x", 1)), Context(Node(NodeA), definition, branches.Current), CancellationToken.None);
@@ -52,7 +52,7 @@ public sealed class ContinueResultHandlerTests
     {
         var branches = new RecordingBranchProvider(_log, Branch(NodeA));
         var journal = new RecordingRunJournal(_log);
-        var handler = new ContinueResultHandler(branches, new BranchEndings(branches, journal, new RecordingBranchTerminator(_log)));
+        var handler = new ContinueResultHandler(branches, new BranchEndings(branches, journal, new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), journal));
         var definition = Definition([Node(NodeA)], []);
 
         BranchResultOutcome outcome = await handler.HandleAsync(new NodeExecutionResult.Continue("default", Patch("x", 1)), Context(Node(NodeA), definition, branches.Current), CancellationToken.None);

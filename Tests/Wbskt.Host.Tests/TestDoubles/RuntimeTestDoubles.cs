@@ -146,14 +146,15 @@ internal static class TestBranchLoop
         IOptions<WorkflowEngineOptions>? engineOptions = null)
     {
         var endings = new BranchEndings(branchProvider, journal, branchTerminator);
-        var continueHandler = new ContinueResultHandler(branchProvider, endings);
+        var declines = new JoinDeclines(joinAggregatorProvider, runCancellationService, journal);
+        var continueHandler = new ContinueResultHandler(branchProvider, endings, declines);
         var resultDispatcher = new BranchResultDispatcher(
         [
             continueHandler,
             new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, endings),
             new WaitForBookmarkResultHandler(branchProvider, bookmarkProvider, idGenerator, clock, journal),
             new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator, continueHandler),
-            new TerminalResultHandler(endings)
+            new TerminalResultHandler(endings, declines)
         ]);
 
         return new BranchLoop(

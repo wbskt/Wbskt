@@ -68,10 +68,11 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
 
         // Resolve the Join this cohort converges on and stamp its config onto the aggregator. Doing
         // it here (rather than passing config on each contribution) is what lets a FAILED branch
-        // contribute later from BranchLoop, which never sees the Join node.
+        // contribute later from BranchLoop, which never sees the Join node. It is the Join at this
+        // node's own nesting level, not the nearest one, which for a Fork in the body is the Fork's.
         JoinNode? joinNode = ctx.Definition is null
             ? null
-            : WorkflowGraph.FindDownstream<JoinNode>(ctx.Definition, node.NodeId, "body");
+            : WorkflowGraph.FindJoinForCohort(ctx.Definition, node.NodeId, ["body"]);
         if (joinNode is null)
         {
             return new NodeExecutionResult.Fail(

@@ -33,7 +33,7 @@ internal sealed class JoinNodeExecutor : INodeExecutor
             || tokenElement.ValueKind != JsonValueKind.String
             || !Guid.TryParse(tokenElement.GetString(), out Guid joinToken))
         {
-            return new NodeExecutionResult.Fail("JOIN_NO_TOKEN", "Join reached without a join token (must follow a ParallelForEach).", false, null);
+            return new NodeExecutionResult.Fail("JOIN_NO_TOKEN", "Join reached without a join token (must be downstream of a Fork or ParallelForEach).", false, null);
         }
 
         // A branch only reaches the Join node by succeeding - a failed branch dies in BranchLoop,

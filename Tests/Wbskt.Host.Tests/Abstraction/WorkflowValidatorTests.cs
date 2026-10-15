@@ -601,28 +601,219 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "PARALLEL_FOREACH_WITHOUT_JOIN");
     }
 
+    // ----------------------------------------------- Fork/Join pairing
+
     [Fact]
-    public void Validate_does_not_require_a_Join_after_a_Fork()
+    public void Validate_rejects_a_Fork_with_a_branch_straight_to_End()
     {
-        // A Fork without a Join is legal - its branches simply run to their own ends.
-        var def = ValidWorkflowBuilder.Build();
-        var forkId = Guid.NewGuid();
-        var fork = new ForkNode
+        // The branch that ends never counts at the Join, so a Mode=All join never converged and the
+        // run finalized Succeeded with everything after the Join skipped.
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid(), endId = Guid.NewGuid(), stepId = Guid.NewGuid();
+        var step = CreateToast(withErrorPort: false) with { NodeId = stepId };
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId), End(endId), step],
+            [
+                new Edge((forkId, "a"), (stepId, "in")),
+                new Edge((stepId, "default"), (joinId, "in")),
+                new Edge((forkId, "b"), (endId, "in"))
+            ]);
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "FORK_BRANCH_WITHOUT_JOIN" && i.NodeId == forkId);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_Fork_without_a_Join_as_a_fire_and_forget_fan_out()
+    {
+        // No branch reaches a Join, so there is no join to converge: the branches run to their own
+        // ends and the run ends when they all do.
+        Guid forkId = Guid.NewGuid(), stepA = Guid.NewGuid(), endId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), CreateToast(withErrorPort: false) with { NodeId = stepA }, End(endId)],
+            [new Edge((forkId, "a"), (stepA, "in")), new Edge((forkId, "b"), (endId, "in"))]);
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "FORK_BRANCH_WITHOUT_JOIN" or "FORK_BRANCHES_JOIN_MISMATCH" or "PARALLEL_FOREACH_WITHOUT_JOIN");
+    }
+
+    [Fact]
+    public void Validate_accepts_a_Fork_branch_that_fails_the_run_instead_of_reaching_the_Join()
+    {
+        // FailRun fails the whole run, so the join never needs to converge.
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid(), gateId = Guid.NewGuid(), failId = Guid.NewGuid();
+        var failRun = new FailRunNode
         {
-            NodeId = forkId,
-            Name = "fork",
-            Ports = [
-                new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
-                new PortDefinition { PortId = "a", Direction = PortDirection.Output, Label = "a" },
-                new PortDefinition { PortId = "b", Direction = PortDirection.Output, Label = "b" }
-            ],
-            Config = new ForkConfig { Branches = ["a", "b"] }
+            NodeId = failId,
+            Name = "fail",
+            Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }],
+            Config = new FailRunConfig { Reason = "nope" }
         };
 
-        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, fork] });
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId), Gate(gateId), failRun],
+            [
+                new Edge((forkId, "a"), (gateId, "in")),
+                new Edge((gateId, "true"), (joinId, "in")),
+                new Edge((gateId, "false"), (failId, "in")),
+                new Edge((forkId, "b"), (joinId, "in"))
+            ]);
 
-        Assert.DoesNotContain(result.Issues, i => i.Code == "PARALLEL_FOREACH_WITHOUT_JOIN");
+        Assert.DoesNotContain(result.Issues, i => i.Code is "FORK_BRANCH_WITHOUT_JOIN" or "FORK_BRANCHES_JOIN_MISMATCH");
     }
+
+    [Fact]
+    public void Validate_rejects_a_Fork_branch_that_a_Logic_port_with_no_edge_ends()
+    {
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid(), gateId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId), Gate(gateId)],
+            [
+                new Edge((forkId, "a"), (gateId, "in")),
+                new Edge((gateId, "true"), (joinId, "in")),
+                new Edge((forkId, "b"), (joinId, "in"))
+            ]);
+
+        Assert.Contains(result.Issues, i => i.Code == "FORK_BRANCH_WITHOUT_JOIN" && i.NodeId == forkId);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_Fork_whose_branches_reach_different_Joins()
+    {
+        Guid forkId = Guid.NewGuid(), joinA = Guid.NewGuid(), joinB = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinA), Join(joinB)],
+            [new Edge((forkId, "a"), (joinA, "in")), new Edge((forkId, "b"), (joinB, "in"))]);
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "FORK_BRANCHES_JOIN_MISMATCH" && i.NodeId == forkId);
+        Assert.DoesNotContain(result.Issues, i => i.Code == "FORK_BRANCH_WITHOUT_JOIN");
+    }
+
+    [Fact]
+    public void Validate_accepts_a_Fork_whose_branches_converge_on_one_Join()
+    {
+        Guid forkId = Guid.NewGuid(), joinId = Guid.NewGuid(), stepId = Guid.NewGuid(), endId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(forkId, "a", "b"), Join(joinId), CreateToast(withErrorPort: false) with { NodeId = stepId }, End(endId)],
+            [
+                new Edge((forkId, "a"), (stepId, "in")),
+                new Edge((stepId, "default"), (joinId, "in")),
+                new Edge((forkId, "b"), (joinId, "in")),
+                // What comes after the Join may end however it likes.
+                new Edge((joinId, "default"), (endId, "in"))
+            ]);
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "FORK_BRANCH_WITHOUT_JOIN" or "FORK_BRANCHES_JOIN_MISMATCH");
+    }
+
+    [Fact]
+    public void Validate_accepts_a_nested_Fork_that_converges_and_continues_to_the_outer_Join()
+    {
+        // outer fork: a -> inner fork (x, y -> inner join -> outer join), b -> outer join
+        Guid outerFork = Guid.NewGuid(), innerFork = Guid.NewGuid(), innerJoin = Guid.NewGuid(), outerJoin = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(outerFork, "a", "b"), Fork(innerFork, "x", "y"), Join(innerJoin), Join(outerJoin)],
+            [
+                new Edge((outerFork, "a"), (innerFork, "in")),
+                new Edge((innerFork, "x"), (innerJoin, "in")),
+                new Edge((innerFork, "y"), (innerJoin, "in")),
+                new Edge((innerJoin, "default"), (outerJoin, "in")),
+                new Edge((outerFork, "b"), (outerJoin, "in"))
+            ]);
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "FORK_BRANCH_WITHOUT_JOIN" or "FORK_BRANCHES_JOIN_MISMATCH");
+    }
+
+    [Fact]
+    public void Validate_rejects_an_outer_Fork_whose_nested_cohort_never_continues_to_the_outer_Join()
+    {
+        // The inner cohort converges, but its continuation ends instead of reaching the outer Join.
+        Guid outerFork = Guid.NewGuid(), innerFork = Guid.NewGuid(), innerJoin = Guid.NewGuid(), outerJoin = Guid.NewGuid(), endId = Guid.NewGuid();
+
+        var result = ValidateGraph(
+            [Fork(outerFork, "a", "b"), Fork(innerFork, "x", "y"), Join(innerJoin), Join(outerJoin), End(endId)],
+            [
+                new Edge((outerFork, "a"), (innerFork, "in")),
+                new Edge((innerFork, "x"), (innerJoin, "in")),
+                new Edge((innerFork, "y"), (innerJoin, "in")),
+                new Edge((innerJoin, "default"), (endId, "in")),
+                new Edge((outerFork, "b"), (outerJoin, "in"))
+            ]);
+
+        Assert.Contains(result.Issues, i => i.Code == "FORK_BRANCH_WITHOUT_JOIN" && i.NodeId == outerFork);
+        Assert.DoesNotContain(result.Issues, i => i.NodeId == innerFork && i.Code is "FORK_BRANCH_WITHOUT_JOIN" or "FORK_BRANCHES_JOIN_MISMATCH");
+    }
+
+    [Fact]
+    public void FindJoinForCohort_returns_the_outer_Join_for_a_Fork_with_a_nested_Fork()
+    {
+        // The nearest Join downstream of the outer Fork is the inner one; the cohort's own is the outer.
+        Guid outerFork = Guid.NewGuid(), innerFork = Guid.NewGuid(), innerJoin = Guid.NewGuid(), outerJoin = Guid.NewGuid();
+        var def = ValidWorkflowBuilder.Build() with
+        {
+            Nodes = [Fork(outerFork, "a", "b"), Fork(innerFork, "x", "y"), Join(innerJoin), Join(outerJoin)],
+            Edges = [
+                new Edge((outerFork, "a"), (innerFork, "in")),
+                new Edge((innerFork, "x"), (innerJoin, "in")),
+                new Edge((innerFork, "y"), (innerJoin, "in")),
+                new Edge((innerJoin, "default"), (outerJoin, "in")),
+                new Edge((outerFork, "b"), (outerJoin, "in"))
+            ]
+        };
+
+        Assert.Equal(outerJoin, WorkflowGraph.FindJoinForCohort(def, outerFork, ["a", "b"])?.NodeId);
+        Assert.Equal(innerJoin, WorkflowGraph.FindJoinForCohort(def, innerFork, ["x", "y"])?.NodeId);
+    }
+
+    private static ValidationResult ValidateGraph(IReadOnlyCollection<BaseNode> nodes, IReadOnlyCollection<Edge> edges)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        return Validator.Validate(def with { Nodes = [.. def.Nodes, .. nodes], Edges = [.. def.Edges, .. edges] });
+    }
+
+    private static ForkNode Fork(Guid nodeId, params string[] branches) => new()
+    {
+        NodeId = nodeId,
+        Name = "fork",
+        Ports = [
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            .. branches.Select(branch => new PortDefinition { PortId = branch, Direction = PortDirection.Output, Label = branch })
+        ],
+        Config = new ForkConfig { Branches = [.. branches] }
+    };
+
+    private static LogicGateNode Gate(Guid nodeId) => new()
+    {
+        NodeId = nodeId,
+        Name = "gate",
+        Ports = [
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "true", Direction = PortDirection.Output, Label = "True" },
+            new PortDefinition { PortId = "false", Direction = PortDirection.Output, Label = "False" }
+        ],
+        Config = new LogicGateConfig { Condition = LogicConditionJsonConverter.FromLegacyString("$trigger.temperature > 35") }
+    };
+
+    private static JoinNode Join(Guid nodeId, JoinMode mode = JoinMode.All) => new()
+    {
+        NodeId = nodeId,
+        Name = "join",
+        Ports = [
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
+        ],
+        Config = new JoinConfig { Mode = mode }
+    };
+
+    private static EndNode End(Guid nodeId) => new()
+    {
+        NodeId = nodeId,
+        Name = "end",
+        Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }]
+    };
 
     // --------------------------------------------- WF-19.5/.6 trigger config
 

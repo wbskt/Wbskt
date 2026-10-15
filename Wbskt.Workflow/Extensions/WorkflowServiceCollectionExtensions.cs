@@ -167,6 +167,7 @@ public static class WorkflowServiceCollectionExtensions
         // that use them: the loop and three handlers end branches, and the Fail handler continues one
         // when an onFailure routes it to a port.
         services.AddScoped<BranchEndings>();
+        services.AddScoped<JoinDeclines>();
         services.AddScoped<ContinueResultHandler>();
         services.AddScoped<IBranchResultHandler>(sp => sp.GetRequiredService<ContinueResultHandler>());
         services.AddScoped<IBranchResultHandler, ForkResultHandler>();

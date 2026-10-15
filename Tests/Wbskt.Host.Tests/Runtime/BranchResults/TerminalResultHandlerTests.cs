@@ -17,7 +17,7 @@ public sealed class TerminalResultHandlerTests
     public async Task Completes_the_branch_unless_it_was_cancelled(BranchTerminalReason reason)
     {
         var branches = new RecordingBranchProvider(_log, Branch(NodeA));
-        var handler = new TerminalResultHandler(new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)));
+        var handler = new TerminalResultHandler(new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), new RecordingRunJournal(_log)));
 
         BranchResultOutcome outcome = await handler.HandleAsync(new NodeExecutionResult.Terminal(reason), Context(Node(NodeA), Definition([Node(NodeA)], []), branches.Current), CancellationToken.None);
 
@@ -30,7 +30,7 @@ public sealed class TerminalResultHandlerTests
     {
         var branches = new RecordingBranchProvider(_log, Branch(NodeA, """{"keep":1}"""));
         var journal = new RecordingRunJournal(_log);
-        var handler = new TerminalResultHandler(new BranchEndings(branches, journal, new RecordingBranchTerminator(_log)));
+        var handler = new TerminalResultHandler(new BranchEndings(branches, journal, new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), journal));
 
         BranchResultOutcome outcome = await handler.HandleAsync(new NodeExecutionResult.Terminal(BranchTerminalReason.Cancelled), Context(Node(NodeA), Definition([Node(NodeA)], []), branches.Current), CancellationToken.None);
 

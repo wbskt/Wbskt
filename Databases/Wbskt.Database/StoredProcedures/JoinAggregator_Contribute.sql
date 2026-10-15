@@ -1,7 +1,7 @@
 CREATE PROCEDURE dbo.JoinAggregator_Contribute
     @JoinToken UNIQUEIDENTIFIER,
     @BranchId  BIGINT = NULL, -- NULL only from an engine older than this procedure, mid-deploy
-    @Outcome   NVARCHAR(20)
+    @Outcome   NVARCHAR(20) -- 'succeeded', 'failed', or 'declined' (ended without reaching the Join)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -12,6 +12,15 @@ BEGIN
     -- contribute (always as 'succeeded'), so a Mode='All' cohort with a failed member never reached
     -- ExpectedCount and everything downstream of the Join was silently skipped.
     DECLARE @ShouldContinue BIT = 0;
+
+    -- A 'declined' vote comes from a member that ended (an End node, a port with no edge) without
+    -- reaching the Join. It used to be silent: a Mode='All' cohort never reached ExpectedCount, the
+    -- other members ended as "not the last", the run finalized Succeeded and everything after the Join
+    -- was skipped without a trace. A decline is not an arrival: it takes the member out of the cohort
+    -- (ExpectedCount is the members still expected to arrive), never claims the continuation itself,
+    -- and abandons the join once the join can no longer be met.
+    DECLARE @Declined BIT = CASE WHEN @Outcome = 'declined' THEN 1 ELSE 0 END;
+    DECLARE @Abandoned BIT = 0;
 
     BEGIN TRAN;
 
@@ -27,11 +36,16 @@ BEGIN
         IF @BranchId IS NOT NULL
             INSERT INTO dbo.JoinContributions (JoinToken, BranchId) VALUES (@JoinToken, @BranchId);
 
-        UPDATE dbo.JoinAggregators WITH (ROWLOCK)
-        SET ContributedCount = ContributedCount + 1,
-            SucceededCount   = SucceededCount + CASE WHEN @Outcome = 'succeeded' THEN 1 ELSE 0 END,
-            FailedCount      = FailedCount + CASE WHEN @Outcome = 'failed' THEN 1 ELSE 0 END
-        WHERE JoinToken = @JoinToken;
+        IF @Declined = 1
+            UPDATE dbo.JoinAggregators WITH (ROWLOCK)
+            SET ExpectedCount = ExpectedCount - 1
+            WHERE JoinToken = @JoinToken;
+        ELSE
+            UPDATE dbo.JoinAggregators WITH (ROWLOCK)
+            SET ContributedCount = ContributedCount + 1,
+                SucceededCount   = SucceededCount + CASE WHEN @Outcome = 'succeeded' THEN 1 ELSE 0 END,
+                FailedCount      = FailedCount + CASE WHEN @Outcome = 'failed' THEN 1 ELSE 0 END
+            WHERE JoinToken = @JoinToken;
     END;
 
     DECLARE @ContributedCount INT,
@@ -57,8 +71,19 @@ BEGIN
 
     DECLARE @QuorumMet BIT = 0;
 
+    IF @Declined = 1
+    BEGIN
+        -- 'All' needs every member, so one walking away fails the join. 'Any' and 'Quorum' carry on
+        -- without it until the remaining members can no longer meet them. A cohort with no Join (a
+        -- Fork saved before every Fork had to have one) has nothing to abandon.
+        IF @IsRepeat = 0 AND @ContinueClaimed = 0 AND @JoinNodeId IS NOT NULL
+           AND (@Mode = 'All'
+                OR (@Mode = 'Any' AND @ContributedCount = 0 AND @ExpectedCount <= 0)
+                OR (@Mode = 'Quorum' AND (@ExpectedCount - @FailedCount) < @QuorumCount))
+            SET @Abandoned = 1;
+    END
     -- 'All' counts arrivals regardless of outcome, so a cohort completes even when members failed.
-    IF @Mode = 'All' AND @ContributedCount >= @ExpectedCount
+    ELSE IF @Mode = 'All' AND @ContributedCount >= @ExpectedCount
         SET @QuorumMet = 1;
     ELSE IF @Mode = 'Any' AND @ContributedCount >= 1
         SET @QuorumMet = 1;
@@ -68,6 +93,12 @@ BEGIN
     -- so release the continuation rather than leaving the run parked forever.
     ELSE IF @Mode = 'Quorum' AND (@ExpectedCount - @FailedCount) < @QuorumCount
         SET @QuorumMet = 1;
+
+    -- An abandoned join is claimed so no later arrival can continue past it.
+    IF @Abandoned = 1
+        UPDATE dbo.JoinAggregators
+        SET ContinueClaimed = 1
+        WHERE JoinToken = @JoinToken;
 
     IF @QuorumMet = 1 AND @ContinueClaimed = 0 AND @IsRepeat = 0
     BEGIN
@@ -86,6 +117,7 @@ BEGIN
         @SucceededCount   AS SucceededCount,
         @FailedCount      AS FailedCount,
         @ExpectedCount    AS ExpectedCount,
-        @JoinNodeId       AS JoinNodeId;
+        @JoinNodeId       AS JoinNodeId,
+        @Abandoned        AS Abandoned;
 END;
 GO

@@ -33,6 +33,43 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
     }
 
     [SkippableFact]
+    public async Task A_declined_member_abandons_an_All_join_and_no_later_arrival_continues()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var joinToken = Guid.NewGuid();
+        await ProcAsync("dbo.JoinAggregator_Initialize", ("@JoinToken", joinToken), ("@RunId", Random.Shared.Next(1_000_000, int.MaxValue)), ("@ExpectedCount", 2), ("@Mode", "All"), ("@JoinNodeId", Guid.NewGuid()));
+
+        var declined = await ContributeWithAbandonedAsync(joinToken, branchId: 1, "declined");
+        var replay = await ContributeWithAbandonedAsync(joinToken, branchId: 1, "declined");
+        var arrival = await ContributeWithAbandonedAsync(joinToken, branchId: 2, "succeeded");
+
+        Assert.Equal((false, true), declined);
+        Assert.Equal((false, false), replay);
+        Assert.Equal((false, false), arrival);
+    }
+
+    [SkippableFact]
+    public async Task A_declined_member_of_an_Any_join_lets_the_next_arrival_continue()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var joinToken = Guid.NewGuid();
+        await ProcAsync("dbo.JoinAggregator_Initialize", ("@JoinToken", joinToken), ("@RunId", Random.Shared.Next(1_000_000, int.MaxValue)), ("@ExpectedCount", 2), ("@Mode", "Any"), ("@JoinNodeId", Guid.NewGuid()));
+
+        Assert.Equal((false, false), await ContributeWithAbandonedAsync(joinToken, branchId: 1, "declined"));
+        Assert.Equal((true, false), await ContributeWithAbandonedAsync(joinToken, branchId: 2, "succeeded"));
+    }
+
+    [SkippableFact]
+    public async Task A_declined_member_of_a_cohort_without_a_Join_abandons_nothing()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        var joinToken = Guid.NewGuid();
+        await ProcAsync("dbo.JoinAggregator_Initialize", ("@JoinToken", joinToken), ("@RunId", Random.Shared.Next(1_000_000, int.MaxValue)), ("@ExpectedCount", 2));
+
+        Assert.Equal((false, false), await ContributeWithAbandonedAsync(joinToken, branchId: 1, "declined"));
+    }
+
+    [SkippableFact]
     public async Task The_active_branch_count_never_goes_negative()
     {
         Skip.IfNot(fixture.IsAvailable, Skipped);
@@ -162,6 +199,18 @@ public sealed class EngineCorrectnessIntegrationTests(SqlEdgeFixture fixture)
         await using var reader = await cmd.ExecuteReaderAsync();
         await reader.ReadAsync();
         return (reader.GetBoolean(reader.GetOrdinal("ShouldContinue")), reader.GetInt32(reader.GetOrdinal("ContributedCount")));
+    }
+
+    private async Task<(bool ShouldContinue, bool Abandoned)> ContributeWithAbandonedAsync(Guid joinToken, long branchId, string outcome)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand("dbo.JoinAggregator_Contribute", conn) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@JoinToken", joinToken);
+        cmd.Parameters.AddWithValue("@BranchId", branchId);
+        cmd.Parameters.AddWithValue("@Outcome", outcome);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return (reader.GetBoolean(reader.GetOrdinal("ShouldContinue")), reader.GetBoolean(reader.GetOrdinal("Abandoned")));
     }
 
     private async Task<(bool Stored, string? Old)> UpsertAsync(int clientId, string name, string valueJson, int maxPerClient)
