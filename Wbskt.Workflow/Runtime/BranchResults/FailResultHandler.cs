@@ -7,6 +7,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.NodeExecutors.Controls;
 
 namespace Wbskt.Workflow.Runtime.BranchResults;
 
@@ -29,13 +30,6 @@ internal sealed class FailResultHandler(
     IBranchTerminator branchTerminator,
     ILogger<FailResultHandler>? logger = null) : BranchResultHandler<NodeExecutionResult.Fail>
 {
-    /// <summary>
-    /// Local-state key marking a branch as a member of a fan-out cohort (written by ForkNodeExecutor
-    /// and ParallelForEachNodeExecutor, read by JoinNodeExecutor). Kept here too because the fail
-    /// path must contribute on behalf of a branch that will never reach the Join node.
-    /// </summary>
-    internal const string JoinTokenKey = "__join_token";
-
     private readonly OnFailureHandler _onFailureHandler = new();
     private readonly ContinueResultHandler _continueHandler = new(branchProvider, journal, branchTerminator);
 
@@ -134,7 +128,7 @@ internal sealed class FailResultHandler(
     private async Task ContributeFailureToJoinAsync(RunRow runRow, BranchRow branchRow, WorkflowDefinition definition, CancellationToken ct)
     {
         IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);
-        if (!localState.TryGetValue(JoinTokenKey, out JsonElement tokenElement)
+        if (!localState.TryGetValue(JoinTokens.TokenKey, out JsonElement tokenElement)
             || tokenElement.ValueKind != JsonValueKind.String
             || !Guid.TryParse(tokenElement.GetString(), out Guid joinToken))
         {
@@ -161,12 +155,17 @@ internal sealed class FailResultHandler(
                 return;
             }
 
-            string continuationLocalJson = BranchLocalState.Serialize(new Dictionary<string, JsonElement>
-            {
-                ["joinContributed"] = JsonSerializer.SerializeToElement(contribution.ContributedCount),
-                ["joinSucceeded"] = JsonSerializer.SerializeToElement(contribution.SucceededCount),
-                ["joinFailed"] = JsonSerializer.SerializeToElement(contribution.FailedCount)
-            });
+            // Build the continuation's state exactly as the Join node would have for this branch:
+            // keep the branch's state, pop the enclosing cohort's token back into place, and add the
+            // join counts. A continuation built from the counts alone lost the outer token, so when
+            // the last arrival of a cohort nested in another one was a failure, the continuation
+            // reached the outer Join without a token, the outer Mode=All cohort never converged,
+            // and the run sat Running until the reaper collected it.
+            (Dictionary<string, JsonElement> patch, List<string> removeKeys) = JoinTokens.AfterJoin(localState);
+            patch["joinContributed"] = JsonSerializer.SerializeToElement(contribution.ContributedCount);
+            patch["joinSucceeded"] = JsonSerializer.SerializeToElement(contribution.SucceededCount);
+            patch["joinFailed"] = JsonSerializer.SerializeToElement(contribution.FailedCount);
+            string continuationLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(branchRow.LocalJson, patch, removeKeys));
 
             // Count the continuation BEFORE creating it, so the caller's own decrement cannot drive
             // the run to zero active branches and finalize it out from under the new branch.

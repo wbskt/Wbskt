@@ -5,6 +5,7 @@ using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime.BranchResults;
 using static Wbskt.Host.Tests.Runtime.BranchResults.BranchResultTestData;
 
@@ -17,6 +18,8 @@ public sealed class FailResultHandlerTests
     private static readonly Guid JoinNode = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid AfterJoin = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private static readonly Guid JoinToken = Guid.Parse("99999999-9999-9999-9999-999999999999");
+    private static readonly Guid OuterToken = Guid.Parse("88888888-8888-8888-8888-888888888888");
+    private static readonly Guid OutermostToken = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
     private static readonly NodeExecutionResult.Fail Boom = new("BOOM", "node blew up", false, null);
 
@@ -281,7 +284,7 @@ public sealed class FailResultHandlerTests
             .Setup(joins => joins.ContributeAsync(JoinToken, BranchId, "failed", It.IsAny<CancellationToken>()))
             .Callback(() => _log.Add("contribute"))
             .ReturnsAsync(new JoinContributionResult(true, 3, 2, 1, 3, JoinNodeId: JoinNode));
-        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, $$"""{"{{FailResultHandler.JoinTokenKey}}":"{{JoinToken}}"}"""));
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}"""));
         var definition = Definition(
             [Node(FailingNode), Node(JoinNode), Node(AfterJoin)],
             [new Edge((FailingNode, "default"), (JoinNode, "in")), new Edge((JoinNode, "default"), (AfterJoin, "in"))]);
@@ -309,18 +312,79 @@ public sealed class FailResultHandlerTests
         Assert.Equal(BranchExecutionReason.ForkChild, Assert.Single(_dispatcher.Requests).Reason);
     }
 
+    /// <summary>
+    /// In a cohort nested inside another, a continuation spawned by a failed last arrival must carry
+    /// the enclosing cohort's token, or it reaches the outer Join with no token and the outer cohort
+    /// never converges.
+    /// </summary>
+    [Fact]
+    public async Task A_nested_cohort_continuation_rejoins_the_enclosing_cohort()
+    {
+        IReadOnlyDictionary<string, JsonElement> state = await SpawnContinuationFrom(
+            $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}","{{JoinTokens.OuterKey}}":["{{OuterToken}}"],"item":"a"}""");
+
+        Assert.Equal(OuterToken.ToString(), state[JoinTokens.TokenKey].GetString());
+        Assert.False(state.ContainsKey(JoinTokens.OuterKey));
+        Assert.Equal("a", state["item"].GetString());
+        Assert.Equal(1, state["joinFailed"].GetInt32());
+    }
+
+    [Fact]
+    public async Task A_doubly_nested_cohort_continuation_keeps_the_rest_of_the_stack()
+    {
+        IReadOnlyDictionary<string, JsonElement> state = await SpawnContinuationFrom(
+            $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}","{{JoinTokens.OuterKey}}":["{{OutermostToken}}","{{OuterToken}}"]}""");
+
+        Assert.Equal(OuterToken.ToString(), state[JoinTokens.TokenKey].GetString());
+        Assert.Equal(
+            new[] { OutermostToken.ToString() },
+            state[JoinTokens.OuterKey].EnumerateArray().Select(e => e.GetString()).ToArray());
+    }
+
+    /// <summary>
+    /// At the outermost cohort the Join node leaves the state as it is, closed token included, so
+    /// the failure path does the same and both continuations carry the same shape of state.
+    /// </summary>
+    [Fact]
+    public async Task An_outermost_cohort_continuation_matches_what_the_join_node_would_carry()
+    {
+        IReadOnlyDictionary<string, JsonElement> state = await SpawnContinuationFrom(
+            $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}""");
+
+        Assert.Equal(JoinToken.ToString(), state[JoinTokens.TokenKey].GetString());
+        Assert.False(state.ContainsKey(JoinTokens.OuterKey));
+        Assert.Equal(3, state["joinContributed"].GetInt32());
+        Assert.Equal(2, state["joinSucceeded"].GetInt32());
+        Assert.Equal(1, state["joinFailed"].GetInt32());
+    }
+
     [Fact]
     public async Task A_join_that_cannot_be_reached_does_not_mask_the_failure()
     {
         _joins
             .Setup(joins => joins.ContributeAsync(It.IsAny<Guid>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("join store down"));
-        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, $$"""{"{{FailResultHandler.JoinTokenKey}}":"{{JoinToken}}"}"""));
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}"""));
 
         BranchResultOutcome outcome = await CreateHandler(branches).HandleAsync(Boom, Context(Node(FailingNode), Definition([Node(FailingNode)], []), branches.Current), CancellationToken.None);
 
         Assert.True(outcome.IsStopped);
         Assert.Equal(new[] { "failed", $"journal:{HistoryEventKind.BranchFailed}", $"release:{RunId}:1" }, _log);
+    }
+
+    private async Task<IReadOnlyDictionary<string, JsonElement>> SpawnContinuationFrom(string failingBranchLocalJson)
+    {
+        _joins
+            .Setup(joins => joins.ContributeAsync(JoinToken, BranchId, "failed", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JoinContributionResult(true, 3, 2, 1, 3, JoinNodeId: JoinNode));
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, failingBranchLocalJson));
+        var definition = Definition(
+            [Node(FailingNode), Node(JoinNode), Node(AfterJoin)],
+            [new Edge((FailingNode, "default"), (JoinNode, "in")), new Edge((JoinNode, "default"), (AfterJoin, "in"))]);
+
+        await CreateHandler(branches).HandleAsync(Boom, Context(Node(FailingNode), definition, branches.Current), CancellationToken.None);
+
+        return LocalState(Assert.Single(branches.Created).LocalJson);
     }
 
     private FailResultHandler CreateHandler(RecordingBranchProvider branches)
