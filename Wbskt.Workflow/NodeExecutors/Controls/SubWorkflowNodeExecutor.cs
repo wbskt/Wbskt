@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -24,8 +26,13 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// configures inputs; without one, an input-carrying node fails with a clear message rather than
 /// quietly starting the child with an empty payload.
 /// </param>
-internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null) : INodeExecutor
+/// <param name="options">
+/// Optional so the executor's unit tests need no configuration; without it the default depth ceiling applies.
+/// </param>
+internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runProvider, TimeProvider clock, IExpressionEvaluator? evaluator = null, IOptions<WorkflowEngineOptions>? options = null) : INodeExecutor
 {
+    private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
+
     internal const string ParkedKey = "__subworkflow";
     internal const string WakeKey = "__wake";
     internal const string ChildResultKey = "childResult";
@@ -51,10 +58,23 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         // First visit: start the child run via its manual trigger.
         Guid childRefId = config.WorkflowRefId;
 
+        // A child is started past the workspace run ceiling, so nothing else stops a workflow that
+        // reaches itself (directly, or through another) from starting children forever. Refused before
+        // anything is evaluated or started, and not retryable: the same parent would reach the same depth.
+        int childDepth = ReadDepth(ctx.Branch.TriggerPayload) + 1;
+        if (childDepth > _maxDepth)
+        {
+            return new NodeExecutionResult.Fail(
+                "SUBWORKFLOW_DEPTH_EXCEEDED",
+                $"Child workflow '{childRefId}' was not started: it would be nested {childDepth} deep, above the configured ceiling of {_maxDepth} (WorkflowEngine:MaxSubWorkflowDepth). Check for a workflow that starts itself, directly or through another.",
+                false,
+                null);
+        }
+
         JsonElement body;
         try
         {
-            body = await BuildChildBodyAsync(config, ctx, ct);
+            body = await BuildChildBodyAsync(config, ctx, childDepth, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -106,15 +126,16 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
     }
 
     /// <summary>
-    /// Builds the child's <c>$trigger.body</c>: the engine's own two keys, plus each configured input
+    /// Builds the child's <c>$trigger.body</c>: the engine's own three keys, plus each configured input
     /// evaluated against the parent branch.
     /// </summary>
-    private async Task<JsonElement> BuildChildBodyAsync(SubWorkflowConfig config, NodeContext ctx, CancellationToken ct)
+    private async Task<JsonElement> BuildChildBodyAsync(SubWorkflowConfig config, NodeContext ctx, int childDepth, CancellationToken ct)
     {
         var body = new Dictionary<string, JsonElement>
         {
-            ["parentRunRefId"] = JsonSerializer.SerializeToElement(ctx.Branch.RunRefId),
-            ["correlationKey"] = JsonSerializer.SerializeToElement(config.CorrelationKey)
+            [SubWorkflowConfig.ParentRunRefIdKey] = JsonSerializer.SerializeToElement(ctx.Branch.RunRefId),
+            ["correlationKey"] = JsonSerializer.SerializeToElement(config.CorrelationKey),
+            [SubWorkflowConfig.DepthKey] = JsonSerializer.SerializeToElement(childDepth)
         };
 
         if (config.Input is { Count: > 0 })
@@ -138,5 +159,28 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         }
 
         return JsonSerializer.SerializeToElement(body);
+    }
+
+    /// <summary>
+    /// How deeply the run this branch belongs to is nested. The depth travels in the trigger payload the
+    /// run was started with - for a child, the body its parent built - which is persisted on the root
+    /// branch's local state and inherited by every branch forked from it, so it reads the same after a
+    /// restart. A run started by anything but a sub-workflow step carries none and is depth 0, and so is
+    /// one whose body holds anything but a positive whole number there: the engine writes the value for
+    /// every child it starts, so only a body supplied from outside can hold a malformed one.
+    /// </summary>
+    private static int ReadDepth(IReadOnlyDictionary<string, JsonElement> triggerPayload)
+    {
+        if (triggerPayload.TryGetValue("body", out JsonElement body)
+            && body.ValueKind == JsonValueKind.Object
+            && body.TryGetProperty(SubWorkflowConfig.DepthKey, out JsonElement depth)
+            && depth.ValueKind == JsonValueKind.Number
+            && depth.TryGetInt32(out int value)
+            && value > 0)
+        {
+            return value;
+        }
+
+        return 0;
     }
 }

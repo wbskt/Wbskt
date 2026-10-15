@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Moq;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -164,12 +166,122 @@ public sealed class SubWorkflowNodeExecutorTests
         hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private static NodeContext Context(IReadOnlyDictionary<string, JsonElement> localState, IReadOnlyDictionary<string, WorkflowExpression>? input = null)
+    [Fact]
+    public async Task First_visit_of_a_root_run_starts_the_child_at_depth_one()
+    {
+        var hub = StartingHub();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock());
+
+        await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>()), CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e => e.Payload["body"].GetProperty("depth").GetInt32() == 1),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task First_visit_carries_one_more_than_the_parent_depth_into_the_child_body()
+    {
+        // The depth is read from the parent's own trigger body, where its parent put it.
+        var hub = StartingHub();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock());
+
+        await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>(), triggerPayload: ChildTrigger(3)), CancellationToken.None);
+
+        hub.Verify(h => h.HandleAsync(
+            It.Is<InboundEvent>(e => e.Payload["body"].GetProperty("depth").GetInt32() == 4
+                && e.Payload["body"].GetProperty("parentRunRefId").GetString() == "dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task First_visit_refuses_a_child_past_the_configured_depth_ceiling()
+    {
+        // A child is exempt from the workspace run ceiling, so a workflow that reaches itself would
+        // otherwise start children forever.
+        var hub = new Mock<IInboundHub>();
+        var options = Options.Create(new WorkflowEngineOptions { MaxSubWorkflowDepth = 2 });
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock(), null, options);
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(
+            await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>(), triggerPayload: ChildTrigger(2)), CancellationToken.None));
+
+        Assert.Equal("SUBWORKFLOW_DEPTH_EXCEEDED", fail.ErrorCode);
+        Assert.False(fail.Retryable);
+        Assert.Contains("WorkflowEngine:MaxSubWorkflowDepth", fail.Message);
+        hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(7, true)]
+    [InlineData(8, false)]
+    public async Task Default_depth_ceiling_allows_eight_levels_of_nesting(int parentDepth, bool starts)
+    {
+        var hub = StartingHub();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, StartedRunProvider().Object, new FixedClock());
+
+        NodeExecutionResult result = await executor.ExecuteAsync(Context(new Dictionary<string, JsonElement>(), triggerPayload: ChildTrigger(parentDepth)), CancellationToken.None);
+
+        if (starts)
+        {
+            Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
+        }
+        else
+        {
+            Assert.Equal("SUBWORKFLOW_DEPTH_EXCEEDED", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
+        }
+    }
+
+    [Fact]
+    public async Task First_visit_refuses_an_input_that_would_overwrite_the_depth()
+    {
+        // Lowering the depth from an input would defeat the ceiling.
+        var hub = new Mock<IInboundHub>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock(), new ExpressionEvaluator(new FixedClock()));
+        NodeContext ctx = Context(
+            new Dictionary<string, JsonElement>(),
+            new Dictionary<string, WorkflowExpression> { ["depth"] = new LiteralExpression("0") });
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("SUBWORKFLOW_INPUT_EVALUATION_ERROR", fail.ErrorCode);
+        hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static Mock<IInboundHub> StartingHub()
+    {
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));
+        return hub;
+    }
+
+    private static Mock<IRunProvider> StartedRunProvider()
+    {
+        var runProvider = new Mock<IRunProvider>();
+        runProvider.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(RunRow(ChildRunRefId));
+        return runProvider;
+    }
+
+    /// <summary>The trigger payload of a run its parent started at the given depth, as the manual channel shapes it.</summary>
+    private static IReadOnlyDictionary<string, JsonElement> ChildTrigger(int depth) => new Dictionary<string, JsonElement>
+    {
+        ["workflowDefinitionRefId"] = JsonSerializer.SerializeToElement(ChildRefId.ToString()),
+        ["body"] = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+        {
+            ["parentRunRefId"] = Guid.NewGuid().ToString(),
+            ["depth"] = depth
+        })
+    };
+
+    private static NodeContext Context(
+        IReadOnlyDictionary<string, JsonElement> localState,
+        IReadOnlyDictionary<string, WorkflowExpression>? input = null,
+        IReadOnlyDictionary<string, JsonElement>? triggerPayload = null)
     {
         var node = new SubWorkflowNode { NodeId = Guid.NewGuid(), Name = "sub", Ports = [], Config = new SubWorkflowConfig { WorkflowRefId = ChildRefId, Input = input } };
         return new NodeContext
         {
-            Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState, new Dictionary<string, JsonElement>(), "corr-1", new DateTime(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc), 9)
+            Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState, triggerPayload ?? new Dictionary<string, JsonElement>(), "corr-1", new DateTime(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc), 9)
             {
                 RunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")
             },
