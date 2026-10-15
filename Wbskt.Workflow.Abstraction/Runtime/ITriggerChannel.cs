@@ -1,4 +1,5 @@
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -31,7 +32,7 @@ public interface ITriggerChannel
 /// <summary>The workflow version being published, and what a channel may need to register its triggers.</summary>
 public sealed record TriggerPublication(WorkflowDefinitionRow Definition, Guid WorkspaceRef, IScheduledFireProvider ScheduledFires, TimeProvider Clock);
 
-public sealed record TriggerRegistrationSpec(string TriggerKey, string ConcurrencyPolicy, string? CorrelationExpression)
+public sealed record TriggerRegistrationSpec(string TriggerKey, WorkflowConcurrencyPolicy ConcurrencyPolicy, string? CorrelationExpression)
 {
     public WorkflowExpression? Filter { get; init; }
 

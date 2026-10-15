@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
@@ -12,7 +13,7 @@ public sealed class TriggerConcurrencyEnforcerTests
     public async Task Evaluate_returns_Dropped_when_drop_policy_has_active_run()
     {
         // Arrange
-        var registration = CreateRegistration("DropIfRunning");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.DropIfRunning);
         var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)]);
 
         // Act
@@ -27,7 +28,7 @@ public sealed class TriggerConcurrencyEnforcerTests
     public async Task Evaluate_returns_Queued_and_enqueues_event_when_queue_policy_has_active_run()
     {
         // Arrange
-        var registration = CreateRegistration("Queue");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
         var pendingProvider = new RecordingPendingTriggerEventProvider();
         var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)], pendingTriggerEventProvider: pendingProvider);
 
@@ -44,7 +45,7 @@ public sealed class TriggerConcurrencyEnforcerTests
     public async Task Evaluate_returns_ProceedAfterCancellingActive_when_cancel_policy_has_active_run()
     {
         // Arrange
-        var registration = CreateRegistration("CancelExisting");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting);
         var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)]);
 
         // Act
@@ -59,7 +60,7 @@ public sealed class TriggerConcurrencyEnforcerTests
     public async Task Evaluate_returns_all_active_runs_to_cancel_when_multiple_runs_match_correlation()
     {
         // Arrange: CancelExisting must cancel every matching active run, not just the first (2.3).
-        var registration = CreateRegistration("CancelExisting");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting);
         var enforcer = CreateEnforcer(activeRuns: [CreateRun(55), CreateRun(56), CreateRun(57)]);
 
         // Act
@@ -74,7 +75,7 @@ public sealed class TriggerConcurrencyEnforcerTests
     public async Task Evaluate_returns_Proceed_when_correlation_key_is_null_or_empty()
     {
         // Arrange
-        var registration = CreateRegistration("DropIfRunning"); // A policy that would normally drop
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.DropIfRunning); // A policy that would normally drop
         var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)]);
         var evt = CreateInboundEvent() with { CorrelationKey = null };
 
@@ -90,7 +91,7 @@ public sealed class TriggerConcurrencyEnforcerTests
     public async Task Evaluate_returns_Proceed_when_no_active_run_exists()
     {
         // Arrange
-        var registration = CreateRegistration("Queue");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
         var enforcer = CreateEnforcer();
 
         // Act
@@ -99,6 +100,56 @@ public sealed class TriggerConcurrencyEnforcerTests
         // Assert
         Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
         Assert.Empty(decision.RunIdsToCancel);
+    }
+
+    [Theory]
+    [InlineData(WorkflowConcurrencyPolicy.AllowParallel, TriggerConcurrencyOutcome.Proceed)]
+    [InlineData(WorkflowConcurrencyPolicy.Queue, TriggerConcurrencyOutcome.Queued)]
+    [InlineData(WorkflowConcurrencyPolicy.CancelExisting, TriggerConcurrencyOutcome.ProceedAfterCancellingActive)]
+    [InlineData(WorkflowConcurrencyPolicy.DropIfRunning, TriggerConcurrencyOutcome.Dropped)]
+    public async Task Each_policy_drives_its_decision_when_a_run_is_active(WorkflowConcurrencyPolicy policy, TriggerConcurrencyOutcome expected)
+    {
+        // Arrange
+        var registration = CreateRegistration(policy);
+        var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)]);
+
+        // Act
+        TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expected, decision.Outcome);
+    }
+
+    [Fact]
+    public void Every_policy_reads_back_as_written()
+    {
+        foreach (WorkflowConcurrencyPolicy policy in Enum.GetValues<WorkflowConcurrencyPolicy>())
+        {
+            Assert.Equal(policy, CreateRegistration(policy).ParseConcurrencyPolicy());
+        }
+    }
+
+    /// <summary>
+    /// An unreadable stored policy used to fall through to AllowParallel and start runs in parallel.
+    /// Only the engine writes the column, so such a value is corruption and must surface instead.
+    /// </summary>
+    [Theory]
+    [InlineData("dropIfRunning")]
+    [InlineData("DROPIFRUNNING")]
+    [InlineData("DropIfRuning")]
+    [InlineData("3")]
+    [InlineData("")]
+    public async Task Evaluate_throws_rather_than_proceeding_when_the_stored_policy_is_unreadable(string storedPolicy)
+    {
+        // Arrange
+        var registration = CreateRegistration(storedPolicy);
+        var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)]);
+
+        // Act
+        Func<Task> evaluate = () => enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(evaluate);
     }
 
     private static TriggerConcurrencyEnforcer CreateEnforcer(
@@ -110,7 +161,13 @@ public sealed class TriggerConcurrencyEnforcerTests
             pendingTriggerEventProvider ?? new RecordingPendingTriggerEventProvider());
     }
 
-    private static TriggerRegistrationRow CreateRegistration(string policy)
+    /// <summary>A registration whose policy is stored the way the engine writes it.</summary>
+    private static TriggerRegistrationRow CreateRegistration(WorkflowConcurrencyPolicy policy)
+    {
+        return CreateRegistration(TriggerRegistrationRow.FormatConcurrencyPolicy(policy));
+    }
+
+    private static TriggerRegistrationRow CreateRegistration(string storedPolicy)
     {
         return new TriggerRegistrationRow
         {
@@ -122,7 +179,7 @@ public sealed class TriggerConcurrencyEnforcerTests
             TriggerKind = "client",
             TriggerKey = "client:serial-1:telemetry",
             CorrelationExpression = null,
-            ConcurrencyPolicy = policy,
+            ConcurrencyPolicy = storedPolicy,
             FilterExpression = null,
             CreatedAt = DateTime.UtcNow
         };

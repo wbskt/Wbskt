@@ -1,3 +1,4 @@
+using Wbskt.Workflow.Abstraction.Enums;
 using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
@@ -144,7 +145,7 @@ public sealed class WorkflowDefinitionChangedConsumerTests
         TriggerKind = ClientHoldTriggerKey.TriggerKind,
         TriggerKey = ClientHoldTriggerKey.Build(ClientRef, "temperature", 60, WorkflowRef, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")),
         CorrelationExpression = null,
-        ConcurrencyPolicy = "Queue",
+        ConcurrencyPolicy = TriggerRegistrationRow.FormatConcurrencyPolicy(WorkflowConcurrencyPolicy.Queue),
         FilterExpression = null,
         CreatedAt = new DateTime(2026, 10, 14, 0, 0, 0, DateTimeKind.Utc)
     };

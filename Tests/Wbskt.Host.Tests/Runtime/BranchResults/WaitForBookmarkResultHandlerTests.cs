@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
@@ -100,9 +101,9 @@ public sealed class WaitForBookmarkResultHandlerTests
         var at = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         var timer = new TimerWakeCondition(at) { Ttl = TimeSpan.FromMinutes(5) };
 
-        Assert.Equal("timer", WaitForBookmarkResultHandler.GetWakeConditionKind(timer));
+        Assert.Equal("timer", timer.Kind);
         Assert.Equal(string.Empty, WaitForBookmarkResultHandler.GetWakeConditionMatchKey(timer));
-        Assert.Equal(at, WaitForBookmarkResultHandler.GetWakeConditionExpiresAt(timer, Now));
+        Assert.Equal(at, timer.ExpiresAt(Now));
     }
 
     /// <summary>
@@ -120,9 +121,49 @@ public sealed class WaitForBookmarkResultHandlerTests
         Assert.Equal(ChildCompletedChannel.Key(childRunId.ToString()), WaitForBookmarkResultHandler.GetWakeConditionMatchKey(new ChildRunCompletedWakeCondition(childRunId)));
         Assert.Equal(CommandChannel.Key(commandId), WaitForBookmarkResultHandler.GetWakeConditionMatchKey(new CommandOutcomeWakeCondition(commandId)));
 
-        Assert.Equal("http", WaitForBookmarkResultHandler.GetWakeConditionKind(new HttpWakeCondition("tok-1")));
-        Assert.Equal("childRunCompleted", WaitForBookmarkResultHandler.GetWakeConditionKind(new ChildRunCompletedWakeCondition(childRunId)));
-        Assert.Equal("commandOutcome", WaitForBookmarkResultHandler.GetWakeConditionKind(new CommandOutcomeWakeCondition(commandId)));
-        Assert.Null(WaitForBookmarkResultHandler.GetWakeConditionExpiresAt(new HttpWakeCondition("tok-1"), Now));
+        Assert.Null(new HttpWakeCondition("tok-1").ExpiresAt(Now));
+    }
+
+    /// <summary>
+    /// Every wake condition the JSON model knows: a new one added to <see cref="WakeCondition"/>'s
+    /// derived types must also say its bookmark kind and match key, or parking on it fails here.
+    /// </summary>
+    public static TheoryData<WakeCondition, string, string> EveryWakeCondition => new()
+    {
+        { new TimerWakeCondition(Now), "timer", string.Empty },
+        { new SignalWakeCondition("approve", "scope-1"), "signal", SignalChannel.Key("approve", "scope-1") },
+        { new HttpWakeCondition("tok-1"), "http", HttpWakeChannel.Key("tok-1") },
+        { new ChildRunCompletedWakeCondition(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")), "childRunCompleted", ChildCompletedChannel.Key("cccccccc-cccc-cccc-cccc-cccccccccccc") },
+        { new CommandOutcomeWakeCondition(Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")), "commandOutcome", CommandChannel.Key(Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")) }
+    };
+
+    [Theory]
+    [MemberData(nameof(EveryWakeCondition))]
+    public void Each_wake_condition_gives_the_kind_and_key_its_bookmark_is_parked_on(WakeCondition condition, string expectedKind, string expectedMatchKey)
+    {
+        Assert.Equal(expectedKind, condition.Kind);
+        Assert.Equal(expectedMatchKey, WaitForBookmarkResultHandler.GetWakeConditionMatchKey(condition));
+    }
+
+    [Fact]
+    public void The_cases_cover_every_derived_wake_condition_and_kind_is_its_discriminator()
+    {
+        Dictionary<Type, string> discriminators = typeof(WakeCondition)
+            .GetCustomAttributes(typeof(JsonDerivedTypeAttribute), inherit: false)
+            .Cast<JsonDerivedTypeAttribute>()
+            .ToDictionary(attribute => attribute.DerivedType, attribute => (string)attribute.TypeDiscriminator!);
+
+        var covered = EveryWakeCondition.Select(row => (WakeCondition)row[0]).ToList();
+
+        Assert.Equal(discriminators.Keys.OrderBy(type => type.Name), covered.Select(condition => condition.GetType()).OrderBy(type => type.Name));
+        Assert.All(covered, condition => Assert.Equal(discriminators[condition.GetType()], condition.Kind));
+    }
+
+    [Fact]
+    public void A_ttl_sets_the_expiry_of_a_condition_that_is_not_a_timer()
+    {
+        var condition = new SignalWakeCondition("approve", "scope-1") { Ttl = TimeSpan.FromMinutes(5) };
+
+        Assert.Equal(Now + TimeSpan.FromMinutes(5), condition.ExpiresAt(Now));
     }
 }

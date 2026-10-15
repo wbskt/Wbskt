@@ -389,7 +389,7 @@ public sealed class InboundEventToRunStartE2ETests
                         TriggerKind = "client",
                         TriggerKey = "client:client-serial-1:telemetry",
                         CorrelationExpression = null,
-                        ConcurrencyPolicy = "AllowParallel",
+                        ConcurrencyPolicy = TriggerRegistrationRow.FormatConcurrencyPolicy(WorkflowConcurrencyPolicy.AllowParallel),
                         FilterExpression = null,
                         CreatedAt = _definition.CreatedAt
                     }

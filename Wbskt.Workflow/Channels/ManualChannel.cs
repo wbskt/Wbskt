@@ -31,6 +31,6 @@ public sealed class ManualChannel : TriggerChannel
 
     public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct) =>
         Task.FromResult<TriggerRegistrationSpec?>(node is ManualTriggerNode
-            ? new TriggerRegistrationSpec(Key(publication.Definition.RefId.ToString()), WorkflowConcurrencyPolicy.AllowParallel.ToString(), null)
+            ? new TriggerRegistrationSpec(Key(publication.Definition.RefId.ToString()), WorkflowConcurrencyPolicy.AllowParallel, null)
             : null);
 }

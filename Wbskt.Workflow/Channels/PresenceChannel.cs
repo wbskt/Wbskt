@@ -24,6 +24,6 @@ public sealed class PresenceChannel : TriggerChannel
 
         ClientPresenceTriggerConfig config = trigger.Config;
         string key = ClientPresenceTriggerKey.Build(Guid.Parse(config.ClientRef), config.State, config.ForSeconds, publication.Definition.RefId, trigger.NodeId);
-        return Task.FromResult<TriggerRegistrationSpec?>(new TriggerRegistrationSpec(key, config.ConcurrencyPolicy.ToString(), config.CorrelationKey));
+        return Task.FromResult<TriggerRegistrationSpec?>(new TriggerRegistrationSpec(key, config.ConcurrencyPolicy, config.CorrelationKey));
     }
 }
