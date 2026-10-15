@@ -65,7 +65,6 @@ internal static class BranchResultTestData
         PendingTakePort = null,
         LocalJson = localJson,
         LastOutputJson = "\"last\"",
-        CompensationStackJson = "[]",
         CreatedAt = Now,
         UpdatedAt = Now,
         RowVersion = [1]
@@ -148,8 +147,8 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
     public List<(long BranchId, string Status)> RefusedEnds { get; } = [];
 
     /// <summary>
-    /// Honours the guard the way Branch_EndIfLive does: a branch that is no longer Active, Waiting or
-    /// Compensating is refused and nothing is written. The writes it does make go through the
+    /// Honours the guard the way Branch_EndIfLive does: a branch that is no longer Active or Waiting is
+    /// refused and nothing is written. The writes it does make go through the
     /// unguarded recorders, so the log reads as it did before the guard.
     /// </summary>
     public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)

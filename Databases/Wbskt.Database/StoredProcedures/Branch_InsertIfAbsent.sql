@@ -7,8 +7,7 @@ CREATE PROCEDURE dbo.Branch_InsertIfAbsent
     @Status                NVARCHAR(32),
     @PendingTakePort       NVARCHAR(128),
     @LocalJson             NVARCHAR(MAX),
-    @LastOutputJson        NVARCHAR(MAX),
-    @CompensationStackJson NVARCHAR(MAX)
+    @LastOutputJson        NVARCHAR(MAX)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -25,10 +24,10 @@ BEGIN
         BEGIN TRY
             INSERT INTO dbo.Branches
                 (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
-                 Status, PendingTakePort, LocalJson, LastOutputJson, CompensationStackJson)
+                 Status, PendingTakePort, LocalJson, LastOutputJson)
             VALUES
                 (@RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
-                 @Status, @PendingTakePort, @LocalJson, @LastOutputJson, @CompensationStackJson);
+                 @Status, @PendingTakePort, @LocalJson, @LastOutputJson);
 
             SET @Inserted = 1;
         END TRY
@@ -52,7 +51,6 @@ BEGIN
         PendingTakePort,
         LocalJson,
         LastOutputJson,
-        CompensationStackJson,
         CreatedAt,
         UpdatedAt,
         RowVersion,

@@ -43,7 +43,7 @@ public sealed class TriggerQueuePolicyE2ETests(ServicesFixture fixture)
             .AddAwaitSignal("continue", AwaitTimeout, awaitSignal =>
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "RunDone", "Run finished", null));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "RunDone", "Run finished"));
             });
 
         var definition = builder.BuildAndValidate();

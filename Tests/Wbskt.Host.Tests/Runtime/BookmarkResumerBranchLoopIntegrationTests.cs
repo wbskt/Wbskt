@@ -50,7 +50,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             new SequentialIdGenerator(),
             new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
         dispatcher.Handler = request => loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
@@ -172,7 +171,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
             new SequentialIdGenerator(),
             new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
         _dispatcher.Handler = request => loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
@@ -301,7 +299,6 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
                 PendingTakePort = null,
                 LocalJson = "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = definition.CreatedAt,
                 UpdatedAt = definition.CreatedAt,
                 RowVersion = [1]

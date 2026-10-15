@@ -9,9 +9,6 @@ public sealed record OnFailureConfig
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required ErrorOutcome Outcome { get; init; }
 
-    [JsonPropertyName("compensate")]
-    public CompensationDeclaration? Compensate { get; init; } = null;
-
     [JsonPropertyName("targetNodeId")]
     public Guid? TargetNodeId { get; init; } = null;
 

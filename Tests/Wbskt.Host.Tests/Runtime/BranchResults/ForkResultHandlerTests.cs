@@ -85,7 +85,6 @@ public sealed class ForkResultHandlerTests
             Assert.Equal(RunId, child.RunId);
             Assert.Equal(BranchRefId, child.ParentBranchId);
             Assert.Equal(BranchStatus.Active, child.Status);
-            Assert.Equal("[]", child.CompensationStackJson);
             Assert.Equal(Now, child.CreatedAt);
         });
         Assert.Equal(2, LocalState(_branches.Created[1].LocalJson)["item"].GetInt32());

@@ -42,7 +42,7 @@ public sealed class CreditBudgetE2ETests(ServicesFixture fixture)
             builder.Connect(logic.GateId, PortNames.True, logic.GateId, PortNames.In);
             
             // We'll also wire "false" to a success node just in case (though it won't be hit)
-            logic.OnFalse(b => b.AddClientMessage(deviceRefStr, "Done", "Done", null));
+            logic.OnFalse(b => b.AddClientMessage(deviceRefStr, "Done", "Done"));
         });
 
         var definition = builder.BuildAndValidate();

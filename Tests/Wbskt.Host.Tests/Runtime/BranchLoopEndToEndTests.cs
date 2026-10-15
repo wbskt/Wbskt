@@ -55,7 +55,6 @@ public sealed class BranchLoopEndToEndTests
             new SequentialIdGenerator(),
             new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -129,7 +128,6 @@ public sealed class BranchLoopEndToEndTests
                 PendingTakePort = null,
                 LocalJson = "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = definition.CreatedAt,
                 UpdatedAt = definition.CreatedAt,
                 RowVersion = [1]

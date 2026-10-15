@@ -96,18 +96,6 @@ public sealed class BranchEndingsTests
         _finalizer.Verify(finalizer => finalizer.FinalizeAsync(RunId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task A_compensating_branch_can_still_be_ended()
-    {
-        _counters.Active = 2;
-        var branches = new RecordingBranchProvider(_log, Branch(NodeA) with { Status = BranchStatus.Compensating });
-
-        await Endings(branches).CancelAsync(RunId, BranchId, branches.Current, CancellationToken.None);
-
-        Assert.Equal(BranchStatus.Cancelled, branches.Current.Status);
-        Assert.Equal(1, _counters.Active);
-        Assert.Empty(_logger.Warnings);
-    }
 
     private BranchEndings Endings(IBranchProvider branches) => new(branches, _journal, _terminator, _logger);
 

@@ -14,7 +14,6 @@ public record BranchRow
     public required string? PendingTakePort { get; init; }
     public required string LocalJson { get; init; }
     public required string? LastOutputJson { get; init; }
-    public required string? CompensationStackJson { get; init; }
     public required DateTime CreatedAt { get; init; }
     public required DateTime UpdatedAt { get; init; }
     public required byte[] RowVersion { get; init; }
@@ -32,8 +31,7 @@ public record BranchRow
         string localJson,
         DateTime nowUtc,
         Guid? parentBranchId = null,
-        Guid? forkCohortId = null,
-        string? compensationStackJson = null)
+        Guid? forkCohortId = null)
     {
         return new BranchRow
         {
@@ -47,7 +45,6 @@ public record BranchRow
             PendingTakePort = null,
             LocalJson = localJson,
             LastOutputJson = null,
-            CompensationStackJson = compensationStackJson,
             CreatedAt = nowUtc,
             UpdatedAt = nowUtc,
             // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it.

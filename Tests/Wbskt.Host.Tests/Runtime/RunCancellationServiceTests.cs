@@ -405,7 +405,6 @@ public sealed class RunCancellationServiceTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new AlwaysCancelledRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -570,7 +569,6 @@ public sealed class RunCancellationServiceTests
                 PendingTakePort = null,
                 LocalJson = "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 RowVersion = [1]

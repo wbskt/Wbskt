@@ -7,8 +7,7 @@ CREATE PROCEDURE dbo.Branch_Upsert
     @Status                NVARCHAR(32),
     @PendingTakePort       NVARCHAR(128),
     @LocalJson             NVARCHAR(MAX),
-    @LastOutputJson        NVARCHAR(MAX),
-    @CompensationStackJson NVARCHAR(MAX)
+    @LastOutputJson        NVARCHAR(MAX)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -23,7 +22,6 @@ BEGIN
         PendingTakePort       = @PendingTakePort,
         LocalJson             = @LocalJson,
         LastOutputJson        = @LastOutputJson,
-        CompensationStackJson = @CompensationStackJson,
         UpdatedAt             = SYSUTCDATETIME()
     WHERE RefId = @RefId;
 
@@ -32,10 +30,10 @@ BEGIN
     BEGIN
         INSERT INTO dbo.Branches
             (RefId, RunId, ParentBranchId, ForkCohortId, NodeId,
-             Status, PendingTakePort, LocalJson, LastOutputJson, CompensationStackJson)
+             Status, PendingTakePort, LocalJson, LastOutputJson)
         VALUES
             (@RefId, @RunId, @ParentBranchId, @ForkCohortId, @NodeId,
-             @Status, @PendingTakePort, @LocalJson, @LastOutputJson, @CompensationStackJson);
+             @Status, @PendingTakePort, @LocalJson, @LastOutputJson);
     END
 
     SELECT
@@ -49,7 +47,6 @@ BEGIN
         PendingTakePort,
         LocalJson,
         LastOutputJson,
-        CompensationStackJson,
         CreatedAt,
         UpdatedAt,
         RowVersion

@@ -16,7 +16,7 @@ namespace Wbskt.Workflow.Runtime;
 /// kept its run's ActiveBranchCount above zero, so the run never finalized.
 ///
 /// The loss is handed to the same <see cref="NodeExecutionResult.Fail"/> handler a failing node goes
-/// through, so the node's onFailure, the workflow's FailFast and compensation settings, and the Join
+/// through, so the node's onFailure, the workflow's FailFast setting, and the Join
 /// contribution of a cohort branch all apply as they would to any other failure of that node.
 /// </summary>
 internal sealed class StrandedBranchFailer(

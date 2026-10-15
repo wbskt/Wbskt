@@ -10,7 +10,6 @@ public static class BranchStatus
     // In flight
     public const string Active = "Active";
     public const string Waiting = "Waiting";
-    public const string Compensating = "Compensating";
 
     // Ended
     public const string Completed = "Completed";
@@ -25,5 +24,5 @@ public static class BranchStatus
     /// clause, so a change here is a change there.
     /// </summary>
     public static bool IsLive(string status) =>
-        status is Active or Waiting or Compensating;
+        status is Active or Waiting;
 }

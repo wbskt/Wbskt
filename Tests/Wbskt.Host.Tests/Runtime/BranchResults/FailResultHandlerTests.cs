@@ -28,7 +28,6 @@ public sealed class FailResultHandlerTests
     private readonly RecordingRunJournal _journal;
     private readonly RecordingRunDispatcher _dispatcher;
     private readonly Mock<IRunCancellationService> _cancellation = new();
-    private readonly Mock<ICompensationOrchestrator> _compensation = new();
     private readonly Mock<IJoinAggregatorProvider> _joins = new();
 
     public FailResultHandlerTests()
@@ -43,10 +42,6 @@ public sealed class FailResultHandlerTests
             .Setup(cancellation => cancellation.RequestCancellationAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Callback((long _, string reason, CancellationToken _) => _log.Add($"cancel-run:{reason}"))
             .ReturnsAsync(true);
-        _compensation
-            .Setup(compensation => compensation.RunAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .Callback(() => _log.Add("compensate"))
-            .Returns(Task.CompletedTask);
     }
 
     [Fact]
@@ -64,7 +59,7 @@ public sealed class FailResultHandlerTests
         Assert.Equal(FailingNode, branchFailed.NodeId);
         JsonElement payload = JsonSerializer.SerializeToElement(branchFailed.Payload);
         Assert.Equal("FailBranch", payload.GetProperty("onFailure").GetString());
-        Assert.False(payload.GetProperty("compensated").GetBoolean());
+        Assert.False(payload.TryGetProperty("compensated", out _));
         _joins.VerifyNoOtherCalls();
     }
 
@@ -108,29 +103,6 @@ public sealed class FailResultHandlerTests
     }
 
     [Fact]
-    public async Task FailRun_compensates_first_when_the_workflow_asks_for_it()
-    {
-        // onFailure FailRun and a control:failRun node are one rule, so both compensate first when
-        // the workflow compensates on failure; FailRun used to skip it.
-        var node = ActionNode(ErrorOutcome.FailRun);
-        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
-
-        await CreateHandler(branches).HandleAsync(Boom, Context(node, Definition([node], [], runCompensationOnFailure: true), branches.Current), CancellationToken.None);
-
-        Assert.Equal(
-            new[]
-            {
-                $"update:{BranchStatus.Compensating}:{FailingNode}",
-                "compensate",
-                "failed",
-                $"fail-run:Node {FailingNode} failed (BOOM) with onFailure FailRun",
-                $"journal:{HistoryEventKind.BranchFailed}",
-                $"release:{RunId}:1"
-            },
-            _log);
-    }
-
-    [Fact]
     public async Task A_FailRun_node_fails_the_run_with_its_reason()
     {
         // control:failRun has no onFailure, so it used to fail only its own branch: siblings kept
@@ -157,50 +129,6 @@ public sealed class FailResultHandlerTests
     }
 
     [Fact]
-    public async Task A_FailRun_node_still_compensates_first_when_the_workflow_asks_for_it()
-    {
-        var node = FailRun();
-        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
-        var failRun = new NodeExecutionResult.Fail("FAIL_RUN", "inventory issue", false, null);
-
-        await CreateHandler(branches).HandleAsync(failRun, Context(node, Definition([node], [], runCompensationOnFailure: true), branches.Current), CancellationToken.None);
-
-        Assert.Equal(
-            new[]
-            {
-                $"update:{BranchStatus.Compensating}:{FailingNode}",
-                "compensate",
-                "failed",
-                "fail-run:inventory issue",
-                $"journal:{HistoryEventKind.BranchFailed}",
-                $"release:{RunId}:1"
-            },
-            _log);
-    }
-
-    [Fact]
-    public async Task Compensate_marks_the_branch_compensating_and_compensates_before_failing_it()
-    {
-        var node = ActionNode(ErrorOutcome.Compensate);
-        var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
-
-        await CreateHandler(branches).HandleAsync(Boom, Context(node, Definition([node], []), branches.Current), CancellationToken.None);
-
-        Assert.Equal(
-            new[]
-            {
-                $"update:{BranchStatus.Compensating}:{FailingNode}",
-                "compensate",
-                "failed",
-                $"journal:{HistoryEventKind.BranchFailed}",
-                $"release:{RunId}:1"
-            },
-            _log);
-        JsonElement payload = JsonSerializer.SerializeToElement(Assert.Single(_journal.Entries).Payload);
-        Assert.True(payload.GetProperty("compensated").GetBoolean());
-    }
-
-    [Fact]
     public async Task FailFast_fails_the_run()
     {
         // FailFast used to move the run to 'Failing' and nothing else, so a sibling parked on a signal
@@ -222,13 +150,27 @@ public sealed class FailResultHandlerTests
     }
 
     [Fact]
-    public async Task FailFast_does_not_apply_to_a_compensated_failure()
+    public async Task A_saved_Compensate_outcome_fails_the_branch_plainly()
     {
+        // Compensation is rejected at publish, but a definition saved before that can still carry
+        // onFailure Compensate and runCompensationOnFailure. Neither does anything any more: the branch
+        // fails as a FailBranch would, FailFast still applies, and the record says what happened.
+        var node = ActionNode(ErrorOutcome.Compensate);
         var branches = new RecordingBranchProvider(_log, Branch(FailingNode));
 
-        await CreateHandler(branches).HandleAsync(Boom, Context(Node(FailingNode), Definition([Node(FailingNode)], [], runCompensationOnFailure: true, failFast: true), branches.Current), CancellationToken.None);
+        await CreateHandler(branches).HandleAsync(Boom, Context(node, Definition([node], [], runCompensationOnFailure: true, failFast: true), branches.Current), CancellationToken.None);
 
-        Assert.DoesNotContain(_log, entry => entry.StartsWith("fail-run:", StringComparison.Ordinal));
+        Assert.Equal(
+            new[]
+            {
+                "failed",
+                $"fail-run:Node {FailingNode} failed (BOOM) on a fail-fast workflow",
+                $"journal:{HistoryEventKind.BranchFailed}",
+                $"release:{RunId}:1"
+            },
+            _log);
+        JsonElement payload = JsonSerializer.SerializeToElement(Assert.Single(_journal.Entries).Payload);
+        Assert.Equal("FailBranch", payload.GetProperty("onFailure").GetString());
     }
 
     [Fact]
@@ -418,7 +360,6 @@ public sealed class FailResultHandlerTests
             new SequentialIdGenerator(),
             new FixedClock(),
             _cancellation.Object,
-            _compensation.Object,
             _joins.Object,
             _journal,
             new RecordingBranchTerminator(_log),

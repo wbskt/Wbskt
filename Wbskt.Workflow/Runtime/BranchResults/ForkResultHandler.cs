@@ -115,7 +115,6 @@ internal sealed class ForkResultHandler(
                 PendingTakePort = null,
                 LocalJson = BranchLocalState.Serialize(childState),
                 LastOutputJson = null,
-                CompensationStackJson = branchRow.CompensationStackJson,
                 CreatedAt = clock.GetUtcNow().UtcDateTime,
                 UpdatedAt = clock.GetUtcNow().UtcDateTime,
                 RowVersion = Array.Empty<byte>()

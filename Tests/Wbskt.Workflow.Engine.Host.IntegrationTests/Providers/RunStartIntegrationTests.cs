@@ -288,7 +288,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
             Status = BranchStatus.Active,
             PendingTakePort = null,
             LocalJson = """{"trigger":{"n":1}}""",
-            LastOutputJson = null, CompensationStackJson = null,
+            LastOutputJson = null,
             CreatedAt = now, UpdatedAt = now,
             RowVersion = Array.Empty<byte>()
         };

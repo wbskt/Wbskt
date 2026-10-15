@@ -46,7 +46,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(countersProvider, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -97,7 +96,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             aggregator);
 
@@ -151,7 +149,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             aggregator);
 
@@ -209,7 +206,7 @@ public sealed class BranchLoopTests
     public async Task RunAsync_records_BranchFailed_alongside_NodeFailed()
     {
         // NodeFailed alone said which node broke, not that the branch ended nor how the failure was
-        // handled - FailBranch, FailRun and Compensate look identical from NodeFailed.
+        // handled - FailBranch and FailRun look identical from NodeFailed.
         var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var definition = TestWorkflowDefinition.Create(
             new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
@@ -266,7 +263,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
     }
@@ -307,7 +303,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -360,7 +355,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -426,7 +420,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -483,7 +476,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -532,7 +524,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -584,7 +575,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -638,7 +628,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             cancellationService,
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -686,7 +675,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -738,7 +726,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -788,7 +775,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -840,7 +826,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -895,7 +880,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -907,51 +891,6 @@ public sealed class BranchLoopTests
         Assert.DoesNotContain(branchProvider.PointerUpdates, update => update.CurrentNodeId == skippedNodeId);
         Assert.True(branchProvider.SetCompletedCalled);
         Assert.False(branchProvider.SetFailedCalled);
-    }
-
-    [Fact]
-    public async Task Branch_failure_invokes_compensation_when_definition_opts_in()
-    {
-        // Arrange
-        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var definition = new WorkflowDefinition(
-            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            1,
-            9,
-            "compensation-opt-in",
-            null,
-            true,
-            [new TestNode { NodeId = nodeId, Name = "fail", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }],
-            [],
-            [],
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
-            7,
-            RunCompensationOnFailure: true);
-        var compensationOrchestrator = new RecordingCompensationOrchestrator();
-        var runCounters = new StubRunCountersProvider();
-        var loop = TestBranchLoop.Create(
-            new RecordingBranchProvider(nodeId),
-            new StubRunProvider(),
-            runCounters,
-            new RecordingBookmarkProvider(),
-            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
-            new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
-            new RecordingRunDispatcher(),
-            new InMemoryIdempotencyKeyProvider(),
-            new FixedClock(),
-            new SequentialIdGenerator(),
-            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
-            new NoOpRunCancellationService(),
-            compensationOrchestrator,
-            new DefaultCreditCostCalculator(),
-            new NoOpJoinAggregatorProvider());
-
-        // Act
-        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
-
-        // Assert
-        Assert.Equal([(42L, 1001L)], compensationOrchestrator.Calls);
     }
 
     [Fact]
@@ -988,7 +927,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             FailingRunCancellationService(runProvider),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1032,7 +970,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1079,7 +1016,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             FailingRunCancellationService(runProvider),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1128,7 +1064,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1176,7 +1111,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1229,7 +1163,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1275,7 +1208,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1320,7 +1252,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1364,7 +1295,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1410,7 +1340,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1462,7 +1391,6 @@ public sealed class BranchLoopTests
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -1665,7 +1593,6 @@ public sealed class BranchLoopTests
                 PendingTakePort = null,
                 LocalJson = initialLocalJson ?? "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 RowVersion = [1]
@@ -1944,17 +1871,6 @@ public sealed class BranchLoopTests
         public Task FinalizeAsync(long runId, CancellationToken ct)
         {
             RunIds.Add(runId);
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class RecordingCompensationOrchestrator : ICompensationOrchestrator
-    {
-        public List<(long RunId, long BranchId)> Calls { get; } = [];
-
-        public Task RunAsync(long runId, long branchId, CancellationToken ct)
-        {
-            Calls.Add((runId, branchId));
             return Task.CompletedTask;
         }
     }

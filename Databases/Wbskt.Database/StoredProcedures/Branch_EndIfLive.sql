@@ -20,7 +20,7 @@ BEGIN
         PendingTakePort = NULL,
         UpdatedAt = SYSUTCDATETIME()
     WHERE Id = @Id
-      AND Status IN ('Active', 'Waiting', 'Compensating');
+      AND Status IN ('Active', 'Waiting');
 
     SELECT @@ROWCOUNT;
 END;

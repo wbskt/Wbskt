@@ -66,11 +66,6 @@ internal sealed class NoOpRunCancellationService : IRunCancellationService
     public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => Task.FromResult(false);
 }
 
-internal sealed class NoOpCompensationOrchestrator : ICompensationOrchestrator
-{
-    public Task RunAsync(long runId, long branchId, CancellationToken ct) => Task.CompletedTask;
-}
-
 /// <summary>A join store for runs with no join: nothing to initialize, and no cohort to contribute to.</summary>
 internal sealed class NoOpJoinAggregatorProvider : IJoinAggregatorProvider
 {
@@ -140,7 +135,6 @@ internal static class TestBranchLoop
         IIdGenerator idGenerator,
         IBranchTerminator branchTerminator,
         IRunCancellationService runCancellationService,
-        ICompensationOrchestrator compensationOrchestrator,
         ICreditCostCalculator creditCostCalculator,
         IJoinAggregatorProvider joinAggregatorProvider,
         IOptions<WorkflowEngineOptions>? engineOptions = null)
@@ -153,7 +147,7 @@ internal static class TestBranchLoop
             continueHandler,
             new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, endings),
             new WaitForBookmarkResultHandler(branchProvider, bookmarkProvider, idGenerator, clock, journal),
-            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator, continueHandler),
+            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, joinAggregatorProvider, journal, branchTerminator, continueHandler),
             new TerminalResultHandler(endings, declines)
         ]);
 

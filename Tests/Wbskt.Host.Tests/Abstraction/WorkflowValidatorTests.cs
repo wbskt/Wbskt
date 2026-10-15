@@ -384,6 +384,44 @@ public sealed class WorkflowValidatorRuleTests
         Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "ONFAILURE_TARGET_NOT_FOUND");
     }
 
+    [Fact]
+    public void Validate_rejects_an_onFailure_of_Compensate()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var action = CreateToast(withErrorPort: false) with
+        {
+            OnFailure = new OnFailureConfig { Outcome = ErrorOutcome.Compensate }
+        };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        var issue = Assert.Single(result.Issues, i => i.Code == "COMPENSATION_NOT_SUPPORTED");
+        Assert.Equal(ValidationSeverity.Error, issue.Severity);
+        Assert.Equal(action.NodeId, issue.NodeId);
+        Assert.Contains("not available in this release", issue.Message);
+    }
+
+    [Fact]
+    public void Validate_rejects_runCompensationOnFailure()
+    {
+        var def = ValidWorkflowBuilder.Build() with { RunCompensationOnFailure = true };
+
+        var result = Validator.Validate(def);
+
+        var issue = Assert.Single(result.Issues, i => i.Code == "COMPENSATION_NOT_SUPPORTED");
+        Assert.Equal(ValidationSeverity.Error, issue.Severity);
+        Assert.Null(issue.NodeId);
+        Assert.Contains("not available in this release", issue.Message);
+    }
+
+    [Fact]
+    public void Validate_does_not_report_compensation_on_a_definition_that_does_not_ask_for_it()
+    {
+        var result = Validator.Validate(ValidWorkflowBuilder.Build());
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "COMPENSATION_NOT_SUPPORTED");
+    }
+
     // ---------------------------------------------- WF-09 sub-workflow inputs
 
     [Theory]
