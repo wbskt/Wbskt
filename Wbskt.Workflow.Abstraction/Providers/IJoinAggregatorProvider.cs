@@ -17,7 +17,10 @@ public interface IJoinAggregatorProvider
         CancellationToken ct);
 
     /// <summary>
-    /// Records one arrival. <paramref name="outcome"/> is "succeeded" or "failed".
+    /// Records one arrival. <paramref name="outcome"/> is "succeeded" or "failed", or "declined" for a
+    /// member that ended without reaching the Join: a decline takes the member out of the cohort, never
+    /// continues, and reports <see cref="JoinContributionResult.Abandoned"/> when it leaves the join
+    /// unable to converge (always for Mode=All).
     /// Exactly one caller ever receives <see cref="JoinContributionResult.ShouldContinue"/> = true
     /// for a given cohort (claimed under the same transaction that counts the arrival).
     /// A repeat from the same <paramref name="branchId"/> is not counted again and never continues.
@@ -33,4 +36,5 @@ public sealed record JoinContributionResult(
     int SucceededCount,
     int FailedCount,
     int ExpectedCount,
-    Guid? JoinNodeId = null);
+    Guid? JoinNodeId = null,
+    bool Abandoned = false);

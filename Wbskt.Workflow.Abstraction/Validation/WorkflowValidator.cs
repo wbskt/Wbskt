@@ -47,6 +47,7 @@ public sealed class WorkflowValidator
         ValidateOnFailure(definition, issues);
         ValidateRetryPolicies(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
+        ValidateForkJoinPairing(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
         ValidateSubWorkflowSelfReference(definition, workflowRefId, issues);
         ValidateLocalVariableNames(definition, issues);
@@ -253,19 +254,76 @@ public sealed class WorkflowValidator
     /// <summary>
     /// A ParallelForEach cohort converges on a Join; without one the aggregator is never satisfied,
     /// so everything downstream is silently skipped and the run hangs until the reaper collects it.
-    /// A Fork without a Join is legal - its branches simply run to their own ends.
+    /// The Join must be the cohort's own, not one belonging to a Fork nested in the body. A Fork has
+    /// its own rule: <see cref="ValidateForkJoinPairing"/>.
     /// </summary>
     private static void ValidateParallelForEachPairing(WorkflowDefinition def, List<ValidationIssue> issues)
     {
         foreach (var node in def.Nodes.OfType<ParallelForEachNode>())
         {
-            if (WorkflowGraph.FindDownstream<JoinNode>(def, node.NodeId, BodyPortId) is null)
+            if (WorkflowGraph.FindJoinForCohort(def, node.NodeId, [BodyPortId]) is null)
             {
                 issues.Add(new ValidationIssue(
                     ValidationSeverity.Error,
                     "PARALLEL_FOREACH_WITHOUT_JOIN",
                     $"ParallelForEach node '{node.NodeId}' has no Join node downstream of its '{BodyPortId}' port; the cohort could never converge.",
                     node.NodeId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A Fork whose branches reach a Join must have every branch reach that same Join before it can
+    /// end. A Fork's cohort only advances when a member arrives at the Join, so a branch that ended
+    /// first - at an End node, or through a port with no edge - never counted: a Mode=All join never
+    /// converged, the run finalized Succeeded, and everything after the Join was skipped without a
+    /// trace. Branches that converge on different Joins split one cohort between two aggregators, and
+    /// neither ever fills.
+    ///
+    /// A Fork with no Join at its own level is a fire-and-forget fan-out and stays legal: its branches
+    /// run to their own ends and the run ends when they all do. A FailRun node is an acceptable end
+    /// too: it fails the whole run, so the join never needs to converge. The paths are walked by
+    /// <see cref="WorkflowGraph.WalkCohort"/>, the same walk the engine uses to find a cohort's Join,
+    /// with each node's expected ports so a port with no edge is seen. An "error" port with no edge is
+    /// skipped: it is only taken with ContinueOnError, and that already requires the edge.
+    /// </summary>
+    private static void ValidateForkJoinPairing(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        var portsWithEdges = def.Edges.Select(edge => (edge.From.NodeId, edge.From.PortId)).ToHashSet();
+        IEnumerable<string> OutputPorts(BaseNode node) => GetExpectedPorts(node)
+            .Where(port => port.Direction == PortDirection.Output)
+            .Select(port => port.PortId)
+            .Where(portId => portId != ErrorPortId || portsWithEdges.Contains((node.NodeId, portId)));
+
+        foreach (ForkNode fork in def.Nodes.OfType<ForkNode>())
+        {
+            if (fork.Config is null)
+            {
+                continue;
+            }
+
+            CohortWalk walk = WorkflowGraph.WalkCohort(def, fork.NodeId, fork.Config.Branches, OutputPorts);
+            if (walk.Joins.Count == 0)
+            {
+                continue;
+            }
+
+            if (walk.EndsBeforeJoin)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "FORK_BRANCH_WITHOUT_JOIN",
+                    $"Fork node '{fork.NodeId}' has a branch that can end (at an End node, or a port with no edge) before reaching its Join; every branch must reach the Fork's Join or the join can never converge.",
+                    fork.NodeId));
+            }
+
+            if (walk.Joins.Count > 1)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "FORK_BRANCHES_JOIN_MISMATCH",
+                    $"Fork node '{fork.NodeId}' has branches that reach different Join nodes ({string.Join(", ", walk.Joins.Select(join => $"'{join.NodeId}'"))}); every branch of a Fork must converge on the same Join.",
+                    fork.NodeId));
             }
         }
     }

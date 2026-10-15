@@ -24,23 +24,15 @@ internal sealed class ForkNodeExecutor(IJoinAggregatorProvider aggregators) : IN
             return new NodeExecutionResult.Fail("FORK_CONFIG_INVALID", "Fork node config is required.", false, null);
         }
 
-        // A Fork's branches converge on the same Join, so the first one reachable from any branch
-        // port identifies the cohort's Join. Stamping its config onto the aggregator is what lets a
-        // branch that FAILS contribute later from BranchLoop, which never sees the Join node.
-        // A Fork with no Join downstream is legal - the branches simply run to their own ends - so
-        // this stays null rather than failing the node.
-        JoinNode? joinNode = null;
-        if (ctx.Definition is not null)
-        {
-            foreach (string branchPort in node.Config.Branches)
-            {
-                joinNode = WorkflowGraph.FindDownstream<JoinNode>(ctx.Definition, node.NodeId, branchPort);
-                if (joinNode is not null)
-                {
-                    break;
-                }
-            }
-        }
+        // The cohort's Join is the one its branches reach at the Fork's own nesting level - not the
+        // nearest one, which for a Fork nested in a branch is the inner Join. Stamping its config onto
+        // the aggregator is what lets a branch that FAILS contribute later from BranchLoop, which never
+        // sees the Join node. A Fork with no Join at its level is a fire-and-forget fan-out: its
+        // branches simply run to their own ends, so this stays null rather than failing the node, and
+        // a branch that ends there has no join to abandon.
+        JoinNode? joinNode = ctx.Definition is null
+            ? null
+            : WorkflowGraph.FindJoinForCohort(ctx.Definition, node.NodeId, node.Config.Branches);
 
         Guid joinToken = Guid.NewGuid();
         await aggregators.InitializeAsync(

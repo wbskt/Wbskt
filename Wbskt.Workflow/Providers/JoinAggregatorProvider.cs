@@ -68,7 +68,23 @@ internal sealed class JoinAggregatorProvider : BaseSqlProvider, IJoinAggregatorP
             SucceededCount: reader.GetInt32(reader.GetOrdinal("SucceededCount")),
             FailedCount: reader.GetInt32(reader.GetOrdinal("FailedCount")),
             ExpectedCount: reader.GetInt32(reader.GetOrdinal("ExpectedCount")),
-            JoinNodeId: reader.IsDBNull(joinNodeIdOrdinal) ? null : reader.GetGuid(joinNodeIdOrdinal)
+            JoinNodeId: reader.IsDBNull(joinNodeIdOrdinal) ? null : reader.GetGuid(joinNodeIdOrdinal),
+            Abandoned: ReadAbandoned(reader)
         );
+    }
+
+    // Read by name and tolerated when absent, so an engine running against a procedure deployed before
+    // declines existed keeps working (it simply never sees a join abandoned).
+    private static bool ReadAbandoned(DbDataReader reader)
+    {
+        for (int ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+        {
+            if (string.Equals(reader.GetName(ordinal), "Abandoned", StringComparison.OrdinalIgnoreCase))
+            {
+                return !reader.IsDBNull(ordinal) && reader.GetBoolean(ordinal);
+            }
+        }
+
+        return false;
     }
 }

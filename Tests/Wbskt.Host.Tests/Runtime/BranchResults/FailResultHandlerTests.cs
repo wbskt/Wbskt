@@ -343,8 +343,9 @@ public sealed class FailResultHandlerTests
     }
 
     /// <summary>
-    /// At the outermost cohort the Join node leaves the state as it is, closed token included, so
-    /// the failure path does the same and both continuations carry the same shape of state.
+    /// At the outermost cohort the Join node drops the closed cohort's token, so the failure path does
+    /// the same and both continuations carry the same shape of state. A continuation that kept the
+    /// token contributed again to the aggregator it had just claimed at the next Join, or on failing.
     /// </summary>
     [Fact]
     public async Task An_outermost_cohort_continuation_matches_what_the_join_node_would_carry()
@@ -352,7 +353,7 @@ public sealed class FailResultHandlerTests
         IReadOnlyDictionary<string, JsonElement> state = await SpawnContinuationFrom(
             $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}""");
 
-        Assert.Equal(JoinToken.ToString(), state[JoinTokens.TokenKey].GetString());
+        Assert.False(state.ContainsKey(JoinTokens.TokenKey));
         Assert.False(state.ContainsKey(JoinTokens.OuterKey));
         Assert.Equal(3, state["joinContributed"].GetInt32());
         Assert.Equal(2, state["joinSucceeded"].GetInt32());
@@ -421,7 +422,7 @@ public sealed class FailResultHandlerTests
             _joins.Object,
             _journal,
             new RecordingBranchTerminator(_log),
-            new ContinueResultHandler(branches, new BranchEndings(branches, _journal, new RecordingBranchTerminator(_log))),
+            new ContinueResultHandler(branches, new BranchEndings(branches, _journal, new RecordingBranchTerminator(_log)), new JoinDeclines(_joins.Object, _cancellation.Object, _journal)),
             logger);
     }
 

@@ -40,6 +40,7 @@ public sealed class JoinNodeExecutorTests
         var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
         Assert.Equal("JOIN_NO_TOKEN", fail.ErrorCode);
         Assert.False(fail.Retryable);
+        Assert.Contains("Fork or ParallelForEach", fail.Message);
     }
 
     [Fact]
@@ -96,8 +97,10 @@ public sealed class JoinNodeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_leaves_the_token_alone_at_the_outermost_cohort()
+    public async Task ExecuteAsync_removes_the_closed_token_at_the_outermost_cohort()
     {
+        // Left in place, the closed cohort's token made a continuation that reached another Join
+        // without a new Fork, or failed later, contribute again to the aggregator this Join claimed.
         Guid joinToken = Guid.NewGuid();
         var aggregatorMock = new Mock<IJoinAggregatorProvider>();
         aggregatorMock
@@ -116,7 +119,7 @@ public sealed class JoinNodeExecutorTests
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
         Assert.False(cont.LocalStatePatch.ContainsKey("__join_token"));
-        Assert.Empty(cont.RemoveKeys!);
+        Assert.Equal(new[] { "__join_token" }, cont.RemoveKeys!);
     }
 
     [Fact]

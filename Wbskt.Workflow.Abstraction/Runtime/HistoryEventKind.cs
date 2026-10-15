@@ -35,6 +35,8 @@ public static class HistoryEventKind
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
+    // A cohort branch ended (an End node, a port with no edge) without reaching its Join.
+    public const string JoinAbandoned = "JoinAbandoned";
 
     // Compensation
     public const string CompensationExecuted = "CompensationExecuted";
@@ -57,6 +59,7 @@ public static class HistoryEventKind
                 or NodeRetrying
                 or CompensationFailed
                 or BranchCancelled
+                or JoinAbandoned
                 or RunCancellationRequested
                 or RunFailureRequested => SeverityWarn,
 
