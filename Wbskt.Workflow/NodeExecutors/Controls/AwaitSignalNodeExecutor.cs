@@ -16,8 +16,8 @@ internal sealed class AwaitSignalNodeExecutor(TimeProvider clock) : AwaitInbound
 {
     public override string Kind => NodeKind.ControlAwaitSignal;
 
-    protected override string ParkedKey => "__await_signal";
-    protected override string DeadlineKey => "__await_signal_until";
+    protected override string ParkedKey => BranchStateKeys.AwaitSignal;
+    protected override string DeadlineKey => BranchStateKeys.AwaitSignalUntil;
     protected override string WakePayloadKey => "signalPayload";
 
     protected override ParkPlan CreateParkPlan(NodeContext ctx)

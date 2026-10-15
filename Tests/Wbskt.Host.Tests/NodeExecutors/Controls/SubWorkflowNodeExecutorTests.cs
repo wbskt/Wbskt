@@ -186,6 +186,33 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task A_stale_wake_is_cleared_and_not_taken_for_the_childs_result()
+    {
+        var hub = new Mock<IInboundHub>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock());
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+        ctx = ctx with
+        {
+            Branch = ctx.Branch with
+            {
+                LocalState = new Dictionary<string, JsonElement>
+                {
+                    [ParkedKey] = JsonSerializer.SerializeToElement(new { nodeId = ctx.Node.NodeId.ToString(), waitingOn = ChildRunRefId.ToString() }),
+                    ["__wake"] = JsonSerializer.SerializeToElement(new { childRunRefId = Guid.NewGuid(), status = "Succeeded" }),
+                    ["__wake_node"] = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString())
+                }
+            }
+        };
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+
+        Assert.Equal(ChildRunRefId, Assert.IsType<ChildRunCompletedWakeCondition>(wait.Condition).ChildRunId);
+        Assert.False(wait.LocalStatePatch.ContainsKey("childResult"));
+        Assert.Empty(wait.LocalStatePatch);
+        Assert.Equal(["__wake", "__wake_node"], wait.RemoveKeys);
+    }
+
+    [Fact]
     public async Task First_visit_evaluates_configured_input_into_the_child_trigger_body()
     {
         // Without this a child always receives the same fixed payload, which makes a shared

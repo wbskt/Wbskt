@@ -30,6 +30,7 @@ public static class BranchStateKeys
     public const string HttpDeadline = "__http_deadline";
     public const string SubWorkflow = "__subworkflow";
     public const string CommandAwaiting = "__command_awaiting";
+    public const string Delay = "__delay";
     public const string DelayUntil = "__delay_until";
 
     /// <summary>The attempt a node parked for a retry backoff runs next when its timer wakes it.</summary>
@@ -58,6 +59,7 @@ public static class BranchStateKeys
         HttpDeadline,
         SubWorkflow,
         CommandAwaiting,
+        Delay,
         DelayUntil,
         RetryAttempt,
         JoinContributed,

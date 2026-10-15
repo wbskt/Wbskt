@@ -7,6 +7,7 @@ using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime.BranchResults;
 using Wbskt.Workflow.Telemetry;
 using Microsoft.Extensions.Logging;
@@ -140,10 +141,12 @@ internal sealed class BranchLoop : IBranchLoop
 
             // PendingTakePort is a pre-decided exit: a port recorded on the branch row for the loop to
             // take on re-entry without re-running the node. It is how a branch resumes "already past"
-            // its current node - re-executing would repeat the node's side effects.
+            // its current node - re-executing would repeat the node's side effects. The node does not run,
+            // so the park it leaves is cleared here, the same keys its own exit would clear: left behind,
+            // the marker and passed deadline made the node, revisited in a loop, take its timeout at once.
             if (!string.IsNullOrEmpty(branchRow.PendingTakePort))
             {
-                result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>());
+                result = new NodeExecutionResult.Continue(branchRow.PendingTakePort, new Dictionary<string, JsonElement>(), ParkStateKeysOf(node));
             }
             else
             {
@@ -346,7 +349,7 @@ internal sealed class BranchLoop : IBranchLoop
         long bytes = result switch
         {
             NodeExecutionResult.Continue cont => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, cont.LocalStatePatch, cont.RemoveKeys)),
-            NodeExecutionResult.WaitForBookmark wait => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, wait.LocalStatePatch)),
+            NodeExecutionResult.WaitForBookmark wait => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, wait.LocalStatePatch, wait.RemoveKeys)),
             // Each child gets the shared state plus its own; base plus the largest child is an upper
             // bound on any child's row without serializing the shared state once per child.
             NodeExecutionResult.Fork fork => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, fork.LocalStatePatch))
@@ -376,6 +379,20 @@ internal sealed class BranchLoop : IBranchLoop
     /// written by whichever handler takes the node's result) and returns the attempt it held, or null
     /// when the branch is not parked for a retry.
     /// </summary>
+    /// <summary>The keys the parking node at <paramref name="node"/> leaves on the branch, or none for any other node.</summary>
+    private IReadOnlyCollection<string>? ParkStateKeysOf(BaseNode node)
+    {
+        try
+        {
+            return _nodeExecutorRegistry.For(node.Kind) is ParkingNodeExecutor parking ? parking.ParkStateKeys : null;
+        }
+        catch (NodeKindNotSupportedException)
+        {
+            // A take-port is taken without the executor; one that cannot be found has nothing to clear.
+            return null;
+        }
+    }
+
     private static (BranchRow Branch, int? ParkedAttempt) TakeParkedAttempt(BranchRow branchRow)
     {
         IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);

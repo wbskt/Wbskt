@@ -6,11 +6,13 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Channels;
 using Wbskt.Workflow.Engine;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Host.Tests.HostedServices;
 using Wbskt.Workflow.NodeExecutors.Actions;
+using Wbskt.Workflow.NodeExecutors.Controls;
 using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Host.Tests.Runtime;
@@ -115,6 +117,96 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
     }
 
     private LoopBackDispatcher? _dispatcher;
+
+    [Fact]
+    public async Task A_command_step_that_times_out_leaves_no_park_behind()
+    {
+        // The timeout is taken by the take-port, without running the step, so the step's own exit
+        // never cleared its marker; the branch loop now clears it in its place.
+        (BranchLoop loop, InMemoryProviders providers, _, _) = CommandStepRun();
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+        Assert.Contains(BranchStateKeys.CommandAwaiting, BranchLocalState.Deserialize(providers.Branches[1001].LocalJson).Keys);
+
+        await Scheduler(providers).TickAsync(CancellationToken.None);
+
+        Assert.Equal(CommandNodeExecutor.TimeoutPort, ExitPort(providers));
+        Assert.DoesNotContain(BranchStateKeys.CommandAwaiting, BranchLocalState.Deserialize(providers.Branches[1001].LocalJson).Keys);
+    }
+
+    [Fact]
+    public async Task An_await_whose_timeout_loops_back_to_it_parks_again_on_the_next_lap()
+    {
+        // Regression: the TTL's take-port left the await's marker and passed deadline on the branch, so
+        // the await, reached again by the loop, took them for its own resume and timed out at once
+        // instead of waiting a second time.
+        Guid awaitId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var wait = new AwaitSignalNode
+        {
+            NodeId = awaitId,
+            Name = "approve",
+            Ports = [],
+            Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromSeconds(30) }
+        };
+        WorkflowDefinition definition = new(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "await-loop-e2e",
+            null,
+            true,
+            [wait],
+            [new Edge((awaitId, "timeout"), (awaitId, "in"))],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var providers = new InMemoryProviders(definition, awaitId);
+        var awaitClock = new SettableClock { UtcNow = new DateTime(2026, 5, 26, 12, 30, 0, DateTimeKind.Utc) };
+        _dispatcher = new LoopBackDispatcher();
+        var loop = TestBranchLoop.Create(
+            providers,
+            providers,
+            providers,
+            providers,
+            new RunJournal(providers, new FixedClock()),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new AwaitSignalNodeExecutor(awaitClock)),
+            _dispatcher,
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new NoOpRunCancellationService(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
+        _dispatcher.Handler = request => loop.RunAsync(request.RunId, request.BranchId, request.Reason, CancellationToken.None);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+        awaitClock.UtcNow = new DateTime(2026, 5, 26, 12, 31, 0, DateTimeKind.Utc);
+        await Scheduler(providers).TickAsync(CancellationToken.None);
+
+        // Parked again at once: the await ran twice (two parks), not a third time for an extra timeout.
+        Assert.Equal(BranchStatus.Waiting, providers.Branches[1001].Status);
+        Assert.Equal(awaitId, providers.Branches[1001].NodeId);
+        Assert.Single(providers.Bookmarks);
+        Assert.Equal(2, providers.History.Count(e => e.EventKind == HistoryEventKind.NodeStarted && e.NodeId == awaitId));
+        IReadOnlyDictionary<string, JsonElement> state = BranchLocalState.Deserialize(providers.Branches[1001].LocalJson);
+        Assert.Equal(new DateTime(2026, 5, 26, 12, 31, 30, DateTimeKind.Utc).ToString("O"), state[BranchStateKeys.AwaitSignalUntil].GetString());
+    }
+
+    private BookmarkScheduler Scheduler(InMemoryProviders providers) => new(
+        new LaterClock(),
+        new AlwaysActiveLeadershipGate(),
+        WorkerTestServices.Scopes(providers),
+        _dispatcher!,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookmarkScheduler>.Instance,
+        WorkerTestServices.Options());
+
+    private sealed class SettableClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
+        public DateTime UtcNow { get; set; }
+    }
 
     [Fact]
     public async Task A_command_step_whose_command_cannot_be_sent_leaves_by_failed_at_once()
@@ -498,7 +590,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         private readonly Queue<Guid> _ids = new([
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")]);
 
-        public Guid NewId() => _ids.Dequeue();
+        public Guid NewId() => _ids.Count > 0 ? _ids.Dequeue() : Guid.NewGuid();
     }
 }
 
