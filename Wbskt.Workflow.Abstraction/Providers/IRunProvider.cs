@@ -59,6 +59,13 @@ public interface IRunProvider
         => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());
     Task<RunRow> UpdateStatusAsync(Guid refId, string status, DateTime? completedAt, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct);
     Task<IReadOnlyCollection<RunRow>> GetStuckRunsAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
+
+    /// <summary>
+    /// Every run in <paramref name="status"/>. Crash recovery reads 'Failing' and 'Cancelling' runs this
+    /// way to re-apply their stop. Defaulted so the test doubles that never recover need no stub.
+    /// </summary>
+    Task<IReadOnlyCollection<RunRow>> GetAllByStatusAsync(string status, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());
     Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct);
     Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct);
 }

@@ -78,6 +78,16 @@ internal sealed class BranchLoop : IBranchLoop
         CancellationToken linkedToken = linkedCts.Token;
 
         BranchRow branchRow = await _branchProvider.GetByIdAsync(branchId, ct);
+        if (BranchStatus.IsEnded(branchRow.Status))
+        {
+            // A wake can still be on its way to a branch that has ended since: a Waiting branch is
+            // cancelled by its run's stop, or failed by the orphan GC as stranded, after its bookmark
+            // was claimed but before this loop picked it up. Running it would execute its node again
+            // and release it a second time, finalizing the run under a sibling that is still going.
+            _logger?.LogInformation("Branch {BranchId} of run {RunId} has already ended ({Status}); not running it for {Reason}", branchId, runId, branchRow.Status, reason);
+            return;
+        }
+
         RunRow runRow = await _runProvider.GetByIdAsync(runId, ct);
         WorkflowDefinition definition = await _workflowDefinitionCache.GetAsync(runRow.WorkflowDefinitionId, ct);
 
@@ -326,7 +336,7 @@ internal sealed class BranchLoop : IBranchLoop
         return System.Text.Encoding.UTF8.GetByteCount(BranchLocalState.Serialize(localState));
     }
 
-    private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)
+    internal static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)
     {
         IReadOnlyDictionary<string, JsonElement> localState = BranchLocalState.Deserialize(branchRow.LocalJson);
 

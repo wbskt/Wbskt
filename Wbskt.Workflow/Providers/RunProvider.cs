@@ -335,6 +335,16 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<RunRow>> GetAllByStatusAsync(string status, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Run_GetAllBy_Status",
+            p => p.AddWithValue("@Status", status),
+            Map,
+            ct
+        );
+    }
+
     public async Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct)
     {
         var result = await ExecuteScalarAsync<object>(

@@ -94,6 +94,33 @@ public sealed class RunRecoveryServiceTests
         Assert.Equal([172L], cancellationService.ReappliedFailures);
     }
 
+    [Fact]
+    public async Task Start_reapplies_the_stop_of_failing_and_cancelling_runs_with_only_waiting_branches()
+    {
+        // Arrange: no Active branch anywhere, so the branch pass finds none of these runs. Their
+        // remaining siblings are all Waiting, which used to keep them Failing or Cancelling for good.
+        var branchProvider = new RecordingBranchProvider([]);
+        var runDispatcher = new RecordingRunDispatcher();
+        var logger = new RecordingLogger<RunRecoveryService>();
+
+        var runProvider = new RecordingRunProvider();
+        runProvider.AddRun(CreateRunRow(180, "Failing"));
+        runProvider.AddRun(CreateRunRow(181, "Cancelling"));
+        runProvider.AddRun(CreateRunRow(182, "Running"));
+
+        var cancellationService = new RecordingRunCancellationService();
+        var service = new RunRecoveryService(WorkerTestServices.Scopes(branchProvider, runProvider, cancellationService), runDispatcher, logger);
+
+        // Act
+        await service.RecoverAsync(CancellationToken.None);
+
+        // Assert: each stop re-applied once, by its own kind; a Running run is left alone.
+        Assert.Equal([180L], cancellationService.ReappliedFailures);
+        Assert.Equal([181L], cancellationService.ReappliedCancellations);
+        Assert.Empty(runDispatcher.Requests);
+        Assert.True(service.Ready.IsCompleted);
+    }
+
     private static RunRow CreateRunRow(int id, string status)
     {
         return new RunRow
@@ -189,6 +216,8 @@ public sealed class RunRecoveryServiceTests
         public Task<RunRow> CreateAsync(RunRow row, CancellationToken ct) => throw new NotSupportedException();
         public Task<int?> FindByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<RunRow> GetByIdAsync(long runId, CancellationToken ct) => Task.FromResult(_runs[runId]);
+        public Task<IReadOnlyCollection<RunRow>> GetAllByStatusAsync(string status, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyCollection<RunRow>>(_runs.Values.Where(run => run.Status == status).ToArray());
         public Task<RunRow?> FindRowByRefIdAsync(Guid refId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkflowAsync(Guid workflowRefId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<RunRow>> ListByWorkspaceAsync(int workspaceId, string? statusFilter, int top, long? cursorId, CancellationToken ct) => throw new NotSupportedException();
