@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Workflow.Channels;
 using Wbskt.Host.Tests.InboundAdapters;
 
 namespace Wbskt.Host.Tests.HostedServices;
@@ -83,6 +84,23 @@ public sealed class ClientHoldTickerTests
         string second = ClientHoldTicker.ToInboundEvent(Hold(id: 1, holdSeconds: 60) with { SinceAt = SinceAt.AddHours(1) }, Now).InboundEventId;
 
         Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void The_held_event_is_the_channels_own_and_correlates_like_the_message()
+    {
+        ClientHoldStateRow hold = Hold(id: 3, holdSeconds: 60);
+
+        InboundEvent evt = ClientHoldTicker.ToInboundEvent(hold, Now);
+        InboundEvent expected = ClientHoldChannel.Event(
+            hold.Id, hold.TriggerKey, hold.SinceAt, 60,
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(hold.Payload)!, Now);
+
+        Assert.Equal(ClientHoldChannel.Name, evt.ChannelKind);
+        Assert.Equal(expected.MatchKeys, evt.MatchKeys);
+        Assert.Equal(expected.InboundEventId, evt.InboundEventId);
+        Assert.Equal(expected.Payload.Keys.Order(), evt.Payload.Keys.Order());
+        Assert.Equal(ClientChannel.Key(ClientRef.ToString(), "temperature"), new ClientHoldChannel().CorrelationKey(evt));
     }
 
     private static ClientHoldTicker CreateTicker(RecordingHoldStateProvider provider, RecordingInboundHub hub, bool isLeader = true)

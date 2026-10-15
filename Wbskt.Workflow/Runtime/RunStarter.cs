@@ -100,24 +100,8 @@ internal sealed class RunStarter : IRunStarter
                         CreditBudget = creditBudget,
                         CreatedAt = nowUtc
                     },
-                    new BranchRow
-                    {
-                        Id = 0,
-                        RefId = rootBranchRefId,
-                        RunId = 0,
-                        ParentBranchId = null,
-                        ForkCohortId = null,
-                        NodeId = Guid.Parse(triggerNodeId),
-                        Status = BranchStatus.Active,
-                        PendingTakePort = null,
-                        LocalJson = localJson,
-                        LastOutputJson = null,
-                        CompensationStackJson = null,
-                        CreatedAt = nowUtc,
-                        UpdatedAt = nowUtc,
-                        // Branches.RowVersion is a SQL Server ROWVERSION: the database assigns it.
-                        RowVersion = Array.Empty<byte>()
-                    },
+                    // RunId 0: Run_Start inserts the root branch under the run it has just created.
+                    BranchRow.New(rootBranchRefId, 0, Guid.Parse(triggerNodeId), localJson, nowUtc),
                     triggerStartKey,
                     definition.WorkspaceId,
                     exemptFromCeiling ? null : _maxActiveRunsPerWorkspace,

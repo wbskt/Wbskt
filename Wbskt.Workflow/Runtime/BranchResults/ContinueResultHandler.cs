@@ -10,17 +10,14 @@ namespace Wbskt.Workflow.Runtime.BranchResults;
 /// </summary>
 internal sealed class ContinueResultHandler(
     IBranchProvider branchProvider,
-    IRunJournal journal,
-    IBranchTerminator branchTerminator) : BranchResultHandler<NodeExecutionResult.Continue>
+    BranchEndings endings) : BranchResultHandler<NodeExecutionResult.Continue>
 {
-    private readonly BranchEndings _endings = new(branchProvider, journal, branchTerminator);
-
     public override async Task<BranchResultOutcome> HandleAsync(NodeExecutionResult.Continue result, BranchResultContext context, CancellationToken ct)
     {
         Guid? nextNodeId = BranchRouting.ResolveNext(context.Definition, context.Node.NodeId, result.OutboundPort);
         if (nextNodeId is null)
         {
-            await _endings.CompleteAsync(context.Run.Id, context.BranchId, context.Branch.RefId, ct);
+            await endings.CompleteAsync(context.Run.Id, context.BranchId, context.Branch.RefId, ct);
             return BranchResultOutcome.Stopped;
         }
 

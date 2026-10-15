@@ -8,6 +8,6 @@ BEGIN
         Status = 'Cancelled',
         UpdatedAt = SYSUTCDATETIME()
     WHERE RunId = @RunId
-      AND Status IN ('Waiting', 'WaitingAtJoin');
+      AND Status = 'Waiting';
 END;
 GO

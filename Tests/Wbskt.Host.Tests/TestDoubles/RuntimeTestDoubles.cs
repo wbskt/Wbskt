@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -140,15 +142,18 @@ internal static class TestBranchLoop
         IRunCancellationService runCancellationService,
         ICompensationOrchestrator compensationOrchestrator,
         ICreditCostCalculator creditCostCalculator,
-        IJoinAggregatorProvider joinAggregatorProvider)
+        IJoinAggregatorProvider joinAggregatorProvider,
+        IOptions<WorkflowEngineOptions>? engineOptions = null)
     {
+        var endings = new BranchEndings(branchProvider, journal, branchTerminator);
+        var continueHandler = new ContinueResultHandler(branchProvider, endings);
         var resultDispatcher = new BranchResultDispatcher(
         [
-            new ContinueResultHandler(branchProvider, journal, branchTerminator),
-            new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, journal, branchTerminator),
+            continueHandler,
+            new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, endings),
             new WaitForBookmarkResultHandler(branchProvider, bookmarkProvider, idGenerator, clock, journal),
-            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator),
-            new TerminalResultHandler(branchProvider, journal, branchTerminator)
+            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator, continueHandler),
+            new TerminalResultHandler(endings)
         ]);
 
         return new BranchLoop(
@@ -160,9 +165,10 @@ internal static class TestBranchLoop
             nodeExecutorRegistry,
             idempotencyKeyProvider,
             clock,
-            branchTerminator,
+            endings,
             runCancellationService,
             creditCostCalculator,
-            resultDispatcher);
+            resultDispatcher,
+            engineOptions);
     }
 }

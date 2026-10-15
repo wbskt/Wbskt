@@ -1,5 +1,6 @@
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Runtime.BranchResults;
 using static Wbskt.Host.Tests.Runtime.BranchResults.BranchResultTestData;
 
@@ -35,8 +36,7 @@ public sealed class ForkResultHandlerTests
             _dispatcher,
             new SequentialIdGenerator(),
             new FixedClock(),
-            new RecordingRunJournal(_log),
-            new RecordingBranchTerminator(_log));
+            new BranchEndings(_branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)));
     }
 
     [Fact]

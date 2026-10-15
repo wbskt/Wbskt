@@ -28,17 +28,17 @@ internal sealed class FailResultHandler(
     IJoinAggregatorProvider joinAggregatorProvider,
     IRunJournal journal,
     IBranchTerminator branchTerminator,
+    ContinueResultHandler continueHandler,
     ILogger<FailResultHandler>? logger = null) : BranchResultHandler<NodeExecutionResult.Fail>
 {
     private readonly OnFailureHandler _onFailureHandler = new();
-    private readonly ContinueResultHandler _continueHandler = new(branchProvider, journal, branchTerminator);
 
     public override async Task<BranchResultOutcome> HandleAsync(NodeExecutionResult.Fail result, BranchResultContext context, CancellationToken ct)
     {
         NodeExecutionResult handledResult = _onFailureHandler.Apply(result, context.Node, context.NodeContext);
         if (handledResult is NodeExecutionResult.Continue handledContinue)
         {
-            return await _continueHandler.HandleAsync(handledContinue, context, ct);
+            return await continueHandler.HandleAsync(handledContinue, context, ct);
         }
 
         RunRow runRow = context.Run;
@@ -171,23 +171,15 @@ internal sealed class FailResultHandler(
             // the run to zero active branches and finalize it out from under the new branch.
             await runCountersProvider.IncrementActiveBranchesAsync(runRow.Id, 1, ct);
 
-            BranchRow continuation = await branchProvider.CreateAsync(new BranchRow
-            {
-                Id = 0,
-                RefId = idGenerator.NewId(),
-                RunId = runRow.Id,
-                ParentBranchId = branchRow.RefId,
-                ForkCohortId = branchRow.ForkCohortId,
-                NodeId = continuationNodeId.Value,
-                Status = BranchStatus.Active,
-                PendingTakePort = null,
-                LocalJson = continuationLocalJson,
-                LastOutputJson = null,
-                CompensationStackJson = branchRow.CompensationStackJson,
-                CreatedAt = clock.GetUtcNow().UtcDateTime,
-                UpdatedAt = clock.GetUtcNow().UtcDateTime,
-                RowVersion = Array.Empty<byte>()
-            }, ct);
+            BranchRow continuation = await branchProvider.CreateAsync(BranchRow.New(
+                idGenerator.NewId(),
+                runRow.Id,
+                continuationNodeId.Value,
+                continuationLocalJson,
+                clock.GetUtcNow().UtcDateTime,
+                parentBranchId: branchRow.RefId,
+                forkCohortId: branchRow.ForkCohortId,
+                compensationStackJson: branchRow.CompensationStackJson), ct);
 
             await journal.AppendBranchEventAsync(runRow.Id, continuation.RefId, joinNodeId, HistoryEventKind.JoinContinuationSpawned, ct);
             await runDispatcher.DispatchAsync(new BranchExecutionRequest(runRow.Id, continuation.Id, BranchExecutionReason.ForkChild), ct);

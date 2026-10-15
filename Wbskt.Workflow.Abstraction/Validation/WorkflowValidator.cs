@@ -49,6 +49,7 @@ public sealed class WorkflowValidator
         ValidateParallelForEachPairing(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
         ValidateSubWorkflowSelfReference(definition, workflowRefId, issues);
+        ValidateLocalVariableNames(definition, issues);
         ValidateTriggerConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
@@ -218,6 +219,32 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "SUBWORKFLOW_SELF_REFERENCE",
                     $"SubWorkflow node '{node.NodeId}' starts its own workflow, which would start children without end; point it at another workflow.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A Local variable is written straight into the branch's local state, which is also where the
+    /// engine keeps the trigger payload and its own bookkeeping. One named after an engine key would
+    /// overwrite it - a variable called <c>__join_token</c> strands its cohort at the Join - so the
+    /// engine's names are refused here.
+    /// </summary>
+    private static void ValidateLocalVariableNames(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes.OfType<VariableNode>())
+        {
+            if (node.Config is not { Scope: VariableScope.Local } config || string.IsNullOrEmpty(config.Var))
+            {
+                continue;
+            }
+
+            if (BranchStateKeys.IsReserved(config.Var))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "VARIABLE_NAME_RESERVED",
+                    $"Variable node '{node.NodeId}' sets local variable '{config.Var}', a name the engine keeps for itself (names starting with '{BranchStateKeys.EnginePrefix}', and '{BranchStateKeys.Trigger}'); rename it.",
                     node.NodeId));
             }
         }

@@ -69,19 +69,8 @@ public sealed class ClientHoldTicker(
     {
         ClientHoldTriggerKey.TryGetHoldSeconds(hold.TriggerKey, out int holdSeconds);
 
-        // The latest matching message, exactly as a plain client trigger would have seen it, plus when
-        // the hold began and how long it had to last.
-        var payload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(hold.Payload) ?? [];
-        payload["heldSince"] = JsonSerializer.SerializeToElement(DateTime.SpecifyKind(hold.SinceAt, DateTimeKind.Utc));
-        payload["holdSeconds"] = JsonSerializer.SerializeToElement(holdSeconds);
+        var heldPayload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(hold.Payload) ?? [];
 
-        return new InboundEvent(
-            ClientHoldChannel.Name,
-            [hold.TriggerKey],
-            // One id per hold: a re-leased hold (the process died before it was marked fired) is dropped
-            // by the dispatcher's idempotency claim, while a later hold of the same trigger is not.
-            $"client-hold:{hold.Id}:{hold.SinceAt.Ticks}",
-            payload,
-            now);
+        return ClientHoldChannel.Event(hold.Id, hold.TriggerKey, hold.SinceAt, holdSeconds, heldPayload, now);
     }
 }

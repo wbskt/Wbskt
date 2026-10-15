@@ -163,7 +163,12 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<INodeExecutorRegistry, NodeExecutorRegistry>();
         // One handler per NodeExecutionResult type, as there is one executor per node kind. Scoped like
         // the executors and holding nothing per branch: each call brings its branch in a BranchResultContext.
-        services.AddScoped<IBranchResultHandler, ContinueResultHandler>();
+        // The branch endings and the Continue handler are shared rather than built inside the classes
+        // that use them: the loop and three handlers end branches, and the Fail handler continues one
+        // when an onFailure routes it to a port.
+        services.AddScoped<BranchEndings>();
+        services.AddScoped<ContinueResultHandler>();
+        services.AddScoped<IBranchResultHandler>(sp => sp.GetRequiredService<ContinueResultHandler>());
         services.AddScoped<IBranchResultHandler, ForkResultHandler>();
         services.AddScoped<IBranchResultHandler, WaitForBookmarkResultHandler>();
         services.AddScoped<IBranchResultHandler, FailResultHandler>();

@@ -245,6 +245,62 @@ public sealed class BranchLoopTests
         Assert.Contains("FailBranch", branchFailed.PayloadJson);
     }
 
+    [Fact]
+    public async Task A_parked_node_is_charged_when_it_parks_and_not_again_when_it_resumes()
+    {
+        // A parked node runs twice: once to park, and again when its wake arrives. Charging both
+        // visits billed every Delay, AwaitSignal, WaitForHttp and SubWorkflow twice.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "wait", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var counters = new StubRunCountersProvider();
+        var loop = CreateLoop(definition, branchProvider, new RecordingHistoryEventProvider(),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(
+                new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("go", "corr"), new Dictionary<string, JsonElement>()),
+                new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))),
+            counters);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+        Assert.Equal(BranchStatus.Waiting, branchProvider.CurrentBranch.Status);
+        Assert.Single(counters.Charges);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        Assert.Single(counters.Charges);
+        Assert.True(branchProvider.SetCompletedCalled);
+    }
+
+    [Fact]
+    public async Task A_node_whose_output_would_overgrow_the_branch_state_fails_instead_of_writing_it()
+    {
+        // Local state is read, merged and written back on every step and copied into every fork child,
+        // so one oversized output slowed every step after it. It is refused before it is written.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var nextId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var lastId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "big", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new TestNode { NodeId = nextId, Name = "next", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new TestNode { NodeId = lastId, Name = "last", Ports = Array.Empty<PortDefinition>(), KindValue = "test" },
+            new Edge((nodeId, "default"), (nextId, "in")),
+            new Edge((nextId, "default"), (lastId, "in")));
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var oversized = new Dictionary<string, JsonElement> { ["blob"] = JsonSerializer.SerializeToElement(new string('x', 200)) };
+        var loop = CreateLoop(definition, branchProvider, historyProvider,
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Continue("default", oversized))),
+            engineOptions: new WorkflowEngineOptions { MaxBranchLocalStateBytes = 100 });
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        Assert.True(branchProvider.SetFailedCalled);
+        Assert.DoesNotContain("blob", branchProvider.CurrentBranch.LocalJson);
+        Assert.Empty(branchProvider.PointerUpdates);
+        var failed = Assert.Single(historyProvider.Events, evt => evt.EventKind == "NodeFailed");
+        Assert.Contains("BRANCH_STATE_TOO_LARGE", failed.PayloadJson);
+    }
+
     private static BranchLoop CreateLoop(
         WorkflowDefinition definition,
         RecordingBranchProvider branchProvider,

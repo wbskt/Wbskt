@@ -6,6 +6,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.NodeExecutors.Controls;
+using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Runtime.BranchResults;
 using static Wbskt.Host.Tests.Runtime.BranchResults.BranchResultTestData;
 
@@ -399,7 +400,8 @@ public sealed class FailResultHandlerTests
             _compensation.Object,
             _joins.Object,
             _journal,
-            new RecordingBranchTerminator(_log));
+            new RecordingBranchTerminator(_log),
+            new ContinueResultHandler(branches, new BranchEndings(branches, _journal, new RecordingBranchTerminator(_log))));
     }
 
     private static FailRunNode FailRun() => new()

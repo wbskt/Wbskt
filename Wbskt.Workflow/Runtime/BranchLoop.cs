@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
@@ -31,6 +33,7 @@ internal sealed class BranchLoop : IBranchLoop
     private readonly ICreditCostCalculator _creditCostCalculator;
     private readonly IBranchResultDispatcher _resultDispatcher;
     private readonly BranchEndings _endings;
+    private readonly int _maxBranchLocalStateBytes;
     private readonly WorkflowMetrics? _workflowMetrics;
     private readonly ILogger<BranchLoop>? _logger;
 
@@ -43,10 +46,11 @@ internal sealed class BranchLoop : IBranchLoop
         INodeExecutorRegistry nodeExecutorRegistry,
         IIdempotencyKeyProvider idempotencyKeyProvider,
         TimeProvider clock,
-        IBranchTerminator branchTerminator,
+        BranchEndings endings,
         IRunCancellationService runCancellationService,
         ICreditCostCalculator creditCostCalculator,
         IBranchResultDispatcher resultDispatcher,
+        IOptions<WorkflowEngineOptions>? options = null,
         WorkflowMetrics? workflowMetrics = null,
         ILogger<BranchLoop>? logger = null)
     {
@@ -61,7 +65,8 @@ internal sealed class BranchLoop : IBranchLoop
         _runCancellationService = runCancellationService;
         _creditCostCalculator = creditCostCalculator;
         _resultDispatcher = resultDispatcher;
-        _endings = new BranchEndings(branchProvider, journal, branchTerminator);
+        _endings = endings;
+        _maxBranchLocalStateBytes = options?.Value.MaxBranchLocalStateBytes ?? new WorkflowEngineOptions().MaxBranchLocalStateBytes;
         _workflowMetrics = workflowMetrics;
         _logger = logger;
     }
@@ -183,6 +188,11 @@ internal sealed class BranchLoop : IBranchLoop
         bool hostShutdownInterrupted = false;
         // Accumulated across attempts, so a node retried three times reports what all three cost.
         decimal creditsCharged = 0m;
+
+        // The resumer and the timer leave a parked branch Waiting at its node and only dispatch it; the
+        // node flips it back to Active when it moves on. So a branch that arrives here Waiting is on the
+        // resume visit of a node it already paid to park on.
+        bool isResumeVisit = string.Equals(branchRow.Status, BranchStatus.Waiting, StringComparison.Ordinal);
         try
         {
             // Resolving the executor MUST stay inside this try. An unregistered node kind throws,
@@ -212,7 +222,8 @@ internal sealed class BranchLoop : IBranchLoop
                     retryCt),
                 // Summed rather than written per attempt: a row per charge would roughly double
                 // history volume for a number that belongs on the outcome event anyway.
-                onCharge: cost => creditsCharged += cost);
+                onCharge: cost => creditsCharged += cost,
+                isResumeVisit: isResumeVisit);
         }
         catch (Exception ex)
         {
@@ -258,6 +269,8 @@ internal sealed class BranchLoop : IBranchLoop
             return null;
         }
 
+        result = GuardLocalStateSize(result, branchRow);
+
         // durationMs travels on every node outcome. Deriving it by subtracting the NodeStarted
         // timestamp only works while both rows survive retention, and it silently includes any
         // retry backoff; this is the executor's own elapsed time and is what per-node timing
@@ -274,6 +287,43 @@ internal sealed class BranchLoop : IBranchLoop
         await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? HistoryEventKind.NodeFailed : HistoryEventKind.NodeCompleted, eventPayload, ct);
 
         return result;
+    }
+
+    /// <summary>
+    /// Fails the node with BRANCH_STATE_TOO_LARGE when the local state its result would leave on the
+    /// branch is over <see cref="WorkflowEngineOptions.MaxBranchLocalStateBytes"/>. Every node output
+    /// is merged into the branch row and the whole of it is read back, deserialized and written again
+    /// on every later step, so one oversized payload made each step after it slower and every row it
+    /// was copied into (a fork child, a join continuation) larger.
+    /// </summary>
+    private NodeExecutionResult GuardLocalStateSize(NodeExecutionResult result, BranchRow branchRow)
+    {
+        long bytes = result switch
+        {
+            NodeExecutionResult.Continue cont => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, cont.LocalStatePatch, cont.RemoveKeys)),
+            NodeExecutionResult.WaitForBookmark wait => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, wait.LocalStatePatch)),
+            // Each child gets the shared state plus its own; base plus the largest child is an upper
+            // bound on any child's row without serializing the shared state once per child.
+            NodeExecutionResult.Fork fork => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, fork.LocalStatePatch))
+                + (fork.Children.Count == 0 ? 0 : fork.Children.Max(child => SizeOf(child.LocalState))),
+            _ => 0
+        };
+
+        if (bytes <= _maxBranchLocalStateBytes)
+        {
+            return result;
+        }
+
+        return new NodeExecutionResult.Fail(
+            "BRANCH_STATE_TOO_LARGE",
+            $"The node's output would grow the branch's local state to {bytes} bytes, over the limit of {_maxBranchLocalStateBytes} bytes.",
+            false,
+            null);
+    }
+
+    private static long SizeOf(IReadOnlyDictionary<string, JsonElement> localState)
+    {
+        return System.Text.Encoding.UTF8.GetByteCount(BranchLocalState.Serialize(localState));
     }
 
     private static BranchContext BuildBranchContext(BranchRow branchRow, RunRow runRow, int workspaceId)

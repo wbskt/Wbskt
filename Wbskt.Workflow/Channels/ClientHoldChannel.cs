@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
@@ -15,6 +16,34 @@ public sealed class ClientHoldChannel : TriggerChannel
     public const string Name = ClientHoldTriggerKey.TriggerKind;
 
     public override string Kind => Name;
+
+    /// <param name="heldPayload">
+    /// The latest matching message's trigger payload, exactly as a plain client trigger would have
+    /// seen it; the event adds when the hold began and how long it had to last.
+    /// </param>
+    public static InboundEvent Event(
+        int holdId,
+        string triggerKey,
+        DateTime sinceAt,
+        int holdSeconds,
+        IReadOnlyDictionary<string, JsonElement> heldPayload,
+        DateTime now)
+    {
+        var payload = new Dictionary<string, JsonElement>(heldPayload, StringComparer.Ordinal)
+        {
+            ["heldSince"] = Json(DateTime.SpecifyKind(sinceAt, DateTimeKind.Utc)),
+            ["holdSeconds"] = Json(holdSeconds)
+        };
+
+        return new InboundEvent(
+            Name,
+            [triggerKey],
+            // One id per hold: a re-leased hold (the process died before it was marked fired) is dropped
+            // by the dispatcher's idempotency claim, while a later hold of the same trigger is not.
+            $"client-hold:{holdId}:{sinceAt.Ticks}",
+            payload,
+            now);
+    }
 
     // A held message correlates exactly as the message itself would have.
     public override string CorrelationKey(InboundEvent evt) =>

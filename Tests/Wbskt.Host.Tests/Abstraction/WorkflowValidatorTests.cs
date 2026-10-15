@@ -478,6 +478,51 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "SUBWORKFLOW_SELF_REFERENCE");
     }
 
+    // ---------------------------------------------- local variable names
+
+    [Theory]
+    [InlineData("trigger")]
+    [InlineData("__join_token")]
+    [InlineData("__wake")]
+    [InlineData("__anything_new")]
+    [InlineData("joinContributed")]
+    public void Validate_rejects_a_Local_variable_named_after_an_engine_key(string name)
+    {
+        // A Local variable is written straight into branch state, where the engine keeps the trigger
+        // payload and its own bookkeeping; one named __join_token would strand its cohort at the Join.
+        var def = ValidWorkflowBuilder.Build();
+        VariableNode variable = CreateVariable(VariableScope.Local, name);
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, variable] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "VARIABLE_NAME_RESERVED" && i.NodeId == variable.NodeId);
+    }
+
+    [Theory]
+    [InlineData(VariableScope.Local, "orderTotal")]
+    [InlineData(VariableScope.Local, "triggered")]
+    [InlineData(VariableScope.Shared, "__counter")]
+    public void Validate_accepts_variable_names_that_cannot_reach_engine_state(VariableScope scope, string name)
+    {
+        // Shared variables live in their own table, so only a Local name can collide.
+        var def = ValidWorkflowBuilder.Build();
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, CreateVariable(scope, name)] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "VARIABLE_NAME_RESERVED");
+    }
+
+    private static VariableNode CreateVariable(VariableScope scope, string name) => new()
+    {
+        NodeId = Guid.NewGuid(),
+        Name = "set",
+        Ports = [
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
+        ],
+        Config = new VariableConfig { Scope = scope, Op = VariableOperation.Set, Var = name, Value = System.Text.Json.JsonSerializer.SerializeToElement(1) }
+    };
+
     private static SubWorkflowNode SubWorkflowTo(Guid workflowRefId) => new()
     {
         NodeId = Guid.NewGuid(),

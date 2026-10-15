@@ -17,11 +17,8 @@ internal sealed class ForkResultHandler(
     IRunDispatcher runDispatcher,
     IIdGenerator idGenerator,
     TimeProvider clock,
-    IRunJournal journal,
-    IBranchTerminator branchTerminator) : BranchResultHandler<NodeExecutionResult.Fork>
+    BranchEndings endings) : BranchResultHandler<NodeExecutionResult.Fork>
 {
-    private readonly BranchEndings _endings = new(branchProvider, journal, branchTerminator);
-
     public override async Task<BranchResultOutcome> HandleAsync(NodeExecutionResult.Fork result, BranchResultContext context, CancellationToken ct)
     {
         BranchRow branchRow = context.Branch;
@@ -42,30 +39,22 @@ internal sealed class ForkResultHandler(
             foreach (ForkSpec child in result.Children)
             {
                 string childLocalJson = BranchLocalState.Serialize(BranchLocalState.Merge(BranchLocalState.Serialize(baseLocalState), child.LocalState));
-                BranchRow created = await branchProvider.CreateAsync(new BranchRow
-                {
-                    Id = 0,
-                    RefId = idGenerator.NewId(),
-                    RunId = context.Run.Id,
-                    ParentBranchId = branchRow.RefId,
-                    ForkCohortId = cohortId,
-                    NodeId = BranchRouting.ResolveForkTarget(context.Definition, nodeId, child.OutboundPort),
-                    Status = BranchStatus.Active,
-                    PendingTakePort = null,
-                    LocalJson = childLocalJson,
-                    LastOutputJson = null,
-                    CompensationStackJson = branchRow.CompensationStackJson,
-                    CreatedAt = clock.GetUtcNow().UtcDateTime,
-                    UpdatedAt = clock.GetUtcNow().UtcDateTime,
-                    RowVersion = Array.Empty<byte>()
-                }, ct);
+                BranchRow created = await branchProvider.CreateAsync(BranchRow.New(
+                    idGenerator.NewId(),
+                    context.Run.Id,
+                    BranchRouting.ResolveForkTarget(context.Definition, nodeId, child.OutboundPort),
+                    childLocalJson,
+                    clock.GetUtcNow().UtcDateTime,
+                    parentBranchId: branchRow.RefId,
+                    forkCohortId: cohortId,
+                    compensationStackJson: branchRow.CompensationStackJson), ct);
                 await runDispatcher.DispatchAsync(new BranchExecutionRequest(context.RunId, created.Id, BranchExecutionReason.ForkChild), ct);
             }
         }
 
         if (string.IsNullOrWhiteSpace(result.ContinueOutboundPort))
         {
-            await _endings.CompleteAsync(context.Run.Id, context.BranchId, branchRow.RefId, ct);
+            await endings.CompleteAsync(context.Run.Id, context.BranchId, branchRow.RefId, ct);
             return BranchResultOutcome.Stopped;
         }
 
