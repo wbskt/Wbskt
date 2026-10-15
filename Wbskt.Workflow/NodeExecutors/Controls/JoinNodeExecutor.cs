@@ -17,7 +17,10 @@ internal sealed class JoinNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlJoin;
 
-    public bool IsSideEffectFree => true;
+    // Not replay-safe, so it keeps the default. JoinAggregator_Contribute counts a repeated
+    // contribution from the same branch once, but answers the repeat with ShouldContinue = 0 - so a
+    // replay of the branch that won the cohort ends it instead of continuing, and nothing downstream
+    // of the Join runs. The recorded outcome keeps the winner's continue.
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

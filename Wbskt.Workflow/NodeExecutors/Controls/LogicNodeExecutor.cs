@@ -17,7 +17,8 @@ internal sealed class LogicNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlLogic;
 
-    public bool IsSideEffectFree => true;
+    // Evaluates a condition over branch state and picks a port; nothing is written anywhere.
+    public bool IsReplaySafe(BaseNode node) => true;
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

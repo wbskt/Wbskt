@@ -11,6 +11,11 @@ using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
+using Wbskt.Workflow.Abstraction.Models.Triggers;
+using Wbskt.Workflow.NodeExecutors.Controls;
+using Wbskt.Workflow.NodeExecutors.Triggers;
 
 namespace Wbskt.Host.Tests.Runtime;
 
@@ -539,13 +544,13 @@ public sealed class RetryExecutorTests
     }
 
     [Fact]
-    public async Task RunWithRetryAsync_side_effect_free_runs_first_then_writes_cache()
+    public async Task RunWithRetryAsync_replay_safe_runs_without_claiming_a_key()
     {
         var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
         
         var executorMock = new Mock<INodeExecutor>();
         executorMock.SetupGet(e => e.Kind).Returns("test");
-        executorMock.SetupGet(e => e.IsSideEffectFree).Returns(true);
+        executorMock.Setup(e => e.IsReplaySafe(It.IsAny<BaseNode>())).Returns(true);
         executorMock.Setup(e => e.ExecuteAsync(It.IsAny<NodeContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
@@ -628,6 +633,127 @@ public sealed class RetryExecutorTests
         Assert.Equal(1, executor.AttemptCount);
         countersMock.Verify(p => p.TryChargeAsync(42, It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Once);
         countersMock.Verify(p => p.GetByRunIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// A shared Increment writes outside the branch row before the pointer moves, so a crash in between
+    /// replays it. The replay has to come back from the idempotency key rather than counting again.
+    /// </summary>
+    [Fact]
+    public async Task Shared_increment_claims_a_key_and_a_replay_returns_the_recorded_outcome_without_counting_again()
+    {
+        var shared = new Mock<ISharedVariableProvider>();
+        shared.Setup(p => p.IncrementAsync(It.IsAny<Guid>(), "hits", 1, It.IsAny<CancellationToken>())).ReturnsAsync("1");
+        var executor = new VariableNodeExecutor(shared.Object, Mock.Of<IExpressionEvaluator>());
+        VariableNode node = CreateVariableNode(VariableScope.Shared, VariableOperation.Increment);
+        var keys = new InMemoryIdempotencyKeyProvider();
+        BranchContext context = CreateContext();
+
+        NodeExecutionResult first = await RunAsync(node, context, executor, keys);
+        NodeExecutionResult replay = await RunAsync(node, context, executor, keys);
+
+        Assert.IsType<NodeExecutionResult.Continue>(first);
+        Assert.IsType<NodeExecutionResult.Continue>(replay);
+        IdempotencyKeyRow row = Assert.Single(keys.Rows);
+        Assert.Equal(IdempotencyKeyStatus.Succeeded, row.Status);
+        shared.Verify(p => p.IncrementAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(VariableScope.Shared, VariableOperation.Increment, false)]
+    [InlineData(VariableScope.Shared, VariableOperation.Decrement, false)]
+    [InlineData(VariableScope.Shared, VariableOperation.CompareAndSet, false)]
+    [InlineData(VariableScope.Shared, VariableOperation.Set, true)]
+    [InlineData(VariableScope.Local, VariableOperation.Set, true)]
+    [InlineData(VariableScope.Local, VariableOperation.Increment, true)]
+    [InlineData(VariableScope.Local, VariableOperation.Decrement, true)]
+    [InlineData(VariableScope.Local, VariableOperation.CompareAndSet, true)]
+    public void Variable_node_is_replay_safe_unless_a_replay_would_repeat_a_shared_effect(VariableScope scope, VariableOperation op, bool expected)
+    {
+        var executor = new VariableNodeExecutor(Mock.Of<ISharedVariableProvider>(), Mock.Of<IExpressionEvaluator>());
+
+        Assert.Equal(expected, executor.IsReplaySafe(CreateVariableNode(scope, op)));
+    }
+
+    [Fact]
+    public async Task Shared_set_claims_no_key_and_simply_writes_again_on_a_replay()
+    {
+        var shared = new Mock<ISharedVariableProvider>();
+        var executor = new VariableNodeExecutor(shared.Object, Mock.Of<IExpressionEvaluator>());
+        VariableNode node = CreateVariableNode(VariableScope.Shared, VariableOperation.Set, JsonSerializer.SerializeToElement("on"));
+        var keys = new InMemoryIdempotencyKeyProvider();
+        BranchContext context = CreateContext();
+
+        await RunAsync(node, context, executor, keys);
+        await RunAsync(node, context, executor, keys);
+
+        Assert.Empty(keys.Rows);
+        shared.Verify(p => p.SetAsync(It.IsAny<Guid>(), "hits", "\"on\"", It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData(VariableOperation.Set)]
+    [InlineData(VariableOperation.Increment)]
+    public async Task Local_variable_write_claims_no_key(VariableOperation op)
+    {
+        var shared = new Mock<ISharedVariableProvider>(MockBehavior.Strict);
+        var executor = new VariableNodeExecutor(shared.Object, Mock.Of<IExpressionEvaluator>());
+        var keys = new InMemoryIdempotencyKeyProvider();
+
+        NodeExecutionResult result = await RunAsync(CreateVariableNode(VariableScope.Local, op, JsonSerializer.SerializeToElement(1)), CreateContext(), executor, keys);
+
+        Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Empty(keys.Rows);
+    }
+
+    [Fact]
+    public async Task Trigger_passthrough_claims_no_key()
+    {
+        var executor = new PassthroughTriggerExecutor(NodeKind.TriggerManual, new FixedClock());
+        var node = new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "start", Ports = [], Config = new ManualTriggerConfig() };
+        var keys = new InMemoryIdempotencyKeyProvider();
+
+        NodeExecutionResult result = await RunAsync(node, CreateContext(), executor, keys);
+
+        Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Empty(keys.Rows);
+    }
+
+    [Fact]
+    public async Task Await_signal_park_claims_no_key()
+    {
+        var executor = new AwaitSignalNodeExecutor(new FixedClock());
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = [], Config = new AwaitSignalConfig { SignalName = "go" } };
+        var keys = new InMemoryIdempotencyKeyProvider();
+
+        NodeExecutionResult result = await RunAsync(node, CreateContext(), executor, keys);
+
+        Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
+        Assert.Empty(keys.Rows);
+    }
+
+    private static Task<NodeExecutionResult> RunAsync(BaseNode node, BranchContext context, INodeExecutor executor, IIdempotencyKeyProvider keys)
+    {
+        return RetryExecutor.RunWithRetryAsync(
+            node,
+            context,
+            executor,
+            new TestNodeExecutionServices(keys),
+            new FixedClock(),
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator());
+    }
+
+    private static VariableNode CreateVariableNode(VariableScope scope, VariableOperation op, JsonElement? value = null)
+    {
+        return new VariableNode
+        {
+            NodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            Name = "variable",
+            Ports = [],
+            Config = new VariableConfig { Scope = scope, Op = op, Var = "hits", Value = value, Expected = JsonSerializer.SerializeToElement(0) }
+        };
     }
 
     private sealed class TestNodeExecutionServices(IIdempotencyKeyProvider? idempotencyKeys = null) : INodeExecutionServices

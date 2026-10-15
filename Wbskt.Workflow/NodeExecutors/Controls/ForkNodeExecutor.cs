@@ -12,7 +12,10 @@ internal sealed class ForkNodeExecutor(IJoinAggregatorProvider aggregators) : IN
 {
     public string Kind => NodeKind.ControlFork;
 
-    public bool IsSideEffectFree => true;
+    // Not replay-safe, so it keeps the default. Every execution initialises a join aggregator under a
+    // fresh token (JoinAggregator_Initialize is a plain INSERT), so a replay would open a second
+    // cohort and hand its children a token the first one never sees. The recorded outcome carries the
+    // first token, which is the one the aggregator row was written for.
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

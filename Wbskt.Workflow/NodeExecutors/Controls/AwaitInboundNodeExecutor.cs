@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models.Bookmarks;
+using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Controls;
@@ -30,6 +31,10 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
     protected TimeProvider Clock { get; }
 
     public abstract string Kind { get; }
+
+    // Reads branch state and returns a park or a continue; the bookmark itself is registered by the
+    // engine from the result, so a replay produces the same park and writes nothing of its own.
+    public bool IsReplaySafe(BaseNode node) => true;
 
     /// <summary>Local-state key whose presence marks that this node has already parked.</summary>
     protected abstract string ParkedKey { get; }
