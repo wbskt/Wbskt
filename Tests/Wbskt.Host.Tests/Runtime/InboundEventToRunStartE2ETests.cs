@@ -35,7 +35,7 @@ public sealed class InboundEventToRunStartE2ETests
             UncachedTriggerRegistrationCache.Instance,
             new TriggerConcurrencyEnforcer(providers, providers),
             new NoOpRunCancellationService(),
-            new RunStarter(providers, new RunJournal(providers, new FixedClock()), providers, new CorrelationKeyResolver(TriggerChannelRegistry.Default), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
+            new RunStarter(providers, new RunJournal(providers, new FixedClock()), providers, new WorkflowDefinitionCache(new MemoryCache(new MemoryCacheOptions()), providers), new CorrelationKeyResolver(TriggerChannelRegistry.Default), new NullRunStartedPublisher(), new FixedClock(), new SequenceIdGenerator(), Options.Create(new WorkflowEngineOptions())),
             runDispatcher,
             providers,
             new ExpressionEvaluator(new FixedClock()));

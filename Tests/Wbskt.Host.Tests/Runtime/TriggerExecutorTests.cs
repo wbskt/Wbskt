@@ -36,8 +36,6 @@ public sealed class TriggerExecutorTests
                 ["clientRefId"] = JsonSerializer.SerializeToElement("serial-1")
             }, "corr-1", DateTime.UtcNow, 9),
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }

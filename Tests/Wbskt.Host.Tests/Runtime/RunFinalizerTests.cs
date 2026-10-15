@@ -103,19 +103,6 @@ public sealed class RunFinalizerTests
     }
 
     [Fact]
-    public async Task FinalizeAsync_leaves_faulted_run_untouched()
-    {
-        var harness = new RunFinalizerHarness("Faulted", [CreateBranch("Failed")]);
-        harness.RunProvider.Transitions = false;
-
-        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
-
-        Assert.Null(harness.RunProvider.TerminalStatus);
-        Assert.Empty(harness.Publisher.RunIds);
-        Assert.Empty(harness.HistoryProvider.Events);
-    }
-
-    [Fact]
     public async Task FinalizeAsync_drains_pending_events()
     {
         var harness = new RunFinalizerHarness("Running", [CreateBranch("Completed")]);

@@ -759,10 +759,6 @@ public sealed class RetryExecutorTests
     private sealed class TestNodeExecutionServices(IIdempotencyKeyProvider? idempotencyKeys = null) : INodeExecutionServices
     {
         public IIdempotencyKeyProvider IdempotencyKeys { get; } = idempotencyKeys ?? new InMemoryIdempotencyKeyProvider();
-
-        public int Tick => 1;
-
-        public IReadOnlyDictionary<string, JsonElement>? ParentResults => null;
     }
 
     private sealed class FixedClock : TimeProvider

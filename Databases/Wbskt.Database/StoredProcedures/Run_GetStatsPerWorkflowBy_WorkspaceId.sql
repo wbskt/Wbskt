@@ -32,7 +32,7 @@ BEGIN
         w.WorkflowRefId,
         COUNT(*)                                                                      AS TotalRuns,
         SUM(CASE WHEN w.Status = N'Succeeded' THEN 1 ELSE 0 END)                      AS SucceededCount,
-        SUM(CASE WHEN w.Status IN (N'Failed', N'PartiallyFailed', N'Faulted', N'OutOfCredits') THEN 1 ELSE 0 END) AS FailedCount,
+        SUM(CASE WHEN w.Status IN (N'Failed', N'PartiallyFailed', N'OutOfCredits') THEN 1 ELSE 0 END) AS FailedCount,
         SUM(CASE WHEN w.Status IN (N'Running', N'Failing', N'Cancelling') THEN 1 ELSE 0 END) AS ActiveCount,
         ISNULL(AVG(w.DurationMs), 0)                                                  AS AvgDurationMs
     FROM Windowed w

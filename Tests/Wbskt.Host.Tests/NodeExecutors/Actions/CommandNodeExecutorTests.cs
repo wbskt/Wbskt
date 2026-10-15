@@ -202,8 +202,6 @@ public sealed class CommandNodeExecutorTests
         {
             Branch = branch,
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }

@@ -39,7 +39,6 @@ BEGIN
         SUM(CASE WHEN w.Status = N'Failed'          THEN 1 ELSE 0 END)                AS FailedCount,
         SUM(CASE WHEN w.Status = N'PartiallyFailed' THEN 1 ELSE 0 END)                AS PartiallyFailedCount,
         SUM(CASE WHEN w.Status = N'Cancelled'       THEN 1 ELSE 0 END)                AS CancelledCount,
-        SUM(CASE WHEN w.Status = N'Faulted'         THEN 1 ELSE 0 END)                AS FaultedCount,
         SUM(CASE WHEN w.Status = N'OutOfCredits'    THEN 1 ELSE 0 END)                AS OutOfCreditsCount,
         SUM(CASE WHEN w.Status IN (N'Running', N'Failing', N'Cancelling') THEN 1 ELSE 0 END) AS ActiveCount,
         ISNULL(MAX(w.DurationMs), 0)                                                  AS MaxDurationMs,

@@ -61,7 +61,6 @@ public sealed class EventBusRunLifecyclePublisherTests
     [InlineData("Failed")]
     [InlineData("PartiallyFailed")]
     [InlineData("OutOfCredits")]
-    [InlineData("Faulted")]
     public async Task CompletedPublisher_publishes_failed_event_for_failure_status(string status)
     {
         var bus = new Mock<IEventBus>();

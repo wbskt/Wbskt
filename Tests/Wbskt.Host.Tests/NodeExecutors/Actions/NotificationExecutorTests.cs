@@ -178,8 +178,6 @@ public sealed class NotificationExecutorTests
         {
             Branch = new BranchContext(1, 2, 3, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, new Dictionary<string, JsonElement>(), new Dictionary<string, JsonElement>(), "corr", DateTime.UtcNow, 9),
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = CancellationToken.None,
             IdempotencyKey = "key"
         };
