@@ -79,7 +79,9 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     {
         _logger.LogInformation("Publishing workflow '{WorkflowName}' (RefId: '{RefId}') in WorkspaceId: {WorkspaceId}", request.Name, request.RefId, workspaceId);
 
-        ValidationResult validation = _validator.Validate(request.Definition);
+        // The request's id is the one the version is stored and triggered under, which the definition's
+        // own WorkflowRefId is not required to match, so the validator is told it for the self-reference check.
+        ValidationResult validation = _validator.Validate(request.Definition, request.RefId);
         if (!validation.IsValid)
         {
             return Result<WorkflowPublishResponse>.Failure(ValidationFailed(validation.Issues));

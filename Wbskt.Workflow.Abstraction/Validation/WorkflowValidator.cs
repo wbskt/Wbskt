@@ -21,7 +21,14 @@ public sealed class WorkflowValidator
     private const string ErrorPortId = "error";
     private const string BodyPortId = "body";
 
-    public ValidationResult Validate(WorkflowDefinition? definition)
+    /// <param name="definition">The definition to check.</param>
+    /// <param name="workflowRefId">
+    /// The id the definition is being published under, when the caller knows it. The definition names
+    /// itself too (<see cref="WorkflowDefinition.WorkflowRefId"/>), but publishing stores it under the
+    /// request's id without requiring the two to agree, so a self-referencing sub-workflow step is
+    /// checked against both.
+    /// </param>
+    public ValidationResult Validate(WorkflowDefinition? definition, Guid? workflowRefId = null)
     {
         var issues = new List<ValidationIssue>();
         if (definition is null)
@@ -41,6 +48,7 @@ public sealed class WorkflowValidator
         ValidateRetryPolicies(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
+        ValidateSubWorkflowSelfReference(definition, workflowRefId, issues);
         ValidateTriggerConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
@@ -184,6 +192,32 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "SUBWORKFLOW_INPUT_KEY_RESERVED",
                     $"SubWorkflow node '{node.NodeId}' supplies input '{key}', which the engine writes itself; rename it.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A sub-workflow step that starts its own workflow starts a child that reaches the same step and
+    /// starts another, and a child is exempt from the workspace run ceiling. The engine's depth ceiling
+    /// stops it eventually; this stops the direct case before it is ever published. A cycle through
+    /// another workflow cannot be seen from one definition and is left to the depth ceiling.
+    /// </summary>
+    private static void ValidateSubWorkflowSelfReference(WorkflowDefinition def, Guid? workflowRefId, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes.OfType<SubWorkflowNode>())
+        {
+            if (node.Config is not { } config || config.WorkflowRefId == Guid.Empty)
+            {
+                continue;
+            }
+
+            if (config.WorkflowRefId == def.WorkflowRefId || config.WorkflowRefId == workflowRefId)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "SUBWORKFLOW_SELF_REFERENCE",
+                    $"SubWorkflow node '{node.NodeId}' starts its own workflow, which would start children without end; point it at another workflow.",
                     node.NodeId));
             }
         }

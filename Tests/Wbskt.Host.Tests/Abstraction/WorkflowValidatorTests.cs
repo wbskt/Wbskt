@@ -389,6 +389,7 @@ public sealed class WorkflowValidatorRuleTests
     [Theory]
     [InlineData("parentRunRefId")]
     [InlineData("correlationKey")]
+    [InlineData("depth")]
     public void Validate_rejects_a_SubWorkflow_input_that_shadows_an_engine_key(string reservedKey)
     {
         // parentRunRefId is how the child's completion hook finds its way back; an input of the same
@@ -439,6 +440,54 @@ public sealed class WorkflowValidatorRuleTests
 
         Assert.DoesNotContain(result.Issues, i => i.Code == "SUBWORKFLOW_INPUT_KEY_RESERVED");
     }
+
+    [Fact]
+    public void Validate_rejects_a_SubWorkflow_that_starts_its_own_workflow()
+    {
+        // A child is exempt from the workspace run ceiling, so a workflow that starts itself would start
+        // children without end.
+        var def = ValidWorkflowBuilder.Build();
+        SubWorkflowNode sub = SubWorkflowTo(def.WorkflowRefId);
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, sub] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "SUBWORKFLOW_SELF_REFERENCE" && i.NodeId == sub.NodeId);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_SubWorkflow_that_starts_the_workflow_it_is_published_under()
+    {
+        // Publishing stores the definition under the request's id, which the definition's own
+        // WorkflowRefId is not required to match.
+        var def = ValidWorkflowBuilder.Build();
+        var publishedAs = Guid.NewGuid();
+        SubWorkflowNode sub = SubWorkflowTo(publishedAs);
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, sub] }, publishedAs);
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "SUBWORKFLOW_SELF_REFERENCE" && i.NodeId == sub.NodeId);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_SubWorkflow_that_starts_another_workflow()
+    {
+        var def = ValidWorkflowBuilder.Build();
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, SubWorkflowTo(Guid.NewGuid())] }, Guid.NewGuid());
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "SUBWORKFLOW_SELF_REFERENCE");
+    }
+
+    private static SubWorkflowNode SubWorkflowTo(Guid workflowRefId) => new()
+    {
+        NodeId = Guid.NewGuid(),
+        Name = "sub",
+        Ports = [
+            new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" },
+            new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }
+        ],
+        Config = new SubWorkflowConfig { WorkflowRefId = workflowRefId }
+    };
 
     // ---------------------------------------------- WF-19.3 PFE <-> Join
 

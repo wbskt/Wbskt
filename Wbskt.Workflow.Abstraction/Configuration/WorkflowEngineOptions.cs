@@ -43,6 +43,15 @@ public sealed class WorkflowEngineOptions
     /// ceiling.
     /// </summary>
     public int MaxActiveRunsPerWorkspace { get; init; } = 200;
+
+    /// <summary>
+    /// How deeply sub-workflows may nest: a run started by a trigger is depth 0, its child depth 1, and
+    /// a sub-workflow step whose child would be deeper than this fails instead of starting it. A child
+    /// is started past the workspace run ceiling, so without this a workflow that reaches itself, or
+    /// two that reach each other, would start children until something else gave way. Zero allows no
+    /// sub-workflows at all.
+    /// </summary>
+    public int MaxSubWorkflowDepth { get; init; } = 8;
     public int BookmarkLeaseBatchSize { get; init; } = 64;
     public int ScheduledFireLeaseBatchSize { get; init; } = 64;
     public int PresenceCheckLeaseBatchSize { get; init; } = 64;

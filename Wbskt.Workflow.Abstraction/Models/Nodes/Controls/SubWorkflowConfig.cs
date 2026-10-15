@@ -17,15 +17,24 @@ public sealed record SubWorkflowConfig
     /// makes a shared sub-workflow useless as anything but a fixed subroutine.
     /// </summary>
     /// <remarks>
-    /// <c>parentRunRefId</c> and <c>correlationKey</c> are reserved: the completion hook needs the first
-    /// to find its way home, so an input of either name is rejected at publish rather than silently
-    /// overwriting it.
+    /// <c>parentRunRefId</c>, <c>correlationKey</c> and <c>depth</c> are reserved: the completion hook
+    /// needs the first to find its way home and the depth guard needs the last to bound nesting, so an
+    /// input of any of these names is rejected at publish rather than silently overwriting it.
     /// </remarks>
     [JsonPropertyName("input")]
     public IReadOnlyDictionary<string, WorkflowExpression>? Input { get; init; } = null;
 
     /// <summary>Keys the engine writes into the child's body itself; an author may not supply them.</summary>
     public static readonly IReadOnlySet<string> ReservedInputKeys =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "parentRunRefId", "correlationKey" };
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ParentRunRefIdKey, "correlationKey", DepthKey };
+
+    /// <summary>The key in the child's body naming the run that started it.</summary>
+    public const string ParentRunRefIdKey = "parentRunRefId";
+
+    /// <summary>
+    /// The key in the child's body carrying how deeply it is nested: one more than its parent's, where a
+    /// run started by anything but a sub-workflow step is depth 0.
+    /// </summary>
+    public const string DepthKey = "depth";
 }
 
