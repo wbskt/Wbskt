@@ -954,7 +954,32 @@ public sealed class ServicesFixture : IDisposable
     private static string DescribeHistory(IReadOnlyList<HistoryEventDto> history) =>
         history.Count == 0
             ? "no history events"
-            : $"{history.Count} history event(s), latest: {string.Join(", ", history.TakeLast(8).Select(e => e.EventKind))}";
+            : $"{history.Count} history event(s), latest: {string.Join(", ", history.TakeLast(8).Select(DescribeEvent))}";
+
+    // A failure's kind alone says nothing about why it failed, and CI keeps the host logs only as an
+    // artifact; the error code and message travel on the event's payload, so the failure that cost
+    // the run reads straight from the test output.
+    private static string DescribeEvent(HistoryEventDto e)
+    {
+        string node = e.NodeId is { } nodeId ? $"@{nodeId.ToString("N")[..8]}" : string.Empty;
+        if (!e.EventKind.EndsWith("Failed", StringComparison.Ordinal) && !e.EventKind.EndsWith("Abandoned", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(e.PayloadJson))
+        {
+            return e.EventKind + node;
+        }
+
+        try
+        {
+            using var payload = JsonDocument.Parse(e.PayloadJson);
+            string? code = payload.RootElement.TryGetProperty("errorCode", out var c) ? c.ToString() : null;
+            string? message = payload.RootElement.TryGetProperty("message", out var m) ? m.ToString() : null;
+            return $"{e.EventKind}{node}({code}: {message})";
+        }
+        catch (JsonException)
+        {
+            return $"{e.EventKind}{node}({e.PayloadJson})";
+        }
+    }
 
     // Best effort: this only adds detail to a failure that is already being reported.
     private async Task<string> DescribeRecentHistoryAsync(string token, Guid workspaceRef, Guid runRefId)
