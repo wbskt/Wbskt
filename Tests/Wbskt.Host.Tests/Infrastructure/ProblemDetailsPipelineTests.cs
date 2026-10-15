@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -32,7 +33,9 @@ public sealed class ProblemDetailsPipelineTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var builder = WebApplication.CreateSlimBuilder();
+        // Pinned, so an ambient ASPNETCORE_ENVIRONMENT=Development cannot load a host's
+        // appsettings.Development.json from the output folder and its Kestrel endpoints with it.
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton(Mock.Of<IEventBus>());
