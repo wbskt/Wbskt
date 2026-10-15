@@ -175,6 +175,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IBranchResultHandler, TerminalResultHandler>();
         services.AddScoped<IBranchResultDispatcher, BranchResultDispatcher>();
         services.AddScoped<IBranchLoop, BranchLoop>();
+        services.AddScoped<IStrandedBranchFailer, StrandedBranchFailer>();
         services.AddScoped<IBookmarkResumer, BookmarkResumer>();
         services.AddScoped<ITriggerConcurrencyEnforcer, TriggerConcurrencyEnforcer>();
         services.AddScoped<IRunFinalizer, RunFinalizer>();

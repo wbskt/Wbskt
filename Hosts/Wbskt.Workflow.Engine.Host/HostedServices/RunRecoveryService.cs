@@ -39,10 +39,12 @@ public sealed class RunRecoveryService : IEngineStartupTracker
             IReadOnlyCollection<BranchRow> branches = await branchProvider.GetRunningBranchesAsync(ct);
             
             var runGroups = branches.GroupBy(b => b.RunId);
+            var reappliedRunIds = new HashSet<long>();
 
             foreach (var group in runGroups)
             {
                 long runId = group.Key;
+                reappliedRunIds.Add(runId);
                 
                 if (runProvider is not null && runCancellationService is not null)
                 {
@@ -82,6 +84,11 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                 }
             }
 
+            if (runProvider is not null && runCancellationService is not null)
+            {
+                await ReapplyStopsAsync(runProvider, runCancellationService, reappliedRunIds, ct);
+            }
+
             _logger.LogInformation("Recovered {Count} running branches.", branches.Count);
             _readyTcs.TrySetResult();
         }
@@ -89,6 +96,55 @@ public sealed class RunRecoveryService : IEngineStartupTracker
         {
             _readyTcs.TrySetException(ex);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Re-applies the stop of every run left in 'Failing' or 'Cancelling' that the branch pass above did
+    /// not visit. That pass only finds runs through an Active or Compensating branch, so a run whose
+    /// stop was cut short by the crash and whose remaining branches were all Waiting was never visited:
+    /// its parked siblings kept ActiveBranchCount above zero, and the reaper skips runs with Waiting
+    /// branches, so it stayed Failing or Cancelling for good. Both stops are idempotent on a run already
+    /// in their status.
+    /// </summary>
+    private async Task ReapplyStopsAsync(IRunProvider runProvider, IRunCancellationService runCancellationService, HashSet<long> alreadyReapplied, CancellationToken ct)
+    {
+        foreach (string status in new[] { RunStatus.Failing, RunStatus.Cancelling })
+        {
+            IReadOnlyCollection<RunRow> runs;
+            try
+            {
+                runs = await runProvider.GetAllByStatusAsync(status, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read {Status} runs during startup recovery.", status);
+                continue;
+            }
+
+            foreach (RunRow run in runs)
+            {
+                if (!alreadyReapplied.Add(run.Id))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (string.Equals(status, RunStatus.Cancelling, StringComparison.Ordinal))
+                    {
+                        await runCancellationService.RequestCancellationAsync(run.Id, run.CancellationReason ?? "Cancellation re-applied during recovery", ct);
+                    }
+                    else
+                    {
+                        await runCancellationService.FailRunAsync(run.Id, "Run failure re-applied during recovery", ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to re-apply the stop of {Status} run {RunId} during startup recovery.", status, run.Id);
+                }
+            }
         }
     }
 }

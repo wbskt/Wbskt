@@ -35,3 +35,10 @@ CREATE INDEX IX_Branches_Status_Active
     ON dbo.Branches (Status)
     WHERE Status = N'Active';
 GO
+
+-- For Branch_GetWaitingWithoutBookmark, the leader's periodic sweep for stranded parked branches.
+CREATE INDEX IX_Branches_Status_Waiting
+    ON dbo.Branches (UpdatedAt)
+    INCLUDE (RunId, RefId)
+    WHERE Status = N'Waiting';
+GO

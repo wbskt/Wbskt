@@ -4,6 +4,14 @@ public sealed class WorkflowEngineOptions
 {
     public TimeSpan BookmarkPollInterval { get; init; } = TimeSpan.FromSeconds(1);
     public TimeSpan BookmarkOrphanGcInterval { get; init; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How long a Waiting branch may go without a bookmark before the orphan GC treats it as stranded
+    /// and fails it with BOOKMARK_LOST. A park writes the branch first and its bookmark just after, so
+    /// this only has to outlast that gap; the GC also wants to see the same branch stranded on two
+    /// consecutive passes before failing it.
+    /// </summary>
+    public TimeSpan StrandedBranchThreshold { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan ScheduleTickInterval { get; init; } = TimeSpan.FromSeconds(1);
     public TimeSpan PresenceTickInterval { get; init; } = TimeSpan.FromSeconds(1);
     public TimeSpan ClientHoldTickInterval { get; init; } = TimeSpan.FromSeconds(1);

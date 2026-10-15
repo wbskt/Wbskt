@@ -83,6 +83,20 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         );
     }
 
+    public async Task<IReadOnlyCollection<BranchRow>> GetWaitingWithoutBookmarkAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
+    {
+        return await ExecuteCollectionAsync(
+            "dbo.Branch_GetWaitingWithoutBookmark",
+            p =>
+            {
+                p.AddWithValue("@CutoffUtc", cutoffUtc);
+                p.AddWithValue("@BatchSize", batchSize);
+            },
+            Map,
+            ct
+        );
+    }
+
     public Task<BranchRow> UpdatePointerAsync(long branchId, Guid currentNodeId, string status, string localJson, string? lastOutputJson, CancellationToken ct)
     {
         return UpdateBranchAsync(branchId, currentNodeId, status, localJson, lastOutputJson, ct);
