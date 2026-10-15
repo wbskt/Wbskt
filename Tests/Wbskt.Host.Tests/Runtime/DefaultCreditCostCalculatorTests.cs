@@ -20,7 +20,7 @@ public sealed class DefaultCreditCostCalculatorTests
         NodeExecutionResult result = new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>());
 
         // Act
-        var cost = calculator.Calculate(node, result);
+        var cost = calculator.Calculate(node);
 
         // Assert
         Assert.Equal(1.0m, cost);
@@ -35,7 +35,7 @@ public sealed class DefaultCreditCostCalculatorTests
         NodeExecutionResult result = new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>());
 
         // Act
-        var cost = calculator.Calculate(node, result);
+        var cost = calculator.Calculate(node);
 
         // Assert
         Assert.Equal(1.0m, cost);
@@ -50,7 +50,7 @@ public sealed class DefaultCreditCostCalculatorTests
         NodeExecutionResult result = new NodeExecutionResult.Fork(Array.Empty<ForkSpec>(), null, new Dictionary<string, JsonElement>());
 
         // Act
-        var cost = calculator.Calculate(node, result);
+        var cost = calculator.Calculate(node);
 
         // Assert
         Assert.Equal(1.0m, cost);
@@ -65,7 +65,7 @@ public sealed class DefaultCreditCostCalculatorTests
         NodeExecutionResult result = new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("signal:test", "corr-1"), new Dictionary<string, JsonElement>());
 
         // Act
-        var cost = calculator.Calculate(node, result);
+        var cost = calculator.Calculate(node);
 
         // Assert
         Assert.Equal(1.0m, cost);
@@ -80,7 +80,7 @@ public sealed class DefaultCreditCostCalculatorTests
         NodeExecutionResult result = new NodeExecutionResult.Fail("error", "message", false, null);
 
         // Act
-        var cost = calculator.Calculate(node, result);
+        var cost = calculator.Calculate(node);
 
         // Assert
         Assert.Equal(1.0m, cost);
@@ -95,7 +95,7 @@ public sealed class DefaultCreditCostCalculatorTests
         NodeExecutionResult result = new NodeExecutionResult.Terminal(BranchTerminalReason.Completed);
 
         // Act
-        var cost = calculator.Calculate(node, result);
+        var cost = calculator.Calculate(node);
 
         // Assert
         Assert.Equal(1.0m, cost);

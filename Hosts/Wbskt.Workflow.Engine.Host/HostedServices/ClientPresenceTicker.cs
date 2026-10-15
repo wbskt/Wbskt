@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Engine;
@@ -137,23 +136,15 @@ public sealed class ClientPresenceTicker(
     internal static InboundEvent ToInboundEvent(ClientPresenceCheckRow check, DateTime now)
     {
         ClientPresenceTriggerKey.TryGetForSeconds(check.TriggerKey, out int forSeconds);
-        var payload = new Dictionary<string, JsonElement>
-        {
-            ["clientRefId"] = JsonSerializer.SerializeToElement(check.ClientRefId),
-            ["clientId"] = JsonSerializer.SerializeToElement(check.ClientId),
-            ["workspaceId"] = JsonSerializer.SerializeToElement(check.ClientWorkspaceId),
-            ["state"] = JsonSerializer.SerializeToElement(check.State),
-            ["changedAt"] = JsonSerializer.SerializeToElement(DateTime.SpecifyKind(check.ChangedAt, DateTimeKind.Utc)),
-            ["forSeconds"] = JsonSerializer.SerializeToElement(forSeconds)
-        };
-
-        return new InboundEvent(
-            PresenceChannel.Name,
-            [check.TriggerKey],
-            // The check's own id: stable if the process dies between this dispatch and the delete, so
-            // the re-leased check is dropped by the dispatcher's idempotency claim instead of running twice.
-            $"presence:{check.Id}",
-            payload,
+        return PresenceChannel.Event(
+            check.Id,
+            check.TriggerKey,
+            check.ClientRefId,
+            check.ClientId,
+            check.ClientWorkspaceId,
+            check.State,
+            check.ChangedAt,
+            forSeconds,
             now);
     }
 }

@@ -8,6 +8,7 @@ using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.HostedServices;
 using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Workflow.Channels;
 using Wbskt.Host.Tests.InboundAdapters;
 
 namespace Wbskt.Host.Tests.HostedServices;
@@ -174,6 +175,21 @@ public sealed class ClientPresenceTickerTests
             services.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<ClientPresenceTicker>.Instance,
             Options.Create(new WorkflowEngineOptions()));
+    }
+
+    [Fact]
+    public void The_presence_event_is_the_channels_own_and_correlates_on_it()
+    {
+        ClientPresenceCheckRow check = Offline(isConnected: false, connectedAt: null, lastActivityAt: ChangedAt);
+
+        InboundEvent evt = ClientPresenceTicker.ToInboundEvent(check, Now);
+        InboundEvent expected = PresenceChannel.Event(check.Id, check.TriggerKey, check.ClientRefId, check.ClientId, check.ClientWorkspaceId, check.State, check.ChangedAt, 60, Now);
+
+        Assert.Equal(PresenceChannel.Name, evt.ChannelKind);
+        Assert.Equal(expected.MatchKeys, evt.MatchKeys);
+        Assert.Equal(expected.InboundEventId, evt.InboundEventId);
+        Assert.Equal(expected.Payload.Keys.Order(), evt.Payload.Keys.Order());
+        Assert.Equal($"{PresenceChannel.Name}:{ClientRef}:offline", new PresenceChannel().CorrelationKey(evt));
     }
 
     private static ClientPresenceCheckRow Offline(bool? isConnected, DateTime? connectedAt, DateTime? lastActivityAt) =>

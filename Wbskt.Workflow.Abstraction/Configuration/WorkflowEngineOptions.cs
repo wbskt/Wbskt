@@ -38,6 +38,13 @@ public sealed class WorkflowEngineOptions
     public int MaxFanOut { get; init; } = 1000;
 
     /// <summary>
+    /// Ceiling, in UTF-8 bytes of its JSON, on one branch's local state. The state is read, merged and
+    /// written back on every step and copied into every branch forked from it, so a node whose output
+    /// would take it past this fails with BRANCH_STATE_TOO_LARGE instead of being written.
+    /// </summary>
+    public int MaxBranchLocalStateBytes { get; init; } = 256 * 1024;
+
+    /// <summary>
     /// The most runs one workspace may have going at once (running, failing or cancelling). A trigger
     /// past it is refused, not queued: no run starts and the dispatch reads Refused. Zero or less is no
     /// ceiling.

@@ -18,8 +18,8 @@ public sealed class CreditCostCalculatorTests
         // a billing label: a thousand local variable sets and a thousand outbound calls billed the same.
         var calculator = new DefaultCreditCostCalculator();
 
-        decimal webhook = calculator.Calculate(Webhook(), null!);
-        decimal variable = calculator.Calculate(Variable(), null!);
+        decimal webhook = calculator.Calculate(Webhook());
+        decimal variable = calculator.Calculate(Variable());
 
         Assert.True(webhook > variable, $"expected an outbound webhook ({webhook}) to cost more than a variable set ({variable})");
     }
@@ -33,7 +33,7 @@ public sealed class CreditCostCalculatorTests
             PerKind = new Dictionary<string, decimal> { [NodeKind.ActionWebhook] = 42m }
         }));
 
-        Assert.Equal(42m, calculator.Calculate(Webhook(), null!));
+        Assert.Equal(42m, calculator.Calculate(Webhook()));
     }
 
     [Fact]
@@ -42,7 +42,23 @@ public sealed class CreditCostCalculatorTests
         // Kinds added after the price list must still be billable rather than free.
         var calculator = new DefaultCreditCostCalculator(Options.Create(new CreditCostOptions { DefaultCost = 7m }));
 
-        Assert.Equal(7m, calculator.Calculate(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ManualTriggerConfig { Description = "d" } }, null!));
+        Assert.Equal(7m, calculator.Calculate(new UnpricedNode { NodeId = Guid.NewGuid(), Name = "n", Ports = [] }));
+    }
+
+    [Fact]
+    public void A_trigger_node_costs_nothing()
+    {
+        // Every run starts at its trigger node, which only hands the inbound payload on. Unpriced, it
+        // fell through to the default, so every run paid a full credit before its first real step.
+        var calculator = new DefaultCreditCostCalculator(Options.Create(new CreditCostOptions { DefaultCost = 7m }));
+
+        Assert.Equal(0m, calculator.Calculate(new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ManualTriggerConfig { Description = "d" } }));
+        Assert.Equal(0m, calculator.Calculate(new WebhookTriggerNode { NodeId = Guid.NewGuid(), Name = "t", Ports = [], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.WebhookTriggerConfig { Path = "orders", Method = "POST" } }));
+    }
+
+    private sealed record UnpricedNode : BaseNode
+    {
+        public override string Kind => "action:notPricedYet";
     }
 
     [Fact]
