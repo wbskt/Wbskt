@@ -35,7 +35,8 @@ public sealed class SubWorkflowNodeExecutorTests
         var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
         var child = Assert.IsType<ChildRunCompletedWakeCondition>(wait.Condition);
         Assert.Equal(ChildRunRefId, child.ChildRunId);
-        Assert.Equal(ChildRunRefId.ToString(), wait.LocalStatePatch[ParkedKey].GetString());
+        Assert.Equal(ctx.Node.NodeId.ToString(), wait.LocalStatePatch[ParkedKey].GetProperty("nodeId").GetString());
+        Assert.Equal(ChildRunRefId.ToString(), wait.LocalStatePatch[ParkedKey].GetProperty("waitingOn").GetString());
         hub.Verify(h => h.HandleAsync(
             It.Is<InboundEvent>(e => e.ChannelKind == "manual"
                 && e.Payload["workflowDefinitionRefId"].GetString() == ChildRefId.ToString()),
@@ -101,6 +102,31 @@ public sealed class SubWorkflowNodeExecutorTests
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         Assert.Equal("default", cont.OutboundPort);
         Assert.Equal("Succeeded", cont.LocalStatePatch["childResult"].GetProperty("status").GetString());
+        Assert.Equal([ParkedKey, "__wake", "__wake_node"], cont.RemoveKeys);
+    }
+
+    [Fact]
+    public async Task Wake_delivered_for_another_node_re_parks_on_the_same_child_without_starting_another()
+    {
+        var hub = new Mock<IInboundHub>();
+        var executor = new SubWorkflowNodeExecutor(hub.Object, new Mock<IRunProvider>().Object, new FixedClock());
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>());
+        ctx = ctx with
+        {
+            Branch = ctx.Branch with
+            {
+                LocalState = new Dictionary<string, JsonElement>
+                {
+                    [ParkedKey] = JsonSerializer.SerializeToElement(new { nodeId = ctx.Node.NodeId.ToString(), waitingOn = ChildRunRefId.ToString() }),
+                    ["__wake"] = JsonSerializer.SerializeToElement(new { body = new { signal = "approve" } }),
+                    ["__wake_node"] = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString())
+                }
+            }
+        };
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal(ChildRunRefId, Assert.IsType<ChildRunCompletedWakeCondition>(wait.Condition).ChildRunId);
+        hub.Verify(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -183,6 +183,9 @@ public sealed class BookmarkResumerTests
         JsonElement wake = doc.RootElement.GetProperty("__wake");
         Assert.Equal("approve", wake.GetProperty("signalName").GetString());
         Assert.Equal("ops", wake.GetProperty("body").GetProperty("approvedBy").GetString());
+        // Tagged with the node that parked, beside the payload rather than inside it.
+        Assert.Equal(bookmark.NodeId.ToString(), doc.RootElement.GetProperty("__wake_node").GetString());
+        Assert.False(wake.TryGetProperty("nodeId", out _));
     }
 
     [Fact]

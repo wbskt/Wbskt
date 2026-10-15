@@ -159,7 +159,7 @@ public sealed class CommandNodeExecutorTests
         var cont = Assert.IsType<NodeExecutionResult.Continue>(result);
         Assert.Equal(expectedPort, cont.OutboundPort);
         Assert.Equal(outcome, cont.LocalStatePatch["command"].GetProperty("outcome").GetString());
-        Assert.Equal(["__command_awaiting", "__wake"], cont.RemoveKeys);
+        Assert.Equal(["__command_awaiting", "__wake", "__wake_node"], cont.RemoveKeys);
     }
 
     [Fact]
