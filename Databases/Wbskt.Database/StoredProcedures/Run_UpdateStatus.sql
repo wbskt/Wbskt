@@ -31,7 +31,9 @@ BEGIN
         CancellationRequestedAt,
         CancellationReason,
         CreditBudget,
-        CreatedAt
+        CreatedAt,
+        ParentRunRefId,
+        OutputJson
     FROM dbo.Runs
     WHERE RefId = @RefId;
 END;

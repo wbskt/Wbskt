@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -11,6 +13,7 @@ internal sealed class RunCancellationService : IRunCancellationService
     private readonly IBranchProvider _branchProvider;
     private readonly IBookmarkProvider _bookmarkProvider;
     private readonly IBranchTerminator _branchTerminator;
+    private readonly ILogger<RunCancellationService>? _logger;
 
     // Singleton, not per-instance: this service is Scoped and the pump runs each branch in its own
     // scope, so a per-instance registry meant the branch loop watched one token source while every
@@ -24,8 +27,10 @@ internal sealed class RunCancellationService : IRunCancellationService
         IBranchProvider branchProvider,
         IBookmarkProvider bookmarkProvider,
         IBranchTerminator branchTerminator,
-        RunCancellationTokenRegistry tokenRegistry)
+        RunCancellationTokenRegistry tokenRegistry,
+        ILogger<RunCancellationService>? logger = null)
     {
+        _logger = logger;
         _tokenRegistry = tokenRegistry;
         _runProvider = runProvider;
         _journal = journal;
@@ -75,6 +80,7 @@ internal sealed class RunCancellationService : IRunCancellationService
         }
 
         await StopRunWorkAsync(runId, ct);
+        await CancelChildRunsAsync(runId, "cancelled", ct);
         return true;
     }
 
@@ -108,8 +114,45 @@ internal sealed class RunCancellationService : IRunCancellationService
         // Failing the run used to only move its status: a sibling parked on a signal kept the run in
         // 'Failing' until the signal came or its TTL ran out, so "fail fast" was not fast at all.
         await StopRunWorkAsync(runId, ct);
+        await CancelChildRunsAsync(runId, "failed", ct);
 
         return true;
+    }
+
+    /// <summary>
+    /// Cancels the sub-workflow runs this run started that are still going. A parent that stops would
+    /// otherwise leave its children running to completion, and their results would find no bookmark to
+    /// wake. Runs after the parent's own stop, so a child that finalizes meanwhile wakes nothing; and
+    /// each child is cancelled through <see cref="RequestCancellationAsync"/>, so its own children
+    /// follow it. Best-effort per child: one that cannot be cancelled is logged and the rest go on,
+    /// because the parent's stop has already happened and must not be reported as failed over a child.
+    /// </summary>
+    private async Task CancelChildRunsAsync(long runId, string parentOutcome, CancellationToken ct)
+    {
+        IReadOnlyCollection<RunRow> children;
+        Guid parentRefId;
+        try
+        {
+            parentRefId = (await _runProvider.GetByIdAsync(runId, ct)).RefId;
+            children = await _runProvider.GetActiveChildrenAsync(parentRefId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "Could not read the child runs of run {RunId}; they are not cancelled with it.", runId);
+            return;
+        }
+
+        foreach (RunRow child in children)
+        {
+            try
+            {
+                await RequestCancellationAsync(child.Id, $"Parent run {parentRefId} was {parentOutcome}.", ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger?.LogWarning(ex, "Could not cancel child run {ChildRunId} of run {RunId}.", child.Id, runId);
+            }
+        }
     }
 
     /// <summary>

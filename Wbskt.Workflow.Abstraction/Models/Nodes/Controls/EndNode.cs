@@ -7,6 +7,8 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 /// </summary>
 public sealed record EndNode : BaseNode
 {
+    [JsonPropertyName("config")]
+    public EndConfig? Config { get; init; }
 
     [JsonIgnore]
     public override string Kind => NodeKind.ControlEnd;

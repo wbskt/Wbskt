@@ -494,6 +494,38 @@ public sealed class WorkflowValidatorRuleTests
     }
 
     [Fact]
+    public void Validate_rejects_an_End_output_on_a_workflow_no_parent_can_start()
+    {
+        // A parent starts its child through the child's manual trigger, so on a workflow without one the
+        // output could never reach anyone.
+        var def = ValidWorkflowBuilder.Build();
+        EndNode end = EndWithOutput();
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, end] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "END_OUTPUT_WITHOUT_MANUAL_TRIGGER" && i.NodeId == end.NodeId);
+    }
+
+    [Fact]
+    public void Validate_accepts_an_End_output_on_a_workflow_with_a_manual_trigger()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var manual = new ManualTriggerNode { NodeId = Guid.NewGuid(), Name = "run", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Out" }], Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ManualTriggerConfig { Description = "run" } };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, manual, EndWithOutput()] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "END_OUTPUT_WITHOUT_MANUAL_TRIGGER");
+    }
+
+    private static EndNode EndWithOutput() => new()
+    {
+        NodeId = Guid.NewGuid(),
+        Name = "End",
+        Ports = [new PortDefinition { PortId = "in", Direction = PortDirection.Input, Label = "In" }],
+        Config = new EndConfig { Output = new BranchStateRefExpression("total") }
+    };
+
+    [Fact]
     public void Validate_rejects_a_SubWorkflow_that_starts_its_own_workflow()
     {
         // A child is exempt from the workspace run ceiling, so a workflow that starts itself would start

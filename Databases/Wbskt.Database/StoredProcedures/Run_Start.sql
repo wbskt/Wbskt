@@ -11,7 +11,8 @@ CREATE PROCEDURE dbo.Run_Start
     @BranchRefId          UNIQUEIDENTIFIER,
     @BranchLocalJson      NVARCHAR(MAX),
     @WorkspaceId          INT = NULL,
-    @MaxActiveRuns        INT = NULL
+    @MaxActiveRuns        INT = NULL,
+    @ParentRunRefId       UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -59,9 +60,9 @@ BEGIN
             END
 
             INSERT INTO dbo.Runs
-                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey)
+                (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, TriggerStartKey, ParentRunRefId)
             VALUES
-                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey);
+                (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @TriggerStartKey, @ParentRunRefId);
 
             SET @RunId = SCOPE_IDENTITY();
 
@@ -105,6 +106,8 @@ BEGIN
         r.CancellationReason,
         r.CreditBudget,
         r.CreatedAt,
+        r.ParentRunRefId,
+        r.OutputJson,
         rb.Id AS RootBranchId,
         @Created AS Created
     FROM dbo.Runs r

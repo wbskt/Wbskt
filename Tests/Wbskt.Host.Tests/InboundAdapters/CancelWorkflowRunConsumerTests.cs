@@ -118,6 +118,9 @@ public sealed class CancelWorkflowRunConsumerTests
                 });
             Provider.Setup(p => p.GetByIdAsync(42, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => Row());
+            // A cancel also looks for the run's sub-workflow children; this run has none.
+            Provider.Setup(p => p.GetActiveChildrenAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Array.Empty<RunRow>());
         }
 
         public string Status { get; set; }

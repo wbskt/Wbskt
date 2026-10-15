@@ -113,7 +113,9 @@ internal sealed class RunFinalizer : IRunFinalizer
         // looks stuck) and collected here, alongside the bookmarks.
         await _joinAggregatorProvider.DeleteAllByRunIdAsync(updatedRun.Id, ct);
 
-        await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, ct);
+        // The output a control:end node recorded goes with the status, whatever the status is: a parent
+        // that branches on childResult.status decides for itself whether to trust it.
+        await _completionHook.OnRunCompletedAsync(updatedRun.RefId, terminalStatus, updatedRun.OutputJson, ct);
         _tokenRegistry.Remove(updatedRun.Id);
     }
 

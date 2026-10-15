@@ -21,6 +21,8 @@ BEGIN
         r.CancellationReason,
         r.CreditBudget,
         r.CreatedAt,
+        r.ParentRunRefId,
+        r.OutputJson,
         rb.Id AS RootBranchId,
         CAST(0 AS BIT) AS Created
     FROM dbo.Runs r

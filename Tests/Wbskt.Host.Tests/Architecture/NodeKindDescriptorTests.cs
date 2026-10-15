@@ -76,7 +76,7 @@ public sealed class NodeKindDescriptorTests
         var model = (BaseNode)RuntimeHelpers.GetUninitializedObject(descriptor.ModelType);
         Assert.Equal(kind, model.Kind);
 
-        // The config type is the model's own Config property, or null for a kind with none (End).
+        // The config type is the model's own Config property, or null for a kind with none.
         PropertyInfo? config = descriptor.ModelType.GetProperty("Config", BindingFlags.Public | BindingFlags.Instance);
         Assert.Equal(config?.PropertyType, descriptor.ConfigType);
 

@@ -23,7 +23,8 @@ BEGIN
         r.CancellationRequestedAt,
         r.CancellationReason,
         r.CreditBudget,
-        r.CreatedAt
+        r.CreatedAt,
+        r.ParentRunRefId
     FROM dbo.Runs r
     INNER JOIN dbo.WorkflowDefinitions w ON w.Id = r.WorkflowDefinitionId
     WHERE w.WorkspaceId = @WorkspaceId

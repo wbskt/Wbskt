@@ -66,6 +66,19 @@ public interface IRunProvider
     /// </summary>
     Task<IReadOnlyCollection<RunRow>> GetAllByStatusAsync(string status, CancellationToken ct)
         => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());
+
+    /// <summary>
+    /// The runs started by <paramref name="parentRunRefId"/>'s sub-workflow steps that are still going
+    /// (Running, Failing or Cancelling). Defaulted so the test doubles that never cascade need no stub.
+    /// </summary>
+    Task<IReadOnlyCollection<RunRow>> GetActiveChildrenAsync(Guid parentRunRefId, CancellationToken ct)
+        => Task.FromResult<IReadOnlyCollection<RunRow>>(Array.Empty<RunRow>());
+
+    /// <summary>
+    /// Records the value a run's <c>control:end</c> node handed back, read with the run when it
+    /// finalizes. A no-op on a terminal run. Defaulted so the test doubles need no stub.
+    /// </summary>
+    Task SetOutputAsync(long runId, string outputJson, CancellationToken ct) => Task.CompletedTask;
     Task<bool> TransitionStatusAsync(long runId, string fromStatus, string toStatus, DateTime? cancellationRequestedAt, string? cancellationReason, CancellationToken ct);
     Task<(bool Transitioned, RunRow Run)> SetTerminalAsync(long runId, string status, DateTime completedAt, CancellationToken ct);
 }

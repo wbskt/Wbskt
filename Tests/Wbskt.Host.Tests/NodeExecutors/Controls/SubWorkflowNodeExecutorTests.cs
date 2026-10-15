@@ -106,6 +106,62 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
+    public async Task Resume_promotes_the_childs_end_output_under_childResult_output()
+    {
+        // The wake is what the completion hook sends when the child finalizes: the parent reads what the
+        // child computed, not just whether it finished.
+        InboundEvent completed = await CompletionEventAsync("Succeeded", """{"total":42,"lines":["a","b"]}""");
+        var executor = new SubWorkflowNodeExecutor(new Mock<IInboundHub>().Object, new Mock<IRunProvider>().Object, new FixedClock());
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(ChildRunRefId.ToString()),
+            ["__wake"] = JsonSerializer.SerializeToElement(completed.Payload)
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        JsonElement childResult = cont.LocalStatePatch["childResult"];
+        Assert.Equal("Succeeded", childResult.GetProperty("status").GetString());
+        Assert.Equal(42, childResult.GetProperty("output").GetProperty("total").GetInt32());
+        Assert.Equal("b", childResult.GetProperty("output").GetProperty("lines")[1].GetString());
+    }
+
+    [Fact]
+    public async Task Resume_of_a_child_with_no_output_still_delivers_its_status()
+    {
+        InboundEvent completed = await CompletionEventAsync("Failed", null);
+        var executor = new SubWorkflowNodeExecutor(new Mock<IInboundHub>().Object, new Mock<IRunProvider>().Object, new FixedClock());
+        NodeContext ctx = Context(new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(ChildRunRefId.ToString()),
+            ["__wake"] = JsonSerializer.SerializeToElement(completed.Payload)
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        JsonElement childResult = cont.LocalStatePatch["childResult"];
+        Assert.Equal("Failed", childResult.GetProperty("status").GetString());
+        Assert.False(childResult.TryGetProperty("output", out _));
+    }
+
+    /// <summary>The event the completion hook hands the hub when the child run finalizes.</summary>
+    private static async Task<InboundEvent> CompletionEventAsync(string status, string? outputJson)
+    {
+        InboundEvent? captured = null;
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback((InboundEvent e, CancellationToken _) => captured = e)
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Queued, null, null, "ok"));
+
+        await new SubWorkflowCompletionHook(hub.Object, new SequentialIdGenerator()).OnRunCompletedAsync(ChildRunRefId, status, outputJson, CancellationToken.None);
+
+        return captured ?? throw new InvalidOperationException("The hook sent nothing.");
+    }
+
+    private sealed class SequentialIdGenerator : IIdGenerator
+    {
+        public Guid NewId() => Guid.NewGuid();
+    }
+
+    [Fact]
     public async Task Wake_delivered_for_another_node_re_parks_on_the_same_child_without_starting_another()
     {
         var hub = new Mock<IInboundHub>();

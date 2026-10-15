@@ -15,16 +15,22 @@ public sealed class ChildCompletedChannel : TriggerChannel
 
     public static string Key(string childRunRef) => $"{Name}:{childRunRef}";
 
-    public static InboundEvent Event(Guid childRunRef, string terminalStatus, Guid eventId) => new(
-        Name,
-        [Key(childRunRef.ToString())],
-        $"{Name}:{childRunRef}:{eventId}",
-        new Dictionary<string, JsonElement>
+    /// <param name="output">The child's End output, delivered as <c>output</c> beside the status; left out when null.</param>
+    public static InboundEvent Event(Guid childRunRef, string terminalStatus, Guid eventId, JsonElement? output = null)
+    {
+        var payload = new Dictionary<string, JsonElement>
         {
             ["childRunRefId"] = Json(childRunRef),
             ["status"] = Json(terminalStatus)
-        },
-        default);
+        };
+
+        if (output is { } value)
+        {
+            payload["output"] = value;
+        }
+
+        return new InboundEvent(Name, [Key(childRunRef.ToString())], $"{Name}:{childRunRef}:{eventId}", payload, default);
+    }
 
     public override string CorrelationKey(InboundEvent evt) => Key(Required(evt, "childRunRefId"));
 }

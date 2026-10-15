@@ -32,6 +32,8 @@ BEGIN
         CancellationReason,
         CreditBudget,
         CreatedAt,
+        ParentRunRefId,
+        OutputJson,
         @Transitioned AS Transitioned
     FROM dbo.Runs
     WHERE Id = @RunId;

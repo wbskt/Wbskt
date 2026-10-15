@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Moq;
+using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
 using Wbskt.Workflow.Runtime.BranchResults;
@@ -40,5 +43,35 @@ public sealed class TerminalResultHandlerTests
         Assert.Equal("""{"keep":1}""", update.LocalJson);
         Assert.Equal("\"last\"", update.LastOutputJson);
         Assert.Equal(BranchRefId, Assert.Single(journal.Entries).BranchRefId);
+    }
+
+    [Fact]
+    public async Task Records_an_end_output_on_the_run_before_the_branch_completes()
+    {
+        // Before, not after: completing the run's last branch finalizes it, and the finalizer reads the
+        // output back with the run to hand it to the parent.
+        var branches = new RecordingBranchProvider(_log, Branch(NodeA));
+        var runs = new Mock<IRunProvider>();
+        runs.Setup(r => r.SetOutputAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((long runId, string json, CancellationToken _) => _log.Add($"output:{runId}:{json}"))
+            .Returns(Task.CompletedTask);
+        var handler = new TerminalResultHandler(new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), new RecordingRunJournal(_log)), runs.Object);
+        var result = new NodeExecutionResult.Terminal(BranchTerminalReason.Completed) { Output = JsonSerializer.SerializeToElement(new { total = 42 }) };
+
+        await handler.HandleAsync(result, Context(Node(NodeA), Definition([Node(NodeA)], []), branches.Current), CancellationToken.None);
+
+        Assert.Equal(new[] { $"output:{RunId}:{{\"total\":42}}", "completed", $"journal:{HistoryEventKind.BranchCompleted}", $"release:{RunId}:1" }, _log);
+    }
+
+    [Fact]
+    public async Task Records_nothing_for_an_end_without_output()
+    {
+        var branches = new RecordingBranchProvider(_log, Branch(NodeA));
+        var runs = new Mock<IRunProvider>(MockBehavior.Strict);
+        var handler = new TerminalResultHandler(new BranchEndings(branches, new RecordingRunJournal(_log), new RecordingBranchTerminator(_log)), new JoinDeclines(new NoOpJoinAggregatorProvider(), new NoOpRunCancellationService(), new RecordingRunJournal(_log)), runs.Object);
+
+        await handler.HandleAsync(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed), Context(Node(NodeA), Definition([Node(NodeA)], []), branches.Current), CancellationToken.None);
+
+        runs.VerifyNoOtherCalls();
     }
 }

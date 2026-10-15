@@ -46,6 +46,63 @@ public sealed class SubWorkflowCompletionHookTests
     }
 
     [Fact]
+    public async Task OnRunCompletedAsync_carries_the_childs_output_beside_its_status()
+    {
+        InboundEvent? sent = null;
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback((InboundEvent e, CancellationToken _) => sent = e)
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Queued, null, null, "ok"));
+        var hook = new SubWorkflowCompletionHook(hub.Object, new FixedIdGenerator());
+
+        await hook.OnRunCompletedAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "Succeeded", """{"total":42}""", CancellationToken.None);
+
+        Assert.NotNull(sent);
+        Assert.Equal("Succeeded", sent!.Payload["status"].GetString());
+        Assert.Equal(42, sent.Payload["output"].GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task OnRunCompletedAsync_without_output_sends_the_status_alone()
+    {
+        InboundEvent? sent = null;
+        var hub = new Mock<IInboundHub>();
+        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
+            .Callback((InboundEvent e, CancellationToken _) => sent = e)
+            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.Queued, null, null, "ok"));
+        var hook = new SubWorkflowCompletionHook(hub.Object, new FixedIdGenerator());
+
+        await hook.OnRunCompletedAsync(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "Succeeded", null, CancellationToken.None);
+
+        Assert.Equal("Succeeded", sent!.Payload["status"].GetString());
+        Assert.False(sent.Payload.ContainsKey("output"));
+    }
+
+    [Fact]
+    public async Task RunFinalizer_hands_the_runs_recorded_output_to_the_hook()
+    {
+        var bookmarkProvider = new RecordingBookmarkProvider();
+        var hook = new RecordingCompletionHook(bookmarkProvider);
+        var finalizer = new RunFinalizer(
+            new RecordingRunProvider { OutputJson = """{"total":42}""" },
+            new StubBranchProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
+            new RecordingPendingTriggerEventDrainer(),
+            new RecordingRunCompletedPublisher(),
+            bookmarkProvider,
+            hook,
+            new FixedClock(),
+            new RunCancellationTokenRegistry(),
+            new NoOpJoinAggregatorProvider(),
+            Mock.Of<IWorkflowDefinitionCache>());
+
+        await finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal("Succeeded", hook.TerminalStatus);
+        Assert.Equal("""{"total":42}""", hook.OutputJson);
+    }
+
+    [Fact]
     public async Task RunFinalizer_calls_hook_after_finalization()
     {
         var bookmarkProvider = new RecordingBookmarkProvider();
@@ -82,6 +139,13 @@ public sealed class SubWorkflowCompletionHookTests
         public bool BookmarksDeletedBeforeCall { get; private set; }
         public Guid RunRefId { get; private set; }
         public string? TerminalStatus { get; private set; }
+        public string? OutputJson { get; private set; }
+
+        public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, string? outputJson, CancellationToken ct)
+        {
+            OutputJson = outputJson;
+            return OnRunCompletedAsync(runRefId, terminalStatus, ct);
+        }
 
         public Task OnRunCompletedAsync(Guid runRefId, string terminalStatus, CancellationToken ct)
         {
@@ -95,8 +159,11 @@ public sealed class SubWorkflowCompletionHookTests
 
     private sealed class RecordingRunProvider : IRunProvider
     {
-        private readonly RunRow _run = new()
+        public string? OutputJson { get; init; }
+
+        private RunRow _run => new()
         {
+            OutputJson = OutputJson,
             Id = 42,
             RefId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             WorkflowDefinitionId = 9,

@@ -6,7 +6,8 @@ CREATE PROCEDURE dbo.Run_Create
     @TriggerNodeId        UNIQUEIDENTIFIER,
     @CorrelationKey       NVARCHAR(400),
     @StartedAt            DATETIME2(3),
-    @CreditBudget         DECIMAL(18,4)
+    @CreditBudget         DECIMAL(18,4),
+    @ParentRunRefId       UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -17,9 +18,9 @@ BEGIN
     BEGIN TRANSACTION;
 
     INSERT INTO dbo.Runs
-        (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget)
+        (RefId, WorkflowDefinitionId, WorkflowRefId, WorkflowVersion, TriggerNodeId, CorrelationKey, Status, StartedAt, CreditBudget, ParentRunRefId)
     VALUES
-        (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget);
+        (@RefId, @WorkflowDefinitionId, @WorkflowRefId, @WorkflowVersion, @TriggerNodeId, @CorrelationKey, N'Running', @StartedAt, @CreditBudget, @ParentRunRefId);
 
     SET @RunId = SCOPE_IDENTITY();
 
@@ -42,7 +43,9 @@ BEGIN
         CancellationRequestedAt,
         CancellationReason,
         CreditBudget,
-        CreatedAt
+        CreatedAt,
+        ParentRunRefId,
+        OutputJson
     FROM dbo.Runs
     WHERE Id = @RunId;
 END;

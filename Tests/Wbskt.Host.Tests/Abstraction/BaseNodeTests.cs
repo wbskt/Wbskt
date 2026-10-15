@@ -57,7 +57,7 @@ public class BaseNodeTests
         string json = JsonSerializer.Serialize<BaseNode>(node, Options);
 
         Assert.Equal(
-            """{"kind":"control:end","nodeId":"33333333-3333-3333-3333-333333333333","name":"stop","ports":[{"portId":"in","direction":"Input","label":"In"}],"posX":0,"posY":0}""",
+            """{"kind":"control:end","config":null,"nodeId":"33333333-3333-3333-3333-333333333333","name":"stop","ports":[{"portId":"in","direction":"Input","label":"In"}],"posX":0,"posY":0}""",
             json);
     }
 

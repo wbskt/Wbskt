@@ -51,6 +51,7 @@ public sealed class WorkflowValidator
         ValidateJoinsBelongToCohorts(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
         ValidateSubWorkflowSelfReference(definition, workflowRefId, issues);
+        ValidateEndOutputs(definition, issues);
         ValidateLocalVariableNames(definition, issues);
         ValidateTriggerConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
@@ -209,6 +210,28 @@ public sealed class WorkflowValidator
                     $"SubWorkflow node '{node.NodeId}' supplies input '{key}', which the engine writes itself; rename it.",
                     node.NodeId));
             }
+        }
+    }
+
+    /// <summary>
+    /// An End node's output is only ever read by a parent's sub-workflow step, and a parent starts its
+    /// child through the child's manual trigger. On a workflow with none, the output could never reach
+    /// anyone, so it is rejected rather than evaluated on every run for nothing.
+    /// </summary>
+    private static void ValidateEndOutputs(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        if (def.Nodes.Any(n => n is ManualTriggerNode))
+        {
+            return;
+        }
+
+        foreach (var node in def.Nodes.OfType<EndNode>().Where(n => n.Config?.Output is not null))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "END_OUTPUT_WITHOUT_MANUAL_TRIGGER",
+                $"End node '{node.NodeId}' declares an output, but the workflow has no manual trigger, so no parent can start it as a sub-workflow to read it; add a manual trigger or remove the output.",
+                node.NodeId));
         }
     }
 

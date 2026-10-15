@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Telemetry;
@@ -102,7 +103,8 @@ internal sealed class RunStarter : IRunStarter
                         CancellationRequestedAt = null,
                         CancellationReason = null,
                         CreditBudget = creditBudget,
-                        CreatedAt = nowUtc
+                        CreatedAt = nowUtc,
+                        ParentRunRefId = ReadParentRunRefId(triggerEvent)
                     },
                     // RunId 0: Run_Start inserts the root branch under the run it has just created.
                     BranchRow.New(rootBranchRefId, 0, Guid.Parse(triggerNodeId), localJson, nowUtc),
@@ -172,6 +174,26 @@ internal sealed class RunStarter : IRunStarter
     {
         RunStartRow? started = await _runProvider.FindByTriggerStartKeyAsync(triggerStartKey, ct);
         return started is null ? null : new RunStartResult(started.Run.Id, started.Run.RefId, started.RootBranchId, false);
+    }
+
+    /// <summary>
+    /// The parent a sub-workflow step named in the child's body, so cancelling or failing the parent can
+    /// find the child. Read only for a start the step itself made: a manual start from the API can put
+    /// anything in its body, and a run that claimed another's run as its parent would be cancelled with it.
+    /// </summary>
+    private static Guid? ReadParentRunRefId(InboundEvent triggerEvent)
+    {
+        if (triggerEvent.StartsChildRun
+            && triggerEvent.Payload.TryGetValue("body", out JsonElement body)
+            && body.ValueKind == JsonValueKind.Object
+            && body.TryGetProperty(SubWorkflowConfig.ParentRunRefIdKey, out JsonElement parent)
+            && parent.ValueKind == JsonValueKind.String
+            && parent.TryGetGuid(out Guid parentRunRefId))
+        {
+            return parentRunRefId;
+        }
+
+        return null;
     }
 
     // The optional per-workflow budget, falling back to the configured default when unset or
