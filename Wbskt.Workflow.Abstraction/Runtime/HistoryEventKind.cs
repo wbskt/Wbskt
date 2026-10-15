@@ -15,6 +15,7 @@ public static class HistoryEventKind
     // Not written any more; kept so a history row of this kind still reads with its severity.
     public const string RunFaulted = "RunFaulted";
     public const string RunCancellationRequested = "RunCancellationRequested";
+    public const string RunFailureRequested = "RunFailureRequested";
 
     // Branch lifecycle
     public const string BranchStarted = "BranchStarted";
@@ -54,7 +55,8 @@ public static class HistoryEventKind
                 or NodeRetrying
                 or CompensationFailed
                 or BranchCancelled
-                or RunCancellationRequested => SeverityWarn,
+                or RunCancellationRequested
+                or RunFailureRequested => SeverityWarn,
 
             _ => SeverityInfo
         };

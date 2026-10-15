@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Exceptions;
@@ -966,7 +967,7 @@ public sealed class BranchLoopTests
             new FixedClock(),
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
-            new NoOpRunCancellationService(),
+            FailingRunCancellationService(runProvider),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
@@ -1023,7 +1024,7 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
-    public async Task Branch_fail_with_failFast_when_run_already_Cancelling_does_nothing()
+    public async Task Branch_of_a_cancelling_fail_fast_run_is_cancelled_before_its_node_runs()
     {
         // Arrange
         var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -1042,20 +1043,22 @@ public sealed class BranchLoopTests
             FailFast: true);
         var runProvider = new StubRunProvider("Cancelling");
         var runCounters = new StubRunCountersProvider();
+        var branchProvider = new RecordingBranchProvider(nodeId);
+        var executor = new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null));
         var loop = TestBranchLoop.Create(
-            new RecordingBranchProvider(nodeId),
+            branchProvider,
             runProvider,
             runCounters,
             new RecordingBookmarkProvider(),
             new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
             new StubWorkflowDefinitionCache(definition),
-            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Fail("E_FAIL", "boom", false, null))),
+            new StubNodeExecutorRegistry(executor),
             new RecordingRunDispatcher(),
             new InMemoryIdempotencyKeyProvider(),
             new FixedClock(),
             new SequentialIdGenerator(),
             new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
-            new NoOpRunCancellationService(),
+            FailingRunCancellationService(runProvider),
             new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
@@ -1063,8 +1066,12 @@ public sealed class BranchLoopTests
         // Act
         await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
-        // Assert
-        Assert.Equal([(42L, "Running", "Failing")], runProvider.TransitionRequests);
+        // Assert: a cancelling run's branch is cancelled at the loop's first check, so the failing node
+        // never runs and fail-fast never gets the chance to move the run. (A failure that does reach
+        // the cancellation service on a cancelling run is left alone there: RunCancellationServiceTests.)
+        Assert.Equal(0, executor.CallCount);
+        Assert.Equal("Cancelled", branchProvider.CurrentBranch.Status);
+        Assert.Empty(runProvider.TransitionRequests);
         Assert.Equal("Cancelling", runProvider.Status);
     }
 
@@ -1530,6 +1537,22 @@ public sealed class BranchLoopTests
         public INodeExecutor For(string kind) => throw new NodeKindNotSupportedException(kind);
     }
 
+    /// <summary>
+    /// The real cancellation service over the test's run provider, for the tests that pin how a
+    /// fail-fast failure moves the run: the handler asks the service, and the service moves the run.
+    /// </summary>
+    private static RunCancellationService FailingRunCancellationService(IRunProvider runProvider)
+    {
+        return new RunCancellationService(
+            runProvider,
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
+            new FixedClock(),
+            Mock.Of<IBranchProvider>(),
+            Mock.Of<IBookmarkProvider>(),
+            new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new RunCancellationTokenRegistry());
+    }
+
     private sealed class RecordingRunCancellationService : IRunCancellationService
     {
         public List<(long RunId, string Reason)> Requests { get; } = [];
@@ -1539,6 +1562,8 @@ public sealed class BranchLoopTests
             Requests.Add((runId, reason));
             return Task.FromResult(true);
         }
+
+        public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => Task.FromResult(false);
     }

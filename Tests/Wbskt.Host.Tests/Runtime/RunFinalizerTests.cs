@@ -81,6 +81,28 @@ public sealed class RunFinalizerTests
     }
 
     [Fact]
+    public async Task FinalizeAsync_sets_failed_for_a_failing_run_whose_siblings_were_cancelled()
+    {
+        // A run fails by its own rule and its siblings are cancelled to stop them. That is still a
+        // failure, not a cancel: "Cancelled" here read as if someone had pressed cancel.
+        var harness = new RunFinalizerHarness("Failing", [CreateBranch("Failed"), CreateBranch("Cancelled")]);
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal("Failed", harness.RunProvider.TerminalStatus);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_sets_failed_for_a_failing_run_even_when_a_sibling_completed()
+    {
+        var harness = new RunFinalizerHarness("Failing", [CreateBranch("Failed"), CreateBranch("Completed"), CreateBranch("Cancelled")]);
+
+        await harness.Finalizer.FinalizeAsync(42, CancellationToken.None);
+
+        Assert.Equal("Failed", harness.RunProvider.TerminalStatus);
+    }
+
+    [Fact]
     public async Task FinalizeAsync_leaves_faulted_run_untouched()
     {
         var harness = new RunFinalizerHarness("Faulted", [CreateBranch("Failed")]);

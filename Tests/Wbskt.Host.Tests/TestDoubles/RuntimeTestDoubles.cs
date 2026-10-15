@@ -59,6 +59,8 @@ internal sealed class NoOpRunCancellationService : IRunCancellationService
 {
     public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct) => Task.FromResult(false);
 
+    public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct) => Task.FromResult(false);
+
     public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => Task.FromResult(false);
 }
 
@@ -145,7 +147,7 @@ internal static class TestBranchLoop
             new ContinueResultHandler(branchProvider, journal, branchTerminator),
             new ForkResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, journal, branchTerminator),
             new WaitForBookmarkResultHandler(branchProvider, bookmarkProvider, idGenerator, clock, journal),
-            new FailResultHandler(branchProvider, runProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator),
+            new FailResultHandler(branchProvider, runCountersProvider, runDispatcher, idGenerator, clock, runCancellationService, compensationOrchestrator, joinAggregatorProvider, journal, branchTerminator),
             new TerminalResultHandler(branchProvider, journal, branchTerminator)
         ]);
 

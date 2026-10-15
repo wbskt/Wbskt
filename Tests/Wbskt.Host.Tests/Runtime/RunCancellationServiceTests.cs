@@ -252,6 +252,128 @@ public sealed class RunCancellationServiceTests
     }
 
     [Fact]
+    public async Task FailRun_moves_the_run_to_Failing_and_stops_its_work()
+    {
+        // The run-level failure path: the run goes to 'Failing', never 'Cancelling', so it finalizes as
+        // Failed - and its work stops the way a cancel stops it, so a sibling parked on a signal does
+        // not keep a failed run alive until the signal or its TTL.
+        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var branchProvider = new CancellationTestBranchProvider();
+        var bookmarkProvider = new CancellationTestBookmarkProvider();
+        var registry = new RunCancellationTokenRegistry();
+        var service = new RunCancellationService(
+            runProvider,
+            new RunJournal(historyProvider, new FixedClock()),
+            new FixedClock(),
+            branchProvider,
+            bookmarkProvider,
+            new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            registry);
+        CancellationToken branchToken = registry.GetToken(42);
+
+        bool failed = await service.FailRunAsync(42, "Node x failed", CancellationToken.None);
+
+        Assert.True(failed);
+        Assert.Equal([(42L, "Running", "Failing")], runProvider.TransitionRequests);
+        Assert.Equal("Failing", runProvider.UpdatedRun.Status);
+        Assert.Null(runProvider.UpdatedRun.CancellationReason);
+        HistoryEventRow entry = Assert.Single(historyProvider.Events);
+        Assert.Equal(HistoryEventKind.RunFailureRequested, entry.EventKind);
+        Assert.Equal(HistoryEventKind.SeverityWarn, HistoryEventKind.SeverityFor(entry.EventKind));
+        Assert.True(branchToken.IsCancellationRequested);
+        Assert.Equal(42, bookmarkProvider.DeletedRunId);
+        Assert.Equal(42, branchProvider.CancelledRunId);
+    }
+
+    [Fact]
+    public async Task FailRun_on_a_run_already_Failing_still_stops_its_work()
+    {
+        // A second branch failing by the same rule, or recovery on a new leader, finds the run already
+        // 'Failing'. The cleanup is idempotent and still runs; the failure is not journalled twice.
+        var runProvider = new RecordingRunProvider("Failing", transitionResult: false);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var branchProvider = new CancellationTestBranchProvider();
+        var bookmarkProvider = new CancellationTestBookmarkProvider();
+        var registry = new RunCancellationTokenRegistry();
+        var service = new RunCancellationService(
+            runProvider,
+            new RunJournal(historyProvider, new FixedClock()),
+            new FixedClock(),
+            branchProvider,
+            bookmarkProvider,
+            new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            registry);
+
+        bool failed = await service.FailRunAsync(42, "recovery", CancellationToken.None);
+
+        Assert.True(failed);
+        Assert.Equal("Failing", runProvider.UpdatedRun.Status);
+        Assert.Empty(historyProvider.Events);
+        Assert.True(registry.IsCancelled(42));
+        Assert.Equal(42, bookmarkProvider.DeletedRunId);
+        Assert.Equal(42, branchProvider.CancelledRunId);
+    }
+
+    [Theory]
+    [InlineData("Cancelling")]
+    [InlineData("Succeeded")]
+    public async Task FailRun_leaves_a_cancelling_or_terminal_run_alone(string status)
+    {
+        var runProvider = new RecordingRunProvider(status, transitionResult: false);
+        var historyProvider = new RecordingHistoryEventProvider();
+        var branchProvider = new CancellationTestBranchProvider();
+        var bookmarkProvider = new CancellationTestBookmarkProvider();
+        var service = new RunCancellationService(
+            runProvider,
+            new RunJournal(historyProvider, new FixedClock()),
+            new FixedClock(),
+            branchProvider,
+            bookmarkProvider,
+            new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new RunCancellationTokenRegistry());
+
+        bool failed = await service.FailRunAsync(42, "Node x failed", CancellationToken.None);
+
+        Assert.False(failed);
+        Assert.Equal(status, runProvider.UpdatedRun.Status);
+        Assert.Empty(historyProvider.Events);
+        Assert.Equal(0, bookmarkProvider.DeletedRunId);
+        Assert.Equal(0, branchProvider.CancelledRunId);
+    }
+
+    [Fact]
+    public async Task FailRun_finalizes_a_run_left_with_nothing_running()
+    {
+        var runProvider = new RecordingRunProvider("Running", transitionResult: true);
+        var finalizer = new RecordingRunFinalizer();
+        var service = new RunCancellationService(
+            runProvider,
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
+            new FixedClock(),
+            new CancellationTestBranchProvider(),
+            new CancellationTestBookmarkProvider(),
+            new BranchTerminator(new IdleRunCountersProvider(), new Lazy<IRunFinalizer>(() => finalizer)),
+            new RunCancellationTokenRegistry());
+
+        await service.FailRunAsync(42, "Node x failed", CancellationToken.None);
+
+        Assert.Equal([42L], finalizer.FinalizedRuns);
+    }
+
+    [Fact]
+    public async Task IsCancellationRequested_returns_true_for_a_failing_run()
+    {
+        // A branch that never saw the token - dispatched after a restart, say - must still stop rather
+        // than keep a failed run alive.
+        var service = new RunCancellationService(new RecordingRunProvider("Failing", transitionResult: false), new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()), new FixedClock(), Mock.Of<IBranchProvider>(), Mock.Of<IBookmarkProvider>(), new BranchTerminator(new UnlimitedRunCountersProvider(), new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())), new RunCancellationTokenRegistry());
+
+        bool cancelled = await service.IsCancellationRequestedAsync(42, CancellationToken.None);
+
+        Assert.True(cancelled);
+    }
+
+    [Fact]
     public async Task BranchLoop_short_circuits_to_cancelled_when_cancellation_requested()
     {
         var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -379,6 +501,7 @@ public sealed class RunCancellationServiceTests
     private sealed class AlwaysCancelledRunCancellationService : IRunCancellationService
     {
         public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct) => Task.FromResult(true);
+        public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct) => Task.FromResult(true);
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => Task.FromResult(true);
     }
 

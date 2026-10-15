@@ -60,9 +60,12 @@ public sealed class RunRecoveryService : IEngineStartupTracker
                         }
                         else if (string.Equals(run.Status, RunStatus.Failing, StringComparison.Ordinal))
                         {
-                            // Failing is not cancelled - the run is winding down on its own - so only the
-                            // token is cancelled here.
-                            runCancellationService.CancelCts(runId);
+                            // Failing is not cancelled, so it must not be moved to 'Cancelling'. But the
+                            // failure stops the run's work just as a cancel does, and the previous leader may
+                            // have died before finishing that: re-applying the failure is idempotent on an
+                            // already-'Failing' run and deletes the bookmarks and cancels the waiting
+                            // branches, so a parked sibling cannot keep the run alive after a failover.
+                            await runCancellationService.FailRunAsync(runId, "Run failure re-applied during recovery", ct);
                         }
                     }
                     catch (Exception ex)
