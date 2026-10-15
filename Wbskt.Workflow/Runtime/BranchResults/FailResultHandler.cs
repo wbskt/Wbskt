@@ -64,7 +64,17 @@ internal sealed class FailResultHandler(
             await compensationOrchestrator.RunAsync(runRow.Id, branchId, ct);
         }
 
-        await branchProvider.SetFailedAsync(branchId, errorJson, ct);
+        // Failing the branch is a compare-and-set, as every branch end is: if another loop already
+        // ended it (a recovery requeue racing a slow node on the old leader), that loop recorded the
+        // end and released the branch, and doing either again here - or escalating to the run a
+        // second time - would count one branch's end twice.
+        if (!await branchProvider.EndIfLiveAsync(branchId, BranchStatus.Failed, errorJson, ct))
+        {
+            logger?.LogWarning(
+                "Branch {BranchId} on run {RunId} was already ended when this loop tried to fail it at node {NodeId}; it was ended elsewhere, so it is not released again.",
+                branchId, runRow.Id, nodeId);
+            return BranchResultOutcome.Stopped;
+        }
 
         if (outOfCredits)
         {

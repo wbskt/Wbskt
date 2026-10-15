@@ -112,7 +112,16 @@ internal sealed class BranchExecutionPump : BackgroundService
                 new { ErrorCode = "BRANCH_LOOP_ESCAPED", Message = "The engine hit an unexpected error running this branch." },
                 EngineJson.Options);
 
-            await branchProvider.SetFailedAsync(request.BranchId, errorJson, ct);
+            // The status read above can be stale by now; the end itself is the compare-and-set that
+            // decides whether this path or the branch's own loop releases it.
+            if (!await branchProvider.EndIfLiveAsync(request.BranchId, BranchStatus.Failed, errorJson, ct))
+            {
+                _logger.LogWarning(
+                    "Branch {BranchId} on run {RunId} ended before it could be contained; not releasing it again.",
+                    request.BranchId,
+                    request.RunId);
+                return;
+            }
 
             var branchTerminator = scope.ServiceProvider.GetRequiredService<IBranchTerminator>();
             await branchTerminator.ReleaseAsync(checked((int)request.RunId), 1, ct);

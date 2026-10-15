@@ -22,21 +22,20 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
     {
         return await ExecuteSingleAsync(
             "dbo.Branch_Upsert",
-            p =>
-            {
-                p.AddWithValue("@RefId", row.RefId);
-                p.AddWithValue("@RunId", row.RunId);
-                p.AddWithValue("@ParentBranchId", (object?)row.ParentBranchId ?? DBNull.Value);
-                p.AddWithValue("@ForkCohortId", (object?)row.ForkCohortId ?? DBNull.Value);
-                p.AddWithValue("@NodeId", row.NodeId);
-                p.AddWithValue("@Status", row.Status);
-                p.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
-                p.AddWithValue("@LocalJson", row.LocalJson);
-                p.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
-                p.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
-            },
+            p => AddRowParameters(p, row),
             Map,
             new InvalidOperationException("Branch_Upsert did not return a row."),
+            ct
+        );
+    }
+
+    public async Task<(BranchRow Row, bool Created)> CreateIfAbsentAsync(BranchRow row, CancellationToken ct)
+    {
+        return await ExecuteSingleAsync(
+            "dbo.Branch_InsertIfAbsent",
+            p => AddRowParameters(p, row),
+            reader => (Map(reader), reader.GetBoolean(reader.GetOrdinal("Inserted"))),
+            new InvalidOperationException("Branch_InsertIfAbsent did not return a row."),
             ct
         );
     }
@@ -112,6 +111,21 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         return UpdateBranchAsync(branchId, null, BranchStatus.Failed, null, lastOutputJson, ct);
     }
 
+    public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+    {
+        var result = await ExecuteScalarAsync<object>(
+            "dbo.Branch_EndIfLive",
+            p =>
+            {
+                p.AddWithValue("@Id", checked((int)branchId));
+                p.AddWithValue("@ToStatus", toStatus);
+                p.AddWithValue("@LastOutputJson", (object?)lastOutputJson ?? DBNull.Value);
+            },
+            ct
+        );
+        return result is int rowsAffected && rowsAffected > 0;
+    }
+
     private async Task<BranchRow> UpdateBranchAsync(long branchId, Guid? currentNodeId, string status, string? localJson, string? lastOutputJson, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
@@ -137,6 +151,20 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             p => p.AddWithValue("@RunId", runId),
             ct
         );
+    }
+
+    private static void AddRowParameters(SqlParameterCollection p, BranchRow row)
+    {
+        p.AddWithValue("@RefId", row.RefId);
+        p.AddWithValue("@RunId", row.RunId);
+        p.AddWithValue("@ParentBranchId", (object?)row.ParentBranchId ?? DBNull.Value);
+        p.AddWithValue("@ForkCohortId", (object?)row.ForkCohortId ?? DBNull.Value);
+        p.AddWithValue("@NodeId", row.NodeId);
+        p.AddWithValue("@Status", row.Status);
+        p.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
+        p.AddWithValue("@LocalJson", row.LocalJson);
+        p.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
+        p.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
     }
 
     internal static BranchRow Map(DbDataReader reader)

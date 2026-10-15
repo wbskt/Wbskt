@@ -19,4 +19,11 @@ public static class BranchStatus
 
     public static bool IsEnded(string status) =>
         status is Completed or Failed or Cancelled;
+
+    /// <summary>
+    /// The statuses a branch can be ended from. Branch_EndIfLive spells the same set out in its WHERE
+    /// clause, so a change here is a change there.
+    /// </summary>
+    public static bool IsLive(string status) =>
+        status is Active or Waiting or Compensating;
 }

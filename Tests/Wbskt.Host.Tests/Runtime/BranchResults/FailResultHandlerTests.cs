@@ -388,7 +388,27 @@ public sealed class FailResultHandlerTests
         return LocalState(Assert.Single(branches.Created).LocalJson);
     }
 
-    private FailResultHandler CreateHandler(RecordingBranchProvider branches)
+    [Fact]
+    public async Task A_branch_already_ended_elsewhere_is_neither_failed_nor_released_again()
+    {
+        // A recovery requeue can run the node a second time while the first loop is still finishing
+        // it; whichever loop ends the branch first owns the end, and the other must stop without
+        // recording it, escalating it, contributing it to a Join or releasing it.
+        var branches = new RecordingBranchProvider(_log, Branch(FailingNode, $$"""{"{{JoinTokens.TokenKey}}":"{{JoinToken}}"}""") with { Status = BranchStatus.Completed });
+        var logger = new WarningRecorder<FailResultHandler>();
+        var definition = Definition([Node(FailingNode)], [], failFast: true);
+
+        BranchResultOutcome outcome = await CreateHandler(branches, logger).HandleAsync(Boom, Context(Node(FailingNode), definition, branches.Current), CancellationToken.None);
+
+        Assert.True(outcome.IsStopped);
+        Assert.Equal(new[] { $"end-refused:{BranchStatus.Failed}" }, _log);
+        Assert.Equal(BranchStatus.Completed, branches.Current.Status);
+        Assert.Single(logger.Warnings);
+        _joins.VerifyNoOtherCalls();
+        _cancellation.Verify(cancellation => cancellation.FailRunAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private FailResultHandler CreateHandler(RecordingBranchProvider branches, WarningRecorder<FailResultHandler>? logger = null)
     {
         return new FailResultHandler(
             branches,
@@ -401,7 +421,8 @@ public sealed class FailResultHandlerTests
             _joins.Object,
             _journal,
             new RecordingBranchTerminator(_log),
-            new ContinueResultHandler(branches, new BranchEndings(branches, _journal, new RecordingBranchTerminator(_log))));
+            new ContinueResultHandler(branches, new BranchEndings(branches, _journal, new RecordingBranchTerminator(_log))),
+            logger);
     }
 
     private static FailRunNode FailRun() => new()

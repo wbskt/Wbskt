@@ -1724,6 +1724,25 @@ public sealed class BranchLoopTests
             return Task.FromResult(updated);
         }
 
+        // Ends through the same recorders the unguarded writes use, so a test can keep asserting
+        // SetCompletedCalled / SetFailedCalled, and refuses a branch that has already ended.
+        public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+        {
+            BranchRow row = _rows[branchId];
+            if (!BranchStatus.IsLive(row.Status))
+            {
+                return false;
+            }
+
+            _ = toStatus switch
+            {
+                BranchStatus.Completed => await SetCompletedAsync(branchId, ct),
+                BranchStatus.Failed => await SetFailedAsync(branchId, lastOutputJson, ct),
+                _ => await UpdatePointerAsync(branchId, row.NodeId, toStatus, row.LocalJson, lastOutputJson, ct)
+            };
+            return true;
+        }
+
         public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
         {
             SetCompletedCalled = true;

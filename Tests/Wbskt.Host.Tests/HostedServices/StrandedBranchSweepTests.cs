@@ -188,10 +188,11 @@ public sealed class StrandedBranchSweepTests
             WaitExecutor = new WaitExecutor(state.Clock);
             BranchLoop = TestBranchLoop.Create(branchProvider, runProvider, counters, bookmarkProvider, journal, cache, new NodeExecutorRegistry([WaitExecutor]), runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, idGenerator, terminator, runCancellationService, new NoOpCompensationOrchestrator(), new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
 
+            var continueHandler = new ContinueResultHandler(branchProvider, new BranchEndings(branchProvider, journal, terminator));
             var resultDispatcher = new BranchResultDispatcher(
             [
-                new ContinueResultHandler(branchProvider, journal, terminator),
-                new FailResultHandler(branchProvider, counters, runDispatcher, idGenerator, state.Clock, runCancellationService, new NoOpCompensationOrchestrator(), new NoOpJoinAggregatorProvider(), journal, terminator)
+                continueHandler,
+                new FailResultHandler(branchProvider, counters, runDispatcher, idGenerator, state.Clock, runCancellationService, new NoOpCompensationOrchestrator(), new NoOpJoinAggregatorProvider(), journal, terminator, continueHandler)
             ]);
             Failer = new StrandedBranchFailer(branchProvider, bookmarkProvider, runProvider, cache, resultDispatcher, runCancellationService, runDispatcher, journal, terminator);
 
