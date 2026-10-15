@@ -38,7 +38,24 @@ internal sealed class VariableNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlVariable;
 
-    public bool IsSideEffectFree => true;
+    /// <summary>
+    /// A local write lands in the branch row and is replayed with it, so every local operation is safe.
+    /// A shared write happens outside the branch row, before the pointer moves, so a crash in between
+    /// replays it: a Set writes the same value again, which is harmless, but an Increment or Decrement
+    /// would count twice, and a CompareAndSet that already won would now miss its own write and report
+    /// a lost race - which an optimistic retry loop answers by writing again. Those three claim an
+    /// idempotency key so the replay returns the first outcome instead.
+    /// </summary>
+    public bool IsReplaySafe(BaseNode node)
+    {
+        if (node is not VariableNode { Config: { } config })
+        {
+            // A node without config fails before it writes anything.
+            return true;
+        }
+
+        return config.Scope == VariableScope.Local || config.Op == VariableOperation.Set;
+    }
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

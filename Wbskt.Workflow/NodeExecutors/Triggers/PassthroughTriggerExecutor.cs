@@ -23,6 +23,9 @@ internal sealed class PassthroughTriggerExecutor : INodeExecutor
 
     public string Kind { get; }
 
+    // Copies the trigger payload into branch state and continues; a replay does the same again.
+    public bool IsReplaySafe(BaseNode node) => true;
+
     public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         _ = ct;

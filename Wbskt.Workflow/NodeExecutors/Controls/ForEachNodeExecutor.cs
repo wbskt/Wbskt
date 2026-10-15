@@ -30,7 +30,8 @@ internal sealed class ForEachNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlForEach;
 
-    public bool IsSideEffectFree => true;
+    // The iterator lives in branch state, so a replay reads the same index and hands out the same item.
+    public bool IsReplaySafe(BaseNode node) => true;
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

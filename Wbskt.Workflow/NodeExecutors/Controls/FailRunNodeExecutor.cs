@@ -13,7 +13,7 @@ internal sealed class FailRunNodeExecutor : INodeExecutor
 {
     public string Kind => NodeKind.ControlFailRun;
 
-    public bool IsSideEffectFree => true;
+    public bool IsReplaySafe(BaseNode node) => true;
 
     public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

@@ -29,7 +29,9 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
 
     public string Kind => NodeKind.ControlParallelForEach;
 
-    public bool IsSideEffectFree => true;
+    // Not replay-safe, so it keeps the default: as with Fork, every execution initialises a join
+    // aggregator under a fresh token, and a replay would open a second cohort. The recorded outcome
+    // carries the token the aggregator row was written for.
 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {

@@ -19,6 +19,10 @@ internal sealed class DelayNodeExecutor(TimeProvider clock) : INodeExecutor
 
     public string Kind => NodeKind.ControlDelay;
 
+    // Only computes a wake time from branch state; the bookmark is registered by the engine from the
+    // result, so a replay simply parks again (on a first visit, from a slightly later instant).
+    public bool IsReplaySafe(BaseNode node) => true;
+
     public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         _ = ct;

@@ -45,11 +45,11 @@ internal static class RetryExecutor
         CreditChargeNotification? onCharge = null)
     {
         RetryPolicy policy = GetPolicy(node);
-        bool isSideEffectFree = executor.IsSideEffectFree;
+        bool isReplaySafe = executor.IsReplaySafe(node);
 
-        // A side-effect-free node is simply run again on a retry or a redelivery; only a node with an
-        // effect outside the engine is deduplicated.
-        IIdempotencyKeyProvider? idempotencyKeyProvider = isSideEffectFree ? null : services.IdempotencyKeys;
+        // A replay-safe node is simply run again on a retry or a redelivery; only a node whose replay
+        // would repeat an effect outside the branch row is deduplicated.
+        IIdempotencyKeyProvider? idempotencyKeyProvider = isReplaySafe ? null : services.IdempotencyKeys;
 
         for (int attempt = 1; attempt <= policy.MaxAttempts; attempt++)
         {
@@ -59,9 +59,8 @@ internal static class RetryExecutor
             string keyValue = $"action:{context.RunId}:{context.BranchRefId:N}:{node.NodeId:N}:{context.VisitToken}:{attempt}";
             IdempotencyKeyRow? existingRow = null;
 
-            // Recording an attempt's outcome, once. There is no side-effect-free path here: a
-            // side-effect-free node never claims a key, so idempotencyKeyProvider is null for one and this
-            // is a no-op.
+            // Recording an attempt's outcome, once. There is no replay-safe path here: a replay-safe
+            // node never claims a key, so idempotencyKeyProvider is null for one and this is a no-op.
             async Task RecordOutcomeAsync(bool succeeded, string json)
             {
                 if (idempotencyKeyProvider is null)
@@ -119,7 +118,7 @@ internal static class RetryExecutor
             }
 
             Guid claimToken = Guid.NewGuid();
-            if (!isSideEffectFree && idempotencyKeyProvider != null)
+            if (!isReplaySafe && idempotencyKeyProvider != null)
             {
                 if (existingRow == null)
                 {

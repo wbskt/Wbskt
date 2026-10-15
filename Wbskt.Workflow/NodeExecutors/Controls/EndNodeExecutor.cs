@@ -11,7 +11,7 @@ internal sealed class EndNodeExecutor : INodeExecutor
 {
     public string Kind => NodeKind.ControlEnd;
 
-    public bool IsSideEffectFree => true;
+    public bool IsReplaySafe(BaseNode node) => true;
 
     public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
