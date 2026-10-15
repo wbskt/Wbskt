@@ -31,10 +31,14 @@ esac
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
 
-declare -A urls=(
-  [auth]="${OPENAPI_AUTH_URL:-http://localhost:5000}"
-  [management]="${OPENAPI_MANAGEMENT_URL:-http://localhost:5010}"
-)
+# No associative array here: macOS ships bash 3.2, where `declare -A` is not available and
+# `[auth]=` is read as an arithmetic index, failing under `set -u` with "auth: unbound variable".
+host_url() {
+  case "$1" in
+    auth) echo "${OPENAPI_AUTH_URL:-http://localhost:5000}" ;;
+    management) echo "${OPENAPI_MANAGEMENT_URL:-http://localhost:5010}" ;;
+  esac
+}
 
 out="${OPENAPI_OUT:-$root/openapi-current}"
 if $check; then
@@ -44,7 +48,7 @@ fi
 status=0
 for host in auth management; do
   snapshot="$here/$host.v1.json"
-  url="${urls[$host]}/openapi/v1.json"
+  url="$(host_url "$host")/openapi/v1.json"
 
   fetched="$(mktemp)"
   if ! curl -fsS "$url" | jq -S 'del(.servers)' > "$fetched"; then
