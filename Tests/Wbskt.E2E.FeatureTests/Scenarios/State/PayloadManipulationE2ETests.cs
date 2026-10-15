@@ -5,6 +5,7 @@ using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 
 namespace Wbskt.E2E.FeatureTests.Scenarios.State;
 
@@ -52,12 +53,14 @@ public class PayloadManipulationE2ETests(ServicesFixture fixture)
                 loop.OnBody(b => 
                 {
                     b.AddVariable(VariableScope.Local, VariableOperation.Set, "itemData", JsonSerializer.SerializeToElement<WorkflowExpression>(extractItemValue, options))
-                     .AddDelay(TimeSpan.FromSeconds(1))
-                     .AddJoin(JoinMode.All, out joinNodeId);
+                     .AddDelay(TimeSpan.FromSeconds(1));
                 });
             });
 
+        // The loop converges on the Join the builder adds for it; a second one in the body would be
+        // reached by the first's winner with no cohort left to join.
         var definition = builder.BuildAndValidate();
+        joinNodeId = definition.Nodes.OfType<JoinNode>().Single().NodeId;
 
         var publishedRef = await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, definition.Name,
