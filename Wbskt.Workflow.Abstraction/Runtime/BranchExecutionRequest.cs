@@ -8,5 +8,9 @@ public enum BranchExecutionReason
     ForkChild,
     BookmarkResumed,
     Retry,
-    Cancellation
+    Cancellation,
+
+    // A new leader re-dispatching a branch the previous leader was running when it died. Not a
+    // bookmark resume: nothing woke the branch, so its history must not say it resumed.
+    Recovered
 }

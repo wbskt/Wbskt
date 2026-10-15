@@ -26,7 +26,7 @@ public sealed class RunRecoveryServiceTests
         await service.RecoverAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal([(171L, 71L, BranchExecutionReason.BookmarkResumed), (172L, 72L, BranchExecutionReason.BookmarkResumed)], runDispatcher.Requests);
+        Assert.Equal([(171L, 71L, BranchExecutionReason.Recovered), (172L, 72L, BranchExecutionReason.Recovered)], runDispatcher.Requests);
     }
 
     [Fact]

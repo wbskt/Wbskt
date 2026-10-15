@@ -54,6 +54,36 @@ public sealed class LeaderElectionService : BackgroundService
         while (!stoppingToken.IsCancellationRequested && await timer.WaitForNextTickAsync(stoppingToken));
     }
 
+    // Releases the lease on the way down so the standby can take over at once instead of waiting
+    // out the TTL - after a clean deploy, and equally after this host stopped itself because
+    // recovery failed or a renewal was lost. This service is registered first, so the host stops it
+    // last: by now EngineLeadershipCoordinator has stopped the bus, and stopping the renew loop
+    // before releasing means no tick can take the lease back afterwards. Best effort: the TTL is
+    // the fallback, so a failure here is logged and must never fail the shutdown.
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+
+        if (!_leadershipState.WhenLeaderAsync().IsCompleted)
+        {
+            return;
+        }
+
+        try
+        {
+            await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+            var leaseProvider = scope.ServiceProvider.GetRequiredService<ILeaseProvider>();
+            // Lease_Release only matches the current holder, so a lease another instance has
+            // already taken over is left alone.
+            await leaseProvider.ReleaseAsync(EngineLeaderLease, _hostIdentity.HostId, cancellationToken);
+            _logger.LogInformation("Released the engine-leader lease.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to release the engine-leader lease on shutdown; the standby takes over once it expires.");
+        }
+    }
+
     private async Task TickAsync(CancellationToken ct)
     {
         try
