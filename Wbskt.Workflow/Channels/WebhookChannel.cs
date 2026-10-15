@@ -40,7 +40,7 @@ public sealed class WebhookChannel : TriggerChannel
 
     public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct) =>
         Task.FromResult<TriggerRegistrationSpec?>(node is WebhookTriggerNode trigger
-            ? new TriggerRegistrationSpec(Key(publication.WorkspaceRef.ToString(), trigger.Config.Path), trigger.Config.ConcurrencyPolicy.ToString(), trigger.Config.CorrelationKey)
+            ? new TriggerRegistrationSpec(Key(publication.WorkspaceRef.ToString(), trigger.Config.Path), trigger.Config.ConcurrencyPolicy, trigger.Config.CorrelationKey)
             {
                 Filter = trigger.Config.Filter,
                 WebhookSecret = trigger.Config.Secret

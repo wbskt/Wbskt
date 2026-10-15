@@ -75,7 +75,7 @@ internal sealed class TriggerRegistrationService : ITriggerRegistrationService
             TriggerKind = triggerKind,
             TriggerKey = spec.TriggerKey,
             CorrelationExpression = spec.CorrelationExpression,
-            ConcurrencyPolicy = spec.ConcurrencyPolicy,
+            ConcurrencyPolicy = TriggerRegistrationRow.FormatConcurrencyPolicy(spec.ConcurrencyPolicy),
 
             // Copied onto the row rather than read from the definition at dispatch time: the dispatcher
             // matches registrations by key and would otherwise have to load and deserialize a whole

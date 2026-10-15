@@ -63,41 +63,21 @@ internal sealed class WaitForBookmarkResultHandler(
             RunId = runId,
             BranchRefId = branchRefId,
             NodeId = nodeId,
-            WakeConditionKind = GetWakeConditionKind(condition),
+            WakeConditionKind = condition.Kind,
             MatchKey = GetWakeConditionMatchKey(condition),
             WakeConditionJson = JsonSerializer.Serialize(condition, EngineJson.Options),
-            ExpiresAt = GetWakeConditionExpiresAt(condition, nowUtc),
+            ExpiresAt = condition.ExpiresAt(nowUtc),
             TtlPort = condition.TtlPort,
             CreatedAt = nowUtc
-        };
-    }
-
-    internal static DateTime? GetWakeConditionExpiresAt(WakeCondition condition, DateTime nowUtc)
-    {
-        return condition switch
-        {
-            TimerWakeCondition timer => timer.At,
-            _ => condition.Ttl is TimeSpan ttl ? nowUtc + ttl : null
-        };
-    }
-
-    internal static string GetWakeConditionKind(WakeCondition condition)
-    {
-        return condition switch
-        {
-            TimerWakeCondition => "timer",
-            SignalWakeCondition => "signal",
-            HttpWakeCondition => "http",
-            ChildRunCompletedWakeCondition => "childRunCompleted",
-            CommandOutcomeWakeCondition => "commandOutcome",
-            _ => condition.GetType().Name
         };
     }
 
     internal static string GetWakeConditionMatchKey(WakeCondition condition)
     {
         // Built by the same channel that computes an event's correlation key, so an inbound event on
-        // that channel finds this bookmark.
+        // that channel finds this bookmark. The key formats belong to the channels, which the models
+        // project cannot see, so the mapping lives here; an unmapped condition throws rather than
+        // parking on an empty key that no event would ever match.
         return condition switch
         {
             // Timers aren't matched by an inbound event key — they're woken by ExpiresAt alone.
@@ -106,7 +86,7 @@ internal sealed class WaitForBookmarkResultHandler(
             HttpWakeCondition http => HttpWakeChannel.Key(http.Token),
             ChildRunCompletedWakeCondition child => ChildCompletedChannel.Key(child.ChildRunId.ToString()),
             CommandOutcomeWakeCondition command => CommandChannel.Key(command.CommandId),
-            _ => string.Empty
+            _ => throw new InvalidOperationException($"Wake condition {condition.GetType().Name} has no match key.")
         };
     }
 }

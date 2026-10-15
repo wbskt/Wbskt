@@ -39,7 +39,7 @@ public sealed class ClientChannel : TriggerChannel
 
     public override Task<TriggerRegistrationSpec?> RegisterAsync(BaseNode node, TriggerPublication publication, CancellationToken ct) =>
         Task.FromResult<TriggerRegistrationSpec?>(node is ClientTriggerNode { Config.HoldSeconds: <= 0 } trigger
-            ? new TriggerRegistrationSpec(Key(trigger.Config.ClientRef, trigger.Config.Type), trigger.Config.ConcurrencyPolicy.ToString(), trigger.Config.CorrelationKey)
+            ? new TriggerRegistrationSpec(Key(trigger.Config.ClientRef, trigger.Config.Type), trigger.Config.ConcurrencyPolicy, trigger.Config.CorrelationKey)
             {
                 Filter = trigger.Config.Filter
             }

@@ -1,3 +1,4 @@
+using Wbskt.Workflow.Abstraction.Enums;
 using System.Text.Json;
 using MassTransit;
 using Moq;
@@ -95,7 +96,7 @@ public sealed class ClientHoldRecorderTests
         TriggerKind = ClientHoldTriggerKey.TriggerKind,
         TriggerKey = triggerKey,
         CorrelationExpression = null,
-        ConcurrencyPolicy = "Queue",
+        ConcurrencyPolicy = TriggerRegistrationRow.FormatConcurrencyPolicy(WorkflowConcurrencyPolicy.Queue),
         FilterExpression = "{}",
         CreatedAt = DateTime.UtcNow
     };

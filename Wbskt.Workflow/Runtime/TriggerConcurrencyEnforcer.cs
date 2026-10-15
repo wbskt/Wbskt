@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
@@ -17,6 +18,10 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
 
     public async Task<TriggerConcurrencyDecision> EvaluateAsync(Abstraction.Entities.TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
     {
+        // Parsed before anything else so a corrupt policy surfaces on every event, not only on the
+        // ones that happen to find a run already active.
+        WorkflowConcurrencyPolicy policy = registration.ParseConcurrencyPolicy();
+
         if (string.IsNullOrEmpty(evt.CorrelationKey))
         {
             return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns);
@@ -28,14 +33,15 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
             return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns);
         }
 
-        return registration.ConcurrencyPolicy switch
+        return policy switch
         {
-            "DropIfRunning" => new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Dropped, TriggerConcurrencyDecision.NoRuns),
-            "Queue" => await QueueAsync(registration, evt, ct),
+            WorkflowConcurrencyPolicy.AllowParallel => new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns),
+            WorkflowConcurrencyPolicy.DropIfRunning => new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Dropped, TriggerConcurrencyDecision.NoRuns),
+            WorkflowConcurrencyPolicy.Queue => await QueueAsync(registration, evt, ct),
             // Cancel every active run matching this correlation, not just the first - a stale
             // "cancel one, leave the rest running" bug when more than one run matched.
-            "CancelExisting" => new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, activeRuns.Select(run => (long)run.Id).ToArray()),
-            _ => new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns)
+            WorkflowConcurrencyPolicy.CancelExisting => new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, activeRuns.Select(run => (long)run.Id).ToArray()),
+            _ => throw new InvalidOperationException($"Concurrency policy {policy} has no enforcement.")
         };
     }
 

@@ -4,4 +4,8 @@ namespace Wbskt.Workflow.Abstraction.Models.Bookmarks;
 
 public sealed record ChildRunCompletedWakeCondition(
     [property: JsonPropertyName("childRunId")] Guid ChildRunId
-) : WakeCondition;
+) : WakeCondition
+{
+    [JsonIgnore]
+    public override string Kind => "childRunCompleted";
+}

@@ -31,6 +31,6 @@ public sealed class ClientHoldChannel : TriggerChannel
         // which checks it again on the held payload.
         ClientTriggerConfig config = trigger.Config;
         string key = ClientHoldTriggerKey.Build(Guid.Parse(config.ClientRef), config.Type, config.HoldSeconds, publication.Definition.RefId, trigger.NodeId);
-        return Task.FromResult<TriggerRegistrationSpec?>(new TriggerRegistrationSpec(key, config.ConcurrencyPolicy.ToString(), config.CorrelationKey) { Filter = config.Filter });
+        return Task.FromResult<TriggerRegistrationSpec?>(new TriggerRegistrationSpec(key, config.ConcurrencyPolicy, config.CorrelationKey) { Filter = config.Filter });
     }
 }

@@ -58,7 +58,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_starts_new_run_when_registration_exists_and_policy_permits()
     {
         // Arrange
-        var registration = CreateRegistration("AllowParallel");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
 
         // Act
@@ -73,7 +73,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_returns_Dropped_when_enforcer_returns_Dropped()
     {
         // Arrange
-        var registration = CreateRegistration("DropIfRunning");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.DropIfRunning);
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
             concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Dropped, [])));
@@ -89,7 +89,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_returns_Queued_when_enforcer_returns_Queued()
     {
         // Arrange
-        var registration = CreateRegistration("Queue");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
             concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, [])));
@@ -105,7 +105,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_cancels_active_run_and_starts_new_when_enforcer_returns_ProceedAfterCancellingActive()
     {
         // Arrange
-        var registration = CreateRegistration("CancelExisting");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting);
         var cancellationService = new RecordingRunCancellationService();
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
@@ -124,7 +124,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_cancels_every_matching_run_when_ProceedAfterCancellingActive_has_multiple_run_ids()
     {
         // Arrange: CancelExisting must cancel all matches, not just the first (2.3).
-        var registration = CreateRegistration("CancelExisting");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting);
         var cancellationService = new RecordingRunCancellationService();
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
@@ -146,7 +146,7 @@ public sealed class TriggerDispatcherTests
     {
         // Arrange
         var operations = new List<string>();
-        var registration = CreateRegistration("AllowParallel");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
         var runStarter = new RecordingRunStarter(operations);
         var runDispatcher = new RecordingRunDispatcher(operations);
         var dispatcher = CreateDispatcher(
@@ -170,8 +170,8 @@ public sealed class TriggerDispatcherTests
     {
         // Arrange: one event, two registrations on the same trigger key - the fan-out case that used
         // to collapse into a single run id.
-        var first = CreateRegistration("AllowParallel", id: 5);
-        var second = CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"));
+        var first = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 5);
+        var second = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"));
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(first, second));
 
         // Act
@@ -205,8 +205,8 @@ public sealed class TriggerDispatcherTests
     {
         // Arrange: the mixed case. The summary can only name one outcome, so the dropped registration
         // must still be reported per-registration or it disappears entirely.
-        var dropped = CreateRegistration("DropIfRunning", id: 5);
-        var started = CreateRegistration("AllowParallel", id: 6);
+        var dropped = CreateRegistration(WorkflowConcurrencyPolicy.DropIfRunning, id: 5);
+        var started = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 6);
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(dropped, started),
             concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(
@@ -245,7 +245,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_skips_a_registration_whose_filter_rejects_the_payload()
     {
         // The whole point of a filter: no run, no credits burned, no run history to explain.
-        var registration = CreateRegistration("AllowParallel");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
         registration = registration with { FilterExpression = Filter("messageType", "not-telemetry") };
         var operations = new List<string>();
         var runStarter = new RecordingRunStarter(operations);
@@ -263,7 +263,7 @@ public sealed class TriggerDispatcherTests
     [Fact]
     public async Task Dispatch_starts_a_run_when_the_filter_matches_the_payload()
     {
-        var registration = CreateRegistration("AllowParallel");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
         registration = registration with { FilterExpression = Filter("messageType", "telemetry") };
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
 
@@ -277,7 +277,7 @@ public sealed class TriggerDispatcherTests
     {
         // Fail closed. A filter is a gate; one that cannot be evaluated has not been passed, and
         // starting the run anyway would defeat the point of configuring it.
-        var registration = CreateRegistration("AllowParallel");
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
         registration = registration with { FilterExpression = "{ not json" };
         var operations = new List<string>();
         var dispatcher = CreateDispatcher(
@@ -293,7 +293,7 @@ public sealed class TriggerDispatcherTests
     [Fact]
     public async Task Dispatch_rejects_a_webhook_whose_secret_does_not_match()
     {
-        var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel) with { WebhookSecret = "expected" };
         var operations = new List<string>();
         var dispatcher = CreateDispatcher(
             triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
@@ -310,7 +310,7 @@ public sealed class TriggerDispatcherTests
     {
         // The upgrade hazard: adding a secret to a live trigger must not silently keep letting the old,
         // unauthenticated callers through.
-        var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel) with { WebhookSecret = "expected" };
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
 
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
@@ -321,7 +321,7 @@ public sealed class TriggerDispatcherTests
     [Fact]
     public async Task Dispatch_accepts_a_webhook_with_the_matching_secret()
     {
-        var registration = CreateRegistration("AllowParallel") with { WebhookSecret = "expected" };
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel) with { WebhookSecret = "expected" };
         var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
 
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { SecretHash = WebhookSecretHash.Of("expected") }, CancellationToken.None);
@@ -333,7 +333,7 @@ public sealed class TriggerDispatcherTests
     public async Task Dispatch_leaves_a_registration_without_a_secret_open()
     {
         // Every webhook published before secrets existed has a null one and must keep working.
-        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")));
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)));
 
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
 
@@ -360,7 +360,7 @@ public sealed class TriggerDispatcherTests
         var dispatcher = new TriggerDispatcher(
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new RecordingBookmarkResumer(new BookmarkMatchResult(false, null, false, "inbound-event:evt-1")),
-            new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
             UncachedTriggerRegistrationCache.Instance,
             new ThrowingTriggerConcurrencyEnforcer(),
             new RecordingRunCancellationService(),
@@ -447,7 +447,7 @@ public sealed class TriggerDispatcherTests
         };
         var runDispatcher = new RecordingRunDispatcher(operations);
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
             runStarter: runStarter,
             runDispatcher: runDispatcher);
 
@@ -471,7 +471,7 @@ public sealed class TriggerDispatcherTests
         var operations = new List<string>();
         var runStarter = new RecordingRunStarter(operations);
         var runDispatcher = new RecordingRunDispatcher(operations);
-        var registrations = new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel"));
+        var registrations = new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel));
 
         await CreateDispatcher(triggerRegistrationProvider: registrations, runStarter: runStarter, runDispatcher: runDispatcher)
             .DispatchAsync(CreateInboundEvent(), CancellationToken.None);
@@ -509,7 +509,7 @@ public sealed class TriggerDispatcherTests
         var operations = new List<string>();
         var runDispatcher = new RecordingRunDispatcher(operations);
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
             runStarter: new RecordingRunStarter(operations) { AtCeiling = true },
             runDispatcher: runDispatcher);
 
@@ -528,7 +528,7 @@ public sealed class TriggerDispatcherTests
         var operations = new List<string>();
         var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
             runStarter: runStarter);
 
         await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
@@ -561,7 +561,7 @@ public sealed class TriggerDispatcherTests
         var operations = new List<string>();
         var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
             runStarter: runStarter);
 
         TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent() with { StartsChildRun = true }, CancellationToken.None);
@@ -577,7 +577,7 @@ public sealed class TriggerDispatcherTests
         var operations = new List<string>();
         var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("AllowParallel")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
             runStarter: runStarter);
         InboundEvent replay = CreateInboundEvent() with
         {
@@ -600,7 +600,7 @@ public sealed class TriggerDispatcherTests
         var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
         var cancellationService = new RecordingRunCancellationService();
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("CancelExisting")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting)),
             concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [55L])),
             runCancellationService: cancellationService,
             runStarter: runStarter);
@@ -619,7 +619,7 @@ public sealed class TriggerDispatcherTests
         var operations = new List<string>();
         var runStarter = new RecordingRunStarter(operations) { AtCeiling = true };
         var dispatcher = CreateDispatcher(
-            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration("CancelExisting")),
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.CancelExisting)),
             concurrencyEnforcer: new RecordingTriggerConcurrencyEnforcer(new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.ProceedAfterCancellingActive, [])),
             runStarter: runStarter);
 
@@ -630,8 +630,8 @@ public sealed class TriggerDispatcherTests
     }
 
     private static RecordingTriggerRegistrationProvider TwoRegistrations() => new(
-        CreateRegistration("AllowParallel", id: 5),
-        CreateRegistration("AllowParallel", id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));
+        CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 5),
+        CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));
 
     /// <summary>Lets every registration proceed, except that it throws the first time it sees one.</summary>
     private sealed class FlakyConcurrencyEnforcer(long? failOnceFor) : ITriggerConcurrencyEnforcer
@@ -812,7 +812,7 @@ public sealed class TriggerDispatcherTests
             DateTime.UtcNow);
     }
 
-    private static TriggerRegistrationRow CreateRegistration(string policy = "Queue", int id = 5, Guid? workflowRefId = null)
+    private static TriggerRegistrationRow CreateRegistration(WorkflowConcurrencyPolicy policy = WorkflowConcurrencyPolicy.Queue, int id = 5, Guid? workflowRefId = null)
     {
         return new TriggerRegistrationRow
         {
@@ -824,7 +824,7 @@ public sealed class TriggerDispatcherTests
             TriggerKind = "client",
             TriggerKey = "client:serial-1:telemetry",
             CorrelationExpression = null,
-            ConcurrencyPolicy = policy,
+            ConcurrencyPolicy = TriggerRegistrationRow.FormatConcurrencyPolicy(policy),
             FilterExpression = null,
             CreatedAt = DateTime.UtcNow
         };

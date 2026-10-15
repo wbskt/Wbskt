@@ -50,6 +50,6 @@ public sealed class ScheduleChannel : TriggerChannel
 
         WorkflowDefinitionRow definition = publication.Definition;
         ScheduledFireRow fire = await publication.ScheduledFires.InsertAsync(trigger.NodeId, definition.Id, definition.RefId, trigger.Config.Cron, nextFireAt, ct);
-        return new TriggerRegistrationSpec(Key(fire.Id), WorkflowConcurrencyPolicy.AllowParallel.ToString(), null);
+        return new TriggerRegistrationSpec(Key(fire.Id), WorkflowConcurrencyPolicy.AllowParallel, null);
     }
 }

@@ -28,4 +28,18 @@ public sealed class WakeConditionSerializationTests
         Assert.NotNull(roundTripped);
         Assert.IsType(expectedType, roundTripped);
     }
+
+    /// <summary>
+    /// Kind and ExpiresAt are computed for the bookmark row, not stored: the serialized condition keeps
+    /// the shape stored bookmarks already have, with the discriminator as the only "kind".
+    /// </summary>
+    [Fact]
+    public void Computed_members_are_not_serialized()
+    {
+        WakeCondition condition = new SignalWakeCondition("operator-ack", "corr-42") { Ttl = TimeSpan.FromMinutes(1), TtlPort = "timeout" };
+
+        string json = JsonSerializer.Serialize(condition, Options);
+
+        Assert.Equal("""{"kind":"signal","name":"operator-ack","correlation":"corr-42","ttl":"00:01:00","ttlPort":"timeout"}""", json);
+    }
 }

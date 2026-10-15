@@ -1,3 +1,4 @@
+using Wbskt.Workflow.Abstraction.Enums;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -177,7 +178,7 @@ public sealed class TriggerRegistrationCacheTests
         TriggerKind = triggerKind,
         TriggerKey = triggerKey,
         CorrelationExpression = null,
-        ConcurrencyPolicy = "AllowParallel",
+        ConcurrencyPolicy = TriggerRegistrationRow.FormatConcurrencyPolicy(WorkflowConcurrencyPolicy.AllowParallel),
         FilterExpression = null,
         CreatedAt = new DateTime(2026, 10, 14, 0, 0, 0, DateTimeKind.Utc)
     };
