@@ -57,7 +57,7 @@ public sealed class SubWorkflowNodeExecutorTests
     }
 
     [Fact]
-    public async Task First_visit_fails_retryably_when_the_workspace_is_at_its_run_ceiling()
+    public async Task First_visit_fails_non_retryably_when_the_workspace_is_at_its_run_ceiling()
     {
         // The safety net: a child is exempt from the ceiling, so this should not happen.
         var hub = new Mock<IInboundHub>();
@@ -68,7 +68,8 @@ public sealed class SubWorkflowNodeExecutorTests
 
         var fail = Assert.IsType<NodeExecutionResult.Fail>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         Assert.Equal("SUBWORKFLOW_WORKSPACE_BUSY", fail.ErrorCode);
-        Assert.True(fail.Retryable);
+        // A control node has no retry policy, so a retryable flag here would be a promise nothing keeps.
+        Assert.False(fail.Retryable);
     }
 
     [Fact]

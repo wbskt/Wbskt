@@ -38,6 +38,7 @@ public sealed class WorkflowValidator
         ValidateNodeConfigs(definition, issues);
         ValidateIntegrationSteps(definition, issues);
         ValidateOnFailure(definition, issues);
+        ValidateRetryPolicies(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
         ValidateSubWorkflowInputs(definition, issues);
         ValidateTriggerConfigs(definition, issues);
@@ -123,6 +124,41 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "ONFAILURE_TARGET_NOT_FOUND",
                     $"Node '{node.NodeId}' has onFailure targetNodeId '{target}', which is not a node in this workflow.",
+                    node.NodeId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The factor and the ceiling were accepted but ignored until the retry executor started reading
+    /// them; values that were harmless while ignored now shape the backoff. A factor of zero or less
+    /// makes every retry after the first immediate (or the delay meaningless), and a ceiling below the
+    /// initial delay silently overrides it on every attempt, so both are rejected as authoring errors.
+    /// </summary>
+    private static void ValidateRetryPolicies(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            if (node is not BaseActionNode { Retry: { } retry })
+            {
+                continue;
+            }
+
+            if (retry.Factor is { } factor && (!double.IsFinite(factor) || factor <= 0))
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "RETRY_FACTOR_INVALID",
+                    $"Node '{node.NodeId}': the retry factor must be a number greater than zero.",
+                    node.NodeId));
+            }
+
+            if (retry.MaxDelay is { } maxDelay && maxDelay < retry.InitialDelay)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "RETRY_MAX_DELAY_BELOW_INITIAL",
+                    $"Node '{node.NodeId}': the retry maxDelay must not be less than the initialDelay.",
                     node.NodeId));
             }
         }

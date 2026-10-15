@@ -3,6 +3,7 @@ using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
+using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
@@ -106,6 +107,193 @@ public sealed class RetryExecutorTests
         Assert.IsType<NodeExecutionResult.Terminal>(result);
         Assert.Equal(3, executor.AttemptCount);
         Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(40), $"Expected at least 40ms, got {stopwatch.Elapsed.TotalMilliseconds}ms.");
+    }
+
+    [Fact]
+    public async Task Exponential_backoff_uses_the_policy_factor_on_the_injected_clock()
+    {
+        // Delays in seconds, finishing at once: only possible if the backoff waits on the injected
+        // clock rather than the wall clock.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromSeconds(10), Factor = 3.0, MaxDelay = null, MaxAttempts = 4, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+
+        NodeExecutionResult result = await RunAsync(node, executor, clock);
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(90)], clock.Delays);
+    }
+
+    [Fact]
+    public async Task Exponential_backoff_without_a_factor_doubles()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromSeconds(1), Factor = null, MaxDelay = null, MaxAttempts = 4, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+
+        await RunAsync(node, executor, clock);
+
+        Assert.Equal([TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)], clock.Delays);
+    }
+
+    [Fact]
+    public async Task MaxDelay_caps_the_backoff()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromSeconds(10), Factor = 3.0, MaxDelay = TimeSpan.FromSeconds(45), MaxAttempts = 4, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+
+        await RunAsync(node, executor, clock);
+
+        Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(45)], clock.Delays);
+    }
+
+    [Fact]
+    public async Task MaxDelay_is_a_ceiling_jitter_cannot_overshoot()
+    {
+        const int attempts = 25;
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(10), Factor = null, MaxDelay = TimeSpan.FromSeconds(10), MaxAttempts = attempts, JitterPct = 50, RetryOn = [] });
+        var executor = new RecordingExecutor(Enumerable.Repeat<NodeExecutionResult>(new NodeExecutionResult.Fail("E_RETRY", "boom", true, null), attempts).ToArray());
+        var clock = new InstantTimeProvider();
+
+        await RunAsync(node, executor, clock);
+
+        Assert.Equal(attempts - 1, clock.Delays.Count);
+        Assert.All(clock.Delays, delay => Assert.InRange(delay, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task A_retryable_fail_the_policy_did_not_opt_into_is_returned_non_retryable_without_a_retry()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(1), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = ["E_TIMEOUT"] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_VALIDATION", "bad input", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+        var retries = new List<int>();
+
+        NodeExecutionResult result = await RunAsync(node, executor, clock, (attempt, _, _, _, _) => { retries.Add(attempt); return Task.CompletedTask; });
+
+        var fail = Assert.IsType<NodeExecutionResult.Fail>(result);
+        Assert.Equal("E_VALIDATION", fail.ErrorCode);
+        Assert.False(fail.Retryable);
+        Assert.Equal(1, executor.AttemptCount);
+        Assert.Empty(retries);
+        Assert.Empty(clock.Delays);
+    }
+
+    [Fact]
+    public async Task A_retryable_fail_the_policy_opted_into_is_retried_and_reported()
+    {
+        // The Fail-result path used to retry silently, so these retries were missing from history.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Linear, InitialDelay = TimeSpan.FromSeconds(1), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = ["e_timeout"] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_TIMEOUT", "slow", true, null),
+            new NodeExecutionResult.Fail("E_TIMEOUT", "slower", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+        var retries = new List<(int Attempt, int MaxAttempts, TimeSpan Delay, string Reason)>();
+
+        NodeExecutionResult result = await RunAsync(node, executor, clock, (attempt, maxAttempts, delay, reason, _) =>
+        {
+            retries.Add((attempt, maxAttempts, delay, reason));
+            return Task.CompletedTask;
+        });
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(3, executor.AttemptCount);
+        Assert.Equal([(1, 3, TimeSpan.FromSeconds(1), "slow"), (2, 3, TimeSpan.FromSeconds(2), "slower")], retries);
+        Assert.Equal([TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)], clock.Delays);
+    }
+
+    [Fact]
+    public async Task A_transient_exception_is_retried_on_the_same_terms()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Exponential, InitialDelay = TimeSpan.FromSeconds(10), Factor = 3.0, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        int calls = 0;
+        var executor = new ThrowingExecutor(() => ++calls < 3
+            ? throw new TransientNodeException("flaky")
+            : new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+        var retries = new List<int>();
+
+        NodeExecutionResult result = await RunAsync(node, executor, clock, (attempt, _, _, _, _) => { retries.Add(attempt); return Task.CompletedTask; });
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal([1, 2], retries);
+        Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)], clock.Delays);
+    }
+
+    private static Task<NodeExecutionResult> RunAsync(BaseNode node, INodeExecutor executor, TimeProvider clock, RetryNotification? onRetry = null)
+    {
+        return RetryExecutor.RunWithRetryAsync(
+            node,
+            CreateContext(),
+            executor,
+            new TestNodeExecutionServices(),
+            clock,
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator(),
+            onRetry: onRetry);
+    }
+
+    /// <summary>
+    /// Records every delay the retry executor asks for and lets it elapse at once, so backoff can be
+    /// asserted exactly without waiting on real time.
+    /// </summary>
+    private sealed class InstantTimeProvider : TimeProvider
+    {
+        private readonly List<TimeSpan> _delays = [];
+
+        public IReadOnlyList<TimeSpan> Delays
+        {
+            get
+            {
+                lock (_delays)
+                {
+                    return [.. _delays];
+                }
+            }
+        }
+
+        public override DateTimeOffset GetUtcNow() => new(2026, 5, 26, 12, 30, 0, TimeSpan.Zero);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (_delays)
+            {
+                _delays.Add(dueTime);
+            }
+
+            // Fired off the calling thread so the timer is returned before its callback runs, as a real
+            // one would be.
+            ThreadPool.QueueUserWorkItem(_ => callback(state));
+            return new NoOpTimer();
+        }
+
+        private sealed class NoOpTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose()
+            {
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
     }
 
     private static SendClientMessageNode CreateNode(RetryPolicy? retry)

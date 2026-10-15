@@ -322,6 +322,54 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "EXTRA_PORT");
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.5)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Validate_rejects_a_retry_factor_that_is_not_a_positive_number(double factor)
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var action = CreateToast(withErrorPort: false) with { Retry = Retry(factor: factor, maxDelay: null) };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "RETRY_FACTOR_INVALID" && i.NodeId == action.NodeId);
+    }
+
+    [Fact]
+    public void Validate_rejects_a_retry_max_delay_below_the_initial_delay()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var action = CreateToast(withErrorPort: false) with { Retry = Retry(factor: null, maxDelay: TimeSpan.FromMilliseconds(500)) };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "RETRY_MAX_DELAY_BELOW_INITIAL" && i.NodeId == action.NodeId);
+    }
+
+    [Fact]
+    public void Validate_accepts_a_retry_policy_with_a_factor_and_a_ceiling()
+    {
+        var def = ValidWorkflowBuilder.Build();
+        var action = CreateToast(withErrorPort: false) with { Retry = Retry(factor: 3.0, maxDelay: TimeSpan.FromSeconds(30)) };
+
+        var result = Validator.Validate(def with { Nodes = [.. def.Nodes, action] });
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "RETRY_FACTOR_INVALID" or "RETRY_MAX_DELAY_BELOW_INITIAL");
+    }
+
+    private static RetryPolicy Retry(double? factor, TimeSpan? maxDelay) => new()
+    {
+        Strategy = RetryStrategy.Exponential,
+        InitialDelay = TimeSpan.FromSeconds(1),
+        Factor = factor,
+        MaxDelay = maxDelay,
+        MaxAttempts = 3,
+        JitterPct = 0,
+        RetryOn = []
+    };
+
     [Fact]
     public void Validate_rejects_an_onFailure_jump_target_that_does_not_exist()
     {
