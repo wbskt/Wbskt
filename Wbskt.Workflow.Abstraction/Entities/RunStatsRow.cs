@@ -8,7 +8,6 @@ public sealed record RunStatsRow
     public required int FailedCount { get; init; }
     public required int PartiallyFailedCount { get; init; }
     public required int CancelledCount { get; init; }
-    public required int FaultedCount { get; init; }
     public required int OutOfCreditsCount { get; init; }
 
     /// <summary>Runs still in flight — counted, but excluded from the duration figures.</summary>
@@ -31,7 +30,7 @@ public sealed record WorkflowRunSummaryRow
     public required int TotalRuns { get; init; }
     public required int SucceededCount { get; init; }
 
-    /// <summary>Failed, PartiallyFailed, Faulted and OutOfCredits together - every way of not succeeding.</summary>
+    /// <summary>Failed, PartiallyFailed and OutOfCredits together - every way of not succeeding.</summary>
     public required int FailedCount { get; init; }
 
     public required int ActiveCount { get; init; }

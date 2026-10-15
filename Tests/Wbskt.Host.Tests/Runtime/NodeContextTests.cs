@@ -35,8 +35,6 @@ public sealed class NodeContextTests
         {
             Branch = branch,
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = cts.Token,
             IdempotencyKey = "test-key"
         };
@@ -44,44 +42,6 @@ public sealed class NodeContextTests
         // Assert - verify init-only properties compile and are set
         Assert.Same(branch, context.Branch);
         Assert.Same(node, context.Node);
-        Assert.Equal(1, context.Tick);
-        Assert.Null(context.ParentResults);
         Assert.Equal(cts.Token, context.CancellationToken);
-    }
-
-    [Fact]
-    public void NodeContext_CanBeCreatedWithParentResults()
-    {
-        // Arrange
-        var branch = new BranchContext(
-            1,
-            2,
-            3,
-            Guid.NewGuid(),
-            4,
-            "node-a",
-            5,
-            new Dictionary<string, JsonElement>(),
-            new Dictionary<string, JsonElement>(),
-            "corr-1",
-            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
-            9);
-        var node = new TestNode { NodeId = Guid.NewGuid(), Name = "test", Ports = Array.Empty<PortDefinition>(), KindValue = "test" };
-        var parentResults = new Dictionary<string, JsonElement>();
-
-        // Act
-        var context = new NodeContext
-        {
-            Branch = branch,
-            Node = node,
-            Tick = 2,
-            ParentResults = parentResults,
-            CancellationToken = CancellationToken.None,
-            IdempotencyKey = "test-key",
-        };
-
-        // Assert
-        Assert.NotNull(context.ParentResults);
-        Assert.Same(parentResults, context.ParentResults);
     }
 }

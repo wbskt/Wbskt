@@ -312,8 +312,6 @@ public sealed class SubWorkflowNodeExecutorTests
                 RunRefId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")
             },
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }

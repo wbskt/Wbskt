@@ -240,7 +240,6 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
             FailedCount = ReadInt(reader, "FailedCount"),
             PartiallyFailedCount = ReadInt(reader, "PartiallyFailedCount"),
             CancelledCount = ReadInt(reader, "CancelledCount"),
-            FaultedCount = ReadInt(reader, "FaultedCount"),
             OutOfCreditsCount = ReadInt(reader, "OutOfCreditsCount"),
             ActiveCount = ReadInt(reader, "ActiveCount"),
             P50DurationMs = ReadDouble(reader, "P50DurationMs"),

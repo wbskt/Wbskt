@@ -1,6 +1,7 @@
 namespace Wbskt.Management.Models.Workflow;
 
 /// <summary>How runs of a workflow turned out over a window.</summary>
+/// <param name="Faulted">Always zero: no run ends in this status any more. Kept so the response shape does not change.</param>
 public record RunOutcomeCountsDto(
     int Total,
     int Succeeded,
@@ -39,7 +40,7 @@ public record WorkflowStatsResponse(
     IReadOnlyCollection<NodeTimingDto> SlowestNodes);
 
 /// <summary>One workflow's line in a workspace rollup.</summary>
-/// <param name="Failed">Every way of not succeeding — failed, partially failed, faulted, out of credits.</param>
+/// <param name="Failed">Every way of not succeeding — failed, partially failed, out of credits.</param>
 /// <param name="SuccessRate">Succeeded ÷ finished for this workflow alone; null when nothing finished.</param>
 public record WorkflowRunSummaryDto(
     Guid WorkflowRefId,

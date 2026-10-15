@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Telemetry;
@@ -17,6 +18,7 @@ internal sealed class RunStarter : IRunStarter
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
+    private readonly IWorkflowDefinitionCache _workflowDefinitionCache;
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IRunStartedPublisher _runStartedPublisher;
     private readonly TimeProvider _clock;
@@ -30,6 +32,7 @@ internal sealed class RunStarter : IRunStarter
         IRunProvider runProvider,
         IRunJournal journal,
         IWorkflowDefinitionProvider workflowDefinitionProvider,
+        IWorkflowDefinitionCache workflowDefinitionCache,
         ICorrelationKeyResolver correlationKeyResolver,
         IRunStartedPublisher runStartedPublisher,
         TimeProvider clock,
@@ -41,6 +44,7 @@ internal sealed class RunStarter : IRunStarter
         _runProvider = runProvider;
         _journal = journal;
         _workflowDefinitionProvider = workflowDefinitionProvider;
+        _workflowDefinitionCache = workflowDefinitionCache;
         _correlationKeyResolver = correlationKeyResolver;
         _runStartedPublisher = runStartedPublisher;
         _clock = clock;
@@ -56,7 +60,7 @@ internal sealed class RunStarter : IRunStarter
         try
         {
             WorkflowDefinitionRow definition = await _workflowDefinitionProvider.GetByIdAsync(workflowDefinitionId, ct);
-            decimal creditBudget = ResolveCreditBudget(definition.DefinitionJson);
+            decimal creditBudget = ResolveCreditBudget(await _workflowDefinitionCache.GetAsync(workflowDefinitionId, ct));
             DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
             // In practice the dispatcher has always set this by now - it normalizes the event per
@@ -170,26 +174,9 @@ internal sealed class RunStarter : IRunStarter
         return started is null ? null : new RunStartResult(started.Run.Id, started.Run.RefId, started.RootBranchId, false);
     }
 
-    // Reads the optional per-workflow "creditBudget" from the definition JSON (a cheap property peek,
-    // not a full node deserialize), falling back to the configured default when unset or non-positive.
-    private decimal ResolveCreditBudget(string definitionJson)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(definitionJson);
-            if (doc.RootElement.TryGetProperty("creditBudget", out JsonElement creditBudget)
-                && creditBudget.ValueKind == JsonValueKind.Number
-                && creditBudget.TryGetDecimal(out decimal budget)
-                && budget > 0)
-            {
-                return budget;
-            }
-        }
-        catch (JsonException)
-        {
-            // A malformed definition would already fail the branch loop; fall back to the default here.
-        }
-
-        return _defaultCreditBudgetPerRun;
-    }
+    // The optional per-workflow budget, falling back to the configured default when unset or
+    // non-positive. Read from the cached definition rather than by parsing the row's JSON again: the
+    // branch loop needs the deserialized definition for this run anyway, so the cache already holds it.
+    private decimal ResolveCreditBudget(WorkflowDefinition definition) =>
+        definition.CreditBudget is { } budget && budget > 0 ? budget : _defaultCreditBudgetPerRun;
 }

@@ -142,8 +142,6 @@ internal sealed class CompensationOrchestrator : ICompensationOrchestrator
                 BranchRefId = branch.RefId
             },
             Node = compensationNode,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = ct,
             IdempotencyKey = $"compensation:{run.Id}:{branch.RefId:N}:{node.NodeId:N}"
         };

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 
@@ -18,10 +17,6 @@ public sealed record NodeContext
     /// tests that build a context by hand only need it when the executor under test walks the graph.
     /// </summary>
     public WorkflowDefinition? Definition { get; init; }
-
-    public required int Tick { get; init; }
-
-    public required IReadOnlyDictionary<string, JsonElement>? ParentResults { get; init; }
 
     public required CancellationToken CancellationToken { get; init; }
 

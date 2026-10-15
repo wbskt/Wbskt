@@ -8,7 +8,6 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class WorkflowDefinitionCache : IWorkflowDefinitionCache
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan SlidingExpiration = TimeSpan.FromMinutes(10);
     private readonly IMemoryCache _cache;
     private readonly IWorkflowDefinitionProvider _provider;
@@ -32,7 +31,7 @@ internal sealed class WorkflowDefinitionCache : IWorkflowDefinitionCache
             throw new KeyNotFoundException($"Workflow definition {workflowDefinitionId} was not found.");
         }
 
-        var definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, SerializerOptions)
+        var definition = JsonSerializer.Deserialize<WorkflowDefinition>(row.DefinitionJson, EngineJson.Options)
             ?? throw new InvalidOperationException($"Workflow definition {workflowDefinitionId} could not be deserialized.");
 
         definition = definition with { WorkspaceId = row.WorkspaceId, PublishedBy = row.PublishedBy };

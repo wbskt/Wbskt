@@ -208,8 +208,6 @@ public sealed class AwaitSignalNodeExecutorTests
                 RunRefId = RunRefId
             },
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }

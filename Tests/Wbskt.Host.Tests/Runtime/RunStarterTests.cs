@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -26,6 +27,7 @@ public sealed class RunStarterTests
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
             workflowDefinitionProvider,
+            new WorkflowDefinitionCache(new MemoryCache(new MemoryCacheOptions()), workflowDefinitionProvider),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
             new FixedClock(),
@@ -83,6 +85,7 @@ public sealed class RunStarterTests
             runProvider,
             new RunJournal(new RecordingHistoryEventProvider(operations), new FixedClock()),
             new RecordingWorkflowDefinitionProvider(),
+            CacheOver(new RecordingWorkflowDefinitionProvider()),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
             new FixedClock(),
@@ -118,6 +121,7 @@ public sealed class RunStarterTests
             runProvider,
             new RunJournal(historyProvider, new FixedClock()),
             new RecordingWorkflowDefinitionProvider(),
+            CacheOver(new RecordingWorkflowDefinitionProvider()),
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
             new NullRunStartedPublisher(),
             new FixedClock(),
@@ -191,15 +195,45 @@ public sealed class RunStarterTests
         Assert.Empty(historyProvider.Events);
     }
 
-    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null) => new(
+    [Theory]
+    [InlineData(75, 75)]
+    [InlineData(0, 100)]
+    public async Task Start_takes_the_credit_budget_from_the_cached_definition(int definitionBudget, int expected)
+    {
+        // The row's JSON carries no budget at all, so a budget on the run can only have come from the
+        // cached definition's property. A non-positive one falls back to the configured default.
+        List<string> operations = [];
+        var runProvider = new RecordingRunProvider(operations);
+        WorkflowDefinition cached = (await CacheOver(new RecordingWorkflowDefinitionProvider()).GetAsync(42, CancellationToken.None)) with { CreditBudget = definitionBudget };
+        RunStarter starter = Starter(runProvider, operations, new WorkflowEngineOptions { DefaultCreditBudgetPerRun = 100m }, definitionCache: new FixedDefinitionCache(cached));
+
+        await starter.StartAsync(42, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").ToString(), AnEvent(), null, CancellationToken.None);
+
+        Assert.Equal((decimal)expected, runProvider.CreatedRun!.CreditBudget);
+    }
+
+    private static RunStarter Starter(RecordingRunProvider runProvider, List<string> operations, WorkflowEngineOptions options, RecordingHistoryEventProvider? historyProvider = null, IWorkflowDefinitionCache? definitionCache = null) => new(
         runProvider,
         new RunJournal(historyProvider ?? new RecordingHistoryEventProvider(operations), new FixedClock()),
         new RecordingWorkflowDefinitionProvider(),
+        definitionCache ?? CacheOver(new RecordingWorkflowDefinitionProvider()),
         new CorrelationKeyResolver(TriggerChannelRegistry.Default),
         new NullRunStartedPublisher(),
         new FixedClock(),
         new SequenceIdGenerator(),
         Options.Create(options));
+
+    private static WorkflowDefinitionCache CacheOver(IWorkflowDefinitionProvider provider) =>
+        new(new MemoryCache(new MemoryCacheOptions()), provider);
+
+    private sealed class FixedDefinitionCache(WorkflowDefinition definition) : IWorkflowDefinitionCache
+    {
+        public Task<WorkflowDefinition> GetAsync(int workflowDefinitionId, CancellationToken ct) => Task.FromResult(definition);
+
+        public void Invalidate(int workflowDefinitionId)
+        {
+        }
+    }
 
     private static InboundEvent AnEvent() =>
         new("client", [], "evt-1", new Dictionary<string, JsonElement>(), new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc)) { CorrelationKey = "c" };

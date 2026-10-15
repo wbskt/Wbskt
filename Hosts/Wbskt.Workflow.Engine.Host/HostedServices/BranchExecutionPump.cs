@@ -110,7 +110,7 @@ internal sealed class BranchExecutionPump : BackgroundService
             // message can name tables, hosts or connection details. The exception is in the log above.
             string errorJson = System.Text.Json.JsonSerializer.Serialize(
                 new { ErrorCode = "BRANCH_LOOP_ESCAPED", Message = "The engine hit an unexpected error running this branch." },
-                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+                EngineJson.Options);
 
             await branchProvider.SetFailedAsync(request.BranchId, errorJson, ct);
 

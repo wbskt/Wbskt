@@ -88,7 +88,6 @@ public sealed class WorkflowRunsControllerTests
     [InlineData("Failed")]
     [InlineData("PartiallyFailed")]
     [InlineData("Cancelled")]
-    [InlineData("Faulted")]
     [InlineData("OutOfCredits")]
     public async Task Cancel_of_a_run_that_already_finished_is_409_and_sends_nothing(string status)
     {
@@ -365,7 +364,6 @@ public sealed class WorkflowRunsControllerTests
             FailedCount = failed,
             PartiallyFailedCount = 0,
             CancelledCount = 0,
-            FaultedCount = 0,
             OutOfCreditsCount = 0,
             ActiveCount = active,
             P50DurationMs = 120,

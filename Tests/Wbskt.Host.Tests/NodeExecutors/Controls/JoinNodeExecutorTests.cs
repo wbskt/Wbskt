@@ -176,8 +176,6 @@ public sealed class JoinNodeExecutorTests
         {
             Branch = new BranchContext(42, 1001, 5, Guid.NewGuid(), 1, node.NodeId.ToString(), 1, localState, new Dictionary<string, JsonElement>(), "corr-1", DateTime.UtcNow, 9),
             Node = node,
-            Tick = 1,
-            ParentResults = null,
             CancellationToken = CancellationToken.None, IdempotencyKey = "test-key"
         };
     }

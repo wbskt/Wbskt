@@ -28,8 +28,6 @@ internal delegate void CreditChargeNotification(decimal cost);
 
 internal static class RetryExecutor
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     public static async Task<NodeExecutionResult> RunWithRetryAsync(
         BaseNode node,
         BranchContext context,
@@ -90,31 +88,11 @@ internal static class RetryExecutor
                     // Key does not exist yet; normal flow.
                 }
 
-                if (existingRow != null)
+                // A finished earlier attempt is returned as recorded. A Pending one means a prior run
+                // crashed mid-execution, so the node runs again.
+                if (existingRow != null && CachedOutcome(existingRow) is { } cached)
                 {
-                    if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
-                    {
-                        if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
-                        {
-                            var cachedResult = JsonSerializer.Deserialize<NodeExecutionResult>(existingRow.ResultJson, JsonOptions);
-                            if (cachedResult != null)
-                            {
-                                return cachedResult;
-                            }
-                        }
-                    }
-                    else if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
-                    {
-                        if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
-                        {
-                            var cachedFail = JsonSerializer.Deserialize<NodeExecutionResult.Fail>(existingRow.ErrorJson, JsonOptions);
-                            if (cachedFail != null)
-                            {
-                                return cachedFail;
-                            }
-                        }
-                    }
-                    // If the status is "Pending", it means a prior run crashed mid-execution, so we must re-execute.
+                    return cached;
                 }
             }
 
@@ -126,31 +104,11 @@ internal static class RetryExecutor
                     existingRow = await idempotencyKeyProvider.UpsertPendingAsync(
                         keyValue, (int)context.RunId, claimToken, node.NodeId, attempt, ct);
 
-                    if (existingRow.BranchRefId != claimToken)
+                    // Another claimant got there first. If it has already finished, its outcome is
+                    // returned; if it was Pending, we continue to run the executor.
+                    if (existingRow.BranchRefId != claimToken && CachedOutcome(existingRow) is { } claimed)
                     {
-                        if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
-                        {
-                            if (!string.IsNullOrWhiteSpace(existingRow.ResultJson))
-                            {
-                                var cachedResult = JsonSerializer.Deserialize<NodeExecutionResult>(existingRow.ResultJson, JsonOptions);
-                                if (cachedResult != null)
-                                {
-                                    return cachedResult;
-                                }
-                            }
-                        }
-                        else if (string.Equals(existingRow.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
-                        {
-                            if (!string.IsNullOrWhiteSpace(existingRow.ErrorJson))
-                            {
-                                var cachedFail = JsonSerializer.Deserialize<NodeExecutionResult.Fail>(existingRow.ErrorJson, JsonOptions);
-                                if (cachedFail != null)
-                                {
-                                    return cachedFail;
-                                }
-                            }
-                        }
-                        // If it was Pending, we continue to run the executor.
+                        return claimed;
                     }
                 }
             }
@@ -169,7 +127,7 @@ internal static class RetryExecutor
                 if (!charged)
                 {
                     var outOfCreditsResult = new NodeExecutionResult.Fail("OUT_OF_CREDITS", "Credit budget exhausted.", false, null);
-                    string errorJson = JsonSerializer.Serialize(outOfCreditsResult, JsonOptions);
+                    string errorJson = JsonSerializer.Serialize(outOfCreditsResult, EngineJson.Options);
 
                     await RecordOutcomeAsync(false, errorJson);
 
@@ -189,8 +147,6 @@ internal static class RetryExecutor
                 Branch = context with { Attempt = attempt },
                 Node = node,
                 Definition = definition,
-                Tick = services.Tick,
-                ParentResults = services.ParentResults,
                 CancellationToken = ct,
                 IdempotencyKey = keyValue
             };
@@ -234,7 +190,7 @@ internal static class RetryExecutor
 
                 if (result is NodeExecutionResult.Fail fail)
                 {
-                    string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+                    string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
                     await RecordOutcomeAsync(false, errorJson);
 
                     if (!fail.Retryable)
@@ -254,7 +210,7 @@ internal static class RetryExecutor
                     return result;
                 }
 
-                string resultJson = JsonSerializer.Serialize(result, JsonOptions);
+                string resultJson = JsonSerializer.Serialize(result, EngineJson.Options);
                 await RecordOutcomeAsync(true, resultJson);
 
                 return result;
@@ -262,7 +218,7 @@ internal static class RetryExecutor
             catch (TransientNodeException ex)
             {
                 var fail = new NodeExecutionResult.Fail("TRANSIENT_ERROR", ex.Message, true, ex);
-                string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+                string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);
 
@@ -274,7 +230,7 @@ internal static class RetryExecutor
             catch (PermanentNodeException ex)
             {
                 var fail = new NodeExecutionResult.Fail(ex.ErrorCode, ex.Message, false, ex);
-                string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+                string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);
 
@@ -292,7 +248,7 @@ internal static class RetryExecutor
             catch (Exception ex)
             {
                 var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
-                string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
+                string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);
 
@@ -301,6 +257,30 @@ internal static class RetryExecutor
         }
 
         return new NodeExecutionResult.Fail("RETRY_EXHAUSTED", "Retry policy exhausted without a terminal result.", false, null);
+    }
+
+    /// <summary>
+    /// The outcome an earlier attempt already recorded under this key, or null when there is none to
+    /// return: the key is still Pending (a prior run crashed mid-execution, so the node must run
+    /// again) or the stored JSON is empty.
+    /// </summary>
+    private static NodeExecutionResult? CachedOutcome(IdempotencyKeyRow row)
+    {
+        if (string.Equals(row.Status, IdempotencyKeyStatus.Succeeded, StringComparison.Ordinal))
+        {
+            return string.IsNullOrWhiteSpace(row.ResultJson)
+                ? null
+                : JsonSerializer.Deserialize<NodeExecutionResult>(row.ResultJson, EngineJson.Options);
+        }
+
+        if (string.Equals(row.Status, IdempotencyKeyStatus.Failed, StringComparison.Ordinal))
+        {
+            return string.IsNullOrWhiteSpace(row.ErrorJson)
+                ? null
+                : JsonSerializer.Deserialize<NodeExecutionResult.Fail>(row.ErrorJson, EngineJson.Options);
+        }
+
+        return null;
     }
 
     private static RetryPolicy GetPolicy(BaseNode node)
