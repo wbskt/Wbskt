@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Moq;
+using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Exceptions;
@@ -1207,6 +1209,175 @@ public sealed class BranchLoopTests
         Assert.Equal("Cancelling", runProvider.Status);
     }
 
+    [Theory]
+    [InlineData(BranchExecutionReason.TriggerStarted)]
+    [InlineData(BranchExecutionReason.BookmarkResumed)]
+    [InlineData(BranchExecutionReason.Recovered)]
+    public async Task A_cancel_on_the_run_row_is_seen_on_the_first_step_of_every_dispatch(BranchExecutionReason reason)
+    {
+        // Arrange: the cancel is only on the row (taken while the branch was parked, or by another
+        // host), so this host's token never trips.
+        var cancellation = new RowAndTokenRunCancellationService { RowCancelled = true };
+        var executor = new CountingContinueExecutor();
+        var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
+        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval: 10);
+
+        // Act
+        await loop.RunAsync(42, 1001, reason, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, executor.CallCount);
+        Assert.Equal(1, cancellation.RowReads);
+        Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
+    }
+
+    [Fact]
+    public async Task The_run_row_is_read_on_the_first_step_and_then_once_every_interval()
+    {
+        // Arrange
+        var cancellation = new RowAndTokenRunCancellationService();
+        var executor = new CountingContinueExecutor();
+        var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
+        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval: 10, nodeCount: 25);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert: steps 0, 10 and 20 read the row; the 22 steps in between trust the token. (The
+        // 26th step finds no node and completes the branch without a read.)
+        Assert.Equal(25, executor.CallCount);
+        Assert.Equal(3, cancellation.RowReads);
+        Assert.True(branchProvider.SetCompletedCalled);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(10)]
+    public async Task A_cancel_written_to_the_run_row_mid_branch_is_seen_within_the_interval(int checkInterval)
+    {
+        // Arrange: another host cancels the run while the first node runs, just after this dispatch's
+        // first row read. Nothing trips this host's token.
+        var cancellation = new RowAndTokenRunCancellationService();
+        var executor = new CountingContinueExecutor(call =>
+        {
+            if (call == 1)
+            {
+                cancellation.RowCancelled = true;
+            }
+        });
+        var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
+        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval, nodeCount: 25);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert: the next row read, at step checkInterval, sees it, so the branch ran that many nodes.
+        Assert.Equal(checkInterval, executor.CallCount);
+        Assert.Equal(2, cancellation.RowReads);
+        Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
+        Assert.False(branchProvider.SetCompletedCalled);
+    }
+
+    [Fact]
+    public async Task A_run_token_tripped_between_nodes_cancels_the_branch_before_the_next_node_without_a_row_read()
+    {
+        // Arrange: a cancel taken on this host trips the token after the third node has been written.
+        var cancellation = new RowAndTokenRunCancellationService();
+        var executor = new CountingContinueExecutor();
+        var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
+        branchProvider.OnPointerUpdate = updates =>
+        {
+            if (updates == 3)
+            {
+                cancellation.TripToken();
+            }
+        };
+        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval: 10, nodeCount: 25);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(3, executor.CallCount);
+        Assert.Equal(1, cancellation.RowReads);
+        Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
+        Assert.Equal(ChainNodeId(3), branchProvider.CurrentBranch.NodeId);
+    }
+
+    [Fact]
+    public async Task A_run_token_tripped_while_a_node_runs_cancels_the_branch_at_once()
+    {
+        // Arrange
+        var cancellation = new RowAndTokenRunCancellationService();
+        var executor = new CountingContinueExecutor(call =>
+        {
+            if (call == 2)
+            {
+                cancellation.TripToken();
+            }
+        });
+        var branchProvider = new RecordingBranchProvider(ChainNodeId(0));
+        BranchLoop loop = CreateChainLoop(branchProvider, executor, cancellation, checkInterval: 10, nodeCount: 25);
+
+        // Act
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        // Assert: the node's Continue is turned into a Cancelled end, and the branch stays on it.
+        Assert.Equal(2, executor.CallCount);
+        Assert.Equal(1, cancellation.RowReads);
+        Assert.Equal(BranchStatus.Cancelled, branchProvider.CurrentBranch.Status);
+        Assert.Equal(ChainNodeId(1), branchProvider.CurrentBranch.NodeId);
+    }
+
+    private static Guid ChainNodeId(int index) => new($"00000000-0000-0000-0000-{index + 1:D12}");
+
+    /// <summary>A loop over a straight chain of <paramref name="nodeCount"/> test nodes, each linked to the next by its "next" port.</summary>
+    private static BranchLoop CreateChainLoop(
+        RecordingBranchProvider branchProvider,
+        INodeExecutor executor,
+        IRunCancellationService cancellation,
+        int checkInterval,
+        int nodeCount = 1)
+    {
+        TestNode[] nodes = Enumerable.Range(0, nodeCount)
+            .Select(index => new TestNode { NodeId = ChainNodeId(index), Name = $"n{index}", Ports = Array.Empty<PortDefinition>(), KindValue = "test" })
+            .ToArray();
+        Edge[] edges = Enumerable.Range(0, nodeCount - 1)
+            .Select(index => new Edge((ChainNodeId(index), "next"), (ChainNodeId(index + 1), "in")))
+            .ToArray();
+        var definition = new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "chain",
+            null,
+            true,
+            nodes,
+            edges,
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+        var runCounters = new StubRunCountersProvider();
+        return TestBranchLoop.Create(
+            branchProvider,
+            new StubRunProvider(),
+            runCounters,
+            new RecordingBookmarkProvider(),
+            new RunJournal(new RecordingHistoryEventProvider(), new FixedClock()),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(executor),
+            new RecordingRunDispatcher(),
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            cancellation,
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider(),
+            Options.Create(new WorkflowEngineOptions { CancellationCheckInterval = checkInterval }));
+    }
+
     [Fact]
     public async Task Loop_converts_thrown_exception_to_NonRetryable_Fail()
     {
@@ -1695,6 +1866,48 @@ public sealed class BranchLoopTests
         public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct) => Task.FromResult(false);
     }
 
+    /// <summary>
+    /// A cancellation service whose run row and run token are set apart, so a test can tell which one
+    /// the loop saw. Every call to <see cref="IsCancellationRequestedAsync"/> stands for a row read.
+    /// </summary>
+    private sealed class RowAndTokenRunCancellationService : IRunCancellationService
+    {
+        private readonly CancellationTokenSource _token = new();
+
+        public bool RowCancelled { get; set; }
+
+        public int RowReads { get; private set; }
+
+        public void TripToken() => _token.Cancel();
+
+        public CancellationToken GetToken(long runId) => _token.Token;
+
+        public Task<bool> RequestCancellationAsync(long runId, string reason, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> FailRunAsync(long runId, string reason, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> IsCancellationRequestedAsync(long runId, CancellationToken ct)
+        {
+            RowReads++;
+            return Task.FromResult(RowCancelled || _token.IsCancellationRequested);
+        }
+    }
+
+    /// <summary>Continues on "next" from every node, calling <paramref name="onCall"/> with the 1-based call number first.</summary>
+    private sealed class CountingContinueExecutor(Action<int>? onCall = null) : INodeExecutor
+    {
+        public int CallCount { get; private set; }
+
+        public string Kind => "test";
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            CallCount++;
+            onCall?.Invoke(CallCount);
+            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>()));
+        }
+    }
+
     private sealed class ThrowingExecutor : INodeExecutor
     {
         public string Kind => "test";
@@ -1788,6 +2001,9 @@ public sealed class BranchLoopTests
 
         public bool SetCompletedCalled { get; private set; }
 
+        /// <summary>Called after each pointer write with the number of writes so far.</summary>
+        public Action<int>? OnPointerUpdate { get; set; }
+
         public bool SetFailedCalled { get; private set; }
 
         public BranchRow CurrentBranch => _rows[1001];
@@ -1827,6 +2043,7 @@ public sealed class BranchLoopTests
             PointerUpdates.Add((branchId, currentNodeId));
             BranchRow updated = _rows[branchId] with { NodeId = currentNodeId, Status = status, LocalJson = localJson, LastOutputJson = lastOutputJson };
             _rows[branchId] = updated;
+            OnPointerUpdate?.Invoke(PointerUpdates.Count);
             return Task.FromResult(updated);
         }
 
