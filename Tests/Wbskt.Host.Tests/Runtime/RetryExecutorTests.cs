@@ -241,7 +241,148 @@ public sealed class RetryExecutorTests
         Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)], clock.Delays);
     }
 
-    private static Task<NodeExecutionResult> RunAsync(BaseNode node, INodeExecutor executor, TimeProvider clock, RetryNotification? onRetry = null)
+    [Fact]
+    public async Task A_backoff_at_or_over_the_park_threshold_parks_on_a_timer_with_the_next_attempt()
+    {
+        // Slept in-process, a long backoff held a pump slot for its whole length and lost the attempt
+        // count if the host went down during it.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(30), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Fail("E_RETRY", "boom", true, null));
+        var clock = new InstantTimeProvider();
+        var retries = new List<(int Attempt, TimeSpan Delay)>();
+
+        NodeExecutionResult result = await RunAsync(
+            node, executor, clock,
+            (attempt, _, delay, _, _) => { retries.Add((attempt, delay)); return Task.CompletedTask; },
+            retryParkThreshold: TimeSpan.FromSeconds(5));
+
+        var park = Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
+        var timer = Assert.IsType<TimerWakeCondition>(park.Condition);
+        Assert.Equal(clock.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(30), timer.At);
+        Assert.Equal(2, park.LocalStatePatch[BranchStateKeys.RetryAttempt].GetInt32());
+        Assert.Equal(1, executor.AttemptCount);
+        Assert.Equal([(1, TimeSpan.FromSeconds(30))], retries);
+        Assert.Empty(clock.Delays);
+    }
+
+    [Fact]
+    public async Task A_backoff_under_the_park_threshold_still_waits_on_the_clock()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(1), Factor = null, MaxDelay = null, MaxAttempts = 2, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var clock = new InstantTimeProvider();
+
+        NodeExecutionResult result = await RunAsync(node, executor, clock, retryParkThreshold: TimeSpan.FromSeconds(5));
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(2, executor.AttemptCount);
+        Assert.Equal([TimeSpan.FromSeconds(1)], clock.Delays);
+    }
+
+    [Fact]
+    public async Task A_visit_woken_from_a_retry_park_runs_the_parked_attempt_and_reports_its_retries_from_there()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Linear, InitialDelay = TimeSpan.FromSeconds(10), Factor = null, MaxDelay = null, MaxAttempts = 4, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Fail("E_RETRY", "again", true, null));
+        var clock = new InstantTimeProvider();
+        var retries = new List<(int Attempt, TimeSpan Delay)>();
+
+        NodeExecutionResult result = await RunAsync(
+            node, executor, clock,
+            (attempt, _, delay, _, _) => { retries.Add((attempt, delay)); return Task.CompletedTask; },
+            retryParkThreshold: TimeSpan.FromSeconds(5),
+            firstAttempt: 2);
+
+        var park = Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
+        Assert.Equal([2], executor.Attempts);
+        Assert.Equal([(2, TimeSpan.FromSeconds(20))], retries);
+        Assert.Equal(3, park.LocalStatePatch[BranchStateKeys.RetryAttempt].GetInt32());
+    }
+
+    [Fact]
+    public async Task The_last_parked_attempt_failing_is_the_nodes_failure()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(30), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Fail("E_RETRY", "still", true, null));
+
+        NodeExecutionResult result = await RunAsync(node, executor, new InstantTimeProvider(), retryParkThreshold: TimeSpan.FromSeconds(5), firstAttempt: 3);
+
+        Assert.Equal("E_RETRY", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
+        Assert.Equal([3], executor.Attempts);
+    }
+
+    [Fact]
+    public async Task A_recorded_retryable_failure_is_retried_rather_than_returned_as_the_nodes_outcome()
+    {
+        // A crash after an attempt's failure was recorded but before its park was written replays the
+        // same key. Returning the recorded failure ended the node with attempts still left; the failed
+        // attempt is not run again, and the retry it was owed is taken instead.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(30), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Fail("E_RETRY", "boom", true, null));
+        var keys = new InMemoryIdempotencyKeyProvider();
+        BranchContext context = CreateContext();
+
+        NodeExecutionResult first = await RunParkingAsync(node, context, executor, keys);
+        NodeExecutionResult replay = await RunParkingAsync(node, context, executor, keys);
+
+        Assert.IsType<NodeExecutionResult.WaitForBookmark>(first);
+        var park = Assert.IsType<NodeExecutionResult.WaitForBookmark>(replay);
+        Assert.Equal(2, park.LocalStatePatch[BranchStateKeys.RetryAttempt].GetInt32());
+        Assert.Equal(1, executor.AttemptCount);
+        IdempotencyKeyRow row = Assert.Single(keys.Rows);
+        Assert.Equal(IdempotencyKeyStatus.Failed, row.Status);
+    }
+
+    [Fact]
+    public async Task A_parked_retry_runs_its_next_attempt_under_a_key_of_its_own()
+    {
+        // The woken visit must not be answered by the failed attempt's recorded outcome.
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(30), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var keys = new InMemoryIdempotencyKeyProvider();
+        BranchContext context = CreateContext();
+
+        await RunParkingAsync(node, context, executor, keys);
+        NodeExecutionResult woken = await RunParkingAsync(node, context, executor, keys, firstAttempt: 2);
+
+        Assert.IsType<NodeExecutionResult.Terminal>(woken);
+        Assert.Equal([1, 2], executor.Attempts);
+        Assert.Equal(2, keys.Rows.Count);
+        Assert.Contains(keys.Rows, row => row.Attempt == 2 && row.Status == IdempotencyKeyStatus.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("2", 2)]
+    [InlineData("\"2\"", null)]
+    [InlineData("0", null)]
+    public void Reads_only_a_positive_attempt_number_as_a_retry_park(string json, int? expected)
+    {
+        var state = new Dictionary<string, JsonElement> { [BranchStateKeys.RetryAttempt] = JsonDocument.Parse(json).RootElement.Clone() };
+
+        Assert.Equal(expected, RetryExecutor.ReadParkedAttempt(state));
+        Assert.Null(RetryExecutor.ReadParkedAttempt(new Dictionary<string, JsonElement>()));
+    }
+
+    private static Task<NodeExecutionResult> RunParkingAsync(BaseNode node, BranchContext context, INodeExecutor executor, IIdempotencyKeyProvider keys, int firstAttempt = 1)
+    {
+        return RetryExecutor.RunWithRetryAsync(
+            node,
+            context,
+            executor,
+            new TestNodeExecutionServices(keys),
+            new InstantTimeProvider(),
+            CancellationToken.None,
+            new UnlimitedRunCountersProvider(),
+            new DefaultCreditCostCalculator(),
+            firstAttempt: firstAttempt,
+            retryParkThreshold: TimeSpan.FromSeconds(5));
+    }
+
+    private static Task<NodeExecutionResult> RunAsync(BaseNode node, INodeExecutor executor, TimeProvider clock, RetryNotification? onRetry = null, TimeSpan? retryParkThreshold = null, int firstAttempt = 1)
     {
         return RetryExecutor.RunWithRetryAsync(
             node,
@@ -252,7 +393,9 @@ public sealed class RetryExecutorTests
             CancellationToken.None,
             new UnlimitedRunCountersProvider(),
             new DefaultCreditCostCalculator(),
-            onRetry: onRetry);
+            onRetry: onRetry,
+            firstAttempt: firstAttempt,
+            retryParkThreshold: retryParkThreshold);
     }
 
     /// <summary>
@@ -391,12 +534,16 @@ public sealed class RetryExecutorTests
 
         public int AttemptCount { get; private set; }
 
+        /// <summary>The attempt number each call was made with.</summary>
+        public List<int> Attempts { get; } = [];
+
         public string Kind => NodeKind.ActionClientMessage;
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
             AttemptCount++;
-            return Task.FromResult(_results.Dequeue());
+            Attempts.Add(ctx.Branch.Attempt);
+            return Task.FromResult(_results.Count > 1 ? _results.Dequeue() : _results.Peek());
         }
     }
 

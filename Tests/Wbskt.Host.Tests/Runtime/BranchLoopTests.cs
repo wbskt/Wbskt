@@ -738,6 +738,182 @@ public sealed class BranchLoopTests
         Assert.False(branchProvider.SetFailedCalled);
     }
 
+    private static readonly Guid RetryNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid AfterRetryNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+    /// <summary>A node retried with a 30 s constant backoff (over the default park threshold), then a plain node.</summary>
+    private static WorkflowDefinition CreateLongBackoffDefinition()
+    {
+        return new WorkflowDefinition(
+            Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            1,
+            9,
+            "long-backoff",
+            null,
+            true,
+            [
+                new SendClientMessageNode { NodeId = RetryNodeId, Name = "send", Ports = [new PortDefinition { PortId = "default", Direction = PortDirection.Output, Label = "Default" }], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, Retry = new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(30), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] } },
+                new TestNode { NodeId = AfterRetryNodeId, Name = "after", Ports = Array.Empty<PortDefinition>(), KindValue = "test" }
+            ],
+            [new Edge((RetryNodeId, "default"), (AfterRetryNodeId, "in"))],
+            [],
+            new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
+            7);
+    }
+
+    private static BranchLoop CreateRetryLoop(
+        RecordingBranchProvider branchProvider,
+        StubRunCountersProvider runCounters,
+        RecordingBookmarkProvider bookmarkProvider,
+        RecordingHistoryEventProvider historyProvider,
+        INodeExecutor executor,
+        WorkflowDefinition? definition = null)
+    {
+        return TestBranchLoop.Create(
+            branchProvider,
+            new StubRunProvider(),
+            runCounters,
+            bookmarkProvider,
+            new RunJournal(historyProvider, new FixedClock()),
+            new StubWorkflowDefinitionCache(definition ?? CreateLongBackoffDefinition()),
+            new StubNodeExecutorRegistry(executor),
+            new RecordingRunDispatcher(),
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new NoOpRunCancellationService(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider());
+    }
+
+    private static async Task ParkForRetryAsync(RecordingBranchProvider branchProvider, string localJson)
+    {
+        await branchProvider.UpsertAsync(branchProvider.CurrentBranch with { Status = BranchStatus.Waiting, LocalJson = localJson }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_long_retry_backoff_parks_the_branch_on_a_timer_with_the_next_attempt()
+    {
+        var branchProvider = new RecordingBranchProvider(RetryNodeId);
+        var runCounters = new StubRunCountersProvider();
+        var bookmarks = new RecordingBookmarkProvider();
+        var history = new RecordingHistoryEventProvider();
+        var executor = new ScriptedExecutor(new NodeExecutionResult.Fail("E_RETRY", "boom", true, null));
+        BranchLoop loop = CreateRetryLoop(branchProvider, runCounters, bookmarks, history, executor);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        Assert.Equal(1, executor.CallCount);
+        BranchRow branch = branchProvider.CurrentBranch;
+        Assert.Equal(BranchStatus.Waiting, branch.Status);
+        Assert.Equal(RetryNodeId, branch.NodeId);
+        Assert.Equal(2, BranchLocalState.Deserialize(branch.LocalJson)[BranchStateKeys.RetryAttempt].GetInt32());
+        BookmarkRow bookmark = Assert.Single(bookmarks.CreatedBookmarks);
+        Assert.Equal("timer", bookmark.WakeConditionKind);
+        Assert.Equal(new FixedClock().UtcNow + TimeSpan.FromSeconds(30), bookmark.ExpiresAt);
+        HistoryEventRow retrying = Assert.Single(history.Events, evt => evt.EventKind == HistoryEventKind.NodeRetrying);
+        Assert.Equal(1, JsonDocument.Parse(retrying.PayloadJson!).RootElement.GetProperty("attempt").GetInt32());
+        Assert.Equal(1, runCounters.ChargeCount);
+        Assert.False(branchProvider.SetFailedCalled);
+    }
+
+    [Fact]
+    public async Task A_woken_retry_park_runs_the_next_attempt_is_charged_and_drops_the_attempt_on_success()
+    {
+        var branchProvider = new RecordingBranchProvider(RetryNodeId);
+        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":2,\"keep\":1}");
+        var runCounters = new StubRunCountersProvider();
+        var executor = new ScriptedExecutor(
+            new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        BranchLoop loop = CreateRetryLoop(branchProvider, runCounters, new RecordingBookmarkProvider(), new RecordingHistoryEventProvider(), executor);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        NodeContext retried = executor.Contexts[0];
+        Assert.Equal(2, retried.Branch.Attempt);
+        // The marker is the engine's; the node does not see it.
+        Assert.False(retried.Branch.LocalState.ContainsKey(BranchStateKeys.RetryAttempt));
+        // A retry park's wake is a real attempt, unlike the resume visit of a node's own park.
+        Assert.Equal(2, runCounters.ChargeCount);
+        IReadOnlyDictionary<string, JsonElement> state = BranchLocalState.Deserialize(branchProvider.CurrentBranch.LocalJson);
+        Assert.False(state.ContainsKey(BranchStateKeys.RetryAttempt));
+        Assert.True(state.ContainsKey("keep"));
+        Assert.True(branchProvider.SetCompletedCalled);
+    }
+
+    [Fact]
+    public async Task A_woken_retry_park_that_fails_again_journals_the_retry_and_parks_for_the_attempt_after()
+    {
+        var branchProvider = new RecordingBranchProvider(RetryNodeId);
+        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":2}");
+        var runCounters = new StubRunCountersProvider();
+        var history = new RecordingHistoryEventProvider();
+        var executor = new ScriptedExecutor(new NodeExecutionResult.Fail("E_RETRY", "again", true, null));
+        BranchLoop loop = CreateRetryLoop(branchProvider, runCounters, new RecordingBookmarkProvider(), history, executor);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        HistoryEventRow retrying = Assert.Single(history.Events, evt => evt.EventKind == HistoryEventKind.NodeRetrying);
+        Assert.Equal(2, JsonDocument.Parse(retrying.PayloadJson!).RootElement.GetProperty("attempt").GetInt32());
+        Assert.Equal(BranchStatus.Waiting, branchProvider.CurrentBranch.Status);
+        Assert.Equal(3, BranchLocalState.Deserialize(branchProvider.CurrentBranch.LocalJson)[BranchStateKeys.RetryAttempt].GetInt32());
+        Assert.Equal(1, runCounters.ChargeCount);
+    }
+
+    [Fact]
+    public async Task A_woken_retry_parks_last_attempt_failing_fails_the_branch()
+    {
+        var branchProvider = new RecordingBranchProvider(RetryNodeId);
+        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":3}");
+        var executor = new ScriptedExecutor(new NodeExecutionResult.Fail("E_RETRY", "still", true, null));
+        BranchLoop loop = CreateRetryLoop(branchProvider, new StubRunCountersProvider(), new RecordingBookmarkProvider(), new RecordingHistoryEventProvider(), executor);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        Assert.Equal(1, executor.CallCount);
+        Assert.Equal(3, executor.Contexts[0].Branch.Attempt);
+        Assert.True(branchProvider.SetFailedCalled);
+    }
+
+    [Fact]
+    public async Task The_resume_visit_of_a_nodes_own_park_is_still_not_charged()
+    {
+        var branchProvider = new RecordingBranchProvider(RetryNodeId);
+        await ParkForRetryAsync(branchProvider, "{}");
+        var runCounters = new StubRunCountersProvider();
+        var executor = new ScriptedExecutor(
+            new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>()),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        BranchLoop loop = CreateRetryLoop(branchProvider, runCounters, new RecordingBookmarkProvider(), new RecordingHistoryEventProvider(), executor);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        // Only the node after it is charged.
+        Assert.Equal(1, runCounters.ChargeCount);
+        Assert.Equal(1, executor.Contexts[0].Branch.Attempt);
+    }
+
+    [Fact]
+    public async Task A_retried_attempt_that_parks_for_real_leaves_no_retry_marker_behind()
+    {
+        // Left in place, the marker would make the node's own resume visit read as a retry wake: charged,
+        // and started from the retried attempt.
+        var branchProvider = new RecordingBranchProvider(RetryNodeId);
+        await ParkForRetryAsync(branchProvider, "{\"__retry_attempt\":2}");
+        var bookmarks = new RecordingBookmarkProvider();
+        var executor = new ScriptedExecutor(
+            new NodeExecutionResult.WaitForBookmark(new SignalWakeCondition("ack", "corr-42"), new Dictionary<string, JsonElement>()));
+        BranchLoop loop = CreateRetryLoop(branchProvider, new StubRunCountersProvider(), bookmarks, new RecordingHistoryEventProvider(), executor);
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.BookmarkResumed, CancellationToken.None);
+
+        Assert.Equal(BranchStatus.Waiting, branchProvider.CurrentBranch.Status);
+        Assert.False(BranchLocalState.Deserialize(branchProvider.CurrentBranch.LocalJson).ContainsKey(BranchStateKeys.RetryAttempt));
+        Assert.Equal("signal", Assert.Single(bookmarks.CreatedBookmarks).WakeConditionKind);
+    }
+
     [Fact]
     public async Task Continue_with_node_id_outbound_port_jumps_directly_to_target_node()
     {
@@ -1465,11 +1641,14 @@ public sealed class BranchLoopTests
 
         public int CallCount { get; private set; }
 
+        public List<NodeContext> Contexts { get; } = [];
+
         public string Kind => "test";
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
             CallCount++;
+            Contexts.Add(ctx);
             return Task.FromResult(_results.Dequeue());
         }
     }
@@ -1779,7 +1958,14 @@ public sealed class BranchLoopTests
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
+
+        public int ChargeCount { get; private set; }
+
+        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct)
+        {
+            ChargeCount++;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class RecordingBookmarkProvider : IBookmarkProvider

@@ -38,6 +38,15 @@ public sealed class WorkflowEngineOptions
     public int BranchWorkerLimit { get; init; } = 50;
 
     /// <summary>
+    /// The shortest retry backoff that parks the branch on a timer bookmark instead of waiting it out on
+    /// the worker. A backoff slept in-process holds one of the <see cref="BranchWorkerLimit"/> slots for
+    /// its whole length, so a handful of branches in a long backoff stopped every other run on the host,
+    /// and a crash during the wait lost the attempt count. Shorter backoffs still wait in-process, where a
+    /// park and a wake would cost more than the wait itself.
+    /// </summary>
+    public TimeSpan RetryParkThreshold { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Hard ceiling on how many branches one ParallelForEach may fan out to. A collection that arrives
     /// larger than this fails the node with a descriptive error instead of writing a branch row and a
     /// dispatcher entry per element - which is one workflow's payload deciding the throughput of every

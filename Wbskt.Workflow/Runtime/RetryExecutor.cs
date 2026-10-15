@@ -3,6 +3,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models;
+using Wbskt.Workflow.Abstraction.Models.Bookmarks;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -28,6 +29,26 @@ internal delegate void CreditChargeNotification(decimal cost);
 
 internal static class RetryExecutor
 {
+    /// <summary>
+    /// The branch-local key a retry park leaves: the attempt the node runs when its timer wakes it. Its
+    /// presence on a Waiting branch is also what tells a retry park from a node's own park.
+    /// </summary>
+    internal const string RetryAttemptKey = BranchStateKeys.RetryAttempt;
+
+    /// <summary>
+    /// The attempt a retry park left on the branch, or null when the branch is not parked for a retry
+    /// (the key is absent, or holds something other than an attempt number).
+    /// </summary>
+    internal static int? ReadParkedAttempt(IReadOnlyDictionary<string, JsonElement> localState)
+    {
+        return localState.TryGetValue(RetryAttemptKey, out JsonElement value)
+            && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt32(out int attempt)
+            && attempt >= 1
+                ? attempt
+                : null;
+    }
+
     public static async Task<NodeExecutionResult> RunWithRetryAsync(
         BaseNode node,
         BranchContext context,
@@ -41,7 +62,9 @@ internal static class RetryExecutor
         WorkflowDefinition? definition = null,
         RetryNotification? onRetry = null,
         CreditChargeNotification? onCharge = null,
-        bool isResumeVisit = false)
+        bool isResumeVisit = false,
+        int firstAttempt = 1,
+        TimeSpan? retryParkThreshold = null)
     {
         RetryPolicy policy = GetPolicy(node);
         bool isReplaySafe = executor.IsReplaySafe(node);
@@ -50,7 +73,12 @@ internal static class RetryExecutor
         // would repeat an effect outside the branch row is deduplicated.
         IIdempotencyKeyProvider? idempotencyKeyProvider = isReplaySafe ? null : services.IdempotencyKeys;
 
-        for (int attempt = 1; attempt <= policy.MaxAttempts; attempt++)
+        // A node woken from a retry park carries on from the attempt it parked for, so the attempt it
+        // reports and the attempts it has left are the real ones. Clamped so a stored number the policy
+        // no longer allows still gets the node one last attempt rather than none.
+        int startAttempt = Math.Clamp(firstAttempt, 1, Math.Max(1, policy.MaxAttempts));
+
+        for (int attempt = startAttempt; attempt <= policy.MaxAttempts; attempt++)
         {
             // The visit token is what lets a node run again when a loop brings the branch back to it.
             // Without it, every lap of a sequential ForEach shares the first lap's key, so laps two
@@ -92,7 +120,12 @@ internal static class RetryExecutor
                 // crashed mid-execution, so the node runs again.
                 if (existingRow != null && CachedOutcome(existingRow) is { } cached)
                 {
-                    return cached;
+                    if (await RetryCachedAsync(cached) is not { } replayed)
+                    {
+                        continue;
+                    }
+
+                    return replayed;
                 }
             }
 
@@ -108,7 +141,12 @@ internal static class RetryExecutor
                     // returned; if it was Pending, we continue to run the executor.
                     if (existingRow.BranchRefId != claimToken && CachedOutcome(existingRow) is { } claimed)
                     {
-                        return claimed;
+                        if (await RetryCachedAsync(claimed) is not { } replayed)
+                        {
+                            continue;
+                        }
+
+                        return replayed;
                     }
                 }
             }
@@ -156,7 +194,7 @@ internal static class RetryExecutor
             // ignored RetryOn and never reported the retry, so a policy saying "only retry these"
             // did not hold for it and its retries were missing from history. Null means "retry";
             // otherwise it is the failure to return.
-            async Task<NodeExecutionResult.Fail?> RetryOrStopAsync(NodeExecutionResult.Fail fail, Exception? exception)
+            async Task<NodeExecutionResult?> RetryOrStopAsync(NodeExecutionResult.Fail fail, Exception? exception)
             {
                 RetryDecision decision = Decide(policy, attempt, fail.ErrorCode, exception);
                 switch (decision.Verdict)
@@ -174,6 +212,21 @@ internal static class RetryExecutor
                     await onRetry(attempt, policy.MaxAttempts, decision.Delay, fail.Message, ct);
                 }
 
+                // A long backoff parks the branch on a timer instead of holding a worker for it: slept
+                // in-process, it kept a pump slot for the whole wait, so a few branches backing off
+                // stopped every other run on the host, and a crash during the wait lost the attempt
+                // count. The next attempt's number goes with the park, and the timer's wake runs it.
+                if (decision.Delay > TimeSpan.Zero && retryParkThreshold is { } threshold && decision.Delay >= threshold)
+                {
+                    DateTime wakeAt = clock.GetUtcNow().UtcDateTime + decision.Delay;
+                    return new NodeExecutionResult.WaitForBookmark(
+                        new TimerWakeCondition(wakeAt),
+                        new Dictionary<string, JsonElement>
+                        {
+                            [RetryAttemptKey] = JsonSerializer.SerializeToElement(attempt + 1)
+                        });
+                }
+
                 // On the injected clock, not the wall clock, so backoff follows the same time source as
                 // the rest of the engine and can be driven by a test.
                 if (decision.Delay > TimeSpan.Zero)
@@ -182,6 +235,20 @@ internal static class RetryExecutor
                 }
 
                 return null;
+            }
+
+            // An attempt that already failed retryably, crashed out of before its retry was taken (the
+            // backoff slept, or the park not yet written), is retried now rather than returned: the
+            // recorded failure ended the node, so one crash in the backoff window cost every attempt
+            // still left. The failed attempt itself is not run again. Null means "go on to the next".
+            async Task<NodeExecutionResult?> RetryCachedAsync(NodeExecutionResult cachedOutcome)
+            {
+                if (cachedOutcome is NodeExecutionResult.Fail { Retryable: true } cachedFail)
+                {
+                    return await RetryOrStopAsync(cachedFail, null);
+                }
+
+                return cachedOutcome;
             }
 
             try
