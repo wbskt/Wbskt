@@ -32,10 +32,27 @@ public sealed class EngineLeadershipCoordinator : BackgroundService
         await _leadershipState.WhenLeaderAsync().WaitAsync(stoppingToken);
 
         _logger.LogInformation("Acquired engine leadership; starting the bus and recovering active runs.");
-        _busHandle = await _busControl.StartAsync(stoppingToken);
-        _leadershipState.SetBusStarted();
+        try
+        {
+            _busHandle = await _busControl.StartAsync(stoppingToken);
+            _leadershipState.SetBusStarted();
 
-        await _runRecoveryService.RecoverAsync(stoppingToken);
+            await _runRecoveryService.RecoverAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            // A leader that cannot recover must not keep the lease: rethrowing stops the host
+            // (BackgroundServiceExceptionBehavior.StopHost), LeaderElectionService releases the lease as
+            // it stops, and the restart brings this instance back as a standby. Logged as Critical
+            // because a cause that persists makes that a restart loop, and the default host message
+            // for a faulted BackgroundService does not say what was being attempted.
+            _logger.LogCritical(
+                ex,
+                "Engine leadership startup failed ({Cause}); stopping the host so the lease is released and another instance can lead.",
+                ex.GetBaseException().Message);
+            throw;
+        }
+
         _logger.LogInformation("Engine leadership startup complete.");
     }
 

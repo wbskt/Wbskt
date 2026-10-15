@@ -78,10 +78,14 @@ internal sealed class BranchLoop : IBranchLoop
 
         // A branch waking from a bookmark is not starting - it is resuming, often hours later. Logging
         // both as "BranchStarted" made a parked-then-woken branch indistinguishable from a fresh one
-        // in the trace, and hid how long it had been parked.
-        string entryKind = reason == BranchExecutionReason.BookmarkResumed
-            ? HistoryEventKind.BranchResumed
-            : HistoryEventKind.BranchStarted;
+        // in the trace, and hid how long it had been parked. A branch picked up after a failover is
+        // neither: journalling it as a resume made a crash recovery read as a bookmark wake.
+        string entryKind = reason switch
+        {
+            BranchExecutionReason.BookmarkResumed => HistoryEventKind.BranchResumed,
+            BranchExecutionReason.Recovered => HistoryEventKind.BranchRecovered,
+            _ => HistoryEventKind.BranchStarted
+        };
         await _journal.AppendBranchEventAsync(
             runRow.Id,
             branchRow.RefId,

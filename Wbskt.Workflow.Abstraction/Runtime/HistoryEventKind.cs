@@ -20,6 +20,8 @@ public static class HistoryEventKind
     // Branch lifecycle
     public const string BranchStarted = "BranchStarted";
     public const string BranchResumed = "BranchResumed";
+    // A new leader picking up a branch that was running when the previous leader went away.
+    public const string BranchRecovered = "BranchRecovered";
     public const string BranchParked = "BranchParked";
     public const string BranchCompleted = "BranchCompleted";
     public const string BranchFailed = "BranchFailed";

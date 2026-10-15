@@ -187,6 +187,26 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_records_a_recovery_distinctly_from_a_resume()
+    {
+        // A branch a new leader picks up after a failover was never parked: journalling it as
+        // BranchResumed made a crash recovery read as a bookmark wake in the run's history.
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = CreateLoop(definition, new RecordingBranchProvider(nodeId), historyProvider,
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed))));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.Recovered, CancellationToken.None);
+
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.BranchRecovered);
+        Assert.DoesNotContain(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.BranchResumed);
+        Assert.DoesNotContain(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.BranchStarted);
+        Assert.Equal(HistoryEventKind.SeverityInfo, HistoryEventKind.SeverityFor(HistoryEventKind.BranchRecovered));
+    }
+
+    [Fact]
     public async Task RunAsync_puts_the_node_duration_on_the_outcome_event()
     {
         // Deriving duration by subtracting the NodeStarted timestamp only works while both rows

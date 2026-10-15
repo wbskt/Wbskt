@@ -140,7 +140,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         mockDispatcher.DispatchedBranches.Should().Contain(dispatched =>
             dispatched.RunId == createdRun.Id
             && dispatched.BranchId == createdBranch.Id
-            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
+            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.Recovered);
     }
 
     [SkippableFact]
@@ -254,7 +254,7 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         mockDispatcher.DispatchedBranches.Should().Contain(dispatched =>
             dispatched.RunId == createdRun.Id
             && dispatched.BranchId == createdBranch.Id
-            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.BookmarkResumed);
+            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.Recovered);
     }
 }
 
