@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Channels;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
@@ -25,7 +26,8 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
 
     // The command id this step parked on, and the key the bookmark resumer writes the wake under.
     private const string AwaitingKey = "__command_awaiting";
-    private const string WakeKey = "__wake";
+    private const string WakeKey = BookmarkResumer.WakeKey;
+    private const string WakeNodeKey = BookmarkResumer.WakeNodeKey;
 
     public string Kind => NodeKind.ActionClientMessage;
 
@@ -76,7 +78,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
         return new NodeExecutionResult.Continue(
             port,
             new Dictionary<string, JsonElement> { ["command"] = wake.Clone() },
-            [AwaitingKey, WakeKey]);
+            [AwaitingKey, WakeKey, WakeNodeKey]);
     }
 
     private NodeExecutionResult Park(NodeContext ctx, SendClientMessageConfig config, Guid clientRefId)

@@ -8,6 +8,16 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class BookmarkResumer : IBookmarkResumer
 {
+    /// <summary>Reserved local-state key the wake payload is delivered under.</summary>
+    internal const string WakeKey = "__wake";
+
+    /// <summary>
+    /// Reserved local-state key naming the node whose bookmark the wake was delivered for. It sits
+    /// beside "__wake" rather than inside it so the payload a node promotes (a signal body, a child
+    /// result) reaches the workflow unchanged.
+    /// </summary>
+    internal const string WakeNodeKey = "__wake_node";
+
     private readonly IBookmarkProvider _bookmarkProvider;
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
     private readonly IBranchProvider _branchProvider;
@@ -101,12 +111,14 @@ internal sealed class BookmarkResumer : IBookmarkResumer
                 var branch = await _branchProvider.GetByRefIdAsync(bookmark.BranchRefId, ct);
 
                 // Deliver the wake payload to the resumed branch under the reserved "__wake" key so the
-                // parked node (and downstream nodes) can read what woke them. The branch keeps its pointer
-                // and Waiting status; the re-executed node flips it to Active when it continues.
+                // parked node (and downstream nodes) can read what woke them, tagged with the node the
+                // bookmark was parked by so a node can tell its own wake from one meant for another.
+                // The branch keeps its pointer and Waiting status; the re-executed node flips it to
+                // Active when it continues.
                 if (evt.Payload.Count > 0)
                 {
                     _logger?.LogDebug("Merging wake payload into branch {BranchId} local state", branch.Id);
-                    string mergedLocalJson = MergeWakePayload(branch.LocalJson, evt.Payload);
+                    string mergedLocalJson = MergeWakePayload(branch.LocalJson, evt.Payload, bookmark.NodeId);
                     await _branchProvider.UpdatePointerAsync(branch.Id, branch.NodeId, branch.Status, mergedLocalJson, branch.LastOutputJson, ct);
                 }
 
@@ -131,12 +143,13 @@ internal sealed class BookmarkResumer : IBookmarkResumer
         }
     }
 
-    private static string MergeWakePayload(string localJson, IReadOnlyDictionary<string, JsonElement> wakePayload)
+    private static string MergeWakePayload(string localJson, IReadOnlyDictionary<string, JsonElement> wakePayload, Guid nodeId)
     {
         var options = EngineJson.Options;
         Dictionary<string, JsonElement> local = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(localJson, options)
             ?? new Dictionary<string, JsonElement>();
-        local["__wake"] = JsonSerializer.SerializeToElement(wakePayload, options);
+        local[WakeKey] = JsonSerializer.SerializeToElement(wakePayload, options);
+        local[WakeNodeKey] = JsonSerializer.SerializeToElement(nodeId.ToString(), options);
         return JsonSerializer.Serialize(local, options);
     }
 }

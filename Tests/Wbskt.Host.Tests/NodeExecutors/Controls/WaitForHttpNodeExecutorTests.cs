@@ -27,7 +27,8 @@ public sealed class WaitForHttpNodeExecutorTests
         var http = Assert.IsType<HttpWakeCondition>(wait.Condition);
         Assert.Equal("author-secret-token-1234567890", http.Token);
         Assert.Equal(TimeSpan.FromMinutes(15), http.Ttl);
-        Assert.Equal("author-secret-token-1234567890", wait.LocalStatePatch[ParkedKey].GetString());
+        Assert.Equal(node.NodeId.ToString(), wait.LocalStatePatch[ParkedKey].GetProperty("nodeId").GetString());
+        Assert.Equal("author-secret-token-1234567890", wait.LocalStatePatch[ParkedKey].GetProperty("waitingOn").GetString());
         Assert.Equal(T0.AddMinutes(15).ToString("O"), wait.LocalStatePatch[DeadlineKey].GetString());
     }
 
@@ -51,7 +52,7 @@ public sealed class WaitForHttpNodeExecutorTests
         var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         var http = Assert.IsType<HttpWakeCondition>(wait.Condition);
         Assert.Equal("author-secret-123", http.Token);
-        Assert.Equal("author-secret-123", wait.LocalStatePatch[ParkedKey].GetString());
+        Assert.Equal("author-secret-123", wait.LocalStatePatch[ParkedKey].GetProperty("waitingOn").GetString());
     }
 
     [Fact]
@@ -100,6 +101,7 @@ public sealed class WaitForHttpNodeExecutorTests
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         Assert.Equal("default", cont.OutboundPort);
         Assert.Equal("done", cont.LocalStatePatch["wakePayload"].GetProperty("status").GetString());
+        Assert.Equal([ParkedKey, DeadlineKey, "__wake", "__wake_node"], cont.RemoveKeys);
     }
 
     [Fact]

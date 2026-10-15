@@ -10,16 +10,15 @@ namespace Wbskt.Workflow.NodeExecutors.Controls;
 /// Shared machine for control nodes that park a branch until an inbound event arrives on some
 /// correlation channel, or until a TTL elapses. First visit registers a bookmark on the wake
 /// condition supplied by the derived executor and writes a local-state marker; the engine
-/// re-executes the same node on resume, where the presence of the marker distinguishes a resume
-/// from a first visit. A resume leaves via the "default" port (promoting any inbound payload) when
-/// the resumer delivered a wake body, and via the "timeout" port once the deadline has passed.
+/// re-executes the same node on resume, where the presence of this node's marker (see
+/// <see cref="ParkMarker"/>) distinguishes a resume from a first visit. A resume leaves via the
+/// "default" port (promoting any inbound payload) when the resumer delivered a wake body, and via the
+/// "timeout" port once the deadline has passed; either way it clears its marker, deadline and wake.
 /// Derived executors differ only in which wake condition they park on and the local-state key names
 /// they use - see <see cref="AwaitSignalNodeExecutor"/> and <see cref="WaitForHttpNodeExecutor"/>.
 /// </summary>
 internal abstract class AwaitInboundNodeExecutor : INodeExecutor
 {
-    // Reserved key the resumer writes the inbound payload under; shared across all await executors.
-    private const string WakeKey = "__wake";
     private const string DefaultPort = "default";
     protected const string DefaultTimeoutPort = "timeout"; // edges map the port to the target node
 
@@ -36,7 +35,7 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
     // engine from the result, so a replay produces the same park and writes nothing of its own.
     public bool IsReplaySafe(BaseNode node) => true;
 
-    /// <summary>Local-state key whose presence marks that this node has already parked.</summary>
+    /// <summary>Local-state key holding the marker of the node of this kind that has parked.</summary>
     protected abstract string ParkedKey { get; }
 
     /// <summary>Local-state key holding the round-trippable deadline timestamp (absent when no TTL).</summary>
@@ -46,8 +45,9 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
     protected abstract string WakePayloadKey { get; }
 
     /// <summary>
-    /// Builds the first-visit park plan: the wake condition to register, the marker value stored
-    /// under <see cref="ParkedKey"/>, and the absolute deadline (null parks with no TTL).
+    /// Builds the first-visit park plan: the wake condition to register, what the node waits on
+    /// (recorded in the marker under <see cref="ParkedKey"/>), and the absolute deadline (null parks
+    /// with no TTL).
     /// </summary>
     protected abstract ParkPlan CreateParkPlan(NodeContext ctx);
 
@@ -56,27 +56,36 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
     public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         _ = ct;
+        Guid nodeId = ctx.Node.NodeId;
+        IReadOnlyDictionary<string, JsonElement> state = ctx.Branch.LocalState;
 
-        // Resume visit: the marker from the first visit is present.
-        if (ctx.Branch.LocalState.ContainsKey(ParkedKey))
+        // Resume visit: this node's own marker from its first visit is present. Every exit clears the
+        // marker, the deadline and the wake, so a later await on this branch - or this node on its next
+        // loop lap - parks afresh instead of mistaking them for its own.
+        if (ParkMarker.TryReadOwn(state, ParkedKey, nodeId, out _))
         {
+            IReadOnlyCollection<string> removeKeys = [ParkedKey, DeadlineKey, .. ParkMarker.WakeKeys];
+
             // The resumer stores the inbound payload under "__wake" when an event arrives; its
             // presence distinguishes an event wake (continue via "default", promoting the payload)
             // from a TTL timeout (a timer wake carries no payload).
-            if (ctx.Branch.LocalState.TryGetValue(WakeKey, out JsonElement wake))
+            switch (ParkMarker.ReadWake(state, nodeId, out JsonElement wake))
             {
-                return Continue(DefaultPort, PromoteWake(wake, WakePayloadKey));
+                case ParkMarker.WakeOwner.This:
+                    return Continue(DefaultPort, PromoteWake(wake, WakePayloadKey), removeKeys);
+
+                case ParkMarker.WakeOwner.Other:
+                    // A wake delivered for another node's bookmark is not this node's to consume: keep
+                    // waiting on the same condition, for whatever is left of the original deadline.
+                    return RePark(ctx, state);
             }
 
-            if (ctx.Branch.LocalState.TryGetValue(DeadlineKey, out JsonElement deadlineElement)
-                && deadlineElement.ValueKind == JsonValueKind.String
-                && DateTime.TryParse(deadlineElement.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime deadline)
-                && Clock.GetUtcNow().UtcDateTime >= deadline)
+            if (TryReadDeadline(state, out DateTime deadline) && Clock.GetUtcNow().UtcDateTime >= deadline)
             {
-                return Continue(DefaultTimeoutPort);
+                return Continue(DefaultTimeoutPort, new Dictionary<string, JsonElement>(), removeKeys);
             }
 
-            return Continue(DefaultPort);
+            return Continue(DefaultPort, new Dictionary<string, JsonElement>(), removeKeys);
         }
 
         // First visit: park on the derived executor's wake condition.
@@ -84,7 +93,7 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
 
         var patch = new Dictionary<string, JsonElement>
         {
-            [ParkedKey] = JsonSerializer.SerializeToElement(plan.MarkerValue)
+            [ParkedKey] = ParkMarker.Create(nodeId, plan.MarkerValue)
         };
         if (plan.Deadline is DateTime deadlineValue)
         {
@@ -94,14 +103,30 @@ internal abstract class AwaitInboundNodeExecutor : INodeExecutor
         return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.WaitForBookmark(plan.Condition, patch));
     }
 
-    private static Task<NodeExecutionResult> Continue(string port)
+    private Task<NodeExecutionResult> RePark(NodeContext ctx, IReadOnlyDictionary<string, JsonElement> state)
     {
-        return Continue(port, new Dictionary<string, JsonElement>());
+        WakeCondition condition = CreateParkPlan(ctx).Condition;
+        if (condition.Ttl is not null && TryReadDeadline(state, out DateTime deadline))
+        {
+            TimeSpan remaining = deadline - Clock.GetUtcNow().UtcDateTime;
+            condition = condition with { Ttl = remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero };
+        }
+
+        // The marker and deadline already on the branch stay as they are.
+        return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.WaitForBookmark(condition, new Dictionary<string, JsonElement>()));
     }
 
-    private static Task<NodeExecutionResult> Continue(string port, IReadOnlyDictionary<string, JsonElement> patch)
+    private bool TryReadDeadline(IReadOnlyDictionary<string, JsonElement> state, out DateTime deadline)
     {
-        return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue(port, patch));
+        deadline = default;
+        return state.TryGetValue(DeadlineKey, out JsonElement deadlineElement)
+            && deadlineElement.ValueKind == JsonValueKind.String
+            && DateTime.TryParse(deadlineElement.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out deadline);
+    }
+
+    private static Task<NodeExecutionResult> Continue(string port, IReadOnlyDictionary<string, JsonElement> patch, IReadOnlyCollection<string> removeKeys)
+    {
+        return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue(port, patch, removeKeys));
     }
 
     // Surface the caller-supplied "body" from the raw wake payload under a friendly key.

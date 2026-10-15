@@ -30,7 +30,9 @@ public sealed class AwaitSignalNodeExecutorTests
         Assert.Equal("approve", signal.Name);
         Assert.Equal(RunRefId.ToString(), signal.Correlation);
         Assert.Null(signal.Ttl);
-        Assert.Equal("approve", wait.LocalStatePatch[ParkedKey].GetString());
+        // The marker names the node that parked, so another await on the branch does not take it for its own.
+        Assert.Equal(node.NodeId.ToString(), wait.LocalStatePatch[ParkedKey].GetProperty("nodeId").GetString());
+        Assert.Equal("approve", wait.LocalStatePatch[ParkedKey].GetProperty("waitingOn").GetString());
         Assert.False(wait.LocalStatePatch.ContainsKey(DeadlineKey));
     }
 
@@ -86,6 +88,7 @@ public sealed class AwaitSignalNodeExecutorTests
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         Assert.Equal("timeout", cont.OutboundPort);
+        Assert.Equal([ParkedKey, DeadlineKey, "__wake", "__wake_node"], cont.RemoveKeys);
     }
 
     [Fact]
@@ -118,6 +121,8 @@ public sealed class AwaitSignalNodeExecutorTests
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         Assert.Equal("default", cont.OutboundPort);
         Assert.Equal("ops", cont.LocalStatePatch["signalPayload"].GetProperty("approvedBy").GetString());
+        // The resume clears the marker, the deadline and the wake so the branch is clean for the next park.
+        Assert.Equal([ParkedKey, DeadlineKey, "__wake", "__wake_node"], cont.RemoveKeys);
     }
 
     [Fact]
@@ -135,6 +140,63 @@ public sealed class AwaitSignalNodeExecutorTests
 
         var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
         Assert.Equal("default", cont.OutboundPort);
+    }
+
+    [Fact]
+    public async Task Marker_left_by_another_node_is_not_taken_for_this_nodes_resume()
+    {
+        // Regression: the marker was a bare value under a key shared by every AwaitSignal, so a second
+        // AwaitSignal in the branch saw the first one's marker and continued without parking.
+        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve" } };
+        Guid other = Guid.NewGuid();
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(new { nodeId = other.ToString(), waitingOn = "approve" }),
+            ["__wake"] = JsonSerializer.SerializeToElement(new { body = new { stale = true } }),
+            ["__wake_node"] = JsonSerializer.SerializeToElement(other.ToString())
+        });
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal(node.NodeId.ToString(), wait.LocalStatePatch[ParkedKey].GetProperty("nodeId").GetString());
+    }
+
+    [Fact]
+    public async Task Wake_delivered_for_another_node_re_parks_for_the_rest_of_the_deadline()
+    {
+        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0.AddMinutes(4)));
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve", Ttl = TimeSpan.FromMinutes(10) } };
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(new { nodeId = node.NodeId.ToString(), waitingOn = "approve" }),
+            [DeadlineKey] = JsonSerializer.SerializeToElement(T0.AddMinutes(10).ToString("O")),
+            ["__wake"] = JsonSerializer.SerializeToElement(new { body = new { meantFor = "someone else" } }),
+            ["__wake_node"] = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString())
+        });
+
+        var wait = Assert.IsType<NodeExecutionResult.WaitForBookmark>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        var signal = Assert.IsType<SignalWakeCondition>(wait.Condition);
+        Assert.Equal("approve", signal.Name);
+        Assert.Equal(TimeSpan.FromMinutes(6), signal.Ttl);
+        // The marker and deadline already on the branch are kept as they are.
+        Assert.Empty(wait.LocalStatePatch);
+    }
+
+    [Fact]
+    public async Task Wake_tagged_for_this_node_resumes_it()
+    {
+        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
+        var node = new AwaitSignalNode { NodeId = Guid.NewGuid(), Name = "await", Ports = Ports(), Config = new AwaitSignalConfig { SignalName = "approve" } };
+        NodeContext ctx = CreateContext(node, new Dictionary<string, JsonElement>
+        {
+            [ParkedKey] = JsonSerializer.SerializeToElement(new { nodeId = node.NodeId.ToString(), waitingOn = "approve" }),
+            ["__wake"] = JsonSerializer.SerializeToElement(new { body = new { approvedBy = "ops" } }),
+            ["__wake_node"] = JsonSerializer.SerializeToElement(node.NodeId.ToString())
+        });
+
+        var cont = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(ctx, CancellationToken.None));
+        Assert.Equal("default", cont.OutboundPort);
+        Assert.Equal("ops", cont.LocalStatePatch["signalPayload"].GetProperty("approvedBy").GetString());
     }
 
     private static NodeContext CreateContext(AwaitSignalNode node, IReadOnlyDictionary<string, JsonElement> localState)

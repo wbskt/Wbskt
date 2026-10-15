@@ -34,7 +34,6 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
     private readonly int _maxDepth = options?.Value.MaxSubWorkflowDepth ?? new WorkflowEngineOptions().MaxSubWorkflowDepth;
 
     internal const string ParkedKey = "__subworkflow";
-    internal const string WakeKey = "__wake";
     internal const string ChildResultKey = "childResult";
     private const string DefaultPort = "default";
 
@@ -46,13 +45,27 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         SubWorkflowConfig config = node.Config
             ?? throw new InvalidOperationException($"SubWorkflow node {node.NodeId} is missing config.");
 
-        // Resume visit: the child completed and its result was delivered under "__wake".
-        if (ctx.Branch.LocalState.ContainsKey(ParkedKey))
+        // Resume visit: this node's own marker is present, and the child's result was delivered under
+        // "__wake". The exit clears the marker and the wake, so a later await on this branch (or this
+        // node on its next loop lap) parks afresh rather than reading them as its own.
+        if (ParkMarker.TryReadOwn(ctx.Branch.LocalState, ParkedKey, node.NodeId, out string? childRunRefId))
         {
-            IReadOnlyDictionary<string, JsonElement> resumePatch = ctx.Branch.LocalState.TryGetValue(WakeKey, out JsonElement wake)
-                ? new Dictionary<string, JsonElement> { [ChildResultKey] = wake.Clone() }
-                : new Dictionary<string, JsonElement>();
-            return new NodeExecutionResult.Continue(DefaultPort, resumePatch);
+            IReadOnlyCollection<string> removeKeys = [ParkedKey, .. ParkMarker.WakeKeys];
+            switch (ParkMarker.ReadWake(ctx.Branch.LocalState, node.NodeId, out JsonElement wake))
+            {
+                case ParkMarker.WakeOwner.This:
+                    return new NodeExecutionResult.Continue(
+                        DefaultPort,
+                        new Dictionary<string, JsonElement> { [ChildResultKey] = wake.Clone() },
+                        removeKeys);
+
+                case ParkMarker.WakeOwner.Other when Guid.TryParse(childRunRefId, out Guid parkedOn):
+                    // A wake delivered for another node's bookmark is not this child's result: keep
+                    // waiting on the same child run rather than starting another.
+                    return new NodeExecutionResult.WaitForBookmark(new ChildRunCompletedWakeCondition(parkedOn), new Dictionary<string, JsonElement>());
+            }
+
+            return new NodeExecutionResult.Continue(DefaultPort, new Dictionary<string, JsonElement>(), removeKeys);
         }
 
         // First visit: start the child run via its manual trigger.
@@ -119,7 +132,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         var condition = new ChildRunCompletedWakeCondition(childRun.RefId);
         var patch = new Dictionary<string, JsonElement>
         {
-            [ParkedKey] = JsonSerializer.SerializeToElement(childRun.RefId.ToString())
+            [ParkedKey] = ParkMarker.Create(node.NodeId, childRun.RefId.ToString())
         };
 
         return new NodeExecutionResult.WaitForBookmark(condition, patch);
