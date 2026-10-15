@@ -15,7 +15,6 @@ BEGIN
         PendingTakePort,
         LocalJson,
         LastOutputJson,
-        CompensationStackJson,
         CreatedAt,
         UpdatedAt,
         RowVersion

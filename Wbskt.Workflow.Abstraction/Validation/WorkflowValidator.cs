@@ -110,11 +110,31 @@ public sealed class WorkflowValidator
     {
         var nodeIds = def.Nodes.Select(node => node.NodeId).ToHashSet();
 
+        // Compensation is not part of this release. Both switches are still read from a saved
+        // definition, so an author who sets one must hear at publish that it does nothing, rather
+        // than find out from a failed run that no undo step ran.
+        if (def.RunCompensationOnFailure)
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "COMPENSATION_NOT_SUPPORTED",
+                "The workflow sets runCompensationOnFailure, but compensation is not available in this release. Remove the setting; a failure then fails the branch (or the run, with failFast)."));
+        }
+
         foreach (var node in def.Nodes)
         {
             if (node is not Models.Nodes.Actions.BaseActionNode { OnFailure: { } onFailure })
             {
                 continue;
+            }
+
+            if (onFailure.Outcome == ErrorOutcome.Compensate)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "COMPENSATION_NOT_SUPPORTED",
+                    $"Node '{node.NodeId}' declares onFailure 'Compensate', but compensation is not available in this release. Use FailBranch or FailRun instead.",
+                    node.NodeId));
             }
 
             // ContinueOnError leaves through an "error" port; without one the outcome silently does

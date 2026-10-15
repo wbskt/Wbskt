@@ -47,7 +47,7 @@ public class Program
         [
             ("LinearHappyPath", BuildHappyPath()),
             ("BranchingWithLogicAndForEach", BuildBranchingWorkflow()),
-            ("ErrorHandlingAndCompensation", BuildErrorHandlingWorkflow())
+            ("ErrorHandling", BuildErrorHandlingWorkflow())
         ];
     }
 

@@ -186,13 +186,13 @@ public sealed class StrandedBranchSweepTests
             var terminator = new BranchTerminator(counters, new Lazy<IRunFinalizer>(() => finalizer));
 
             WaitExecutor = new WaitExecutor(state.Clock);
-            BranchLoop = TestBranchLoop.Create(branchProvider, runProvider, counters, bookmarkProvider, journal, cache, new NodeExecutorRegistry([WaitExecutor]), runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, idGenerator, terminator, runCancellationService, new NoOpCompensationOrchestrator(), new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
+            BranchLoop = TestBranchLoop.Create(branchProvider, runProvider, counters, bookmarkProvider, journal, cache, new NodeExecutorRegistry([WaitExecutor]), runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, idGenerator, terminator, runCancellationService, new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
 
             var continueHandler = new ContinueResultHandler(branchProvider, new BranchEndings(branchProvider, journal, terminator), new JoinDeclines(new NoOpJoinAggregatorProvider(), runCancellationService, journal));
             var resultDispatcher = new BranchResultDispatcher(
             [
                 continueHandler,
-                new FailResultHandler(branchProvider, counters, runDispatcher, idGenerator, state.Clock, runCancellationService, new NoOpCompensationOrchestrator(), new NoOpJoinAggregatorProvider(), journal, terminator, continueHandler)
+                new FailResultHandler(branchProvider, counters, runDispatcher, idGenerator, state.Clock, runCancellationService, new NoOpJoinAggregatorProvider(), journal, terminator, continueHandler)
             ]);
             Failer = new StrandedBranchFailer(branchProvider, bookmarkProvider, runProvider, cache, resultDispatcher, runCancellationService, runDispatcher, journal, terminator);
 
@@ -276,7 +276,6 @@ public sealed class StrandedBranchSweepTests
                 PendingTakePort = null,
                 LocalJson = "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = Start,
                 UpdatedAt = updatedAt ?? Clock.Now,
                 RowVersion = NextVersion()

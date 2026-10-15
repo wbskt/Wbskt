@@ -164,7 +164,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
         p.AddWithValue("@PendingTakePort", (object?)row.PendingTakePort ?? DBNull.Value);
         p.AddWithValue("@LocalJson", row.LocalJson);
         p.AddWithValue("@LastOutputJson", (object?)row.LastOutputJson ?? DBNull.Value);
-        p.AddWithValue("@CompensationStackJson", (object?)row.CompensationStackJson ?? DBNull.Value);
     }
 
     internal static BranchRow Map(DbDataReader reader)
@@ -181,7 +180,6 @@ internal sealed class BranchProvider : BaseSqlProvider, IBranchProvider
             PendingTakePort = reader.IsDBNull(reader.GetOrdinal("PendingTakePort")) ? null : reader.GetString(reader.GetOrdinal("PendingTakePort")),
             LocalJson = reader.GetString(reader.GetOrdinal("LocalJson")),
             LastOutputJson = reader.IsDBNull(reader.GetOrdinal("LastOutputJson")) ? null : reader.GetString(reader.GetOrdinal("LastOutputJson")),
-            CompensationStackJson = reader.IsDBNull(reader.GetOrdinal("CompensationStackJson")) ? null : reader.GetString(reader.GetOrdinal("CompensationStackJson")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
             RowVersion = (byte[])reader.GetValue(reader.GetOrdinal("RowVersion"))

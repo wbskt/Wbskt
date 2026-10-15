@@ -57,7 +57,6 @@ public sealed class InboundEventToRunStartE2ETests
             new SequenceIdGenerator(),
             new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => new CompletingRunFinalizer(providers))),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
         InboundEvent evt = new(

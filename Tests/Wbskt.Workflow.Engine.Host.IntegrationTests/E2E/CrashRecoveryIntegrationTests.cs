@@ -113,7 +113,6 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
             PendingTakePort = null,
             LocalJson = "{}",
             LastOutputJson = null,
-            CompensationStackJson = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             RowVersion = Array.Empty<byte>()
@@ -133,120 +132,6 @@ public sealed class CrashRecoveryIntegrationTests(SqlEdgeFixture fixture)
         await recoveryService.RecoverAsync(CancellationToken.None);
         
         // 4. Verify it was dispatched
-        // Containment, not ContainSingle: recovery deliberately picks up every orphaned branch in
-        // the database, and every test in the SqlEdge collection shares one database - so branches
-        // this test did not create are legitimately dispatched in the same pass. What this test is
-        // about is that its own orphaned branch was among them, with the right reason.
-        mockDispatcher.DispatchedBranches.Should().Contain(dispatched =>
-            dispatched.RunId == createdRun.Id
-            && dispatched.BranchId == createdBranch.Id
-            && dispatched.Reason == Wbskt.Workflow.Abstraction.Runtime.BranchExecutionReason.Recovered);
-    }
-
-    [SkippableFact]
-    public async Task StartupRecoveryService_RecoversOrphanedCompensatingBranch_AndDispatchesIt()
-    {
-        Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
-
-        ServiceCollection services = EngineTestHost.BuildServices(fixture.ConnectionString);
-
-        await using ServiceProvider sp = services.BuildServiceProvider();
-
-        var definitionProvider = sp.GetRequiredService<IWorkflowDefinitionProvider>();
-        var runProvider = sp.GetRequiredService<IRunProvider>();
-        var branchProvider = sp.GetRequiredService<IBranchProvider>();
-
-        var workflowRefId = Guid.NewGuid();
-        string dummyJson = $$"""
-        {
-            "workflowRefId": "{{workflowRefId}}",
-            "version": 1,
-            "workspaceId": 1,
-            "name": "CrashRecoveryCompensating",
-            "nodes": [
-                {
-                    "nodeId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                    "kind": "trigger:manual",
-                    "name": "Start",
-                    "ports": [{"portId": "out", "direction": "Output", "label": "Out"}],
-                    "config": {}
-                }
-            ],
-            "edges": [],
-            "sharedVariableSchema": [],
-            "createdAt": "2026-01-01T00:00:00Z",
-            "publishedBy": 1,
-            "failFast": false,
-            "runCompensationOnFailure": false
-        }
-        """;
-
-        WorkflowDefinitionRow wd = await definitionProvider.InsertAsync(new WorkflowDefinitionRow
-        {
-            Id = 0,
-            RefId = workflowRefId,
-            Version = 1,
-            WorkspaceId = 1,
-            Name = "CrashRecoveryCompensating",
-            Description = null,
-            IsEnabled = true,
-            DefinitionJson = dummyJson,
-            PublishedBy = 1,
-            CreatedAt = DateTime.UtcNow
-        }, CancellationToken.None);
-
-        Guid runRefId = Guid.NewGuid();
-        Guid branchRefId = Guid.NewGuid();
-
-        var run = new RunRow
-        {
-            Id = 0,
-            RefId = runRefId,
-            WorkflowDefinitionId = wd.Id,
-            WorkflowRefId = wd.RefId,
-            WorkflowVersion = wd.Version,
-            Status = "Failing",
-            TriggerNodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            CorrelationKey = null,
-            StartedAt = DateTime.UtcNow,
-            CompletedAt = null,
-            CancellationRequestedAt = null,
-            CancellationReason = null,
-            CreditBudget = 1000m,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var createdRun = await runProvider.CreateAsync(run, CancellationToken.None);
-
-        var branch = new BranchRow
-        {
-            Id = 0,
-            RefId = branchRefId,
-            RunId = createdRun.Id,
-            ParentBranchId = null,
-            ForkCohortId = null,
-            NodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            Status = "Compensating",
-            PendingTakePort = null,
-            LocalJson = "{}",
-            LastOutputJson = null,
-            CompensationStackJson = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            RowVersion = Array.Empty<byte>()
-        };
-
-        var createdBranch = await branchProvider.CreateAsync(branch, CancellationToken.None);
-
-        var mockDispatcher = new RecordingRunDispatcher();
-        var mockScopeFactory = new MockServiceScopeFactory(branchProvider, runProvider, null);
-        var recoveryService = new RunRecoveryService(
-            mockScopeFactory,
-            mockDispatcher,
-            NullLogger<RunRecoveryService>.Instance);
-
-        await recoveryService.RecoverAsync(CancellationToken.None);
-
         // Containment, not ContainSingle: recovery deliberately picks up every orphaned branch in
         // the database, and every test in the SqlEdge collection shares one database - so branches
         // this test did not create are legitimately dispatched in the same pass. What this test is

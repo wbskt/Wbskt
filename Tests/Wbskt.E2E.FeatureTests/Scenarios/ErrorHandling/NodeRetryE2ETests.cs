@@ -83,7 +83,7 @@ public sealed class NodeRetryE2ETests(ServicesFixture fixture)
             .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddWebhook("POST", url, null, webhook => 
             {
-                webhook.OnSuccess(b => b.AddClientMessage(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded", null));
+                webhook.OnSuccess(b => b.AddClientMessage(deviceRefStr, "WebhookSucceeded", "Webhook Succeeded"));
                 webhook.OnError(b => b.AddFailRun("Webhook failed permanently"));
             });
 

@@ -2665,7 +2665,7 @@ const runsView = {
     },
 
     async cancel(runRefId) {
-        if (!await modal.confirm('Cancel run', 'Cancel this run? Compensation runs if the workflow declares it.', { danger: true, confirmLabel: 'Cancel run' })) return;
+        if (!await modal.confirm('Cancel run', 'Cancel this run?', { danger: true, confirmLabel: 'Cancel run' })) return;
         const ok = await act(() => http.post('api', `/api/workspaces/{ws}/runs/${runRefId}/cancel`, { reason: 'Cancelled from the test dashboard' }), 'Cancellation requested');
         if (ok !== undefined) this.reload();
     },

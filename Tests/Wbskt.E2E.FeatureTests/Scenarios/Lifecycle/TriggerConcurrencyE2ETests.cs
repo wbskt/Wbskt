@@ -37,7 +37,7 @@ public sealed class TriggerConcurrencyE2ETests(ServicesFixture fixture)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(5), awaitSignal => 
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired"));
             });
 
         var definition = builder.BuildAndValidate();

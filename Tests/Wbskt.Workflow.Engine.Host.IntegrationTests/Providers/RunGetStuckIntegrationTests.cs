@@ -5,7 +5,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 
 /// <summary>
 /// Phase 1.2 — Run_GetStuck must only return runs with no live work (no bookmark, no
-/// active/waiting/compensating branch), not merely "old and non-terminal".
+/// active/waiting branch), not merely "old and non-terminal".
 /// </summary>
 [Collection("SqlEdge")]
 public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
@@ -99,7 +99,6 @@ public sealed class RunGetStuckIntegrationTests(SqlEdgeFixture fixture)
             PendingTakePort = null,
             LocalJson = "{}",
             LastOutputJson = null,
-            CompensationStackJson = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             RowVersion = Array.Empty<byte>()

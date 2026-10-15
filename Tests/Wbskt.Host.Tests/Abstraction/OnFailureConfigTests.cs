@@ -15,21 +15,19 @@ public class OnFailureConfigTests
         var config = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);
         Assert.NotNull(config);
         Assert.Equal(ErrorOutcome.FailRun, config!.Outcome);
-        Assert.Null(config.Compensate);
     }
 
     [Fact]
-    public void OnFailureConfig_roundtrips_with_compensation()
+    public void A_saved_Compensate_outcome_still_deserialises()
     {
-        var refundNodeId = new Guid("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-        var config = new OnFailureConfig { Outcome = ErrorOutcome.Compensate, Compensate = new CompensationDeclaration { NodeId = refundNodeId, Kind = "action:clientMessage", Config = null } };
+        // Compensation is not available, and the validator rejects it at publish, but a definition saved
+        // before that may carry the outcome (and its old "compensate" block). It must still load, so the
+        // run fails plainly rather than the whole definition becoming unreadable.
+        var json = """{ "outcome": "Compensate", "compensate": { "nodeId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "kind": "action:clientMessage" } }""";
 
-        var json = JsonSerializer.Serialize(config, Options);
-        var back = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);
+        var config = JsonSerializer.Deserialize<OnFailureConfig>(json, Options);
 
-        Assert.Equal(ErrorOutcome.Compensate, back!.Outcome);
-        Assert.NotNull(back.Compensate);
-        Assert.Equal(refundNodeId, back.Compensate!.NodeId);
+        Assert.Equal(ErrorOutcome.Compensate, config!.Outcome);
     }
 
     [Fact]

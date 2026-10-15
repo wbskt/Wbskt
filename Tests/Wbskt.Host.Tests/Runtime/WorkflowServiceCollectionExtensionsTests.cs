@@ -117,8 +117,6 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         var runFinalizer2 = scope2.ServiceProvider.GetRequiredService<IRunFinalizer>();
         var cancellationService1 = scope1.ServiceProvider.GetRequiredService<IRunCancellationService>();
         var cancellationService2 = scope2.ServiceProvider.GetRequiredService<IRunCancellationService>();
-        var compensationOrchestrator1 = scope1.ServiceProvider.GetRequiredService<ICompensationOrchestrator>();
-        var compensationOrchestrator2 = scope2.ServiceProvider.GetRequiredService<ICompensationOrchestrator>();
         var runCompletedPublisher1 = scope1.ServiceProvider.GetRequiredService<IRunCompletedPublisher>();
         var runCompletedPublisher2 = scope2.ServiceProvider.GetRequiredService<IRunCompletedPublisher>();
         var runStartedPublisher1 = scope1.ServiceProvider.GetRequiredService<IRunStartedPublisher>();
@@ -175,8 +173,6 @@ public sealed class WorkflowServiceCollectionExtensionsTests
         Assert.NotSame(runFinalizer1, runFinalizer2);
         Assert.IsType<RunCancellationService>(cancellationService1);
         Assert.NotSame(cancellationService1, cancellationService2);
-        Assert.IsType<CompensationOrchestrator>(compensationOrchestrator1);
-        Assert.NotSame(compensationOrchestrator1, compensationOrchestrator2);
         Assert.IsType<NullRunCompletedPublisher>(runCompletedPublisher1);
         Assert.NotSame(runCompletedPublisher1, runCompletedPublisher2);
         Assert.IsType<NullRunStartedPublisher>(runStartedPublisher1);

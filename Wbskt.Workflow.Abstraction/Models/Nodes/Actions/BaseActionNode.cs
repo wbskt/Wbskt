@@ -11,7 +11,4 @@ public abstract record BaseActionNode : BaseNode
 
     [JsonPropertyName("onFailure")]
     public OnFailureConfig? OnFailure { get; init; }
-
-    [JsonPropertyName("compensation")]
-    public CompensationDeclaration? Compensation { get; init; }
 }

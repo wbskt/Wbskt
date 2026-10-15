@@ -48,7 +48,7 @@ public sealed class RunCancellationE2ETests(ServicesFixture fixture)
             .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(60), awaitSignal =>
             {
-                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired"));
                 awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
             });
 

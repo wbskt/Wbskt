@@ -101,7 +101,7 @@ public sealed class RunRecoveryService : IEngineStartupTracker
 
     /// <summary>
     /// Re-applies the stop of every run left in 'Failing' or 'Cancelling' that the branch pass above did
-    /// not visit. That pass only finds runs through an Active or Compensating branch, so a run whose
+    /// not visit. That pass only finds runs through an Active branch, so a run whose
     /// stop was cut short by the crash and whose remaining branches were all Waiting was never visited:
     /// its parked siblings kept ActiveBranchCount above zero, and the reaper skips runs with Waiting
     /// branches, so it stayed Failing or Cancelling for good. Both stops are idempotent on a run already

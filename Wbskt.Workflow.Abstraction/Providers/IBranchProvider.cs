@@ -36,8 +36,8 @@ public interface IBranchProvider
         (await CreateAsync(row, ct), true);
 
     /// <summary>
-    /// Ends the branch with <paramref name="toStatus"/> only if it is still live (Active, Waiting or
-    /// Compensating), and says whether it did. Two loops can reach the end of one branch - a cancel
+    /// Ends the branch with <paramref name="toStatus"/> only if it is still live (Active or Waiting),
+    /// and says whether it did. Two loops can reach the end of one branch - a cancel
     /// racing a bookmark wake, a recovery requeue racing a slow node on the old leader - and only the
     /// one that actually ended it may release it; a second release lets the run's active-branch count
     /// reach zero while another branch is still running. <paramref name="lastOutputJson"/> replaces the

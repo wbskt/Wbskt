@@ -36,7 +36,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(2), awaitSignal => 
             {
                 awaitSignal.OnSuccess(b => b.AddFailRun("Should not have received signal"));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired"));
             });
 
         var definition = builder.BuildAndValidate();
@@ -101,7 +101,7 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
             .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(10), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired", null));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired"));
                 awaitSignal.OnTimeout(b => b.AddFailRun("Should not have timed out"));
             });
 
@@ -171,8 +171,8 @@ public sealed class BookmarkTtlRaceE2ETests(ServicesFixture fixture)
             .AddClientTrigger(deviceRefStr, "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out var triggerNodeId)
             .AddAwaitSignal("continue", TimeSpan.FromSeconds(3), awaitSignal => 
             {
-                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired", null));
-                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired", null));
+                awaitSignal.OnSuccess(b => b.AddClientMessage(deviceRefStr, "SignalFired", "Signal Fired"));
+                awaitSignal.OnTimeout(b => b.AddClientMessage(deviceRefStr, "TimeoutFired", "Timeout Fired"));
             });
 
         var definition = builder.BuildAndValidate();

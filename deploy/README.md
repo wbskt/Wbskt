@@ -507,11 +507,17 @@ older migrator, its password is the one that used to be documented here; change 
 
 The change that moved `Clients.Secret` (plaintext) to `Clients.SecretHash` (SHA-256) drops a column,
 so the deploy carrying it fails the incremental publish until you pass `MIGRATE_ALLOW_DATA_LOSS=true`
-for that one run. This is the only migration so far that needs it.
+for that one run.
 
 The loss is intended and bounded: the pre-deployment script hashes every existing secret into the
 new column *before* the schema diff drops the old one, so devices already registered keep working
 with the secret they hold. What is destroyed is the plaintext, which is the point.
+
+### The compensation cut needs this flag, once
+
+Cutting compensation from the launch drops `Branches.CompensationStackJson`, so the deploy carrying
+it also fails the incremental publish until `MIGRATE_ALLOW_DATA_LOSS=true` is passed for that one
+run. The column was written but never read, so nothing is lost but the column itself.
 
 Nothing is recoverable afterwards, so take a backup first — `deploy/scripts/backup.sh` — and confirm
 a device can still log in before moving on.

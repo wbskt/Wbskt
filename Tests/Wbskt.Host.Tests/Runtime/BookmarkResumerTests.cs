@@ -492,7 +492,6 @@ public sealed class BookmarkResumerTests
                 PendingTakePort = null,
                 LocalJson = "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
                 RowVersion = [1]

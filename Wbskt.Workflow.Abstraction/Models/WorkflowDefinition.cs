@@ -16,6 +16,8 @@ public sealed record WorkflowDefinition(
     [property: JsonPropertyName("sharedVariableSchema")] IReadOnlyCollection<SharedVariableDeclaration> SharedVariableSchema,
     [property: JsonPropertyName("createdAt")] DateTime CreatedAt,
     [property: JsonIgnore] int PublishedBy, // will be 0 by default and be replaced in the service
+    // Compensation is not available in this release and WorkflowValidator rejects true. The flag stays
+    // so publishing can say so, rather than silently ignoring a setting the author believes is on.
     [property: JsonPropertyName("runCompensationOnFailure")] bool RunCompensationOnFailure = false,
     [property: JsonPropertyName("failFast")] bool FailFast = false,
     // Optional per-run credit budget. When null (or non-positive) the engine falls back to

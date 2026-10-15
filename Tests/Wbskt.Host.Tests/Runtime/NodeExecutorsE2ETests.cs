@@ -77,7 +77,6 @@ public sealed class NodeExecutorsE2ETests
             new SequentialIdGenerator(),
             new BranchTerminator(providers, new Lazy<IRunFinalizer>(() => finalizer)),
             new NoOpRunCancellationService(),
-            new NoOpCompensationOrchestrator(),
             new DefaultCreditCostCalculator(),
             new NoOpJoinAggregatorProvider());
 
@@ -155,7 +154,6 @@ public sealed class NodeExecutorsE2ETests
                     ["items"] = JsonSerializer.SerializeToElement(new[] { "x", "y", "z" })
                 }),
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = definition.CreatedAt,
                 UpdatedAt = definition.CreatedAt,
                 RowVersion = [1]

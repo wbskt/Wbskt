@@ -14,10 +14,10 @@ namespace Wbskt.Host.Tests.Runtime;
 public sealed class ErrorModelE2ETests
 {
     [Fact]
-    public async Task Parallel_branch_failure_with_compensation_finishes_partially_failed()
+    public async Task Parallel_branch_failure_finishes_partially_failed()
     {
         Guid rootNodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        Guid compensableNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        Guid sendNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         Guid fatalNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         Guid successNodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         WorkflowDefinition definition = new(
@@ -29,15 +29,14 @@ public sealed class ErrorModelE2ETests
             true,
             [
                 new TestNode { NodeId = rootNodeId, Name = "root", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fork" },
-                new SendClientMessageNode { NodeId = compensableNodeId, Name = "compensable", Ports = [new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" }, Compensation = new CompensationDeclaration { NodeId = Guid.Empty, Kind = "action:email", Config = null } },
+                new SendClientMessageNode { NodeId = sendNodeId, Name = "send", Ports = [new PortDefinition { PortId = "next", Direction = PortDirection.Output, Label = "Next" }], Config = new SendClientMessageConfig { ClientRef = "client-1", Type = "DoThing" } },
                 new TestNode { NodeId = fatalNodeId, Name = "fatal", Ports = Array.Empty<PortDefinition>(), KindValue = "test:fail" },
                 new TestNode { NodeId = successNodeId, Name = "success", Ports = Array.Empty<PortDefinition>(), KindValue = "test:success" }
             ],
-            [new Edge((compensableNodeId, "next"), (fatalNodeId, "in"))],
+            [new Edge((sendNodeId, "next"), (fatalNodeId, "in"))],
             Array.Empty<SharedVariableDeclaration>(),
             new DateTime(2026, 5, 26, 12, 0, 0, DateTimeKind.Utc),
             7,
-            RunCompensationOnFailure: true,
             FailFast: false);
 
         var state = new InMemoryState(definition, rootNodeId);
@@ -47,32 +46,27 @@ public sealed class ErrorModelE2ETests
         var bookmarkProvider = new InMemoryBookmarkProvider(state);
         var historyEventProvider = new InMemoryHistoryEventProvider(state);
         var runDispatcher = new RecordingRunDispatcher();
-        var compensationExecutor = new RecordingCompensationExecutor();
         var registry = new NodeExecutorRegistry([
-            new ForkExecutor(compensableNodeId, successNodeId),
+            new ForkExecutor(sendNodeId, successNodeId),
             new ContinueExecutor(NodeKind.ActionClientMessage, "next"),
             new FailExecutor(),
-            new SuccessExecutor(),
-            compensationExecutor
+            new SuccessExecutor()
         ]);
         var cache = new StaticWorkflowDefinitionCache(definition);
-        var orchestrator = new CompensationOrchestrator(runProvider, branchProvider, new RunJournal(historyEventProvider, new FixedClock()), cache, registry, state.Clock);
         var finalizer = new RunFinalizer(runProvider, branchProvider, new RunJournal(historyEventProvider, new FixedClock()), new NoOpPendingTriggerEventDrainer(), new NullRunCompletedPublisher(), bookmarkProvider, new NoOpCompletionHook(), state.Clock, new RunCancellationTokenRegistry(), new NoOpJoinAggregatorProvider(), cache);
-        var branchLoop = TestBranchLoop.Create(branchProvider, runProvider, runCountersProvider, bookmarkProvider, new RunJournal(historyEventProvider, new FixedClock()), cache, registry, runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, new SequenceIdGenerator(), new BranchTerminator(runCountersProvider, new Lazy<IRunFinalizer>(() => finalizer)), new NoOpRunCancellationService(), orchestrator, new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
+        var branchLoop = TestBranchLoop.Create(branchProvider, runProvider, runCountersProvider, bookmarkProvider, new RunJournal(historyEventProvider, new FixedClock()), cache, registry, runDispatcher, new InMemoryIdempotencyKeyProvider(), state.Clock, new SequenceIdGenerator(), new BranchTerminator(runCountersProvider, new Lazy<IRunFinalizer>(() => finalizer)), new NoOpRunCancellationService(), new DefaultCreditCostCalculator(), new NoOpJoinAggregatorProvider());
 
         await branchLoop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
 
         BranchExecutionRequest successRequest = Assert.Single(runDispatcher.Requests, request => state.Branches[request.BranchId].NodeId == successNodeId);
-        BranchExecutionRequest failingRequest = Assert.Single(runDispatcher.Requests, request => state.Branches[request.BranchId].NodeId == compensableNodeId);
+        BranchExecutionRequest failingRequest = Assert.Single(runDispatcher.Requests, request => state.Branches[request.BranchId].NodeId == sendNodeId);
 
         await branchLoop.RunAsync(successRequest.RunId, successRequest.BranchId, successRequest.Reason, CancellationToken.None);
         await branchLoop.RunAsync(failingRequest.RunId, failingRequest.BranchId, failingRequest.Reason, CancellationToken.None);
 
         Assert.Equal("PartiallyFailed", state.Runs[42].Status);
-        Assert.Single(compensationExecutor.Calls);
         Assert.Equal("Completed", state.Branches[successRequest.BranchId].Status);
         Assert.Equal("Failed", state.Branches[failingRequest.BranchId].Status);
-        Assert.Contains(state.HistoryEvents, evt => evt.EventKind == "CompensationExecuted");
     }
 
     private sealed record TestNode : BaseNode { public required string KindValue { get; init; } public override string Kind => KindValue; }
@@ -117,19 +111,6 @@ public sealed class ErrorModelE2ETests
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
-            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
-        }
-    }
-
-    private sealed class RecordingCompensationExecutor : INodeExecutor
-    {
-        public string Kind => "action:email";
-
-        public List<NodeContext> Calls { get; } = [];
-
-        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
-        {
-            Calls.Add(ctx);
             return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
         }
     }
@@ -205,7 +186,6 @@ public sealed class ErrorModelE2ETests
                 PendingTakePort = null,
                 LocalJson = "{}",
                 LastOutputJson = null,
-                CompensationStackJson = null,
                 CreatedAt = definition.CreatedAt,
                 UpdatedAt = definition.CreatedAt,
                 RowVersion = [1]

@@ -30,7 +30,7 @@ BEGIN
       AND NOT EXISTS (SELECT 1 FROM dbo.Bookmarks b WHERE b.RunId = r.Id)
       AND NOT EXISTS (SELECT 1 FROM dbo.Branches br
                       WHERE br.RunId = r.Id
-                        AND br.Status IN (N'Active', N'Waiting', N'Compensating'))
+                        AND br.Status IN (N'Active', N'Waiting'))
     ORDER BY r.CreatedAt;
 END;
 GO

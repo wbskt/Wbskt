@@ -17,7 +17,6 @@ public sealed class WorkflowBuilder
     private readonly List<BaseNode> _nodes = [];
     private readonly List<Edge> _edges = [];
     private (Guid NodeId, string PortId)? _head;
-    private bool _runCompensationOnFailure;
     private decimal? _creditBudget;
 
     public WorkflowBuilder(string name, Guid? workflowRefId = null)
@@ -27,12 +26,6 @@ public sealed class WorkflowBuilder
     }
 
     public Guid WorkflowRefId => _workflowRefId;
-
-    public WorkflowBuilder EnableCompensationOnFailure(bool enable = true)
-    {
-        _runCompensationOnFailure = enable;
-        return this;
-    }
 
     /// <summary>Caps the compute a single run of this workflow may consume before it goes OutOfCredits.</summary>
     public WorkflowBuilder WithCreditBudget(decimal creditBudget)
@@ -55,7 +48,6 @@ public sealed class WorkflowBuilder
             SharedVariableSchema: [],
             CreatedAt: DateTime.UtcNow,
             PublishedBy: 1,
-            RunCompensationOnFailure: _runCompensationOnFailure,
             CreditBudget: _creditBudget);
     }
 
@@ -145,7 +137,7 @@ public sealed class WorkflowBuilder
         return this;
     }
 
-    public WorkflowBuilder AddClientMessage(string clientRef, string messageType, string? name = null, CompensationDeclaration? compensation = null)
+    public WorkflowBuilder AddClientMessage(string clientRef, string messageType, string? name = null)
     {
         var id = Guid.NewGuid();
         _nodes.Add(new SendClientMessageNode {
@@ -154,8 +146,7 @@ public sealed class WorkflowBuilder
             Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
             Config = new SendClientMessageConfig { ClientRef = clientRef, Type = messageType, Payload = null },
             Retry = null,
-            OnFailure = null,
-            Compensation = compensation });
+            OnFailure = null });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);
@@ -175,8 +166,7 @@ public sealed class WorkflowBuilder
             Ports = [new PortDefinition { PortId = PortNames.In, Direction = PortDirection.Input, Label = "In" }, new PortDefinition { PortId = PortNames.Default, Direction = PortDirection.Output, Label = "Out" }],
             Config = new ToastConfig { Title = title, Message = message },
             Retry = null,
-            OnFailure = null,
-            Compensation = null });
+            OnFailure = null });
 
         ConnectToHead(id, PortNames.In);
         _head = (id, PortNames.Default);

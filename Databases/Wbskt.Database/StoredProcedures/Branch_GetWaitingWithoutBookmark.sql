@@ -23,7 +23,6 @@ BEGIN
         br.PendingTakePort,
         br.LocalJson,
         br.LastOutputJson,
-        br.CompensationStackJson,
         br.CreatedAt,
         br.UpdatedAt,
         br.RowVersion

@@ -38,10 +38,6 @@ public static class HistoryEventKind
     // A cohort branch ended (an End node, a port with no edge) without reaching its Join.
     public const string JoinAbandoned = "JoinAbandoned";
 
-    // Compensation
-    public const string CompensationExecuted = "CompensationExecuted";
-    public const string CompensationFailed = "CompensationFailed";
-
     public const string SeverityInfo = "Info";
     public const string SeverityWarn = "Warn";
     public const string SeverityError = "Error";
@@ -57,7 +53,6 @@ public static class HistoryEventKind
             NodeFailed
                 or BranchFailed
                 or NodeRetrying
-                or CompensationFailed
                 or BranchCancelled
                 or JoinAbandoned
                 or RunCancellationRequested
