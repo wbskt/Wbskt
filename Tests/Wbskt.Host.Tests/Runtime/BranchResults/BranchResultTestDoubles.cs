@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
@@ -116,7 +117,8 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
 {
     private int _nextId = 5000;
 
-    public BranchRow Current { get; private set; } = current;
+    // Settable so a test can put the branch back where a crash left it and replay a handler.
+    public BranchRow Current { get; set; } = current;
 
     public List<(long BranchId, Guid NodeId, string Status, string LocalJson, string? LastOutputJson)> Updates { get; } = [];
 
@@ -139,6 +141,50 @@ internal sealed class RecordingBranchProvider(List<string> log, BranchRow curren
         Created.Add(created);
         return Task.FromResult(created);
     }
+
+    /// <summary>Children created through <see cref="CreateIfAbsentAsync"/>, by RefId, so a replayed Fork finds them.</summary>
+    private readonly Dictionary<Guid, BranchRow> _byRefId = [];
+
+    public List<(long BranchId, string Status)> RefusedEnds { get; } = [];
+
+    /// <summary>
+    /// Honours the guard the way Branch_EndIfLive does: a branch that is no longer Active, Waiting or
+    /// Compensating is refused and nothing is written. The writes it does make go through the
+    /// unguarded recorders, so the log reads as it did before the guard.
+    /// </summary>
+    public async Task<bool> EndIfLiveAsync(long branchId, string toStatus, string? lastOutputJson, CancellationToken ct)
+    {
+        if (!BranchStatus.IsLive(Current.Status))
+        {
+            log.Add($"end-refused:{toStatus}");
+            RefusedEnds.Add((branchId, toStatus));
+            return false;
+        }
+
+        _ = toStatus switch
+        {
+            BranchStatus.Completed => await SetCompletedAsync(branchId, ct),
+            BranchStatus.Failed => await SetFailedAsync(branchId, lastOutputJson, ct),
+            _ => await UpdatePointerAsync(branchId, Current.NodeId, toStatus, Current.LocalJson, lastOutputJson, ct)
+        };
+        return true;
+    }
+
+    public async Task<(BranchRow Row, bool Created)> CreateIfAbsentAsync(BranchRow row, CancellationToken ct)
+    {
+        if (_byRefId.TryGetValue(row.RefId, out BranchRow? existing))
+        {
+            log.Add($"exists:{existing.NodeId}");
+            return (existing, false);
+        }
+
+        BranchRow created = await CreateAsync(row, ct);
+        _byRefId[created.RefId] = created;
+        return (created, true);
+    }
+
+    /// <summary>Forgets a child, as if the crash that cut a Fork short came before it was written.</summary>
+    public void Forget(Guid refId) => _byRefId.Remove(refId);
 
     public Task<BranchRow> SetCompletedAsync(long branchId, CancellationToken ct)
     {
@@ -212,7 +258,11 @@ internal sealed class RecordingRunCountersProvider(List<string> log) : IRunCount
 
     public Task<RunCountersRow> GetByRunIdAsync(int runId, CancellationToken ct) => throw new NotSupportedException();
 
-    public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct) => throw new NotSupportedException();
+    public Task<int> DecrementActiveBranchesAsync(int runId, int delta, CancellationToken ct)
+    {
+        log.Add($"decrement:{runId}:{delta}");
+        return Task.FromResult(0);
+    }
 
     public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => throw new NotSupportedException();
 
@@ -229,4 +279,22 @@ internal sealed class SequentialIdGenerator : IIdGenerator
     private int _next;
 
     public Guid NewId() => new($"00000000-0000-0000-0000-{++_next:D12}");
+}
+
+/// <summary>Keeps the warnings it is given, so a test can pin that a refused end was logged.</summary>
+internal sealed class WarningRecorder<T> : ILogger<T>
+{
+    public List<string> Warnings { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        if (logLevel == LogLevel.Warning)
+        {
+            Warnings.Add(formatter(state, exception));
+        }
+    }
 }
