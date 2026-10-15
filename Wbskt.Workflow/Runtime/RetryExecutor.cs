@@ -44,7 +44,6 @@ internal static class RetryExecutor
         RetryNotification? onRetry = null,
         CreditChargeNotification? onCharge = null)
     {
-        _ = clock;
         RetryPolicy policy = GetPolicy(node);
         bool isSideEffectFree = executor.IsSideEffectFree;
 
@@ -190,6 +189,39 @@ internal static class RetryExecutor
                 IdempotencyKey = keyValue
             };
 
+            // Both ways a node can ask for a retry - returning a retryable Fail and throwing a
+            // TransientNodeException - go through here. They used to be separate: the Fail path
+            // ignored RetryOn and never reported the retry, so a policy saying "only retry these"
+            // did not hold for it and its retries were missing from history. Null means "retry";
+            // otherwise it is the failure to return.
+            async Task<NodeExecutionResult.Fail?> RetryOrStopAsync(NodeExecutionResult.Fail fail, Exception? exception)
+            {
+                RetryDecision decision = Decide(policy, attempt, fail.ErrorCode, exception);
+                switch (decision.Verdict)
+                {
+                    case RetryVerdict.NotRetryable:
+                        return fail with { Retryable = false };
+                    case RetryVerdict.Exhausted:
+                        return fail;
+                }
+
+                // Retries were invisible in the trace: a node retried four times looked like one slow
+                // node, and the backoff was indistinguishable from the node itself being slow.
+                if (onRetry is not null)
+                {
+                    await onRetry(attempt, policy.MaxAttempts, decision.Delay, fail.Message, ct);
+                }
+
+                // On the injected clock, not the wall clock, so backoff follows the same time source as
+                // the rest of the engine and can be driven by a test.
+                if (decision.Delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(decision.Delay, clock, ct);
+                }
+
+                return null;
+            }
+
             try
             {
                 NodeExecutionResult result = await executor.ExecuteAsync(nodeContext, ct);
@@ -199,15 +231,14 @@ internal static class RetryExecutor
                     string errorJson = JsonSerializer.Serialize(fail, JsonOptions);
                     await RecordOutcomeAsync(false, errorJson);
 
-                    if (!fail.Retryable || attempt >= policy.MaxAttempts)
+                    if (!fail.Retryable)
                     {
                         return fail;
                     }
 
-                    TimeSpan delay = GetDelay(policy, attempt);
-                    if (delay > TimeSpan.Zero)
+                    if (await RetryOrStopAsync(fail, fail.Cause) is { } stop)
                     {
-                        await Task.Delay(delay, ct);
+                        return stop;
                     }
                     continue;
                 }
@@ -229,30 +260,9 @@ internal static class RetryExecutor
 
                 await RecordOutcomeAsync(false, errorJson);
 
-                // policy.RetryOn was collected but never consulted, so a policy saying "only retry
-                // these" retried everything transient. An empty list still means "retry anything".
-                if (!ShouldRetry(policy, fail.ErrorCode, ex))
+                if (await RetryOrStopAsync(fail, ex) is { } stop)
                 {
-                    return fail with { Retryable = false };
-                }
-
-                if (attempt >= policy.MaxAttempts)
-                {
-                    return fail;
-                }
-
-                TimeSpan delay = GetDelay(policy, attempt);
-
-                // Retries were invisible in the trace: a node retried four times looked like one slow
-                // node, and the backoff was indistinguishable from the node itself being slow.
-                if (onRetry is not null)
-                {
-                    await onRetry(attempt, policy.MaxAttempts, delay, ex.Message, ct);
-                }
-
-                if (delay > TimeSpan.Zero)
-                {
-                    await Task.Delay(delay, ct);
+                    return stop;
                 }
             }
             catch (PermanentNodeException ex)
@@ -296,13 +306,44 @@ internal static class RetryExecutor
         return new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] };
     }
 
+    private enum RetryVerdict
+    {
+        Retry,
+        NotRetryable,
+        Exhausted
+    }
+
+    private readonly record struct RetryDecision(RetryVerdict Verdict, TimeSpan Delay);
+
+    /// <summary>
+    /// The one place that decides whether a retryable failure is tried again, and after how long.
+    /// <see cref="RetryVerdict.NotRetryable"/> means the policy did not opt into this failure;
+    /// <see cref="RetryVerdict.Exhausted"/> means it did but the attempts are used up.
+    /// </summary>
+    private static RetryDecision Decide(RetryPolicy policy, int attempt, string errorCode, Exception? exception)
+    {
+        // policy.RetryOn was once collected but never consulted, so a policy saying "only retry
+        // these" retried everything transient. An empty list still means "retry anything".
+        if (!ShouldRetry(policy, errorCode, exception))
+        {
+            return new RetryDecision(RetryVerdict.NotRetryable, TimeSpan.Zero);
+        }
+
+        if (attempt >= policy.MaxAttempts)
+        {
+            return new RetryDecision(RetryVerdict.Exhausted, TimeSpan.Zero);
+        }
+
+        return new RetryDecision(RetryVerdict.Retry, GetDelay(policy, attempt));
+    }
+
     /// <summary>
     /// Whether a transient failure is one this policy opted into retrying. An empty
     /// <see cref="RetryPolicy.RetryOn"/> means "anything transient"; otherwise the failure must match
     /// by error code or by exception type name, so a policy can retry a timeout without also
     /// retrying, say, a validation error the callee reported as transient.
     /// </summary>
-    private static bool ShouldRetry(RetryPolicy policy, string errorCode, Exception exception)
+    private static bool ShouldRetry(RetryPolicy policy, string errorCode, Exception? exception)
     {
         if (policy.RetryOn.Count == 0)
         {
@@ -311,16 +352,33 @@ internal static class RetryExecutor
 
         return policy.RetryOn.Any(entry =>
             string.Equals(entry, errorCode, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(entry, exception.GetType().Name, StringComparison.OrdinalIgnoreCase));
+            || (exception is not null && string.Equals(entry, exception.GetType().Name, StringComparison.OrdinalIgnoreCase)));
     }
+
+    /// <summary>
+    /// The exponential base when a policy names none. Also used for a stored definition whose factor
+    /// is not a positive number: the validator now rejects one, but a definition published before
+    /// that rule would otherwise collapse every backoff to zero (or fail to build a delay at all).
+    /// </summary>
+    private const double DefaultFactor = 2.0;
+
+    /// <summary>
+    /// The longest delay Task.Delay accepts. A high factor over many attempts can exceed it - or
+    /// overflow to infinity - and a backoff that long is indistinguishable from "never" anyway.
+    /// </summary>
+    private const double LongestDelayMs = uint.MaxValue - 1.0;
 
     private static TimeSpan GetDelay(RetryPolicy policy, int attempt)
     {
+        double factor = policy.Factor is { } f && double.IsFinite(f) && f > 0 ? f : DefaultFactor;
+
         double baseMs = policy.Strategy switch
         {
             RetryStrategy.Constant or RetryStrategy.None => policy.InitialDelay.TotalMilliseconds,
             RetryStrategy.Linear => policy.InitialDelay.TotalMilliseconds * attempt,
-            RetryStrategy.Exponential => policy.InitialDelay.TotalMilliseconds * Math.Pow(2, attempt - 1),
+            // The growth is clamped before it is multiplied so the product stays finite; an
+            // infinite one times a zero initial delay is NaN, which no TimeSpan can hold.
+            RetryStrategy.Exponential => policy.InitialDelay.TotalMilliseconds * Math.Min(Math.Pow(factor, attempt - 1), LongestDelayMs),
             _ => policy.InitialDelay.TotalMilliseconds
         };
 
@@ -332,6 +390,14 @@ internal static class RetryExecutor
             double pct = Random.Shared.Next(-policy.JitterPct, policy.JitterPct + 1) / 100.0;
             baseMs += baseMs * pct;
         }
+
+        // Capped after jitter, so MaxDelay is a true ceiling rather than one jitter can overshoot.
+        if (policy.MaxDelay is { } maxDelay)
+        {
+            baseMs = Math.Min(baseMs, maxDelay.TotalMilliseconds);
+        }
+
+        baseMs = Math.Min(baseMs, LongestDelayMs);
 
         return TimeSpan.FromMilliseconds(Math.Max(0, baseMs));
     }

@@ -75,13 +75,14 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
         TriggerDispatchResult result = await hub.HandleAsync(evt, ct);
         if (result.Outcome == TriggerDispatchOutcome.Refused)
         {
-            // Not expected, since a child is exempt from the ceiling; kept as a safety net. Marked
-            // retryable, but a sub-workflow step gets no retries of its own, so this fails the parent
-            // with a code that says why rather than as a missing manual trigger.
+            // Not expected, since a child is exempt from the ceiling; kept as a safety net. Not
+            // retryable: a sub-workflow step is a control node and carries no retry policy, so nothing
+            // would ever retry it, and saying otherwise misleads whoever reads the failure. It fails
+            // the parent with a code that says why rather than as a missing manual trigger.
             return new NodeExecutionResult.Fail(
                 "SUBWORKFLOW_WORKSPACE_BUSY",
                 $"Child workflow '{childRefId}' did not start: the workspace has as many runs going as it may.",
-                true,
+                false,
                 null);
         }
 
