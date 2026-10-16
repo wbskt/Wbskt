@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -27,18 +28,28 @@ public sealed class UserRateLimiter : IDisposable
 
     public UserRateLimiter(int permitsPerMinute, int burst)
     {
-        // Refilled every second rather than once a minute, so a user who spends the burst waits
-        // seconds, not the rest of the minute.
-        int perSecond = Math.Max(1, (int)Math.Ceiling(permitsPerMinute / 60d));
+        var (tokens, period) = Refill(permitsPerMinute);
         _limiter = PartitionedRateLimiter.Create<Guid, Guid>(userRef =>
             RateLimitPartition.GetTokenBucketLimiter(userRef, _ => new TokenBucketRateLimiterOptions
             {
                 TokenLimit = Math.Max(1, burst),
-                TokensPerPeriod = perSecond,
-                ReplenishmentPeriod = TimeSpan.FromSeconds(1),
+                TokensPerPeriod = tokens,
+                ReplenishmentPeriod = period,
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    }
+
+    /// <summary>
+    /// The refill that adds exactly <paramref name="permitsPerMinute"/> a minute in the shortest whole
+    /// number of seconds, so a user who spends the burst waits seconds, not the rest of the minute:
+    /// 600 is 10 every second, 30 is 1 every 2 seconds, 90 is 3 every 2 seconds.
+    /// </summary>
+    internal static (int Tokens, TimeSpan Period) Refill(int permitsPerMinute)
+    {
+        int perMinute = Math.Max(1, permitsPerMinute);
+        int seconds = 60 / (int)BigInteger.GreatestCommonDivisor(perMinute, 60);
+        return (perMinute * seconds / 60, TimeSpan.FromSeconds(seconds));
     }
 
     public static UserRateLimiter FromConfiguration(IConfiguration configuration) => new(

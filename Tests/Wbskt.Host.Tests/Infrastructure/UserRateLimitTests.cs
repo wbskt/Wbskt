@@ -16,6 +16,7 @@ using Moq;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Infrastructure;
 using Wbskt.Infrastructure.Hosting;
+using Wbskt.Infrastructure.Middlewares;
 using Wbskt.Infrastructure.Security;
 
 namespace Wbskt.Host.Tests.Infrastructure;
@@ -64,13 +65,30 @@ public sealed class UserRateLimitTests
         }
     }
 
+    [Theory]
+    [InlineData(600, 10, 1)]
+    [InlineData(30, 1, 2)]
+    [InlineData(90, 3, 2)]
+    [InlineData(45, 3, 4)]
+    [InlineData(7, 7, 60)]
+    [InlineData(1, 1, 60)]
+    [InlineData(100000, 5000, 3)]
+    [InlineData(0, 1, 60)]
+    public void The_refill_matches_the_configured_rate_exactly(int permitsPerMinute, int tokens, int seconds)
+    {
+        var (perPeriod, period) = UserRateLimiter.Refill(permitsPerMinute);
+
+        Assert.Equal(tokens, perPeriod);
+        Assert.Equal(TimeSpan.FromSeconds(seconds), period);
+    }
+
     private static async Task<WebApplication> StartAsync(int burst)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            // A refill of one a second at most, so the test's few requests cannot earn one back.
+            // A refill of one a minute, so the test's few requests cannot earn one back.
             ["RateLimiting:Api:PermitsPerMinute"] = "1",
             ["RateLimiting:Api:Burst"] = burst.ToString(),
         });
