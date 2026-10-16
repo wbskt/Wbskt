@@ -159,6 +159,23 @@ public sealed class AuthLogRedactionTests
         Assert.Equal("none", EmailFingerprint.Of(null));
     }
 
+    [Fact]
+    public void The_fingerprint_is_keyed_so_an_address_list_cannot_reverse_it()
+    {
+        // An unkeyed hash of the address is what a reader with a list of candidates would compute.
+        var unkeyed = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(Email.ToLowerInvariant())))[..12];
+        Assert.NotEqual(unkeyed, EmailFingerprint.Of(Email));
+
+        var dedicated = EmailFingerprint.KeyFrom("a-dedicated-fingerprint-key", "signing-key");
+        Assert.Equal(dedicated, EmailFingerprint.KeyFrom(" a-dedicated-fingerprint-key ", "another-signing-key"));
+        var derived = EmailFingerprint.KeyFrom(null, "signing-key");
+        Assert.Equal(derived, EmailFingerprint.KeyFrom("", "signing-key"));
+        Assert.NotEqual(derived, EmailFingerprint.KeyFrom(null, "rotated-signing-key"));
+        Assert.NotEqual(derived, Encoding.UTF8.GetBytes("signing-key"));
+        Assert.NotEqual(EmailFingerprint.KeyFrom(null, null), EmailFingerprint.KeyFrom(null, null));
+        Assert.Throws<InvalidOperationException>(() => EmailFingerprint.KeyFrom("short", "signing-key"));
+    }
+
     // Its own frame, so the test can tell the original's stack trace was carried over.
     private static async Task FailsDeepInTheProvider()
     {
