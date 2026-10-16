@@ -72,7 +72,9 @@ groups:
 
       - alert: CallbackQueueBacklog
         # Public webhooks and wakes wait here for the engine. The broker caps the queue at 10,000
-        # (deploy/observability/rabbitmq/healthcheck.sh); once full, callers get 503s.
+        # callbacks or 64 MiB, whichever comes first (deploy/observability/rabbitmq/healthcheck.sh);
+        # once full, callers get 503s. This fires at a tenth of the count, CallbackQueueBytesBacklog
+        # at a tenth of the bytes.
         expr: max(rabbitmq_detailed_queue_messages_ready{queue="workflow-inbound-callback"}) > 1000
         for: 5m
         labels:
@@ -80,8 +82,21 @@ groups:
         annotations:
           summary: "{{ $value }} public callbacks are waiting for the workflow engine"
           description: >-
-            The engine is down or not keeping up. At 10,000 the queue refuses more and webhook
-            callers are answered 503 until it drains.
+            The engine is down or not keeping up. At 10,000 callbacks or 64 MiB the queue refuses
+            more and webhook callers are answered 503 until it drains.
+
+      - alert: CallbackQueueBytesBacklog
+        # Webhook bodies can be up to 128 KiB, so about 512 large callbacks fill the 64 MiB cap long
+        # before the count alert above sees 1,000. Needs the queue_metrics family (prometheus.yml).
+        expr: max(rabbitmq_detailed_queue_messages_ready_bytes{queue="workflow-inbound-callback"}) > 6 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $value | humanize1024 }}B of public callbacks are waiting for the workflow engine"
+          description: >-
+            The engine is down or not keeping up. At 64 MiB (or 10,000 callbacks) the queue refuses
+            more and webhook callers are answered 503 until it drains.
 
       - alert: SocketDisconnectRateHigh
         # Abnormal disconnects only: client_closed is a device signing off, server_stopping a deploy.
