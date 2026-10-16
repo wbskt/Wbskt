@@ -152,6 +152,8 @@ services:
       # Signs user tokens. Its public half is served at /.well-known/jwks.json for management.
       Jwt__SigningKey: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required - see .env.example}
       Jwt__AdditionalPublicKeys__0: ${AUTH_JWT_PREVIOUS_PUBLIC_KEY:-}
+      # Keys the email fingerprints in logs and events. Optional: unset, it is derived from the signing key.
+      Auth__Telemetry__EmailFingerprintKey: ${AUTH_EMAIL_FINGERPRINT_KEY:-}
       # Publishes access-token revocations (logout-all, deactivation, password reset) to management.
       ConnectionStrings__Redis: redis:6379
       Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}

@@ -30,6 +30,9 @@ public static class Program
     {
         var builder = WbsktHost.CreateBuilder(typeof(Program), args, "serilog.json", "connectionstrings.json", "rabbitmq.json", "email.json");
 
+        // Logs and events name an address by a keyed fingerprint; see EmailFingerprint.
+        EmailFingerprint.UseKeyFrom(builder.Configuration);
+
         // Add services to the container.
         builder.Services.AddSingleton<AuthMetrics>();
         builder.Services.AddSingleton<IWorkerTickMetrics>(sp => sp.GetRequiredService<AuthMetrics>());
