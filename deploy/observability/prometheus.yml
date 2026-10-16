@@ -26,11 +26,12 @@ alerting:
 
 scrape_configs:
   # Per-queue depth, which is what the dead-letter alert needs. The plain /metrics endpoint is
-  # aggregated across queues and cannot tell an _error queue from a busy one.
+  # aggregated across queues and cannot tell an _error queue from a busy one. queue_metrics adds
+  # the bytes waiting, which the callback queue's byte cap alert needs.
   - job_name: rabbitmq
     metrics_path: /metrics/detailed
     params:
-      family: [queue_coarse_metrics]
+      family: [queue_coarse_metrics, queue_metrics]
     static_configs:
       - targets: [rabbitmq:15692]
 

@@ -237,6 +237,12 @@ docker compose up -d --no-deps auth
 The same steps apply to management with the `MANAGEMENT_` variables, restarting devices with it
 (`docker compose up -d --no-deps devices management`): devices signs device tokens with the same key.
 
+**Email fingerprints.** Auth logs and events name an address by a 12-character HMAC fingerprint, never
+the address. The key is `AUTH_EMAIL_FINGERPRINT_KEY` when set, otherwise one derived from
+`AUTH_JWT_SIGNING_KEY`, so rotating the signing key without a dedicated key changes every fingerprint
+from then on. To check a suspect address against the logs, compute its fingerprint with the same key
+(lower-case and trim the address first).
+
 ### Integration master key
 
 Integrations (Telegram bots, mail relays, Discord webhooks, ntfy topics, API tokens) are saved with
