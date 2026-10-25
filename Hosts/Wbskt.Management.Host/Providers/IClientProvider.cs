@@ -1,5 +1,6 @@
 using Wbskt.Protocol;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Models;
 using Wbskt.Primitives;
 
@@ -8,11 +9,16 @@ namespace Wbskt.Management.Host.Providers;
 public interface IClientProvider : IReferenceProvider
 {
     Task<int> GetRegisteredCountByPolicyIdAsync(int policyId, CancellationToken cancellationToken = default);
-    /// <summary><paramref name="tag"/>, when given, must already be normalised (<see cref="ClientTags.TryNormalize"/>).</summary>
-    Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, string? tag, int skip, int take,
+    /// <summary>
+    /// <paramref name="statuses"/>, when not empty, lists only clients in one of them. <paramref name="tag"/>,
+    /// when given, must already be normalised (<see cref="ClientTags.TryNormalize"/>).
+    /// </summary>
+    Task<IPagedList<Client>> GetAllAsync(int workspaceId, IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag, int skip, int take,
         CancellationToken cancellationToken = default);
-    Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, ClientStatus? status, string? name,
+    Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, IReadOnlyCollection<ClientStatus>? statuses, string? name,
         string? tag, int skip, int take, CancellationToken cancellationToken = default);
+    /// <summary>How many clients the workspace, or one of its policies when <paramref name="policyId"/> is given, has in each status.</summary>
+    Task<ClientCountsResponse> GetCountsAsync(int workspaceId, int? policyId, CancellationToken cancellationToken = default);
     /// <summary>
     /// Creates a client. Throws <c>SqlException</c> 50020 when its policy is at <c>MaxClients</c>, and
     /// 50025 when it would be created registered and the workspace already has

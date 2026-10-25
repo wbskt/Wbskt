@@ -143,7 +143,17 @@ public sealed class ClientServiceTagTests
 
         all.Error.Code.Should().Be("CLIENT_TAG_INVALID");
         byPolicy.Error.Code.Should().Be("CLIENT_TAG_INVALID");
-        _provider.Verify(x => x.GetAllAsync(It.IsAny<int>(), It.IsAny<ClientStatus?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _provider.Verify(x => x.GetAllAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<ClientStatus>?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void Several_statuses_become_one_bit_each_and_none_lists_every_status()
+    {
+        ClientProvider.StatusMask([ClientStatus.Revoked, ClientStatus.Rejected]).Should().Be(0b1100);
+        ClientProvider.StatusMask([ClientStatus.Pending]).Should().Be(0b0001);
+        ClientProvider.StatusMask([ClientStatus.Registered, ClientStatus.Registered]).Should().Be(0b0010);
+        ClientProvider.StatusMask([]).Should().BeNull();
+        ClientProvider.StatusMask(null).Should().BeNull();
     }
 
     [Fact]

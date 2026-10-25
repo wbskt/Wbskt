@@ -23,6 +23,7 @@ public sealed class ManagementEndpointPermissionTests
         ["ClientReadingsController.Get"] = PermissionNames.ClientsRead,
         ["ClientReadingsController.GetCsv"] = PermissionNames.ClientsRead,
         ["ClientsController.GetAll"] = PermissionNames.ClientsRead,
+        ["ClientsController.GetCounts"] = PermissionNames.ClientsRead,
         ["ClientsController.GetTags"] = PermissionNames.ClientsRead,
         ["ClientsController.GetByPolicy"] = PermissionNames.ClientsRead,
         ["ClientsController.GetDetail"] = PermissionNames.ClientsRead,

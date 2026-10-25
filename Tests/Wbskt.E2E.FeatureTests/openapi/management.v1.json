@@ -142,6 +142,67 @@
         ],
         "type": "object"
       },
+      "ClientCountsResponse": {
+        "properties": {
+          "connected": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "pending": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "registered": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "rejected": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "revoked": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "total",
+          "pending",
+          "registered",
+          "revoked",
+          "rejected",
+          "connected"
+        ],
+        "type": "object"
+      },
       "ClientDetailResponse": {
         "properties": {
           "agentName": {
@@ -2753,7 +2814,10 @@
             "in": "query",
             "name": "status",
             "schema": {
-              "$ref": "#/components/schemas/ClientStatus"
+              "items": {
+                "$ref": "#/components/schemas/ClientStatus"
+              },
+              "type": "array"
             }
           },
           {
@@ -2871,6 +2935,54 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/PageOfClientResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/workspaces/{workspaceRef}/clients/counts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "policyRefId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCountsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCountsResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCountsResponse"
                 }
               }
             },

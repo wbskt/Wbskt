@@ -20,7 +20,7 @@ internal sealed class ClientQueryService : IClientQueryService
         _logger = logger;
     }
 
-    public async Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, ClientStatus? status, string? name,
+    public async Task<Result<IPagedList<ClientResponse>>> GetAllAsync(int workspaceId, IReadOnlyCollection<ClientStatus>? statuses, string? name,
         string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying clients for WorkspaceId: {WorkspaceId}", workspaceId);
@@ -30,7 +30,7 @@ internal sealed class ClientQueryService : IClientQueryService
             return Result<IPagedList<ClientResponse>>.Failure(ClientTags.Invalid);
         }
 
-        var pagedClients = await _clientProvider.GetAllAsync(workspaceId, status, name, normalizedTag, skip, take, cancellationToken);
+        var pagedClients = await _clientProvider.GetAllAsync(workspaceId, statuses, name, normalizedTag, skip, take, cancellationToken);
         _logger.LogTrace("Retrieved {Count} clients for WorkspaceId: {WorkspaceId}", pagedClients.TotalCount, workspaceId);
         
         var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
@@ -38,7 +38,7 @@ internal sealed class ClientQueryService : IClientQueryService
     }
 
     public async Task<Result<IPagedList<ClientResponse>>> GetByPolicyIdAsync(int workspaceId, int policyId,
-        ClientStatus? status, string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
+        IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying clients by PolicyId: {PolicyId} in WorkspaceId: {WorkspaceId}", policyId, workspaceId);
 
@@ -47,11 +47,18 @@ internal sealed class ClientQueryService : IClientQueryService
             return Result<IPagedList<ClientResponse>>.Failure(ClientTags.Invalid);
         }
 
-        var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, status, name, normalizedTag, skip, take, cancellationToken);
+        var pagedClients = await _clientProvider.GetByPolicyIdAsync(workspaceId, policyId, statuses, name, normalizedTag, skip, take, cancellationToken);
         _logger.LogTrace("Retrieved {Count} clients by PolicyId: {PolicyId}", pagedClients.TotalCount, policyId);
         
         var result = new PagedList<ClientResponse>(pagedClients.Select(MapToResponse), pagedClients.TotalCount);
         return Result<IPagedList<ClientResponse>>.Success(result);
+    }
+
+    public async Task<Result<ClientCountsResponse>> GetCountsAsync(int workspaceId, int? policyId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Counting clients in WorkspaceId: {WorkspaceId}, PolicyId: {PolicyId}", workspaceId, policyId);
+
+        return Result<ClientCountsResponse>.Success(await _clientProvider.GetCountsAsync(workspaceId, policyId, cancellationToken));
     }
 
     private Task<Result<ClientDetail>> FindInWorkspaceAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken)

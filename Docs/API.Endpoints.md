@@ -306,7 +306,8 @@ that is empty or backwards is 400 `TIME_RANGE_INVALID`, and one longer than 400 
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name`, `tag` and `policyRefId` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). Each client carries its `tags`. Paged, with `totalCount`. |
+| `GET /` | `clients.read` | Lists clients, filterable by `status`, `name`, `tag` and `policyRefId` (case-insensitive; an invalid one is 400 `CLIENT_TAG_INVALID`). `status` can be repeated to list several statuses together (`?status=2&status=3` is every removed client). Each client carries its `tags`. Paged, with `totalCount`. |
+| `GET counts` | `clients.read` | How many clients the workspace has in each status, and how many are connected now (`{ total, pending, registered, revoked, rejected, connected }`), in one read. `policyRefId` counts one policy's clients (404 for one this workspace does not own). |
 | `GET tags` | `clients.read` | Every tag in use in the workspace with its client count (`{ tag, clientCount }`), sorted, for a tag filter. |
 | `GET {clientRef}` | `clients.read` | Full client detail: presence, uptime anchor, latency, self-reported SDK metadata and command capabilities. |
 | `GET {clientRef}/state` | `clients.read` | The client's last-known self-reported state variables. |
