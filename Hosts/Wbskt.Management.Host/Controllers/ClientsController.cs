@@ -43,7 +43,7 @@ public class ClientsController : ApiControllerBase
     /// Retrieves all clients for a specific workspace with optional filtering.
     /// </summary>
     /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
-    /// <param name="status">Optional filter by client status (Pending, Registered, etc.).</param>
+    /// <param name="status">Optional filter by client status (Pending, Registered, etc.). Repeat it to list several statuses, as <c>?status=2&amp;status=3</c> for every removed client.</param>
     /// <param name="name">Optional filter by client name (partial match).</param>
     /// <param name="tag">Optional filter: only clients carrying this tag (case-insensitive).</param>
     /// <param name="policyRefId">Optional filter: only clients registered under this policy. A policy this workspace does not own is a 404, not an empty page.</param>
@@ -54,7 +54,7 @@ public class ClientsController : ApiControllerBase
     [RequiresPermission(PermissionNames.ClientsRead)]
     public async Task<ActionResult<Page<ClientResponse>>> GetAll(
         [FromWorkspace] int workspaceId,
-        [FromQuery] ClientStatus? status,
+        [FromQuery] ClientStatus[]? status,
         [FromQuery] string? name,
         [FromQuery] string? tag,
         [FromQuery] Guid? policyRefId,
@@ -79,6 +79,33 @@ public class ClientsController : ApiControllerBase
         }
 
         return MapPage(await _queryService.GetByPolicyIdAsync(workspaceId, policy.Value.Id, status, name, tag, offset.Value, page.LimitOr(100), cancellationToken), offset.Value);
+    }
+
+    /// <summary>
+    /// Counts the workspace's clients by status, with how many are connected now: one read for a
+    /// status bar or a policy's filter chips, whatever the size of the list.
+    /// </summary>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
+    /// <param name="policyRefId">Optional: count only the clients registered under this policy. A policy this workspace does not own is a 404.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The counts.</returns>
+    [HttpGet("counts")]
+    [RequiresPermission(PermissionNames.ClientsRead)]
+    public async Task<ActionResult<ClientCountsResponse>> GetCounts([FromWorkspace] int workspaceId, [FromQuery] Guid? policyRefId, CancellationToken cancellationToken)
+    {
+        int? policyId = null;
+        if (policyRefId is not null)
+        {
+            var policy = await _policyService.FindInWorkspaceAsync(workspaceId, policyRefId.Value, cancellationToken);
+            if (policy.IsFailure)
+            {
+                return MapError(policy.Error);
+            }
+
+            policyId = policy.Value.Id;
+        }
+
+        return MapResult(await _queryService.GetCountsAsync(workspaceId, policyId, cancellationToken));
     }
 
     /// <summary>
@@ -107,7 +134,7 @@ public class ClientsController : ApiControllerBase
     public Task<ActionResult<Page<ClientResponse>>> GetByPolicy(
         [FromWorkspace] int workspaceId,
         Guid policyRef,
-        [FromQuery] ClientStatus? status,
+        [FromQuery] ClientStatus[]? status,
         [FromQuery] string? name,
         [FromQuery] string? tag,
         [FromQuery] PageRequest page,

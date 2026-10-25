@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
+using Wbskt.Management.Models;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 using Wbskt.Models;
 
@@ -232,6 +233,37 @@ public sealed class ClientLifecycleIntegrationTests(SqlEdgeFixture fixture)
     }
 
     // ---------------------------------------------------------------- helpers
+
+    [SkippableFact]
+    public async Task The_list_takes_several_statuses_and_the_counts_match_it()
+    {
+        Skip.IfNot(fixture.IsAvailable, Skipped);
+        int workspaceId = NewWorkspaceId();
+        int policyId = await CreatePolicyAsync(workspaceId);
+        int otherPolicyId = await CreatePolicyAsync(workspaceId);
+        int pending = await CreateClientAsync(workspaceId, policyId, status: 0);
+        int registered = await CreateClientAsync(workspaceId, policyId, status: 1);
+        int revoked = await CreateClientAsync(workspaceId, policyId, status: 2);
+        int rejected = await CreateClientAsync(workspaceId, policyId, status: 3);
+        int elsewhere = await CreateClientAsync(workspaceId, otherPolicyId, status: 2);
+        await CreateClientAsync(NewWorkspaceId(), policyId, status: 2);
+        await ExecAsync("UPDATE dbo.Clients SET IsConnected = 1 WHERE Id = @p0", registered);
+
+        var removed = await Clients().GetByPolicyIdAsync(workspaceId, policyId, [ClientStatus.Revoked, ClientStatus.Rejected], null, null, 0, 100);
+        Assert.Equal(2, removed.TotalCount);
+        Assert.Equal(new[] { revoked, rejected }.Order(), removed.Select(c => c.Id).Order());
+
+        var removedInWorkspace = await Clients().GetAllAsync(workspaceId, [ClientStatus.Revoked, ClientStatus.Rejected], null, null, 0, 100);
+        Assert.Equal(new[] { revoked, rejected, elsewhere }.Order(), removedInWorkspace.Select(c => c.Id).Order());
+
+        var one = await Clients().GetAllAsync(workspaceId, [ClientStatus.Pending], null, null, 0, 100);
+        Assert.Equal([pending], one.Select(c => c.Id));
+        Assert.Equal(5, (await Clients().GetAllAsync(workspaceId, [], null, null, 0, 100)).TotalCount);
+
+        Assert.Equal(new ClientCountsResponse(4, 1, 1, 1, 1, 1), await Clients().GetCountsAsync(workspaceId, policyId));
+        Assert.Equal(new ClientCountsResponse(5, 1, 1, 2, 1, 1), await Clients().GetCountsAsync(workspaceId, null));
+        Assert.Equal(new ClientCountsResponse(0, 0, 0, 0, 0, 0), await Clients().GetCountsAsync(NewWorkspaceId(), null));
+    }
 
     private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue - 1);
 

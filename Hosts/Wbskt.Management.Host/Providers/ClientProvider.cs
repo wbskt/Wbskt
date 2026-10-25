@@ -3,6 +3,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Wbskt.Infrastructure;
 using Wbskt.Management.Host.Models;
+using Wbskt.Management.Models;
 using Wbskt.Models;
 using Wbskt.Primitives.Exceptions;
 
@@ -32,14 +33,14 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         return result;
     }
 
-    public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, ClientStatus? status, string? name, string? tag,
+    public async Task<IPagedList<Client>> GetAllAsync(int workspaceId, IReadOnlyCollection<ClientStatus>? statuses, string? name, string? tag,
         int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
             "dbo.Client_GetAll",
             p =>
             {
-                p.AddWithValue("@Status", (object?)status ?? DBNull.Value);
+                p.AddWithValue("@StatusMask", (object?)StatusMask(statuses) ?? DBNull.Value);
                 p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
                 p.AddWithValue("@Tag", (object?)tag ?? DBNull.Value);
@@ -52,7 +53,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
         );
     }
 
-    public async Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, ClientStatus? status,
+    public async Task<IPagedList<Client>> GetByPolicyIdAsync(int workspaceId, int policyId, IReadOnlyCollection<ClientStatus>? statuses,
         string? name, string? tag, int skip, int take, CancellationToken cancellationToken = default)
     {
         return await ExecutePagedCollectionAsync(
@@ -61,7 +62,7 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             {
                 p.AddWithValue("@WorkspaceId", workspaceId);
                 p.AddWithValue("@PolicyId", policyId);
-                p.AddWithValue("@Status", (object?)status ?? DBNull.Value);
+                p.AddWithValue("@StatusMask", (object?)StatusMask(statuses) ?? DBNull.Value);
                 p.AddWithValue("@Name", (object?)name ?? DBNull.Value);
                 p.AddWithValue("@Tag", (object?)tag ?? DBNull.Value);
                 p.AddWithValue("@Skip", skip);
@@ -72,6 +73,32 @@ internal sealed class ClientProvider : BaseSqlProvider, IClientProvider
             cancellationToken
         );
     }
+
+    public async Task<ClientCountsResponse> GetCountsAsync(int workspaceId, int? policyId, CancellationToken cancellationToken = default)
+    {
+        var counts = await ExecuteFindAsync(
+            "dbo.Client_GetCounts",
+            p =>
+            {
+                p.AddWithValue("@WorkspaceId", workspaceId);
+                p.AddWithValue("@PolicyId", (object?)policyId ?? DBNull.Value);
+            },
+            reader => new ClientCountsResponse(
+                reader.GetInt32(reader.GetOrdinal("Total")),
+                reader.GetInt32(reader.GetOrdinal("Pending")),
+                reader.GetInt32(reader.GetOrdinal("Registered")),
+                reader.GetInt32(reader.GetOrdinal("Revoked")),
+                reader.GetInt32(reader.GetOrdinal("Rejected")),
+                reader.GetInt32(reader.GetOrdinal("Connected"))),
+            cancellationToken);
+
+        // An aggregate without GROUP BY always returns its one row.
+        return counts!;
+    }
+
+    /// <summary>The statuses as dbo.Client_GetAll's @StatusMask: one bit per status; null for none, which lists them all.</summary>
+    internal static int? StatusMask(IReadOnlyCollection<ClientStatus>? statuses) =>
+        statuses is null || statuses.Count == 0 ? null : statuses.Aggregate(0, (mask, status) => mask | 1 << (int)status);
 
     public async Task<Client> InsertClientAsync(int workspaceId, int policyId, string name, byte[] secretHash,
         ClientStatus status, int? maxPerWorkspace, CancellationToken cancellationToken = default)

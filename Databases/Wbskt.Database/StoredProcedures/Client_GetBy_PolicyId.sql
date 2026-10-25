@@ -1,7 +1,8 @@
 CREATE PROCEDURE dbo.Client_GetBy_PolicyId
     @WorkspaceId INT,
     @PolicyId INT,
-    @Status TINYINT = NULL,
+    -- Which statuses to list, one bit per status (1 << Status); NULL lists every status.
+    @StatusMask INT = NULL,
     @Name NVARCHAR(100) = NULL,
     @Skip INT = 0,
     @Take INT = 100,
@@ -16,7 +17,7 @@ BEGIN
     FROM dbo.Clients
     WHERE WorkspaceId = @WorkspaceId
       AND  PolicyId = @PolicyId
-      AND (@Status IS NULL OR Status = @Status)
+      AND (@StatusMask IS NULL OR @StatusMask & POWER(2, Status) <> 0)
       AND (@Name IS NULL OR Name LIKE '%' + @Name + '%')
       AND (@Tag IS NULL OR EXISTS (SELECT 1 FROM dbo.ClientTags t WHERE t.ClientId = Clients.Id AND t.Tag = @Tag));
 
@@ -41,7 +42,7 @@ BEGIN
     INNER JOIN dbo.RegistrationPolicies p ON c.PolicyId = p.Id
     WHERE  c.WorkspaceId = @WorkspaceId
       AND  c.PolicyId = @PolicyId
-      AND (@Status IS NULL OR c.Status = @Status)
+      AND (@StatusMask IS NULL OR @StatusMask & POWER(2, c.Status) <> 0)
       AND (@Name IS NULL OR c.Name LIKE '%' + @Name + '%')
       AND (@Tag IS NULL OR EXISTS (SELECT 1 FROM dbo.ClientTags t WHERE t.ClientId = c.Id AND t.Tag = @Tag))
     ORDER BY c.CreatedAt DESC

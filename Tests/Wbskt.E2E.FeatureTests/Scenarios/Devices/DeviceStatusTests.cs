@@ -22,6 +22,7 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
     private const int Pending = 0;
     private const int Registered = 1;
     private const int Revoked = 2;
+    private const int Rejected = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     // ── One device's status ───────────────────────────────────────────────────────────────
@@ -251,6 +252,41 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
         (await ClientLoginAsync(second, secondSecret)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    // ── Lists and counts by status ────────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task DEV_LIST_01_SeveralStatuses_ListTogether_AndTheCountsMatch()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
+        var (policyRef, pin) = await fixture.CreatePolicyAsync(token, workspace, autoApproval: false);
+        var (_, otherPin) = await fixture.CreatePolicyAsync(token, workspace);
+        await fixture.RegisterClientAsync(pin, "waiting");
+        var (kept, _) = await fixture.RegisterClientAsync(pin, "kept");
+        var (revoked, _) = await fixture.RegisterClientAsync(pin, "revoked");
+        var (rejected, _) = await fixture.RegisterClientAsync(pin, "rejected");
+        await fixture.RegisterClientAsync(otherPin, "elsewhere");
+        (await SetStatusAsync(workspace, kept, token, Registered)).EnsureSuccessStatusCode();
+        (await SetStatusAsync(workspace, revoked, token, Revoked)).EnsureSuccessStatusCode();
+        (await SetStatusAsync(workspace, rejected, token, Rejected)).EnsureSuccessStatusCode();
+
+        var removed = await Send(HttpMethod.Get, workspace, $"clients?policyRefId={policyRef}&status={Revoked}&status={Rejected}", token);
+        removed.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var body = JsonDocument.Parse(await removed.Content.ReadAsStringAsync()))
+        {
+            body.RootElement.GetProperty("items").EnumerateArray().Select(c => c.GetProperty("clientRefId").GetGuid())
+                .Should().BeEquivalentTo([revoked, rejected]);
+            body.RootElement.GetProperty("totalCount").GetInt32().Should().Be(2);
+        }
+
+        (await CountsAsync(workspace, token, $"?policyRefId={policyRef}")).Should().Be(new ClientCountsResponse(4, 1, 1, 1, 1, 0));
+        (await CountsAsync(workspace, token)).Should().Be(new ClientCountsResponse(5, 1, 2, 1, 1, 0));
+
+        var foreignPolicy = await Send(HttpMethod.Get, workspace, $"clients/counts?policyRefId={Guid.NewGuid()}", token);
+        foreignPolicy.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private async Task<string> CreateLimitedPolicyAsync(string token, Guid workspace, int maxClients)
@@ -259,6 +295,13 @@ public sealed class DeviceStatusTests(ServicesFixture fixture)
             new { Name = $"e2e-limit-{Guid.NewGuid():N}", MaxClients = maxClients, AutoApproval = false });
         created.EnsureSuccessStatusCode();
         return (await created.Content.ReadFromJsonAsync<RegistrationPolicyResponse>(JsonOptions))!.Pin;
+    }
+
+    private async Task<ClientCountsResponse> CountsAsync(Guid workspace, string token, string query = "")
+    {
+        var response = await Send(HttpMethod.Get, workspace, $"clients/counts{query}", token);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<ClientCountsResponse>(JsonOptions))!;
     }
 
     private Task<HttpResponseMessage> SetStatusAsync(Guid workspace, Guid clientRef, string token, int status) =>

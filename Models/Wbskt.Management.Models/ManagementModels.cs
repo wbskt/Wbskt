@@ -81,6 +81,9 @@ public record ClientTagsResponse(Guid ClientRefId, IReadOnlyList<string> Tags);
 
 public record ClientTagCountResponse(string Tag, int ClientCount);
 
+/// <summary>How many clients a workspace or a policy has in each status, and how many are connected now.</summary>
+public record ClientCountsResponse(int Total, int Pending, int Registered, int Revoked, int Rejected, int Connected);
+
 public record ClientStateVariableResponse(
     string Name,
     string DataType,
