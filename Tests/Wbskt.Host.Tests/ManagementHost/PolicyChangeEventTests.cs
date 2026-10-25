@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events;
 using Wbskt.Events.Abstractions;
 using Wbskt.Events.Management;
 using Wbskt.Management.Host.Models;
@@ -60,6 +61,20 @@ public sealed class PolicyChangeEventTests
 
         _published.Should().ContainSingle().Which.Should().BeOfType<PolicyEnabledEvent>()
             .Which.Changes.Should().Equal(new FieldChange("enabled", "false", "true"));
+    }
+
+    // A member's open policy page follows another member's change only through these hub events, so
+    // turning a policy on must reach it as turning it off does.
+    [Fact]
+    public void Every_policy_change_reaches_the_console_hub()
+    {
+        var policyEvents = typeof(PolicyEnabledEvent).Assembly.GetTypes()
+            .Where(t => t.Namespace == typeof(PolicyEnabledEvent).Namespace && t.Name.StartsWith("Policy") && t.Name.EndsWith("Event"))
+            .ToList();
+
+        policyEvents.Should().Contain([typeof(PolicyEnabledEvent), typeof(PolicyDisabledEvent)]);
+        policyEvents.Should().AllSatisfy(t =>
+            t.GetCustomAttributes(typeof(SignalRNotifyAttribute), inherit: false).Should().ContainSingle(t.Name));
     }
 
     [Fact]
