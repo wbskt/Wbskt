@@ -10,8 +10,10 @@ BEGIN
         W.Name,
         W.Description,
         W.OwnerUserId,
-        W.CreatedAt
+        W.CreatedAt,
+        T.RefId AS TenantRefId
     FROM dbo.Workspaces W
+    INNER JOIN dbo.Tenants T ON T.Id = W.TenantId
     INNER JOIN dbo.WorkspaceMembers WM ON W.Id = WM.WorkspaceId
     WHERE WM.UserId = @UserId
       AND NOT EXISTS (

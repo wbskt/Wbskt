@@ -62,7 +62,7 @@ internal sealed class WorkspaceService : IWorkspaceService
 
         var workspaceId = await _workspaceProvider.FindIdByRefIdAsync(refId, cancellationToken);
         await AnnounceAsync(new WorkspaceCreatedEvent(workspaceId, refId, request.Name), cancellationToken);
-        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow));
+        return Result<WorkspaceResponse>.Success(new WorkspaceResponse(refId, request.Name, request.Description, DateTime.UtcNow, tenant.RefId));
     }
 
     public async Task<Result<IReadOnlyCollection<WorkspaceResponse>>> GetWorkspacesForUserAsync(int userId, CancellationToken cancellationToken = default)
@@ -72,7 +72,7 @@ internal sealed class WorkspaceService : IWorkspaceService
         var workspaces = await _workspaceProvider.GetWorkspacesForUserAsync(userId, cancellationToken);
         _logger.LogTrace("Retrieved {Count} workspaces for user ID: {UserId}", workspaces.Count, userId);
         
-        var items = workspaces.Select(w => new WorkspaceResponse(w.RefId, w.Name, w.Description, w.CreatedAt)).ToList() as IReadOnlyCollection<WorkspaceResponse>;
+        var items = workspaces.Select(w => new WorkspaceResponse(w.RefId, w.Name, w.Description, w.CreatedAt, w.TenantRefId)).ToList() as IReadOnlyCollection<WorkspaceResponse>;
         return Result<IReadOnlyCollection<WorkspaceResponse>>.Success(items);
     }
 

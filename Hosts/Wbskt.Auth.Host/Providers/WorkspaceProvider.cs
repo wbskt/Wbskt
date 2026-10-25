@@ -186,6 +186,7 @@ internal sealed class WorkspaceProvider : BaseSqlProvider, IWorkspaceProvider
             Name = reader.GetString(reader.GetOrdinal("Name")),
             Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
             OwnerUserId = reader.GetInt32(reader.GetOrdinal("OwnerUserId")),
+            TenantRefId = reader.GetGuid(reader.GetOrdinal("TenantRefId")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
         };
     }

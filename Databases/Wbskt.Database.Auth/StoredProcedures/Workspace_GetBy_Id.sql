@@ -4,8 +4,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT Id, RefId, Name, Description, OwnerUserId, CreatedAt
-    FROM dbo.Workspaces
-    WHERE Id = @Id;
+    SELECT W.Id, W.RefId, W.Name, W.Description, W.OwnerUserId, W.CreatedAt, T.RefId AS TenantRefId
+    FROM dbo.Workspaces W
+    INNER JOIN dbo.Tenants T ON T.Id = W.TenantId
+    WHERE W.Id = @Id;
 END
 GO

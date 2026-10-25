@@ -128,6 +128,46 @@ public sealed class WorkspaceAccessTests(ServicesFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    // ── What the caller sees of a workspace ───────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task WS_SEE_01_EachWorkspace_NamesTheTenantThatOwnsIt()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var owner = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(owner.Token);
+
+        var created = await fixture.Auth.As(owner.Token).CreateWorkspaceAsync(new CreateWorkspaceRequest($"e2e-tenant-{Guid.NewGuid():N}", null));
+        var listed = (await fixture.Auth.As(owner.Token).GetWorkspacesAsync()).Single(w => w.RefId == created.RefId);
+
+        created.TenantRefId.Should().Be(tenantRef);
+        listed.TenantRefId.Should().Be(tenantRef);
+    }
+
+    [SkippableFact]
+    public async Task WS_SEE_02_AMember_ReadsTheirOwnPermissions_AndAStrangerIsRefused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+
+        var admin = await fixture.CreateUserAsync();
+        var tenantRef = await fixture.GetTenantRefAsync(admin.Token);
+        var workspace = await fixture.CreateWorkspaceAsync(admin.Token);
+        var userRole = (await fixture.GetRolesAsync(admin.Token, tenantRef)).Single(r => r.Name == "User");
+        var reader = await RegisterWithInvitationAsync(
+            admin.Token, tenantRef, new { RoleRef = userRole.RefId, WorkspaceRefs = new[] { workspace } });
+        var stranger = await fixture.CreateUserAsync();
+
+        var own = (await fixture.Auth.As(admin.Token).GetWorkspacePermissionsAsync(workspace)).Permissions;
+        var read = (await fixture.Auth.As(reader.AccessToken).GetWorkspacePermissionsAsync(workspace)).Permissions;
+
+        own.Should().Contain("users.manage").And.BeInAscendingOrder(StringComparer.Ordinal);
+        read.Should().BeEquivalentTo(await fixture.GetEffectivePermissionsAsync(reader.AccessToken, workspace));
+        read.Should().NotContain("users.manage");
+        (await fixture.Auth.As(stranger.Token).GetWorkspacePermissionsRawAsync(workspace)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await fixture.Auth.As(admin.Token).GetWorkspacePermissionsRawAsync(Guid.NewGuid())).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private Task<HttpResponseMessage> TransferAsync(string token, Guid workspaceRef, Guid userRef) =>

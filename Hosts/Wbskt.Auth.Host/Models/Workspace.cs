@@ -7,5 +7,6 @@ public class Workspace
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int OwnerUserId { get; set; }
+    public Guid TenantRefId { get; set; }
     public DateTime CreatedAt { get; set; }
 }

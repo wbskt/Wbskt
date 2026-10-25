@@ -64,6 +64,27 @@ public class WorkspacesController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// The caller's effective permissions in a workspace they belong to, so a client can show only
+    /// what they may do there (a read-only member sees the member list without Add or Remove).
+    /// Needs membership and no particular permission; a workspace the caller is not in is refused
+    /// exactly as on every other workspace route.
+    /// </summary>
+    [HttpGet("{workspaceRef:guid}/permissions")]
+    public async Task<ActionResult<WorkspacePermissionsResponse>> GetMyPermissions(Guid workspaceRef, CancellationToken cancellationToken)
+    {
+        var caller = CurrentUserId();
+        if (caller.IsFailure)
+        {
+            return MapError(caller.Error);
+        }
+
+        var access = await _workspaceService.ResolveAccessAsync(caller.Value, workspaceRef, cancellationToken);
+        return access.IsFailure
+            ? MapError(access.Error)
+            : Ok(new WorkspacePermissionsResponse(access.Value.Permissions.Order(StringComparer.Ordinal).ToArray()));
+    }
+
     /// <summary>Adds a new member to an existing workspace.</summary>
     [HttpPost("{workspaceRef:guid}/members")]
     [RequiresPermission(PermissionNames.UsersManage)]
