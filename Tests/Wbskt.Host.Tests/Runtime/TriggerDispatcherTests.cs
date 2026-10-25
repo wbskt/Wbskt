@@ -69,6 +69,29 @@ public sealed class TriggerDispatcherTests
         Assert.Equal("client:serial-1:telemetry", result.Reason);
     }
 
+    [Theory]
+    [InlineData("{{trigger.payload.room}}")]
+    [InlineData("$trigger.payload.room")]
+    public async Task Dispatch_correlates_by_a_payload_path_in_either_form(string correlationExpression)
+    {
+        // The designer writes {{trigger.…}}; read verbatim it would be one constant key for every run.
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel) with { CorrelationExpression = correlationExpression };
+        var dispatcher = CreateDispatcher(triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration));
+        InboundEvent evt = CreateInboundEvent();
+        evt = evt with
+        {
+            Payload = new Dictionary<string, JsonElement>(evt.Payload)
+            {
+                ["payload"] = JsonSerializer.SerializeToElement(new { room = "north" })
+            }
+        };
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(evt, CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+        Assert.Equal("north", result.Reason);
+    }
+
     [Fact]
     public async Task Dispatch_returns_Dropped_when_enforcer_returns_Dropped()
     {

@@ -490,6 +490,17 @@ public sealed class WorkflowValidator
                 nodeId));
         }
 
+        // An any-type hold is recorded against every message the device sends, and a message of another
+        // type (its own state.report, say) fails the filter and clears the hold, so it would rarely fire.
+        if (config.Type == "*")
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "HOLD_REQUIRES_MESSAGE_TYPE",
+                $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds} on any message type; a hold time needs one message type, because every other type would reset it.",
+                nodeId));
+        }
+
         // The hold key is built from the parsed GUID, as presence keys are.
         if (!Guid.TryParse(config.ClientRef, out _))
         {
@@ -507,8 +518,16 @@ public sealed class WorkflowValidator
         WorkflowConcurrencyPolicy? concurrencyPolicy,
         List<ValidationIssue> issues)
     {
-        if (correlationKey is not null
-            && !correlationKey.StartsWith("$trigger.", StringComparison.OrdinalIgnoreCase)
+        if (CorrelationKeyExpression.IsUnresolvableTemplate(correlationKey))
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Error,
+                "INVALID_CORRELATION_KEY",
+                $"Trigger '{nodeId}' has correlationKey '{correlationKey}'. A template must be the whole key and name a trigger field, e.g. '{{{{trigger.payload.room}}}}'; as written every run would share one key.",
+                nodeId));
+        }
+        else if (correlationKey is not null
+            && !CorrelationKeyExpression.TryGetTriggerPath(correlationKey, out _)
             && correlationKey.Contains('$'))
         {
             issues.Add(new ValidationIssue(
