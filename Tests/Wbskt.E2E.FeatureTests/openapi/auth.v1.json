@@ -836,6 +836,20 @@
         ],
         "type": "object"
       },
+      "WorkspacePermissionsResponse": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "permissions"
+        ],
+        "type": "object"
+      },
       "WorkspaceResponse": {
         "properties": {
           "createdAt": {
@@ -853,13 +867,18 @@
           "refId": {
             "format": "uuid",
             "type": "string"
+          },
+          "tenantRefId": {
+            "format": "uuid",
+            "type": "string"
           }
         },
         "required": [
           "refId",
           "name",
           "description",
-          "createdAt"
+          "createdAt",
+          "tenantRefId"
         ],
         "type": "object"
       }
@@ -3642,6 +3661,46 @@
         },
         "responses": {
           "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{workspaceRef}/permissions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePermissionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePermissionsResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePermissionsResponse"
+                }
+              }
+            },
             "description": "OK"
           }
         },

@@ -203,9 +203,9 @@ services:
       # Tenant and workspace administration on the one public API host (#304). auth.${DOMAIN}
       # keeps serving them for a release so the console can move over; sign-in and the refresh
       # cookie stay there. The workspace regex matches only auth's own routes (the list, one
-      # workspace, its members and owner); every other /api/workspaces/{ref}/... path is
+      # workspace, its members, owner and the caller's permissions); every other /api/workspaces/{ref}/... path is
       # management's. $$ is compose's escape for a literal $.
-      - traefik.http.routers.auth-api.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/tenants`) || PathPrefix(`/api/invitations`) || PathRegexp(`^/api/workspaces(/[0-9a-fA-F-]{36}(/(members|owner)(/.*)?)?)?/?$$`))
+      - traefik.http.routers.auth-api.rule=Host(`api.${DOMAIN}`) && (PathPrefix(`/api/tenants`) || PathPrefix(`/api/invitations`) || PathRegexp(`^/api/workspaces(/[0-9a-fA-F-]{36}(/(members|owner|permissions)(/.*)?)?)?/?$$`))
       - traefik.http.routers.auth-api.priority=900
       - traefik.http.routers.auth-api.entrypoints=websecure
       - traefik.http.routers.auth-api.tls.certresolver=letsencrypt

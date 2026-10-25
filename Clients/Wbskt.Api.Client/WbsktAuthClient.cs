@@ -146,6 +146,14 @@ public sealed class WbsktAuthClient : WbsktApiClient
     public Task<HttpResponseMessage> CreateWorkspaceRawAsync(CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
         SendRawAsync(HttpMethod.Post, "/api/workspaces", request, cancellationToken);
 
+    /// <summary>The bearer's effective permissions in a workspace. <c>GET /api/workspaces/{workspaceRef}/permissions</c>.</summary>
+    public Task<WorkspacePermissionsResponse> GetWorkspacePermissionsAsync(Guid workspaceRef, CancellationToken cancellationToken = default) =>
+        ReceiveAsync<WorkspacePermissionsResponse>(GetWorkspacePermissionsRawAsync(workspaceRef, cancellationToken), cancellationToken);
+
+    /// <summary><see cref="GetWorkspacePermissionsAsync"/>, returning the response untouched for a caller that asserts on its status or error.</summary>
+    public Task<HttpResponseMessage> GetWorkspacePermissionsRawAsync(Guid workspaceRef, CancellationToken cancellationToken = default) =>
+        SendRawAsync(HttpMethod.Get, $"/api/workspaces/{workspaceRef}/permissions", null, cancellationToken);
+
     /// <summary>Renames a workspace or changes its description. <c>PUT /api/workspaces/{workspaceRef}</c>.</summary>
     public Task UpdateWorkspaceAsync(Guid workspaceRef, CreateWorkspaceRequest request, CancellationToken cancellationToken = default) =>
         ReceiveAsync(UpdateWorkspaceRawAsync(workspaceRef, request, cancellationToken), cancellationToken);
