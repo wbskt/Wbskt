@@ -1022,7 +1022,46 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code is "HOLD_REQUIRES_FILTER" or "INVALID_CLIENT_REF" or "INVALID_HOLD_DURATION");
     }
 
-    private static WorkflowDefinition WithClientTrigger(string clientRef, int holdSeconds, bool withFilter)
+    [Fact]
+    public void Validate_rejects_a_hold_on_any_message_type()
+    {
+        var result = Validator.Validate(WithClientTrigger("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 600, true, type: "*"));
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "HOLD_REQUIRES_MESSAGE_TYPE");
+    }
+
+    [Fact]
+    public void Validate_accepts_any_message_type_without_a_hold()
+    {
+        var result = Validator.Validate(WithClientTrigger("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 0, true, type: "*"));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == "HOLD_REQUIRES_MESSAGE_TYPE");
+    }
+
+    [Theory]
+    [InlineData("{{payload.room}}")]
+    [InlineData("room-{{trigger.payload.room}}")]
+    [InlineData("{{trigger.payload.room}} {{trigger.payload.floor}}")]
+    public void Validate_rejects_a_correlation_template_that_is_not_a_trigger_path(string correlationKey)
+    {
+        var result = Validator.Validate(WithClientTrigger("sensor-A", 0, false, correlationKey: correlationKey));
+
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "INVALID_CORRELATION_KEY");
+    }
+
+    [Theory]
+    [InlineData("{{trigger.payload.room}}")]
+    [InlineData("{{ trigger.payload.room }}")]
+    [InlineData("$trigger.payload.room")]
+    [InlineData("greenhouse")]
+    public void Validate_accepts_a_trigger_path_or_constant_correlation_key(string correlationKey)
+    {
+        var result = Validator.Validate(WithClientTrigger("sensor-A", 0, false, correlationKey: correlationKey));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code is "INVALID_CORRELATION_KEY" or "SUSPICIOUS_CORRELATION_KEY");
+    }
+
+    private static WorkflowDefinition WithClientTrigger(string clientRef, int holdSeconds, bool withFilter, string type = "temperature", string? correlationKey = null)
     {
         var def = ValidWorkflowBuilder.Build();
         var client = new ClientTriggerNode
@@ -1033,7 +1072,8 @@ public sealed class WorkflowValidatorRuleTests
             Config = new Wbskt.Workflow.Abstraction.Models.Triggers.ClientTriggerConfig
             {
                 ClientRef = clientRef,
-                Type = "temperature",
+                Type = type,
+                CorrelationKey = correlationKey,
                 HoldSeconds = holdSeconds,
                 Filter = withFilter ? new LiteralExpression(true) : null
             }

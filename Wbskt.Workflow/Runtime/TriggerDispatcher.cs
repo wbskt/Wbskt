@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Channels;
@@ -366,11 +367,12 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     /// Resolves a registration's correlation expression against the arriving payload.
     /// </summary>
     /// <remarks>
-    /// Two forms, and only two: a <c>$trigger.</c>-prefixed dotted path into the payload, or any other
-    /// string taken as a constant. Anything that walks off the end of the payload returns null, and the
-    /// caller falls back to the trigger key - so a mistyped path silently correlates everything together
-    /// rather than nothing. That is why the validator warns (`SUSPICIOUS_CORRELATION_KEY`) on a
-    /// correlation key that is neither <c>$trigger.</c>-prefixed nor an obvious constant.
+    /// Two forms, and only two: a dotted path into the payload (<c>$trigger.payload.room</c> or
+    /// <c>{{trigger.payload.room}}</c>, see <see cref="CorrelationKeyExpression"/>), or any other string
+    /// taken as a constant. A path that walks off the end of the payload returns null, and the caller
+    /// falls back to the trigger key. The validator rejects a template that is not a payload path
+    /// (`INVALID_CORRELATION_KEY`) and warns on other '$' strings (`SUSPICIOUS_CORRELATION_KEY`), since
+    /// either would otherwise be one constant shared by every run.
     /// </remarks>
     private static string? EvaluateCorrelationExpression(string? expression, InboundEvent evt)
     {
@@ -379,9 +381,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return null;
         }
 
-        if (expression.StartsWith("$trigger.", StringComparison.OrdinalIgnoreCase))
+        if (CorrelationKeyExpression.TryGetTriggerPath(expression, out string path))
         {
-            string path = expression.Substring("$trigger.".Length);
             string[] segments = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (segments.Length == 0)
             {
