@@ -621,6 +621,30 @@ Both decisions, written down so the next person does not have to guess:
 - **RabbitMQ** — holds in-flight events only. Losing it drops whatever was queued at that instant,
   which is a real but bounded loss; the durable record of every run lives in SQL.
 
+## Disk space
+
+Every deploy pulls a fresh `sha-<short>` tag of each host and the migrator. `deploy.sh` now runs
+`docker image prune -af` before pulling, which removes every image no container is using (the
+running stack keeps its own), then refuses to continue if less than 3 GB is free on the image
+store. That check runs before anything is stopped, so a failure there leaves production as it was.
+Rolling back to an older tag simply pulls it from GHCR again.
+
+If a deploy stops on that check, or a pull fails with `no space left on device`, on the VM:
+
+```bash
+df -h / /var/lib/containerd /var/lib/docker   # which filesystem is full
+docker system df                              # images / containers / volumes / build cache
+docker image prune -af                        # unused images (safe: running ones are kept)
+docker builder prune -af                      # build cache, if anything was ever built here
+sudo du -sh "$BACKUP_DIR" /var/log/journal    # local backups and the systemd journal
+sudo journalctl --vacuum-size=200M
+```
+
+Do not run `docker system prune --volumes` or `docker volume prune`: the SQL Server, RabbitMQ and
+Grafana data live in named volumes. If the disk is simply too small for the stack plus two
+releases of images and `BACKUP_RETENTION_DAYS` of backups, grow it (the OS disk on Azure can be
+expanded in place, followed by `growpart` and `resize2fs`).
+
 ## Rollout phases + verification
 
 Rollout phases (containerize as-is → socket fan-out → management ×2 → engine API key → engine
