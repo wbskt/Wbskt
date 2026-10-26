@@ -1117,8 +1117,13 @@ public sealed class WorkflowValidatorRuleTests
         Assert.DoesNotContain(result.Issues, i => i.Code == "INVALID_CRON");
     }
 
-    [Fact]
-    public void Validate_warns_when_a_concurrency_policy_has_no_correlation_key()
+    // With no key, the dispatcher groups runs by the channel's own default (device and message type
+    // here), so a policy still applies: there is nothing to warn about.
+    [Theory]
+    [InlineData(WorkflowConcurrencyPolicy.Queue)]
+    [InlineData(WorkflowConcurrencyPolicy.CancelExisting)]
+    [InlineData(WorkflowConcurrencyPolicy.DropIfRunning)]
+    public void Validate_does_not_warn_when_a_concurrency_policy_has_no_correlation_key(WorkflowConcurrencyPolicy policy)
     {
         var def = ValidWorkflowBuilder.Build();
         var trigger = new ClientTriggerNode
@@ -1131,13 +1136,13 @@ public sealed class WorkflowValidatorRuleTests
                 ClientRef = "dev-1",
                 Type = "telemetry",
                 CorrelationKey = null,
-                ConcurrencyPolicy = WorkflowConcurrencyPolicy.CancelExisting
+                ConcurrencyPolicy = policy
             }
         };
 
         var result = Validator.Validate(def with { Nodes = [.. def.Nodes, trigger] });
 
-        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Warning && i.Code == "CONCURRENCY_POLICY_WITHOUT_CORRELATION_KEY");
+        Assert.DoesNotContain(result.Issues, i => i.Code == "CONCURRENCY_POLICY_WITHOUT_CORRELATION_KEY");
     }
 
     private static ToastNotificationNode CreateToast(bool withErrorPort)

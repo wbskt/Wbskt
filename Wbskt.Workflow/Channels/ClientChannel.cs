@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wbskt.Protocol;
 using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -16,9 +17,14 @@ public sealed class ClientChannel : TriggerChannel
     // The client ref is taken as text: a key is compared as a string, so it is never reformatted here.
     public static string Key(string clientRef, string type) => $"{Name}:{clientRef}:{type}";
 
+    // The platform's own messages (state.report, capabilities) reach only the triggers that name
+    // them: an any-type trigger means "this device's messages", and would otherwise run on every
+    // reconnect and state change.
     public static InboundEvent Event(ClientMessage message, string inboundEventId) => new(
         Name,
-        [Key(message.ClientRefId.ToString(), message.Type), Key(message.ClientRefId.ToString(), AnyType)],
+        MessageTypes.IsReserved(message.Type)
+            ? [Key(message.ClientRefId.ToString(), message.Type)]
+            : [Key(message.ClientRefId.ToString(), message.Type), Key(message.ClientRefId.ToString(), AnyType)],
         inboundEventId,
         new Dictionary<string, JsonElement>
         {
