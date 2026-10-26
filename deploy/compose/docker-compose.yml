@@ -69,7 +69,7 @@ services:
       - --entrypoints.websecure.address=:443
       - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
       - --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0
-      # Internal-only entrypoint for the engine's api/inbound/*; never published to the host,
+      # Internal-only entrypoint for the engine's api/inbound/* and internal/integrations/*; never published to the host,
       # only reachable by other containers as http://traefik:8081.
       - --entrypoints.engine.address=:8081
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
@@ -409,7 +409,9 @@ services:
       replicas: ${ENGINE_REPLICAS:-1}
     labels:
       - traefik.enable=true
-      - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`)
+      # Management reaches the engine only through this router: api/inbound/* for runs and
+      # signals, internal/integrations/* to seal and test integration credentials.
+      - traefik.http.routers.engine.rule=PathPrefix(`/api/inbound`) || PathPrefix(`/internal/integrations`)
       - traefik.http.routers.engine.entrypoints=engine
       # Engine is backend-only, so override the provider-level wbskt_edge default.
       - traefik.docker.network=wbskt_backend
