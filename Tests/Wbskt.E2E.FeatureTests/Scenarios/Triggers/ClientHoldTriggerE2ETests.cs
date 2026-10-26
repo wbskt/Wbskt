@@ -1,8 +1,10 @@
+using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Wbskt.Client.Sdk;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.E2E.FeatureTests.Fixtures;
+using Wbskt.Management.Models.Workflow;
 using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
@@ -12,7 +14,8 @@ namespace Wbskt.E2E.FeatureTests.Scenarios.Triggers;
 /// <summary>
 /// A device trigger with a hold time: a reading that stays out of range for the whole hold starts one
 /// run, however many more out-of-range readings follow; a reading that drops back in range first
-/// starts nothing.
+/// starts nothing. A hold needs one message type and a filter: the management API refuses either
+/// missing, and a device's other message types never reset a hold on one type.
 /// </summary>
 [Collection(EngineCollection.Name)]
 public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
@@ -79,6 +82,69 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
         runs.Should().BeEmpty("the reading came back in range before the hold ran out");
     }
 
+    [SkippableFact]
+    public async Task A_message_of_another_type_does_not_reset_the_hold()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var (token, workspaceRef, clientRefId, secret, deviceName) = await RegisterDeviceAsync("other-type");
+        var workflowRefId = await PublishAsync(token, workspaceRef, clientRefId, holdSeconds: 3, Celsius(BinaryOperator.GreaterThan, 8));
+        await using var client = await ConnectAsync(clientRefId, secret, deviceName);
+
+        // One warm reading, then only heartbeats, which carry no celsius. The trigger listens for
+        // temperature alone, so the heartbeats are never checked against its filter and the hold runs out.
+        await client.SendAsync("temperature", new { celsius = 10 });
+        for (int i = 0; i < 5; i++)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            await client.SendAsync("heartbeat", new { uptime = i });
+        }
+
+        var runRefId = await fixture.WaitForFirstRunAsync(token, workspaceRef, workflowRefId, TimeSpan.FromSeconds(60));
+        runRefId.Should().NotBe(Guid.Empty, "a heartbeat is another message type, so it cannot reset a hold on temperature");
+    }
+
+    [SkippableFact]
+    public async Task A_hold_on_any_message_type_is_refused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
+
+        var (validation, publish) = await ValidateAndPublishAsync(token, workspaceRef, "*", 60, Celsius(BinaryOperator.LessThan, 2));
+
+        validation.IsValid.Should().BeFalse();
+        validation.Issues.Should().Contain(i => i.Code == "HOLD_REQUIRES_MESSAGE_TYPE" && i.Severity == "Error" && i.NodeId != null,
+            "every other message type would fail the filter and reset the hold");
+        publish.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await publish.Content.ReadAsStringAsync()).Should().Contain("HOLD_REQUIRES_MESSAGE_TYPE");
+    }
+
+    [SkippableFact]
+    public async Task A_hold_without_a_filter_is_refused()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
+
+        var (validation, publish) = await ValidateAndPublishAsync(token, workspaceRef, "temperature", 60, filter: null);
+
+        validation.IsValid.Should().BeFalse();
+        validation.Issues.Should().Contain(i => i.Code == "HOLD_REQUIRES_FILTER" && i.Severity == "Error" && i.NodeId != null,
+            "with no condition there is nothing to hold");
+        publish.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await publish.Content.ReadAsStringAsync()).Should().Contain("HOLD_REQUIRES_FILTER");
+    }
+
+    [SkippableFact]
+    public async Task Any_message_type_with_a_filter_and_no_hold_is_accepted()
+    {
+        Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
+        var (token, workspaceRef, clientRefId, _, _) = await RegisterDeviceAsync("any-type");
+
+        var (validation, publish) = await ValidateAndPublishAsync(token, workspaceRef, "*", 0, Celsius(BinaryOperator.LessThan, 2), clientRefId);
+
+        validation.Issues.Should().NotContain(i => i.Severity == "Error");
+        publish.IsSuccessStatusCode.Should().BeTrue("only the hold time needs one message type, not the filter");
+    }
+
     private async Task<(string Token, Guid WorkspaceRef, Guid ClientRefId, string Secret, string DeviceName)> RegisterDeviceAsync(string label)
     {
         var (token, workspaceRef) = await fixture.CreateIsolatedWorkspaceAsync();
@@ -107,6 +173,23 @@ public sealed class ClientHoldTriggerE2ETests(ServicesFixture fixture)
         return await fixture.PublishWorkflowAsync(
             token, workspaceRef, workflowRefId, $"E2E-Hold-{workflowRefId:N}",
             JsonSerializer.SerializeToElement(definition, JsonOpts));
+    }
+
+    // Validates, then publishes, a device trigger the builder would refuse, as a hand-edited definition would be.
+    private async Task<(WorkflowValidationResponse Validation, HttpResponseMessage Publish)> ValidateAndPublishAsync(
+        string token, Guid workspaceRef, string type, int holdSeconds, WorkflowExpression? filter, Guid? clientRefId = null)
+    {
+        var workflowRefId = Guid.NewGuid();
+        var name = $"E2E-Hold-Rules-{workflowRefId:N}";
+        WorkflowDefinition definition = new WorkflowBuilder(name, workflowRefId)
+            .AddClientTrigger((clientRefId ?? Guid.NewGuid()).ToString(), type, WorkflowConcurrencyPolicy.AllowParallel, null, out _, filter: filter, holdSeconds: holdSeconds)
+            .AddDelay(TimeSpan.FromMilliseconds(10))
+            .Build();
+        var request = new WorkflowPublishRequest(workflowRefId, name, null, definition);
+        var management = fixture.Management.As(token);
+        var validation = await management.ValidateWorkflowAsync(workspaceRef, request);
+        var publish = await management.PublishWorkflowRawAsync(workspaceRef, request);
+        return (validation, publish);
     }
 
     private static async Task<WbsktClient> ConnectAsync(Guid clientRefId, string secret, string deviceName)
