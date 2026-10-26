@@ -28,6 +28,10 @@ set -euo pipefail
 readonly ALLOWED_SERVICES=(auth management devices socket engine)
 readonly DEFAULT_SERVICES=(auth management devices socket engine)
 readonly HEALTH_TIMEOUT_SECONDS=240
+# Free space required on the image store after pruning, before anything is pulled. A full disk
+# fails layer extraction halfway through a pull; failing here instead says why, and still happens
+# before any container has been stopped.
+readonly MIN_FREE_GB=3
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 readonly SCRIPT_PATH
@@ -184,6 +188,31 @@ See the 'Network changes' section of deploy/README.md."
     fi
 }
 
+# Every deploy pulls a new sha-<commit> tag of each host plus the migrator, and nothing ever removed
+# the old ones, so the image store grew by a full release per deploy until a pull ran the disk out.
+# Pruning unused images is safe here: whatever is running keeps its image (prune skips anything a
+# container still references), and any older tag can be pulled from GHCR again to roll back.
+# Runs before the pull, because that is the step that needs the room.
+free_disk_space() {
+    local store free_kb
+    store=/var/lib/containerd
+    [[ -d "$store" ]] || store="$(docker info -f '{{.DockerRootDir}}')"
+
+    echo "==> pruning unused images (free on $store before: $(df -h --output=avail "$store" | tail -1 | tr -d ' '))"
+    docker image prune -af >/dev/null
+    docker builder prune -af >/dev/null 2>&1 || true
+
+    free_kb="$(df -k --output=avail "$store" | tail -1 | tr -d ' ')"
+    echo "==> free on $store after prune: $((free_kb / 1024 / 1024)) GB"
+    if (( free_kb < MIN_FREE_GB * 1024 * 1024 )); then
+        df -h "$store" >&2
+        docker system df >&2 || true
+        die "under ${MIN_FREE_GB} GB free on $store even after pruning unused images. Nothing was
+stopped. Check what else is using the disk (backups under BACKUP_DIR, volumes, journald) or grow
+the disk - see the 'Disk space' section of deploy/README.md."
+    fi
+}
+
 container_state() {
     docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1"
 }
@@ -242,6 +271,8 @@ deploy_console() {
     set_env_var CONSOLE_IMAGE_TAG "$CONSOLE_TAG"
     cd "$COMPOSE_DIR"
 
+    free_disk_space
+
     echo "==> pulling console at $CONSOLE_TAG"
     docker compose pull console
 
@@ -259,6 +290,7 @@ deploy_backend() {
 
     # Before anything is stopped or pulled: refuse deploys Compose cannot complete.
     assert_no_network_recreation
+    free_disk_space
 
     echo "==> pulling ${SERVICES[*]} at $TAG"
     docker compose pull "${SERVICES[@]}"
