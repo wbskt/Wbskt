@@ -59,6 +59,22 @@ public sealed class TriggerChannelTests
         Assert.Equal($"client:{ClientRef}:temp", channel.CorrelationKey(evt));
     }
 
+    [Theory]
+    [InlineData("state.report")]
+    [InlineData("capabilities")]
+    [InlineData("State.Report")]
+    public async Task A_platform_message_reaches_only_a_trigger_that_names_it(string type)
+    {
+        var channel = new ClientChannel();
+        InboundEvent evt = ClientChannel.Event(new ClientMessage(ClientRef, 5, 7, type, Body, Now, Now, false), "id-1");
+
+        TriggerRegistrationSpec named = await RegisterAsync(channel, ClientTrigger(type));
+        TriggerRegistrationSpec any = await RegisterAsync(channel, ClientTrigger(ClientChannel.AnyType));
+
+        Assert.Contains(named.TriggerKey, evt.MatchKeys);
+        Assert.DoesNotContain(any.TriggerKey, evt.MatchKeys);
+    }
+
     [Fact]
     public async Task A_held_client_trigger_belongs_to_the_hold_channel_alone()
     {

@@ -89,9 +89,9 @@ patches it. Keys nodes write: `trigger`, `triggeredAt`, `item`, `index`, `status
 ### 4.1 Correlation
 
 Each run has a correlation key. A trigger's `correlationKey` is either a `$trigger.<path>` into the
-payload or a constant. The concurrency policy groups runs by workflow and correlation key. Setting a
-policy other than `AllowParallel` without a correlation key draws the warning
-`CONCURRENCY_POLICY_WITHOUT_CORRELATION_KEY`.
+payload or a constant. The concurrency policy groups runs by workflow and correlation key. With no
+`correlationKey`, the trigger's channel supplies one: device and message type for a device trigger,
+device and state for presence, the path for a webhook. So a policy always has a group to apply to.
 
 ### 4.2 Concurrency policies
 
@@ -268,7 +268,7 @@ publish. An expression error fails the node with `EXPRESSION_EVALUATION_ERROR`.
 | Webhook step | `WEBHOOK_URL_RELATIVE`, `WEBHOOK_TIMEOUT_INVALID`, `WEBHOOK_HEADER_INVALID`, `WEBHOOK_HEADER_FORBIDDEN`, `WEBHOOK_HEADERS_TOO_MANY` |
 | Other steps | `INTEGRATION_REF_MISSING`, `TELEGRAM_CHAT_MISSING`, `DISCORD_MESSAGE_INVALID`, `NTFY_MESSAGE_MISSING`, `NTFY_PRIORITY_INVALID`, `CLIENT_MESSAGE_INVALID`, `CLIENT_MESSAGE_ACK_TIMEOUT` |
 | Triggers | `INVALID_CLIENT_REF`, `INVALID_CRON`, `INVALID_PRESENCE_DURATION`, `INVALID_HOLD_DURATION`, `HOLD_REQUIRES_FILTER` |
-| Warnings | `NO_TRIGGERS`, `ORPHAN_NODE`, `SUSPICIOUS_CORRELATION_KEY`, `CONCURRENCY_POLICY_WITHOUT_CORRELATION_KEY` |
+| Warnings | `NO_TRIGGERS`, `ORPHAN_NODE`, `SUSPICIOUS_CORRELATION_KEY` |
 
 The management host also refuses a publish that references an integration the workspace does not
 have.

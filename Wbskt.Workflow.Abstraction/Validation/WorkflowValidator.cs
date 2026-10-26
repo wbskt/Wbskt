@@ -422,7 +422,7 @@ public sealed class WorkflowValidator
                             $"Schedule trigger '{node.NodeId}' has an invalid cron expression '{schedule.Config?.Cron}'.",
                             node.NodeId));
                     }
-                    WarnOnCorrelation(node.NodeId, schedule.Config?.CorrelationKey, null, issues);
+                    WarnOnCorrelation(node.NodeId, schedule.Config?.CorrelationKey, issues);
                     break;
 
                 case ClientTriggerNode client:
@@ -430,7 +430,7 @@ public sealed class WorkflowValidator
                     {
                         ValidateClientHold(node.NodeId, clientConfig, issues);
                     }
-                    WarnOnCorrelation(node.NodeId, client.Config?.CorrelationKey, client.Config?.ConcurrencyPolicy, issues);
+                    WarnOnCorrelation(node.NodeId, client.Config?.CorrelationKey, issues);
                     break;
 
                 case ClientPresenceTriggerNode presence:
@@ -453,11 +453,11 @@ public sealed class WorkflowValidator
                             $"Presence trigger '{node.NodeId}' has forSeconds {config.ForSeconds}; it must be between 0 and {ClientPresenceTriggerConfig.MaxForSeconds}.",
                             node.NodeId));
                     }
-                    WarnOnCorrelation(node.NodeId, presence.Config?.CorrelationKey, presence.Config?.ConcurrencyPolicy, issues);
+                    WarnOnCorrelation(node.NodeId, presence.Config?.CorrelationKey, issues);
                     break;
 
                 case WebhookTriggerNode webhook:
-                    WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, webhook.Config?.ConcurrencyPolicy, issues);
+                    WarnOnCorrelation(node.NodeId, webhook.Config?.CorrelationKey, issues);
                     break;
             }
         }
@@ -515,7 +515,6 @@ public sealed class WorkflowValidator
     private static void WarnOnCorrelation(
         Guid nodeId,
         string? correlationKey,
-        WorkflowConcurrencyPolicy? concurrencyPolicy,
         List<ValidationIssue> issues)
     {
         if (CorrelationKeyExpression.IsUnresolvableTemplate(correlationKey))
@@ -534,19 +533,6 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Warning,
                 "SUSPICIOUS_CORRELATION_KEY",
                 $"Trigger '{nodeId}' has correlationKey '{correlationKey}', which is neither a '$trigger.' path nor a plain constant; it will be used verbatim.",
-                nodeId));
-        }
-
-        // Every concurrency policy other than AllowParallel groups runs by correlation key. With no
-        // key there is nothing to group by, so the policy silently degrades.
-        if (concurrencyPolicy is not null
-            && concurrencyPolicy != WorkflowConcurrencyPolicy.AllowParallel
-            && string.IsNullOrWhiteSpace(correlationKey))
-        {
-            issues.Add(new ValidationIssue(
-                ValidationSeverity.Warning,
-                "CONCURRENCY_POLICY_WITHOUT_CORRELATION_KEY",
-                $"Trigger '{nodeId}' sets concurrencyPolicy '{concurrencyPolicy}' but has no correlationKey, so it will behave as AllowParallel.",
                 nodeId));
         }
     }
