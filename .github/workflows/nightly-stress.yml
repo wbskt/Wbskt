@@ -65,6 +65,10 @@ jobs:
       # through to the hosts.
       RateLimiting__Webhook__PermitLimit: "10000"
       RateLimiting__PublicCallbacks__PermitLimit: "10000"
+      # The thousand runs are all going at once, past the engine's ceiling of 200 active runs a
+      # workspace, which refuses (does not queue) a trigger past it: left at 200, only about 300
+      # runs ever start and the scenario waits out its timeout for the rest.
+      WorkflowEngine__MaxActiveRunsPerWorkspace: "2000"
       E2E_STRESS_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
