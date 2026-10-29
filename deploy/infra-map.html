@@ -329,11 +329,11 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
 
   <section class="view" id="v-env" hidden>
     <h2>Env vars</h2>
-    <p class="lede">Every variable in <code>deploy/compose/.env</code> on the VM, from <code>.env.example</code>. Compose maps each one into the container config keys shown. Values are never shown here. The drift column compares against the <code>deploy-env/dev.env</code> copy in project files.</p>
+    <p class="lede">Every variable in <code>deploy/compose/.env</code> on the VM, from <code>.env.example</code>. Compose maps each one into the container config keys shown. Values are never shown here. The drift column compares against the <code>deploy-env/dev.env</code> copy in project files (refreshed 29 Oct); “to fill” means the copy holds a placeholder and the real value is only on the VM.</p>
     <div class="toolbar">
       <input type="search" id="env-q" placeholder="Filter by name, container or key" aria-label="Filter env vars">
       <button class="chip" id="env-secret" aria-pressed="false">Secrets only</button>
-      <button class="chip" id="env-drift" aria-pressed="false">Missing from dev.env</button>
+      <button class="chip" id="env-drift" aria-pressed="false">Missing or unfilled in dev.env</button>
       <span class="count" id="env-count"></span>
     </div>
     <div class="sheet"><table><thead><tr><th>Name</th><th>Kind</th><th>Default</th><th>Used by → container key</th><th>Notes</th><th>dev.env</th></tr></thead><tbody id="envrows"></tbody></table></div>
@@ -556,7 +556,9 @@ const ENV = [
  ['MIGRATE_FRESH','Shell only (migrator)','plain',false,'false',[['migrator','MIGRATE_FRESH']],'Not in .env. Drops and recreates both databases.'],
  ['MIGRATE_ALLOW_DATA_LOSS','Shell only (migrator)','plain',false,'false',[['migrator','MIGRATE_ALLOW_DATA_LOSS']],'Not in .env. Lets a schema change destroy rows.'],
 ];
-const DEV_ENV = ['REGISTRY','IMAGE_TAG','CONSOLE_IMAGE_TAG','SOCKET_REPLICAS','MANAGEMENT_REPLICAS','ENGINE_REPLICAS','DOMAIN','ACME_EMAIL','SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','RABBITMQ_USER','RABBITMQ_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_JWT_PREVIOUS_PUBLIC_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','API_DOCS_ENABLED','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS','SMTP_FROM_NAME','ENGINE_INBOUND_API_KEY','BACKUP_DIR','BACKUP_RETENTION_DAYS','GRAFANA_ADMIN_PASSWORD','METRICS_RETENTION','ALERT_EMAIL_TO','ALERT_WEBHOOK_URL'];
+const DEV_ENV = ['REGISTRY','IMAGE_TAG','CONSOLE_IMAGE_TAG','SOCKET_REPLICAS','MANAGEMENT_REPLICAS','DEVICES_REPLICAS','ENGINE_REPLICAS','DOMAIN','ACME_EMAIL','SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','ROOT_ADMIN_PASSWORD_HASH','RABBITMQ_USER','RABBITMQ_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_JWT_PREVIOUS_PUBLIC_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','AUTH_EMAIL_FINGERPRINT_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','REFRESH_COOKIE_SAMESITE','API_DOCS_ENABLED','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS','SMTP_FROM_NAME','ENGINE_INBOUND_API_KEY','AUTH_INTERNAL_API_KEY','INTEGRATIONS_KEY_1','BACKUP_DIR','BACKUP_RETENTION_DAYS','GRAFANA_ADMIN_PASSWORD','METRICS_RETENTION','ALERT_EMAIL_TO','ALERT_WEBHOOK_URL'];
+// In dev.env but still a placeholder there: the real value lives only in the VM's .env.
+const DEV_TODO = new Set(['SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_EMAIL_FINGERPRINT_KEY','AUTH_INTERNAL_API_KEY','INTEGRATIONS_KEY_1']);
 const OPTIONAL_DRIFT = new Set(['ACME_CASERVER','BACKUP_ALLOW_LOCAL_ONLY','MIGRATE_FRESH','MIGRATE_ALLOW_DATA_LOSS']);
 
 const ROUTES = [
@@ -700,7 +702,7 @@ const RUNBOOK = [
 const GAPS = [
  ['done','No disk or container metrics','Fixed in PR #435: node-exporter and cAdvisor are scraped by Prometheus, with DiskAlmostFull, DiskFillingFast, NodeExporterDown and ContainerRestarting rules. On a VM that predates them, run docker compose up -d node-exporter cadvisor and recreate prometheus once after the deploy.'],
  ['high','Backups depend on settings the repo cannot show','backup.sh refuses to run without BACKUP_UPLOAD_CMD, and nothing alerts on failure without BACKUP_ALERT_CMD. Check both are set on the VM, that crontab has the 02:00 line, and that a restore rehearsal has been run with row counts compared.','check'],
- ['med','Project copy of dev.env is stale','deploy-env/dev.env (formatted from master f55e6c9 on 4 Oct) lacks variables compose now requires or reads, including AUTH_INTERNAL_API_KEY and INTEGRATIONS_KEY_1. See the drift filter on the Env vars tab.'],
+ ['done','Project copy of dev.env is stale','Refreshed on 29 Oct from .env.example at master b750195, keeping every value the 4 Oct copy had (old copy kept as dev.env.2026-10-04.bak). New variables are listed with TODO markers; the ones still to fill from the VM show as “to fill” on the Env vars tab.'],
  ['done','No laptop path to SQL or the RabbitMQ UI','Fixed in PR #437: compose publishes SQL on 127.0.0.1:1433 and the RabbitMQ UI on 127.0.0.1:15672, so ssh -L reaches both and the socat workaround is gone. On a VM that predates it, recreate sql and rabbitmq once.'],
  ['med','Launch-time switches to reset','CORS_EXTRA_ORIGINS should be empty, REFRESH_COOKIE_SAMESITE Strict, and API_DOCS_ENABLED false before going public.','check'],
  ['med','Everything shares one VM and one disk','SQL data, backups staging, images and logs compete for the same disk, and a VM loss takes the database with it until restored from off-box backups. The README suggests a VM-installed or managed SQL Server for production.'],
@@ -922,7 +924,7 @@ function buildRouting() {
   $('#alertrows').innerHTML = ALERTS.map(r => `<tr><td><code>${r[0]}</code></td><td>${r[1]}</td><td>${esc(r[2])}</td></tr>`).join('');
 }
 const envState = { q: '', secret: false, drift: false };
-function driftOf(name) { if (DEV_ENV.includes(name)) return 'ok'; if (OPTIONAL_DRIFT.has(name)) return 'na'; return 'missing'; }
+function driftOf(name) { if (DEV_TODO.has(name)) return 'todo'; if (DEV_ENV.includes(name)) return 'ok'; if (OPTIONAL_DRIFT.has(name)) return 'na'; return 'missing'; }
 function buildEnv() {
   const q = envState.q.toLowerCase(); let rows = '', last = '', n = 0;
   ENV.forEach(e => {
@@ -931,14 +933,14 @@ function buildEnv() {
     if (q && !hay.includes(q)) return;
     if (envState.secret && kind !== 'secret') return;
     const d = driftOf(name);
-    if (envState.drift && d !== 'missing') return;
+    if (envState.drift && d !== 'missing' && d !== 'todo') return;
     if (group !== last) { rows += `<tr class="grouprow"><td colspan="6">${group}</td></tr>`; last = group; }
     n++;
-    rows += `<tr id="env-${name}"><td><code>${name}</code></td><td>${kind === 'secret' ? '<span class="pill p-secret">secret</span> ' : ''}${req ? '<span class="pill p-req">required</span>' : '<span class="pill p-opt">optional</span>'}</td><td>${def ? `<code>${esc(def)}</code>` : '<span style="color:var(--muted)">none</span>'}</td><td>${uses.map(([s, k]) => `<div>${esc(s)} → <code>${esc(k)}</code></div>`).join('')}</td><td>${esc(note)}${gen ? `<div class="cmd"><div class="lbl" style="font-size:12px;color:var(--muted)">Generate</div><div class="cmdbox"><pre data-tpl="${esc(gen)}"></pre><button class="copy" type="button">Copy</button></div></div>` : ''}</td><td>${d === 'ok' ? '<span class="pill p-ok">present</span>' : d === 'missing' ? '<span class="pill p-missing">missing</span>' : '<span style="color:var(--muted)">n/a</span>'}</td></tr>`;
+    rows += `<tr id="env-${name}"><td><code>${name}</code></td><td>${kind === 'secret' ? '<span class="pill p-secret">secret</span> ' : ''}${req ? '<span class="pill p-req">required</span>' : '<span class="pill p-opt">optional</span>'}</td><td>${def ? `<code>${esc(def)}</code>` : '<span style="color:var(--muted)">none</span>'}</td><td>${uses.map(([s, k]) => `<div>${esc(s)} → <code>${esc(k)}</code></div>`).join('')}</td><td>${esc(note)}${gen ? `<div class="cmd"><div class="lbl" style="font-size:12px;color:var(--muted)">Generate</div><div class="cmdbox"><pre data-tpl="${esc(gen)}"></pre><button class="copy" type="button">Copy</button></div></div>` : ''}</td><td>${d === 'ok' ? '<span class="pill p-ok">present</span>' : d === 'missing' ? '<span class="pill p-missing">missing</span>' : d === 'todo' ? '<span class="pill p-missing">to fill</span>' : '<span style="color:var(--muted)">n/a</span>'}</td></tr>`;
   });
   $('#envrows').innerHTML = rows || '<tr><td colspan="6">No variables match that filter.</td></tr>';
-  const missing = ENV.filter(e => driftOf(e[0]) === 'missing').length;
-  $('#env-count').textContent = `${n} of ${ENV.length} shown · ${ENV.filter(e => e[2] === 'secret').length} secrets · ${missing} missing from dev.env`;
+  const missing = ENV.filter(e => driftOf(e[0]) === 'missing').length, tofill = ENV.filter(e => driftOf(e[0]) === 'todo').length;
+  $('#env-count').textContent = `${n} of ${ENV.length} shown · ${ENV.filter(e => e[2] === 'secret').length} secrets · ${missing} missing from dev.env · ${tofill} to fill in it`;
   $('#envrows').querySelectorAll('.copy').forEach(copyBtn);
   refreshTemplates($('#envrows'));
 }
