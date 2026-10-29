@@ -232,7 +232,8 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
 .gap.s-med .stripe { background: var(--amber); }
 .gap.s-low .stripe { background: var(--line-strong); }
 .gap.s-done .stripe { background: var(--green); }
-.gap.s-done h3 { color: var(--muted); }
+.gap.s-done h3, .gap.s-accepted h3 { color: var(--muted); }
+.gap.s-accepted .stripe { background: var(--line-strong); }
 .gap h3 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .gap p { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-2); max-width: 92ch; }
 
@@ -703,7 +704,7 @@ const GAPS = [
  ['med','No laptop path to SQL or the RabbitMQ UI','Neither is published on the VM loopback, so there is nothing to SSH-tunnel to. The runbook has a temporary socat workaround. A permanent fix is 127.0.0.1:1433 and 127.0.0.1:15672 port publishes in compose.'],
  ['med','Launch-time switches to reset','CORS_EXTRA_ORIGINS should be empty, REFRESH_COOKIE_SAMESITE Strict, and API_DOCS_ENABLED false before going public.','check'],
  ['med','Everything shares one VM and one disk','SQL data, backups staging, images and logs compete for the same disk, and a VM loss takes the database with it until restored from off-box backups. The README suggests a VM-installed or managed SQL Server for production.'],
- ['low','Console deploys without approval','build-and-deploy.yml deploys on every master push. Add required reviewers to the production-console environment if you want a gate.','check'],
+ ['accepted','Console deploys without approval','build-and-deploy.yml deploys on every master push. Decided on 29 Oct to keep it that way: merging to master is the approval, so no required reviewers on production-console.'],
  ['low','Scaled tiers restart all at once','Compose has no rolling update, so redeploying a tier with 3 replicas recreates all three together. Only devices/management are sequenced by deploy.sh.'],
 ];
 
@@ -997,7 +998,7 @@ function buildPipeline() {
   $('#pipeline').querySelectorAll('.copy').forEach(copyBtn);
 }
 function buildGaps() {
-  $('#gaplist').innerHTML = GAPS.map(([s, t, p, chk]) => `<div class="gap s-${s}"><div class="stripe"></div><div><h3>${esc(t)} <span class="pill ${s === 'high' ? 'p-secret' : s === 'med' ? 'p-missing' : s === 'done' ? 'p-ok' : 'p-opt'}">${s === 'med' ? 'medium' : s === 'done' ? 'fixed' : s}</span>${chk ? ' <span class="pill p-opt">check</span>' : ''}</h3><p>${esc(p)}</p></div></div>`).join('');
+  $('#gaplist').innerHTML = GAPS.map(([s, t, p, chk]) => `<div class="gap s-${s}"><div class="stripe"></div><div><h3>${esc(t)} <span class="pill ${s === 'high' ? 'p-secret' : s === 'med' ? 'p-missing' : s === 'done' ? 'p-ok' : 'p-opt'}">${s === 'med' ? 'medium' : s === 'done' ? 'fixed' : s === 'accepted' ? 'accepted as is' : s}</span>${chk ? ' <span class="pill p-opt">check</span>' : ''}</h3><p>${esc(p)}</p></div></div>`).join('');
 }
 
 // ---------------------------------------------------------------- routing between views
