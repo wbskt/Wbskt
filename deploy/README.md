@@ -39,6 +39,8 @@ there. See [Build and release flow](#build-and-release-flow).
 - `scripts/alert.sh` — raises an alert in the stack's Alertmanager; `BACKUP_ALERT_CMD` points at it.
 - `scripts/backup.sh` / `scripts/restore.sh` — run **on the VM**: nightly full backups of both
   databases and the restore/rehearsal path for them. See [Backups](#backups).
+- `scripts/backup-check.sh` — run **on the VM**: read-only check that the backup settings, cron
+  line, log, local files and Pushgateway timestamp are all in order.
 - `scripts/deploy.sh` — runs **on the VM**: resets the checkout to the deployed commit, pulls the
   requested images, optionally migrates, restarts only the named services, waits for health.
 - `scripts/ssh-forced-command.sh` — what the CI deploy key is pinned to in `authorized_keys`, so
@@ -618,6 +620,24 @@ destroy the only surviving backups.
 Set `BACKUP_ALERT_CMD`. A backup that silently stops running is the ordinary way this goes wrong,
 and nothing else in the stack will notice.
 
+### Checking the setup
+
+Most of what backups depend on lives outside the repo: `.env`, the crontab, the log and the files on
+disk. `backup-check.sh` looks at all of it, changes nothing and prints no secrets:
+
+```bash
+deploy/scripts/backup-check.sh
+# PASS  BACKUP_UPLOAD_CMD is set (/home/deploy/bin/wbskt-upload)
+# FAIL  BACKUP_ALERT_CMD is not set
+# ...
+```
+
+It checks that `BACKUP_UPLOAD_CMD` and `BACKUP_ALERT_CMD` name executables, that alerts have a
+receiver, that the crontab runs `backup.sh`, that the latest run in `/var/log/wbskt-backup.log`
+finished, that each database has a non-empty local backup under 26 hours old, and what the
+Pushgateway last saw. It exits 1 on any failure. It cannot see the off-box copies, so look at the
+upload target itself.
+
 ### Restoring, and rehearsing the restore
 
 ```bash
@@ -637,7 +657,19 @@ the original if the restore fails. To be sure no host reconnects in between, sto
 (`docker compose stop auth management devices socket engine`) and start them again afterwards.
 
 **Rehearse it at least once, and confirm the row counts.** Until a restore has actually been
-performed, what exists is a backup script, not a backup.
+performed, what exists is a backup script, not a backup. A rehearsal, start to finish:
+
+1. `deploy/scripts/backup-check.sh` passes.
+2. Restore last night's backup of each database into a scratch copy:
+   `deploy/scripts/restore.sh --file "$(ls -t /var/backups/wbskt/Wbskt.Database_2*.bak | head -1)"`,
+   then the same for `Wbskt.Database.Auth_2*`.
+3. Compare the printed row counts with the live database (the same query against
+   `[Wbskt.Database]`). Small differences are the day's new rows; a table that is empty in the copy
+   but not live is a failed rehearsal.
+4. Better still, fetch one `.bak` back from the off-box target and restore that, which proves the
+   upload as well.
+5. Drop the scratch databases (`restore.sh` prints the command) and note the date in the ops
+   tracking issue.
 
 ### What is deliberately not backed up
 
