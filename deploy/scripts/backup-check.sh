@@ -3,6 +3,9 @@
 #
 #   deploy/scripts/backup-check.sh
 #
+# Run it as the user whose crontab holds the backup job (the deploy user), not with sudo, or the
+# crontab check looks at the wrong user.
+#
 # backup.sh depends on things the repo cannot show: settings in the untracked .env, a line in the
 # deploy user's crontab, and files on this disk. This script looks at each of them and prints one
 # PASS / WARN / FAIL line per check. It changes nothing, and never prints a secret: settings are
@@ -75,17 +78,17 @@ check_log() {
         fail "no readable log at $LOG_FILE (has the cron job ever run?)"
         return
     fi
-    # Each run starts by backing up the first database and ends with "backup: done"; die() writes
-    # its reason as the run's last line.
-    local last_start last_done
-    last_start="$(grep -n "backup: backing up ${DATABASES[0]}\$" "$LOG_FILE" | tail -1 | cut -d: -f1)"
-    last_done="$(grep -n 'backup: done' "$LOG_FILE" | tail -1 | cut -d: -f1)"
-    if [[ -z "$last_done" ]]; then
-        fail "$LOG_FILE has no successful run; its last line: $(tail -1 "$LOG_FILE")"
-    elif [[ -n "$last_start" && "$last_start" -gt "$last_done" ]]; then
-        fail "the latest run in $LOG_FILE did not finish; its last line: $(tail -1 "$LOG_FILE")"
+    # A successful run's last line is "backup: done (<stamp>)". Anything else last means the latest
+    # run failed (die() writes its reason last, including the checks it makes before backing up
+    # anything) or is still running.
+    local last_line
+    last_line="$(grep -v '^[[:space:]]*$' "$LOG_FILE" | tail -1)"
+    if [[ -z "$last_line" ]]; then
+        fail "$LOG_FILE is empty (has the cron job ever run?)"
+    elif [[ "$last_line" == "backup: done"* ]]; then
+        pass "the latest run in $LOG_FILE succeeded: $last_line"
     else
-        pass "the latest run in $LOG_FILE succeeded: $(sed -n "${last_done}p" "$LOG_FILE")"
+        fail "the latest run in $LOG_FILE did not finish (or is still running); its last line: $last_line"
     fi
 }
 
