@@ -158,7 +158,7 @@ MIGRATE_FRESH=true docker compose --profile migrate run --rm migrator   # first 
 
 docker compose pull auth management devices socket engine
 docker compose up -d rabbitmq redis
-docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana
+docker compose up -d otel-collector prometheus alertmanager pushgateway loki tempo grafana node-exporter cadvisor
 docker compose up -d --no-build auth management devices socket engine traefik
 docker compose ps                                           # everything should report healthy
 ```
@@ -388,7 +388,7 @@ ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 <vm>
 # Grafana: http://localhost:3000 (admin / GRAFANA_ADMIN_PASSWORD), Alertmanager: http://localhost:9093
 ```
 
-The stack adds seven containers and roughly 1 GB of memory at idle. On a 4 GB VM, add swap first
+The stack adds nine containers and roughly 1.2 GB of memory at idle. On a 4 GB VM, add swap first
 (see Fresh install).
 
 ### Alerts
@@ -406,10 +406,25 @@ alerts fire and reach nobody, and Alertmanager says so in its log.
 | `SocketDisconnectRateHigh` | abnormal device disconnects exceed half the connected devices in 10 minutes |
 | `BackupMissing` / `BackupNeverReported` | no successful backup for 26 hours |
 | `BackupFailed` | `backup.sh` failed (raised immediately by `scripts/alert.sh`) |
+| `DiskAlmostFull` | any real filesystem on the VM has under 15% free for 10 minutes |
+| `DiskFillingFast` | at the last 6 hours' rate a filesystem under 40% free fills within 24 hours |
+| `NodeExporterDown` | Prometheus cannot scrape node-exporter, so nothing is watching disk space |
+| `ContainerRestarting` | a container restarted in place 3 or more times in 15 minutes |
 | `EngineNotReporting` | no engine has reported metrics for 5 minutes |
 | `DeletedWorkspaceRetiredBySweep` | management's daily deleted workspace sweep retired a workspace its delete event had missed |
 
 Engine readiness is deliberately not alerted on: a standby engine is not ready by design.
+
+Disk and container alerts come from `node-exporter` (host filesystems) and `cadvisor` (per-container
+start times), both on the backend network only. Neither is started by `deploy.sh`; on a VM that
+predates them, start them once after the first deploy that includes them (deploy.sh syncs the
+checkout), and recreate Prometheus so it reads the new scrape config and rules:
+
+```bash
+cd ~/Wbskt/deploy/compose
+docker compose up -d node-exporter cadvisor
+docker compose up -d --force-recreate prometheus   # picks up the new prometheus.yml and alerts.yml
+```
 
 For backups, set `BACKUP_ALERT_CMD` to `deploy/scripts/alert.sh` in `.env`. A failed run then
 raises `BackupFailed` straight away, and every successful run pushes its timestamp to the

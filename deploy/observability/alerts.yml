@@ -152,3 +152,57 @@ groups:
           severity: page
         annotations:
           summary: "No workflow engine has reported metrics for 5 minutes"
+
+      - alert: DiskAlmostFull
+        # Every real filesystem on the VM: /, and the image store or SQL volume if they are separate.
+        # At 15% free a deploy's pull or a SQL Server autogrow is close to failing.
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs|fuse.*"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs|fuse.*"}
+          < 0.15
+          and node_filesystem_readonly == 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.mountpoint }} on the VM has {{ $value | humanizePercentage }} free"
+          description: >-
+            Follow "Disk space" in deploy/README.md: find what grew with docker system df and du,
+            prune unused images, vacuum the journal. Never prune volumes.
+
+      - alert: DiskFillingFast
+        # Early warning: at the last six hours' rate, the filesystem is full within a day.
+        expr: |
+          predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs|fuse.*"}[6h], 24 * 3600) < 0
+          and node_filesystem_avail_bytes / node_filesystem_size_bytes < 0.40
+          and node_filesystem_readonly == 0
+        for: 1h
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $labels.mountpoint }} on the VM will be full within 24 hours at the current rate"
+          description: Look for a runaway log, local backups piling up, or images not being pruned.
+
+      - alert: NodeExporterDown
+        # Without it the two disk alerts above can never fire.
+        expr: absent(up{job="node"} == 1)
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Prometheus cannot scrape node-exporter, so disk space is unwatched"
+
+      - alert: ContainerRestarting
+        # A container that crashes and is restarted in place keeps its series, so its start time
+        # changes. A deploy recreates containers under new ids and does not count.
+        expr: |
+          sum by (container_label_com_docker_compose_service, name) (
+            changes(container_start_time_seconds{name!=""}[15m])
+          ) >= 3
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.name }} restarted {{ $value }} times in 15 minutes"
+          description: >-
+            It is crash-looping. docker logs --tail 200 {{ $labels.name }} on the VM shows why; a
+            container stopped by its memory limit shows OOMKilled in docker inspect.

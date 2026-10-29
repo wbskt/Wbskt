@@ -544,6 +544,48 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  # Host metrics: free space on every real filesystem (/, the image store, the SQL volume) for
+  # DiskAlmostFull and DiskFillingFast. It reads the host's root through /host and its /proc via
+  # pid: host; it listens on the backend network only and Prometheus scrapes it there.
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: wbskt-node-exporter
+    command:
+      - --path.rootfs=/host
+      # Docker's own mounts would report every container's overlay as a filesystem of its own.
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run|sys|var/lib/docker/.+|var/lib/containerd/.+)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Per-container metrics, for ContainerRestarting: a host that crashes and is restarted by
+  # restart: unless-stopped keeps its container, so cAdvisor sees the same series start again.
+  # Trimmed to CPU and memory (start times always come with them): the full set is thousands of series per container.
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: wbskt-cadvisor
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.service
+      - --enable_metrics=cpu,memory
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
+
   loki:
     image: grafana/loki:3.5.3
     container_name: wbskt-loki

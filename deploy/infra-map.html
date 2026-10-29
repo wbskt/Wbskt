@@ -230,6 +230,8 @@ pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); 
 .gap.s-high .stripe { background: var(--red); }
 .gap.s-med .stripe { background: var(--amber); }
 .gap.s-low .stripe { background: var(--line-strong); }
+.gap.s-done .stripe { background: var(--green); }
+.gap.s-done h3 { color: var(--muted); }
 .gap h3 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .gap p { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-2); max-width: 92ch; }
 
@@ -417,9 +419,11 @@ node('redis','Redis 7',':6379 · AOF on','data',DX(2),404,230,48,{ title:'Redis'
 node('migrator','migrator','one-shot · profile migrate','oneshot',DX(3),404,230,48,{ title:'migrator', what:'Publishes both DACPACs with sqlpackage. Incremental by default and safe to rerun; deploy.sh runs it on every backend deploy. Creates and resets the per-host SQL logins.', facts:[['Image','wbskt-migrator:${IMAGE_TAG}'],['Container','wbskt-migrator (exits when done)'],['Profile','migrate'],['Connects as','sa'],['Shell-only flags','MIGRATE_FRESH, MIGRATE_ALLOW_DATA_LOSS']], env:['SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','ROOT_ADMIN_PASSWORD_HASH'], cmds:[['Incremental migration (safe)','docker compose --profile migrate run --rm migrator']], notes:'MIGRATE_FRESH=true drops and recreates both databases with no prompt. Only for a brand-new environment.' });
 
 node('otel','OTel collector','OTLP :4317','tele',DX(0),516,230,48,{ title:'OpenTelemetry collector', what:'Receives traces, metrics and logs from every host and fans them out to Tempo, Prometheus and Loki.', facts:[['Image','otel/opentelemetry-collector-contrib:0.130.0'],['Port','4317 OTLP gRPC, backend only'],['Config','deploy/observability/otel-collector.yaml'],['Hosts point at it via','OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317']] });
-node('prometheus','Prometheus','metrics · alert rules','tele',DX(1),516,230,48,{ title:'Prometheus', what:'Stores metrics (pushed over OTLP and scraped), evaluates the alert rules and fires them at Alertmanager.', facts:[['Image','prom/prometheus:v3.5.0'],['Retention','METRICS_RETENTION (default 15d)'],['Scrapes','rabbitmq:15692, pushgateway:9091, alertmanager:9093'],['Rules','deploy/observability/alerts.yml'],['Volume','prometheus-data']], env:['METRICS_RETENTION'], go:'alerts' });
+node('prometheus','Prometheus','metrics · alert rules','tele',DX(1),516,230,48,{ title:'Prometheus', what:'Stores metrics (pushed over OTLP and scraped), evaluates the alert rules and fires them at Alertmanager.', facts:[['Image','prom/prometheus:v3.5.0'],['Retention','METRICS_RETENTION (default 15d)'],['Scrapes','rabbitmq:15692, pushgateway:9091, node-exporter:9100, cadvisor:8080'],['Rules','deploy/observability/alerts.yml'],['Volume','prometheus-data']], env:['METRICS_RETENTION'], go:'alerts' });
 node('loki','Loki','logs · 7 days','tele',DX(2),516,230,48,{ title:'Loki', what:'Log store. Logs carry trace and span ids, and Grafana links logs and traces both ways.', facts:[['Image','grafana/loki:3.5.3'],['Retention','168h'],['Volume','loki-data']] });
 node('tempo','Tempo','traces · 72 hours','tele',DX(3),516,230,48,{ title:'Tempo', what:'Trace store. MassTransit carries trace context in message headers, so one trace follows a device message from socket, over the bus, into the engine and management.', facts:[['Image','grafana/tempo:2.8.2'],['Retention','72h'],['Volume','tempo-data']] });
+node('nodeexp','node-exporter',':9100 · host filesystems','tele',DX(0),516,230,48,{ title:'node-exporter', what:'Host metrics for the VM itself, read through a read-only mount of / and the host’s /proc. Its filesystem free space drives DiskAlmostFull and DiskFillingFast.', facts:[['Image','prom/node-exporter:v1.12.1'],['Container','wbskt-node-exporter'],['Port','9100, backend only'],['Mounts','/ → /host (read-only), pid: host'],['Ignores','Docker’s own overlay mounts, /dev, /proc, /run, /sys']], cmds:[['Free space as Prometheus sees it','docker compose exec prometheus wget -qO- "http://localhost:9090/api/v1/query?query=node_filesystem_avail_bytes" | head -c 1500'],['Start it on a VM that predates it','docker compose up -d node-exporter && docker compose up -d --force-recreate prometheus']], go:'alerts' });
+node('cadvisor','cAdvisor',':8080 · per-container','tele',DX(0),516,230,48,{ title:'cAdvisor', what:'Per-container CPU, memory and start times. A container restarted in place keeps its series, so its start time changing is how ContainerRestarting spots a crash loop.', facts:[['Image','ghcr.io/google/cadvisor:v0.60.6'],['Container','wbskt-cadvisor'],['Port','8080, backend only'],['Runs','privileged, reads /sys, /var/run and /var/lib/docker read-only'],['Metrics','cpu and memory only (the full set is thousands of series per container)']], cmds:[['Restart counts Docker keeps','docker ps -a --format "{{.Names}}" | xargs docker inspect -f "{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}"'],['Start it on a VM that predates it','docker compose up -d cadvisor && docker compose up -d --force-recreate prometheus']], go:'alerts' });
 
 const HX = i => 60 + i * 200;
 node('sshd','sshd + deploy.sh','deploy user · docker group','host',HX(0),628,180,48,{ title:'SSH and deploy.sh', what:'The VM host itself. CI’s deploy key is pinned in authorized_keys to ssh-forced-command.sh, which can only run deploy.sh.', facts:[['Port','22, open in the cloud firewall'],['User','in the docker group (root-equivalent)'],['Forced command','deploy/scripts/ssh-forced-command.sh'],['deploy.sh does','sync checkout to the tag’s commit, prune images, require 3 GB free, pull, migrate, restart devices then the rest, wait up to 240s for health']], cmds:[['Deploy backend by hand','{path}/deploy/scripts/deploy.sh --tag sha-<short>'],['Deploy only some hosts','{path}/deploy/scripts/deploy.sh --tag sha-<short> --services "auth management"']], go:'pipeline' });
@@ -461,6 +465,8 @@ const E = {};
  ['otel_prom','otel','prometheus','metrics'],['otel_loki','otel','loki','logs'],['otel_tempo','otel','tempo','traces'],
  ['prom_rmq','prometheus','rabbitmq','scrape :15692'],
  ['prom_push','prometheus','pushgateway','scrape :9091'],
+ ['prom_node','prometheus','nodeexp','scrape :9100'],
+ ['prom_cadv','prometheus','cadvisor','scrape :8080'],
  ['prom_am','prometheus','alertmanager','fires alerts'],
  ['graf_prom','grafana','prometheus','query'],['graf_loki','grafana','loki','query'],['graf_tempo','grafana','tempo','query'],
  ['am_smtp','alertmanager','smtp','ALERT_EMAIL_TO via SMTP_*'],
@@ -572,6 +578,8 @@ const PORTS = [
  ['redis','6379','backend network','Redis'],
  ['otel-collector','4317','backend network','OTLP gRPC'],
  ['prometheus','9090','backend network','Queries from Grafana'],
+ ['node-exporter','9100','backend network','Host metrics for Prometheus'],
+ ['cadvisor','8080','backend network','Container metrics for Prometheus'],
  ['loki','3100','backend network','Log push and query'],
  ['tempo','3200','backend network','Trace query'],
  ['grafana','3000','127.0.0.1 on the VM','Dashboards (ssh -L)'],
@@ -603,6 +611,10 @@ const ALERTS = [
  ['BackupMissing','Backups','No successful backup for 26 hours'],
  ['BackupNeverReported','Backups','No backup has ever reported success'],
  ['BackupFailed','Backups','backup.sh failed; raised directly by alert.sh, not a Prometheus rule'],
+ ['DiskAlmostFull','VM','A real filesystem on the VM has under 15% free for 10 minutes'],
+ ['DiskFillingFast','VM','At the last 6 hours’ rate a filesystem under 40% free fills within 24 hours'],
+ ['NodeExporterDown','VM','Prometheus cannot scrape node-exporter, so disk space is unwatched'],
+ ['ContainerRestarting','VM','A container restarted in place 3 or more times in 15 minutes'],
 ];
 
 const TREE = [
@@ -610,7 +622,7 @@ const TREE = [
  ['row','├─ deploy/compose/docker-compose.yml','The whole stack. Compose project name <b>wbskt</b>.'],
  ['row','├─ deploy/compose/.env','<b>All secrets.</b> Untracked, never committed. deploy.sh rewrites <b>IMAGE_TAG</b> and <b>CONSOLE_IMAGE_TAG</b> here.'],
  ['row','├─ deploy/config/serilog.json','Mounted read-only at <b>/Config</b> in auth, management, devices, socket, engine.'],
- ['row','├─ deploy/observability/','Collector, Prometheus + alerts.yml, Loki, Tempo, Grafana datasources, Alertmanager entrypoint, RabbitMQ plugins and healthcheck. All mounted read-only.'],
+ ['row','├─ deploy/observability/','Collector, Prometheus + alerts.yml (scrapes node-exporter and cAdvisor), Loki, Tempo, Grafana datasources, Alertmanager entrypoint, RabbitMQ plugins and healthcheck. All mounted read-only.'],
  ['row','└─ deploy/scripts/','deploy.sh, backup.sh, restore.sh, alert.sh, ssh-forced-command.sh.'],
  ['head','/var/backups/wbskt/','<b>BACKUP_DIR</b>. Wbskt.Database_&lt;UTC stamp&gt;.bak and Wbskt.Database.Auth_&lt;stamp&gt;.bak, pruned after BACKUP_RETENTION_DAYS.'],
  ['row','/var/log/wbskt-backup.log','Output of the nightly cron run.'],
@@ -665,7 +677,7 @@ const RUNBOOK = [
    ['Restart one host without touching dependencies','docker compose up -d --no-build --no-deps auth'],
    ['Change scale (edit .env, then apply)','sed -i "s/^SOCKET_REPLICAS=.*/SOCKET_REPLICAS=3/" .env\ndocker compose up -d --no-build --no-deps socket'],
    ['Network definition changed (maintenance window)','docker compose down && docker compose up -d --no-build','danger'] ] },
- { t:'Disk space', p:'The disk filled from old images once already. deploy.sh now prunes first and stops if under 3 GB is free.', c:[
+ { t:'Disk space', p:'The disk filled from old images once already. deploy.sh now prunes first and stops if under 3 GB is free, and DiskAlmostFull pages at 15% free.', c:[
    ['Which filesystem is full','df -h / /var/lib/containerd /var/lib/docker'],
    ['What Docker is using','docker system df'],
    ['Remove unused images (running ones are kept)','docker image prune -af'],
@@ -684,7 +696,7 @@ const RUNBOOK = [
 ];
 
 const GAPS = [
- ['high','No disk or container metrics','Prometheus scrapes app metrics, RabbitMQ and backup age, but nothing watches disk usage or container restarts. The disk-full incident behind PR #427 and #429 would not alert today. Add node-exporter and cAdvisor plus a DiskAlmostFull rule.'],
+ ['done','No disk or container metrics','Fixed in PR #PRNUM: node-exporter and cAdvisor are scraped by Prometheus, with DiskAlmostFull, DiskFillingFast, NodeExporterDown and ContainerRestarting rules. On a VM that predates them, run docker compose up -d node-exporter cadvisor and recreate prometheus once after the deploy.'],
  ['high','Backups depend on settings the repo cannot show','backup.sh refuses to run without BACKUP_UPLOAD_CMD, and nothing alerts on failure without BACKUP_ALERT_CMD. Check both are set on the VM, that crontab has the 02:00 line, and that a restore rehearsal has been run with row counts compared.','check'],
  ['med','Project copy of dev.env is stale','deploy-env/dev.env (formatted from master f55e6c9 on 4 Oct) lacks variables compose now requires or reads, including AUTH_INTERNAL_API_KEY and INTEGRATIONS_KEY_1. See the drift filter on the Env vars tab.'],
  ['med','No laptop path to SQL or the RabbitMQ UI','Neither is published on the VM loopback, so there is nothing to SSH-tunnel to. The runbook has a temporary socat workaround. A permanent fix is 127.0.0.1:1433 and 127.0.0.1:15672 port publishes in compose.'],
@@ -732,10 +744,10 @@ const ROWS = [
  { ids:['traefik'], top:180, h:110, w:1136, gap:0, x0:72, label:['Public edge','edge network 172.28.0.0/24, host ports 80 and 443'] },
  { ids:['console','auth','management','devices','socket','engine'], top:318, h:116, w:166, gap:28, x0:72, label:['App hosts','ASP.NET on :8080'] },
  { ids:['sql','rabbitmq','redis','migrator'], top:462, h:116, w:254, gap:40, x0:72, label:['Data','backend network 172.28.1.0/24, never published'] },
- { ids:['otel','prometheus','loki','tempo'], top:606, h:116, w:254, gap:40, x0:72, label:['Telemetry','backend network'] },
+ { ids:['otel','prometheus','loki','tempo','nodeexp','cadvisor'], top:606, h:116, w:166, gap:28, x0:72, label:['Telemetry','backend network'] },
  { ids:['sshd','cron','grafana','alertmanager','pushgateway'], top:750, h:116, w:200, gap:34, x0:72, label:['VM host','SSH, cron, and ports bound to 127.0.0.1'] },
 ];
-const SUBS = { traefik:'v3.7. The only container with host ports. TLS from Let’s Encrypt, plus an internal :8081 for the engine.', console:'nginx, edge only', auth:'sign-in, tenants', management:'console API, SignalR', devices:'device login', socket:'device WebSockets', engine:'workflows, backend only', sql:':1433, volume sql-data', rabbitmq:':5672, UI on :15672', redis:':6379, AOF on', migrator:'one-shot, profile migrate', otel:'OTLP on :4317', prometheus:'metrics and alert rules', loki:'logs, kept 7 days', tempo:'traces, kept 72 hours', sshd:'deploy user, docker group', cron:'nightly at 02:00', grafana:'127.0.0.1:3000', alertmanager:'127.0.0.1:9093', pushgateway:'127.0.0.1:9091' };
+const SUBS = { traefik:'v3.7. The only container with host ports. TLS from Let’s Encrypt, plus an internal :8081 for the engine.', console:'nginx, edge only', auth:'sign-in, tenants', management:'console API, SignalR', devices:'device login', socket:'device WebSockets', engine:'workflows, backend only', sql:':1433, volume sql-data', rabbitmq:':5672, UI on :15672', redis:':6379, AOF on', migrator:'one-shot, profile migrate', otel:'OTLP on :4317', prometheus:'metrics and alert rules', loki:'logs, kept 7 days', tempo:'traces, kept 72 hours', nodeexp:'disk space, :9100', cadvisor:'container restarts', sshd:'deploy user, docker group', cron:'nightly at 02:00', grafana:'127.0.0.1:3000', alertmanager:'127.0.0.1:9093', pushgateway:'127.0.0.1:9091' };
 N.cron.label = 'cron: backup.sh';
 ROWS.forEach((r, ri) => r.ids.forEach((id, i) => {
   const n = N[id]; n.row = ri; n.x = r.x0 + i * (r.w + r.gap); n.w = r.w;
@@ -984,7 +996,7 @@ function buildPipeline() {
   $('#pipeline').querySelectorAll('.copy').forEach(copyBtn);
 }
 function buildGaps() {
-  $('#gaplist').innerHTML = GAPS.map(([s, t, p, chk]) => `<div class="gap s-${s}"><div class="stripe"></div><div><h3>${esc(t)} <span class="pill ${s === 'high' ? 'p-secret' : s === 'med' ? 'p-missing' : 'p-opt'}">${s === 'med' ? 'medium' : s}</span>${chk ? ' <span class="pill p-opt">check</span>' : ''}</h3><p>${esc(p)}</p></div></div>`).join('');
+  $('#gaplist').innerHTML = GAPS.map(([s, t, p, chk]) => `<div class="gap s-${s}"><div class="stripe"></div><div><h3>${esc(t)} <span class="pill ${s === 'high' ? 'p-secret' : s === 'med' ? 'p-missing' : s === 'done' ? 'p-ok' : 'p-opt'}">${s === 'med' ? 'medium' : s === 'done' ? 'fixed' : s}</span>${chk ? ' <span class="pill p-opt">check</span>' : ''}</h3><p>${esc(p)}</p></div></div>`).join('');
 }
 
 // ---------------------------------------------------------------- routing between views

@@ -35,6 +35,16 @@ scrape_configs:
     static_configs:
       - targets: [rabbitmq:15692]
 
+  # The VM itself: filesystem free space for the disk alerts.
+  - job_name: node
+    static_configs:
+      - targets: [node-exporter:9100]
+
+  # Per-container CPU, memory and start times, for ContainerRestarting.
+  - job_name: cadvisor
+    static_configs:
+      - targets: [cadvisor:8080]
+
   # The backup job's last-success timestamp, pushed by deploy/scripts/backup.sh.
   - job_name: pushgateway
     honor_labels: true
