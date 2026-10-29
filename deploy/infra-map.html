@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wbskt Infra Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Wbskt console theme, dark only by design (the console has no light theme).
+   Layout: console-style top bar, a canvas board with node cards beside a details panel, then reference panels. */
+:root {
+  color-scheme: dark;
+  --canvas: #0e0e0e;      /* designer canvas, code insets */
+  --app: #111111;         /* page and panels */
+  --panel: #151515;       /* cards, details panel */
+  --raised: #181818;      /* inputs, hover */
+  --row: #1a1a1a;
+  --line: #2a2a2a;
+  --line-soft: #222222;
+  --line-strong: #333333;
+  --dot: #262626;
+  --ink: #f4f4f0;
+  --ink-2: #cccccc;
+  --muted: #999999;
+  --dim: #808080;
+  --faint: #666666;
+  --accent: #e85d26;
+  --accent-hover: #c2410c;
+  --accent-12: rgba(232,93,38,.12);
+  --accent-20: rgba(232,93,38,.2);
+  --green: #7bb35f; --green-12: rgba(123,179,95,.12);
+  --amber: #d19a66; --amber-12: rgba(209,154,102,.12);
+  --red: #f43f5e; --red-soft: #f87171; --red-12: rgba(244,63,94,.12);
+  --blue: #60a5fa; --blue-12: rgba(96,165,250,.12);
+  --violet: #a78bfa; --violet-12: rgba(167,139,250,.12);
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, Menlo, monospace;
+  --radius: 6px;
+}
+* { box-sizing: border-box; }
+html { background: var(--app); }
+body { background: var(--app); color: var(--ink); font: 13px/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--app); }
+::selection { background: var(--accent-20); }
+.wrap { max-width: 1480px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* top bar, as in the console */
+header.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--app); box-shadow: inset 0 -1px 0 var(--line-strong); }
+.bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; min-height: 48px; padding-block: 6px; }
+.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--ink); }
+.mark { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; font: 700 11px/1 var(--font-sans); }
+.wordmark { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.product { font-size: 12px; color: var(--faint); padding-left: 8px; border-left: 1px solid var(--line-strong); }
+nav.tabs { display: flex; gap: 2px; padding: 2px; background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+nav.tabs a { flex: none; padding: 5px 11px; color: var(--muted); text-decoration: none; font-size: 12.5px; font-weight: 500; border-radius: 4px; }
+nav.tabs a:hover { color: var(--ink); background: var(--raised); }
+nav.tabs a[aria-current="page"] { color: var(--ink); background: var(--line-soft); box-shadow: inset 0 -2px 0 var(--accent); }
+nav.tabs a:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.settings { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.settings label { display: flex; align-items: center; gap: 0; font-size: 11px; color: var(--faint); background: var(--raised); border: 1px solid var(--line-strong); border-radius: 4px; padding-left: 8px; }
+.settings label:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-12); }
+.settings input { font: 12px var(--font-mono); color: var(--ink-2); background: transparent; border: 0; outline: 0; padding: 5px 8px; width: 170px; max-width: 100%; }
+
+.pagehead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding-block: 22px 14px; }
+.pagehead h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+.pagehead .meta { font: 11.5px var(--font-mono); color: var(--faint); }
+.pagehead .meta b { color: var(--muted); font-weight: 500; }
+main { padding-block: 0 56px; }
+section.view[hidden] { display: none; }
+h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.005em; text-wrap: balance; }
+h3 { font-size: 13.5px; font-weight: 600; margin: 0; }
+.lede { color: var(--muted); margin: 0 0 16px; max-width: 76ch; font-size: 13px; }
+.eyebrow { font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+code, .mono { font-family: var(--font-mono); font-size: 11.5px; }
+:not(pre) > code { color: var(--ink-2); background: var(--canvas); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+
+/* flow chips, console filter-chip style */
+.flows { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+.flows .eyebrow { margin-right: 6px; }
+.chip { font: 500 12px var(--font-sans); color: var(--muted); background: var(--app); border: 1px solid var(--line-strong); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+.chip:hover { color: var(--ink); border-color: var(--faint); }
+.chip[aria-pressed="true"] { color: var(--accent); background: var(--accent-12); border-color: var(--accent); }
+.chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+/* map */
+.mapgrid { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 6px; align-items: start; }
+.board { min-width: 0; background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.board svg { display: block; width: 100%; min-width: 900px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); min-width: 900px; background: var(--app); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 14px; height: 10px; border-radius: 2px; background: var(--panel); border: 1px solid var(--line); border-top: 2px solid; display: inline-block; }
+.legend .hint { color: var(--faint); margin-left: auto; }
+.rail { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); position: sticky; top: calc(env(safe-area-inset-top, 0px) + 60px); max-height: calc(100vh - 76px); overflow-y: auto; }
+.rail-head { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
+.rail-body { padding: 14px; }
+.rail h3 { font-size: 16px; }
+.rail .kind { display: inline-flex; align-items: center; gap: 6px; font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: .08em; }
+.rail .kind::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.rail p { margin: 8px 0; color: var(--ink-2); }
+.rail dl { display: grid; grid-template-columns: 104px minmax(0,1fr); gap: 5px 10px; margin: 14px 0; font-size: 12px; }
+.rail dt { color: var(--dim); }
+.rail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--ink-2); font-family: var(--font-mono); font-size: 11.5px; }
+.rail .sect { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.rail .sect > .eyebrow { display: block; margin-bottom: 8px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font: 11px var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--raised); border: 1px solid var(--line); cursor: pointer; color: var(--ink-2); }
+.tag.secret { color: var(--red-soft); border-color: rgba(248,113,113,.25); }
+.tag:hover { border-color: var(--accent); color: var(--ink); }
+.conn { list-style: none; padding: 0; margin: 0; display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+.conn li { display: grid; grid-template-columns: 16px minmax(0,1fr); gap: 6px; }
+.conn .dir { color: var(--faint); font-family: var(--font-mono); }
+.conn button { all: unset; cursor: pointer; font-weight: 600; color: var(--ink); }
+.conn button:hover { color: var(--accent); }
+.conn button:focus-visible { outline: 1px solid var(--accent); }
+.steps { list-style: none; counter-reset: s; padding: 0; margin: 12px 0 0; display: grid; gap: 2px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 10px; font-size: 12.5px; padding: 6px 8px; border-radius: 4px; color: var(--ink-2); }
+.steps li::before { content: counter(s); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: var(--accent-12); color: var(--accent); font: 600 11px var(--font-mono); }
+.steps li .via { display: block; color: var(--faint); font-size: 11px; font-family: var(--font-mono); margin-top: 1px; }
+.steps li:hover { background: var(--row); color: var(--ink); }
+.note { font-size: 12px; color: var(--muted); border-left: 2px solid var(--line-strong); padding-left: 10px; margin: 12px 0; }
+.warnnote { border-left-color: var(--amber); background: var(--amber-12); padding: 8px 10px; border-radius: 0 4px 4px 0; color: var(--ink-2); }
+
+/* svg board */
+.band-rect { fill: #121212; stroke: var(--line-soft); }
+.vm-rect { fill: none; stroke: var(--line-strong); stroke-dasharray: 5 4; }
+.band-label { paint-order: stroke; stroke: #121212; stroke-width: 6px; stroke-linejoin: round; }
+.band-label .n { font: 600 10px var(--font-sans); letter-spacing: .08em; fill: var(--dim); text-transform: uppercase; }
+.band-label .d { font: 10.5px var(--font-mono); fill: var(--faint); }
+.band-label.ext, .band-label.vm { stroke: var(--canvas); }
+.node { cursor: pointer; }
+.node .card { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+.node .edge-top { fill: var(--c); }
+.node .kd { font: 600 9px var(--font-sans); letter-spacing: .08em; fill: var(--dim); text-transform: uppercase; }
+.node .nm { font: 600 13px var(--font-sans); fill: var(--ink); }
+.node .sb { font: 10.5px var(--font-mono); fill: var(--muted); }
+.node:hover .card { stroke: var(--line-strong); fill: #181818; }
+.node:focus, .node:focus-visible { outline: none; }
+.node:focus-visible .card { stroke: var(--accent); }
+.node.sel .card { stroke: var(--accent); stroke-width: 1.5; }
+.node.sel .glow { opacity: 1; }
+.node .glow { fill: none; stroke: var(--accent-20); stroke-width: 6; opacity: 0; }
+.node.dim { opacity: .32; }
+.node.k-ext { --c: #4a4a4a; } .node.k-ext .card { stroke-dasharray: 4 3; fill: var(--app); }
+.node.k-edge { --c: var(--accent); } .node.k-edge .card { fill: #1a1411; }
+.node.k-app { --c: var(--green); }
+.node.k-data { --c: var(--violet); }
+.node.k-oneshot { --c: var(--violet); } .node.k-oneshot .card { stroke-dasharray: 5 3; }
+.node.k-tele { --c: var(--blue); }
+.node.k-host { --c: var(--amber); }
+.edge { fill: none; stroke: #4a4a4a; stroke-width: 1.25; opacity: 0; transition: opacity .15s; }
+.edge.on { opacity: 1; stroke: var(--accent); stroke-width: 1.5; marker-start: url(#port); marker-end: url(#port); }
+.edge.hot { stroke-width: 2.75; }
+.badge rect { fill: var(--accent); }
+.badge text { fill: #111; font: 700 10.5px var(--font-mono); text-anchor: middle; }
+.badge.hot rect { fill: var(--ink); }
+
+/* panels and tables */
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
+th { font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); background: var(--app); position: sticky; top: 0; white-space: nowrap; }
+td { color: var(--ink-2); }
+td b { color: var(--ink); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--row); }
+td code { white-space: nowrap; }
+td.wrap code { white-space: normal; }
+#envrows td code { white-space: normal; overflow-wrap: anywhere; }
+#envrows td:first-child code { white-space: nowrap; color: var(--ink); }
+#envrows td:nth-child(5) { min-width: 240px; max-width: 360px; }
+#envrows td:nth-child(4) { min-width: 220px; }
+#envrows pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 9.5px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.p-secret { color: var(--red-soft); background: var(--red-12); }
+.p-req { color: var(--ink-2); background: var(--line-soft); }
+.p-opt { color: var(--dim); background: transparent; border: 1px solid var(--line); padding: 1px 5px; }
+.p-missing { color: var(--amber); background: var(--amber-12); }
+.p-ok { color: var(--green); background: var(--green-12); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+.toolbar input[type=search] { font: 12.5px var(--font-sans); color: var(--ink); background: var(--raised); border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 10px; width: 280px; max-width: 100%; }
+.toolbar input:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-12); }
+.count { color: var(--faint); font: 11.5px var(--font-mono); margin-left: auto; }
+.grouprow td { background: var(--app); font: 600 10px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding-top: 12px; }
+tbody tr.grouprow:hover td { background: var(--app); }
+tr.flash td { background: var(--accent-12) !important; }
+
+/* runbook */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 6px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px 16px; min-width: 0; }
+.card > p { margin: 4px 0 6px; color: var(--muted); font-size: 12.5px; }
+.cmd { margin: 12px 0 0; }
+.cmd .lbl { font-size: 12px; font-weight: 500; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
+.cmdbox { position: relative; margin-top: 5px; }
+pre { margin: 0; background: var(--canvas); border: 1px solid var(--line-soft); border-radius: 4px; padding: 9px 70px 9px 11px; overflow-x: auto; font: 11.5px/1.6 var(--font-mono); color: var(--ink-2); white-space: pre; }
+.cmd.danger pre { border-color: rgba(244,63,94,.3); }
+.copy { position: absolute; top: 5px; right: 5px; font: 500 11px var(--font-sans); color: var(--muted); background: var(--raised); border: 1px solid var(--line-strong); border-radius: 4px; padding: 3px 9px; cursor: pointer; }
+.copy:hover { color: var(--ink); border-color: var(--faint); }
+.copy:focus-visible { outline: 1px solid var(--accent); }
+
+/* paths */
+.tree { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.tree .row { display: grid; grid-template-columns: minmax(280px, 480px) minmax(260px, 1fr); gap: 16px; padding: 7px 16px; border-bottom: 1px solid var(--line-soft); }
+.tree .row:last-child { border-bottom: 0; }
+.tree .row.head { background: var(--app); padding-block: 10px; }
+.tree .row.head .p { color: var(--accent); }
+.tree .p { font: 11.5px var(--font-mono); white-space: pre; color: var(--ink-2); }
+.tree .d { font-size: 12.5px; color: var(--muted); }
+.tree .d b { color: var(--ink); font-weight: 600; }
+
+/* pipeline */
+.lane { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 6px; }
+.lane-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 12px; }
+.lane-head .meta { color: var(--faint); font-size: 12px; }
+.stages { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(170px, 1fr); overflow-x: auto; padding-bottom: 4px; }
+.stage { position: relative; padding: 10px 22px 10px 12px; border: 1px solid var(--line); border-top: 2px solid var(--green); border-radius: 4px; background: var(--app); margin-right: 18px; min-width: 0; }
+.stage::after { content: ""; position: absolute; right: -14px; top: 50%; width: 9px; height: 9px; border-top: 1.5px solid var(--faint); border-right: 1.5px solid var(--faint); transform: translateY(-50%) rotate(45deg); }
+.stage:last-child::after { display: none; }
+.stage.vm { border-top-color: var(--accent); background: #1a1411; }
+.stage b { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.stage span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 5px; font-size: 12.5px; color: var(--ink-2); }
+.twocol { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 6px; }
+
+/* gaps */
+.gaplist { display: grid; gap: 6px; }
+.gap { display: grid; grid-template-columns: 3px minmax(0,1fr); gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px 14px 0; overflow: hidden; }
+.gap.s-high .stripe { background: var(--red); }
+.gap.s-med .stripe { background: var(--amber); }
+.gap.s-low .stripe { background: var(--line-strong); }
+.gap h3 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.gap p { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-2); max-width: 92ch; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 2px solid var(--app); }
+::-webkit-scrollbar-thumb:hover { background: #4a4a4a; }
+
+@media (max-width: 1100px) {
+  .mapgrid { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; max-height: none; }
+}
+@media (max-width: 720px) {
+  .settings { margin-left: 0; width: 100%; }
+  .settings label { flex: 1 1 160px; }
+  .settings input { width: 100%; }
+  .tree .row { grid-template-columns: minmax(0,1fr); gap: 2px; }
+  .tree .p { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .rail dl { grid-template-columns: 92px minmax(0,1fr); }
+  .legend .hint { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .edge { transition: none; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="bar-top">
+      <a class="brand" href="#map" aria-label="Wbskt infra map, home"><span class="mark" aria-hidden="true">w</span><span class="wordmark">wbskt</span><span class="product">Infra map</span></a>
+      <nav class="tabs" aria-label="Views">
+        <a href="#map">Map</a>
+        <a href="#routing">Ports &amp; routing</a>
+        <a href="#env">Env vars</a>
+        <a href="#paths">VM paths</a>
+        <a href="#runbook">Runbook</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#alerts">Observability</a>
+        <a href="#gaps">Gaps</a>
+      </nav>
+      <div class="settings">
+        <label for="set-vm">ssh<input id="set-vm" value="deploy@&lt;vm&gt;" spellcheck="false" autocomplete="off"></label>
+        <label for="set-path">path<input id="set-path" value="/home/deploy/Wbskt" spellcheck="false" autocomplete="off"></label>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="wrap pagehead">
+  <h1>Production deployment</h1>
+  <span class="meta"><b>wbskt/Wbskt</b> @ 038299a · <b>Wbskt.Console</b> · one VM · env var names only, never values</span>
+</div>
+
+<main class="wrap">
+  <section class="view" id="v-map">
+    <div class="flows" id="flows" role="group" aria-label="Request flows"><span class="eyebrow">Trace a flow</span></div>
+    <div class="mapgrid">
+      <div class="board">
+        <svg id="board" viewBox="0 0 1280 914" role="img" aria-label="Topology of the Wbskt production VM"></svg>
+        <div class="legend">
+          <span><i style="border-top-color:var(--accent)"></i>Public edge</span>
+          <span><i style="border-top-color:var(--green)"></i>App host</span>
+          <span><i style="border-top-color:var(--violet)"></i>Data</span>
+          <span><i style="border-top-color:var(--blue)"></i>Telemetry</span>
+          <span><i style="border-top-color:var(--amber)"></i>VM host</span>
+          <span><i style="border-top-color:#4a4a4a;border-style:dashed"></i>Outside the VM</span>
+          <span class="hint">Click a card for its ports, env vars and commands</span>
+        </div>
+      </div>
+      <aside class="rail" id="rail" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section class="view" id="v-routing" hidden>
+    <h2>Ports &amp; routing</h2>
+    <p class="lede">Traefik is the only container with host ports. It routes by host name and path to containers on the <code>edge</code> network, and to the engine through an internal entrypoint that is never published. Everything else listens only inside Docker networks or on the VM loopback.</p>
+    <div class="twocol" style="margin-bottom:14px">
+      <div class="sheet"><table><thead><tr><th>Network</th><th>Subnet</th><th>Static</th><th>Members</th></tr></thead><tbody>
+        <tr><td><b>edge</b> <span class="mono">wbskt_edge</span></td><td><code>172.28.0.0/24</code></td><td>Traefik <code>.2</code>; dynamic pool <code>.128/25</code></td><td>traefik, console, auth, management, devices, socket</td></tr>
+        <tr><td><b>backend</b> <span class="mono">wbskt_backend</span></td><td><code>172.28.1.0/24</code></td><td>Traefik <code>.2</code>; dynamic pool <code>.128/25</code></td><td>traefik, auth, management, devices, socket, engine, sql, rabbitmq, redis, telemetry, migrator</td></tr>
+      </tbody></table></div>
+      <div class="sheet"><table><thead><tr><th>Entrypoint</th><th>Listens</th><th>Behaviour</th></tr></thead><tbody>
+        <tr><td><code>web</code></td><td>host <code>:80</code></td><td>Redirects to HTTPS; serves the Let's Encrypt HTTP-01 challenge</td></tr>
+        <tr><td><code>websecure</code></td><td>host <code>:443</code></td><td>TLS from Let's Encrypt; read/write timeouts off for WebSockets</td></tr>
+        <tr><td><code>engine</code></td><td><code>traefik:8081</code>, containers only</td><td>Management reaches the engine leader here</td></tr>
+      </tbody></table></div>
+    </div>
+    <h3 style="margin:18px 0 8px">Routers</h3>
+    <div class="sheet"><table><thead><tr><th>Router</th><th>Match</th><th>Priority</th><th>Target</th><th>Notes</th></tr></thead><tbody id="routes"></tbody></table></div>
+    <h3 style="margin:18px 0 8px">Every listening port</h3>
+    <div class="sheet"><table><thead><tr><th>Container</th><th>Port</th><th>Reachable from</th><th>Purpose</th></tr></thead><tbody id="ports"></tbody></table></div>
+    <h3 style="margin:18px 0 8px">Service-to-service addresses</h3>
+    <div class="sheet"><table><thead><tr><th>Caller</th><th>Address</th><th>Auth</th><th>Why</th></tr></thead><tbody id="internal"></tbody></table></div>
+  </section>
+
+  <section class="view" id="v-env" hidden>
+    <h2>Env vars</h2>
+    <p class="lede">Every variable in <code>deploy/compose/.env</code> on the VM, from <code>.env.example</code>. Compose maps each one into the container config keys shown. Values are never shown here. The drift column compares against the <code>deploy-env/dev.env</code> copy in project files.</p>
+    <div class="toolbar">
+      <input type="search" id="env-q" placeholder="Filter by name, container or key" aria-label="Filter env vars">
+      <button class="chip" id="env-secret" aria-pressed="false">Secrets only</button>
+      <button class="chip" id="env-drift" aria-pressed="false">Missing from dev.env</button>
+      <span class="count" id="env-count"></span>
+    </div>
+    <div class="sheet"><table><thead><tr><th>Name</th><th>Kind</th><th>Default</th><th>Used by → container key</th><th>Notes</th><th>dev.env</th></tr></thead><tbody id="envrows"></tbody></table></div>
+  </section>
+
+  <section class="view" id="v-paths" hidden>
+    <h2>VM paths</h2>
+    <p class="lede">Where things live on the VM. The checkout path comes from the <code>DEPLOY_PATH</code> secret; the box above changes it everywhere on this page. Named volumes are prefixed with the Compose project name <code>wbskt_</code>.</p>
+    <div class="tree" id="tree"></div>
+  </section>
+
+  <section class="view" id="v-runbook" hidden>
+    <h2>Runbook</h2>
+    <p class="lede">Copy-ready commands. Unless a card says otherwise, run them on the VM from <code class="pathref"></code><code>/deploy/compose</code>, where Compose finds <code>docker-compose.yml</code> and <code>.env</code>. Commands that read a secret read it inside the container, so nothing secret is typed or echoed.</p>
+    <div class="cards" id="runbook"></div>
+  </section>
+
+  <section class="view" id="v-pipeline" hidden>
+    <h2>Release pipeline</h2>
+    <p class="lede">Two repos, two release streams, one VM. CI builds every image; the VM only pulls. There is no inbound deploy endpoint: a workflow SSHes in with a key pinned to <code>deploy.sh</code>.</p>
+    <div id="pipeline"></div>
+  </section>
+
+  <section class="view" id="v-alerts" hidden>
+    <h2>Observability</h2>
+    <p class="lede">Every host sends traces, metrics and logs over OTLP to the collector, which fans them out. None of it is publicly routed: open Grafana through an SSH tunnel.</p>
+    <div class="twocol" style="margin-bottom:14px">
+      <div class="sheet"><table><thead><tr><th>Signal</th><th>Store</th><th>Retention</th><th>Read it in</th></tr></thead><tbody>
+        <tr><td>Traces</td><td>Tempo 2.8.2</td><td>72 hours</td><td>Grafana → Explore → Tempo</td></tr>
+        <tr><td>Metrics</td><td>Prometheus 3.5.0</td><td><code>METRICS_RETENTION</code>, default 15 days</td><td>Grafana → Explore → Prometheus</td></tr>
+        <tr><td>Logs</td><td>Loki 3.5.3</td><td>7 days (168h)</td><td>Grafana → Explore → Loki; logs carry trace ids</td></tr>
+        <tr><td>Container stdout</td><td>Docker json-file</td><td>20 MB × 5 files per container</td><td><code>docker compose logs</code></td></tr>
+      </tbody></table></div>
+      <div class="card">
+        <h3>Open Grafana and Alertmanager</h3>
+        <p>Both listen on the VM loopback. Forward them to your laptop, then sign in to Grafana as <code>admin</code> with <code>GRAFANA_ADMIN_PASSWORD</code>.</p>
+        <div class="cmd"><div class="cmdbox"><pre data-tpl="ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 {vm}
+# Grafana:      http://localhost:3000
+# Alertmanager: http://localhost:9093"></pre><button class="copy">Copy</button></div></div>
+        <p style="margin-top:10px">Alerts go to <code>ALERT_EMAIL_TO</code> (through the <code>SMTP_*</code> relay) and/or <code>ALERT_WEBHOOK_URL</code>. With neither set, alerts fire and reach nobody.</p>
+      </div>
+    </div>
+    <h3 style="margin:18px 0 8px">Alert rules <span class="mono" style="color:var(--muted);font-weight:400">deploy/observability/alerts.yml</span></h3>
+    <div class="sheet"><table><thead><tr><th>Alert</th><th>Area</th><th>Fires when</th></tr></thead><tbody id="alertrows"></tbody></table></div>
+  </section>
+
+  <section class="view" id="v-gaps" hidden>
+    <h2>Gaps</h2>
+    <p class="lede">Things this map exposes that are worth fixing or confirming before launch. Items marked "check" cannot be verified from the repo alone.</p>
+    <div class="gaplist" id="gaplist"></div>
+  </section>
+</main>
+
+<script>
+// ---------------------------------------------------------------- data
+const SVC = ['auth','management','devices','socket','engine'];
+const N = {};
+function node(id, label, sub, kind, x, y, w, h, d) { N[id] = Object.assign({ id, label, sub, kind, x, y, w, h }, d || {}); }
+// top band: outside the VM
+const TX = i => 28 + i * 117;
+node('browser','Browsers','console users','ext',TX(0),40,108,44,{ title:'Browsers', what:'People using the console at console.DOMAIN. Every request arrives over HTTPS on 443 at Traefik.', facts:[['Talks to','console., auth., api. DOMAIN'],['Live updates','SignalR at api.DOMAIN/hubs/notifications'],['Session','HttpOnly refresh cookie from auth (SameSite Strict by default)']] });
+node('device','Devices','Client SDK','ext',TX(1),40,108,44,{ title:'Devices', what:'Customer devices running the Client SDK. They register and log in over HTTPS at api.DOMAIN, then hold a WebSocket to ws.DOMAIN.', facts:[['Login','api.DOMAIN/api/client-auth, /api/client-registrations'],['Socket','wss://ws.DOMAIN'],['Token','Device JWT signed by management, audience wbskt-socket']] });
+node('laptop','Ops laptop','you, over SSH','ext',TX(2),40,108,44,{ title:'Ops laptop', what:'You. Nothing operational is publicly routed, so everything goes through SSH to the VM: a shell, docker compose, and tunnels to Grafana and Alertmanager.', facts:[['Reach','SSH 22 to the VM'],['Tunnels','127.0.0.1:3000 Grafana, :9093 Alertmanager, :9091 Pushgateway']], cmds:[['Tunnel Grafana + Alertmanager','ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 {vm}']] });
+node('gha','GitHub Actions','build + deploy','ext',TX(3),40,108,44,{ title:'GitHub Actions', what:'Builds and tests on every master push, publishes images to GHCR, then SSHes to the VM and runs deploy.sh.', facts:[['Backend','build-images.yml → deploy.yml, GitHub-hosted ubuntu-latest'],['Console','build-and-deploy.yml on the self-hosted runner'],['Environments','production, production-console'],['Secrets','DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS']], go:'pipeline' });
+node('ghcr','GHCR','ghcr.io/wbskt','ext',TX(4),40,108,44,{ title:'GitHub Container Registry', what:'Holds every image the VM runs. The VM logs in once with a classic PAT scoped to read:packages.', facts:[['Images','wbskt-auth, -management, -socket, -engine, -migrator, -console'],['Tags','sha-<short commit> and latest'],['Registry var','REGISTRY (default ghcr.io/wbskt)'],['Login stored in','~/.docker/config.json on the VM']] });
+node('le','Let’s Encrypt','TLS certs','ext',TX(5),40,108,44,{ title:'Let’s Encrypt', what:'Issues the certificates Traefik serves, through the HTTP-01 challenge on port 80.', facts:[['Account email','ACME_EMAIL'],['Directory','ACME_CASERVER (production unless set to staging)'],['Stored in','volume wbskt_traefik-acme → /letsencrypt/acme.json']] });
+node('smtp','SMTP relay','outbound mail','ext',TX(6),40,108,44,{ title:'SMTP relay', what:'External mail relay. Auth sends confirmation, invitation and reset mail through it; Alertmanager sends alert email through the same settings.', facts:[['Settings','SMTP_HOST, SMTP_PORT (587), SMTP_USE_STARTTLS, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_ADDRESS, SMTP_FROM_NAME'],['Without it','Sign-ups succeed but nobody can confirm an address or sign in']] });
+node('integ','Integrations','Telegram, ntfy…','ext',TX(7),40,108,44,{ title:'Integration APIs', what:'Telegram bots, mail relays, Discord webhooks, ntfy topics and API tokens that workflow steps send through. The engine makes these calls.', facts:[['Secrets','Sealed by the engine with INTEGRATIONS_KEY_1; the DB holds only ciphertext']] });
+node('offsite','Backup storage','off-box target','ext',TX(8),40,108,44,{ title:'Off-box backup storage', what:'Wherever BACKUP_UPLOAD_CMD copies BACKUP_DIR to (rclone, S3, restic, scp). Retention there is that system’s job, never the VM’s.', facts:[['Set by','BACKUP_UPLOAD_CMD, a single executable taking the folder as $1']] });
+
+node('traefik','Traefik','v3.7 · host ports 80 and 443 · TLS by Let’s Encrypt · internal :8081 for the engine','edge',60,188,980,44,{ title:'Traefik', what:'Reverse proxy and TLS terminator, and the only container with host ports. Routes by host and path using Docker labels on each service.', facts:[['Image','traefik:v3.7'],['Container','wbskt-traefik'],['Host ports','80 (redirects to HTTPS), 443'],['Internal','8081 for the engine, never published'],['Networks','edge 172.28.0.2, backend 172.28.1.2 (pinned)'],['Volume','traefik-acme → /letsencrypt'],['Reads','/var/run/docker.sock (read-only)'],['Restart policy','unless-stopped']], env:['DOMAIN','ACME_EMAIL','ACME_CASERVER'], cmds:[['Tail logs','docker compose logs -f --tail 200 traefik'],['Certificate problems','docker compose logs traefik 2>&1 | grep -i acme'],['Restart (only after changing its own static config)','docker compose up -d --no-deps traefik']], notes:'Host deploys never need a Traefik restart: it watches Docker labels live. Unhealthy containers are dropped from routing, which shows up as a 404.', go:'routing' });
+
+const AX = i => 60 + i * 166;
+node('console','console','nginx · edge only','app',AX(0),292,150,48,{ title:'console', what:'The Angular console, built in the Wbskt.Console repo and served by nginx. Its entrypoint writes config.json with the public URLs before the app boots.', facts:[['Image','ghcr.io/wbskt/wbskt-console:${CONSOLE_IMAGE_TAG}'],['Container','wbskt-console'],['Port','80 (nginx)'],['Network','edge'],['Route','console.DOMAIN'],['Health','wget http://127.0.0.1:80/']], env:['REGISTRY','CONSOLE_IMAGE_TAG','DOMAIN'], extraEnv:'Container gets AUTH_URL, WORKSPACE_URL, NOTIFICATIONS_URL, SOCKET_URL, all built from DOMAIN.', cmds:[['Tail logs','docker compose logs -f --tail 200 console'],['See the URLs it was given','docker compose exec console cat /usr/share/nginx/html/config.json'],['Deploy or roll back a console build','{path}/deploy/scripts/deploy.sh --console-tag sha-<short>']] });
+node('auth','auth','sign-in · edge+backend','app',AX(1),292,150,48,{ title:'auth', what:'Sign-in, accounts, tenants, workspaces and invitations. Signs user tokens and serves their public keys at /.well-known/jwks.json.', facts:[['Image','wbskt-auth:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Routes','auth.DOMAIN (not /api/internal); api.DOMAIN tenants, invitations, workspace admin'],['Database','Wbskt.Database.Auth as wbskt_auth'],['Health','/healthz/ready'],['Depends on','rabbitmq, sql, redis healthy'],['Mounts','deploy/config → /Config (Serilog)']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_AUTH_PASSWORD','AUTH_JWT_SIGNING_KEY','AUTH_JWT_PREVIOUS_PUBLIC_KEY','AUTH_EMAIL_FINGERPRINT_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','REFRESH_COOKIE_SAMESITE','API_DOCS_ENABLED','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS','SMTP_FROM_NAME','AUTH_INTERNAL_API_KEY'], cmds:[['Tail logs','docker compose logs -f --tail 200 auth'],['Check mail is configured (expect no output)','docker compose logs auth 2>&1 | grep "No SMTP relay is configured"'],['Restart alone','docker compose up -d --no-build --no-deps auth']] });
+node('management','management','console API · edge+backend','app',AX(2),292,150,48,{ title:'management', what:'The console API and the SignalR notifications hub. Signs device tokens, validates user tokens with auth’s keys, and calls the engine through Traefik.', facts:[['Image','wbskt-management:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Route','api.DOMAIN, every path except /api/internal; sticky cookie for SignalR'],['Replicas','MANAGEMENT_REPLICAS (default 1)'],['Database','Wbskt.Database as wbskt_management'],['Calls','http://auth:8080, http://traefik:8081'],['Depends on','rabbitmq, sql, redis, auth healthy']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_MANAGEMENT_PASSWORD','MANAGEMENT_JWT_SIGNING_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','ENGINE_INBOUND_API_KEY','AUTH_INTERNAL_API_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','API_DOCS_ENABLED','MANAGEMENT_REPLICAS'], cmds:[['Tail logs (all replicas)','docker compose logs -f --tail 200 management'],['Restart (devices keeps device login up meanwhile)','docker compose up -d --no-build --no-deps management']] });
+node('devices','devices','device login · edge+backend','app',AX(3),292,150,48,{ title:'devices', what:'The management image run with Host__Role=Devices. Serves only device registration and login, so a console deploy or heavy query cannot stop devices signing in.', facts:[['Image','wbskt-management:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Route','api.DOMAIN /api/client-auth, /api/client-registrations (priority 1000)'],['Fallback','management serves the same paths while devices is unhealthy'],['Replicas','DEVICES_REPLICAS (default 1)'],['Database','Wbskt.Database as wbskt_management']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_MANAGEMENT_PASSWORD','MANAGEMENT_JWT_SIGNING_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','ENGINE_INBOUND_API_KEY','AUTH_INTERNAL_API_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','DEVICES_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 devices'],['Restart alone','docker compose up -d --no-build --no-deps devices']], notes:'deploy.sh always restarts devices first and waits for it to be healthy before touching management.' });
+node('socket','socket','WebSockets · edge+backend','app',AX(4),292,150,48,{ title:'socket', what:'Holds device WebSocket connections. Holds no secret: it validates device tokens with management’s public keys and checks revocations in Redis.', facts:[['Image','wbskt-socket:${IMAGE_TAG}'],['Port','8080'],['Networks','edge, backend'],['Route','ws.DOMAIN (no stickiness needed)'],['Replicas','SOCKET_REPLICAS (default 1)'],['Keys from','http://management:8080/.well-known/jwks.json'],['Depends on','rabbitmq, redis healthy']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SOCKET_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 socket'],['Scale to 3 (edit .env first)','sed -i "s/^SOCKET_REPLICAS=.*/SOCKET_REPLICAS=3/" .env && docker compose up -d --no-build --no-deps socket']] });
+node('engine','engine','workflows · backend only','app',AX(5),292,150,48,{ title:'engine', what:'The workflow engine. Active/standby: one replica holds the leader lease and does all work, others are warm spares. Not on the edge network; reached only through Traefik’s internal :8081.', facts:[['Image','wbskt-engine:${IMAGE_TAG}'],['Port','8080'],['Network','backend only'],['Route','traefik:8081 /api/inbound, /internal/integrations'],['Leader routing','Traefik health check on /healthz/ready (only the leader is ready)'],['Container health','/healthz (liveness)'],['Replicas','ENGINE_REPLICAS (default 1)'],['Database','Wbskt.Database as wbskt_engine']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD','SQL_ENGINE_PASSWORD','ENGINE_INBOUND_API_KEY','INTEGRATIONS_KEY_1','ENGINE_REPLICAS'], cmds:[['Tail logs','docker compose logs -f --tail 200 engine'],['Restart alone','docker compose up -d --no-build --no-deps engine']], notes:'Losing INTEGRATIONS_KEY_1 makes every saved integration secret unreadable. Keep a copy with the backup credentials.' });
+
+const DX = i => 60 + i * 250;
+node('sql','SQL Server 2022',':1433 · sql-data','data',DX(0),404,230,48,{ title:'SQL Server', what:'Both databases on one instance. Hosts use their own least-privilege logins that can only run stored procedures; sa is for the migrator, healthcheck and backups.', facts:[['Image','mcr.microsoft.com/mssql/server:2022-latest'],['Container','wbskt-sql'],['Port','1433, backend network only'],['Volume','sql-data → /var/opt/mssql'],['Databases','Wbskt.Database, Wbskt.Database.Auth'],['Logins','wbskt_auth, wbskt_management, wbskt_engine, sa'],['Health','sqlcmd SELECT 1 every 10s']], env:['SQL_SA_PASSWORD'], cmds:[['Open a SQL shell as sa','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C\''],['Database sizes','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "EXEC sp_helpdb"\''],['Run a backup now','{path}/deploy/scripts/backup.sh']], go:'runbook' });
+node('rabbitmq','RabbitMQ 4',':5672 · UI :15672','data',DX(1),404,230,48,{ title:'RabbitMQ', what:'The message bus (MassTransit). Carries device messages to the engine, commands back to devices, and events to management. Holds in-flight messages only.', facts:[['Image','rabbitmq:4-management'],['Container','wbskt-rabbitmq'],['Ports','5672 AMQP, 15672 management UI, 15692 Prometheus; all backend only'],['Volume','rabbitmq-data → /var/lib/rabbitmq'],['Health','ping + the callback-queue cap policy'],['Backed up','No, by design']], env:['RABBITMQ_USER','RABBITMQ_PASSWORD'], cmds:[['Queues with depth and consumers','docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers'],['Dead-lettered messages','docker compose exec rabbitmq rabbitmqctl list_queues name messages | grep -E "_error|_skipped"']] });
+node('redis','Redis 7',':6379 · AOF on','data',DX(2),404,230,48,{ title:'Redis', what:'SignalR backplane and cache, plus token revocations that live about an hour (signed-out users, revoked devices).', facts:[['Image','redis:7 (appendonly yes)'],['Container','wbskt-redis'],['Port','6379, backend only'],['Volume','redis-data → /data'],['Used by','auth, management, devices, socket'],['Backed up','No, by design']], cmds:[['Ping','docker compose exec redis redis-cli ping'],['Memory and key count','docker compose exec redis redis-cli info memory | grep used_memory_human && docker compose exec redis redis-cli dbsize']] });
+node('migrator','migrator','one-shot · profile migrate','oneshot',DX(3),404,230,48,{ title:'migrator', what:'Publishes both DACPACs with sqlpackage. Incremental by default and safe to rerun; deploy.sh runs it on every backend deploy. Creates and resets the per-host SQL logins.', facts:[['Image','wbskt-migrator:${IMAGE_TAG}'],['Container','wbskt-migrator (exits when done)'],['Profile','migrate'],['Connects as','sa'],['Shell-only flags','MIGRATE_FRESH, MIGRATE_ALLOW_DATA_LOSS']], env:['SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','ROOT_ADMIN_PASSWORD_HASH'], cmds:[['Incremental migration (safe)','docker compose --profile migrate run --rm migrator']], notes:'MIGRATE_FRESH=true drops and recreates both databases with no prompt. Only for a brand-new environment.' });
+
+node('otel','OTel collector','OTLP :4317','tele',DX(0),516,230,48,{ title:'OpenTelemetry collector', what:'Receives traces, metrics and logs from every host and fans them out to Tempo, Prometheus and Loki.', facts:[['Image','otel/opentelemetry-collector-contrib:0.130.0'],['Port','4317 OTLP gRPC, backend only'],['Config','deploy/observability/otel-collector.yaml'],['Hosts point at it via','OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317']] });
+node('prometheus','Prometheus','metrics · alert rules','tele',DX(1),516,230,48,{ title:'Prometheus', what:'Stores metrics (pushed over OTLP and scraped), evaluates the alert rules and fires them at Alertmanager.', facts:[['Image','prom/prometheus:v3.5.0'],['Retention','METRICS_RETENTION (default 15d)'],['Scrapes','rabbitmq:15692, pushgateway:9091, alertmanager:9093'],['Rules','deploy/observability/alerts.yml'],['Volume','prometheus-data']], env:['METRICS_RETENTION'], go:'alerts' });
+node('loki','Loki','logs · 7 days','tele',DX(2),516,230,48,{ title:'Loki', what:'Log store. Logs carry trace and span ids, and Grafana links logs and traces both ways.', facts:[['Image','grafana/loki:3.5.3'],['Retention','168h'],['Volume','loki-data']] });
+node('tempo','Tempo','traces · 72 hours','tele',DX(3),516,230,48,{ title:'Tempo', what:'Trace store. MassTransit carries trace context in message headers, so one trace follows a device message from socket, over the bus, into the engine and management.', facts:[['Image','grafana/tempo:2.8.2'],['Retention','72h'],['Volume','tempo-data']] });
+
+const HX = i => 60 + i * 200;
+node('sshd','sshd + deploy.sh','deploy user · docker group','host',HX(0),628,180,48,{ title:'SSH and deploy.sh', what:'The VM host itself. CI’s deploy key is pinned in authorized_keys to ssh-forced-command.sh, which can only run deploy.sh.', facts:[['Port','22, open in the cloud firewall'],['User','in the docker group (root-equivalent)'],['Forced command','deploy/scripts/ssh-forced-command.sh'],['deploy.sh does','sync checkout to the tag’s commit, prune images, require 3 GB free, pull, migrate, restart devices then the rest, wait up to 240s for health']], cmds:[['Deploy backend by hand','{path}/deploy/scripts/deploy.sh --tag sha-<short>'],['Deploy only some hosts','{path}/deploy/scripts/deploy.sh --tag sha-<short> --services "auth management"']], go:'pipeline' });
+node('cron','cron · backup.sh','nightly 02:00','host',HX(1),628,180,48,{ title:'Nightly backup', what:'backup.sh from cron: full backups of both databases with checksum and compression, verified, copied to BACKUP_DIR, then pushed off the box.', facts:[['Schedule','0 2 * * * (crontab of the deploy user)'],['Staging','/var/opt/mssql/backups inside the sql container'],['Local copies','BACKUP_DIR (default /var/backups/wbskt), kept BACKUP_RETENTION_DAYS (14)'],['Log','/var/log/wbskt-backup.log']], env:['BACKUP_DIR','BACKUP_RETENTION_DAYS','BACKUP_UPLOAD_CMD','BACKUP_ALLOW_LOCAL_ONLY','BACKUP_ALERT_CMD'], cmds:[['Last backup run','tail -n 50 /var/log/wbskt-backup.log'],['Local backup files','ls -lh /var/backups/wbskt']], go:'runbook' });
+node('grafana','Grafana','127.0.0.1:3000','host',HX(2),628,180,48,{ title:'Grafana', what:'Dashboards and Explore over Prometheus, Loki and Tempo (datasources provisioned). Loopback only.', facts:[['Image','grafana/grafana:12.1.1'],['Listens','127.0.0.1:3000 on the VM'],['Login','admin / GRAFANA_ADMIN_PASSWORD'],['Volume','grafana-data']], env:['GRAFANA_ADMIN_PASSWORD'], cmds:[['Open from your laptop','ssh -L 3000:127.0.0.1:3000 {vm}']] });
+node('alertmanager','Alertmanager','127.0.0.1:9093','host',HX(3),628,180,48,{ title:'Alertmanager', what:'Delivers alerts from Prometheus and from alert.sh (backup failures) by email and/or webhook.', facts:[['Image','prom/alertmanager:v0.28.1'],['Listens','127.0.0.1:9093 on the VM'],['Volume','alertmanager-data']], env:['ALERT_EMAIL_TO','ALERT_WEBHOOK_URL','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS'], cmds:[['Firing alerts','curl -s http://127.0.0.1:9093/api/v2/alerts | head -c 2000']] });
+node('pushgateway','Pushgateway','127.0.0.1:9091','host',HX(4),628,180,48,{ title:'Pushgateway', what:'Receives backup.sh’s success timestamp, which lets the BackupMissing rule notice when cron stops running the script at all.', facts:[['Image','prom/pushgateway:v1.11.1'],['Listens','127.0.0.1:9091 on the VM']] });
+
+// edges: [id, from, to, label]
+const E = {};
+[
+ ['b_t','browser','traefik','HTTPS 443'],
+ ['d_t','device','traefik','HTTPS and WSS 443'],
+ ['t_console','traefik','console','console.DOMAIN → console:80'],
+ ['t_auth','traefik','auth','auth.DOMAIN, api.DOMAIN admin paths → auth:8080'],
+ ['t_mgmt','traefik','management','api.DOMAIN → management:8080, sticky cookie'],
+ ['t_dev','traefik','devices','api.DOMAIN /api/client-* → devices:8080'],
+ ['t_sock','traefik','socket','ws.DOMAIN → socket:8080'],
+ ['t_eng','traefik','engine',':8081 → engine leader :8080'],
+ ['mgmt_t','management','traefik','http://traefik:8081 with ENGINE_INBOUND_API_KEY'],
+ ['t_le','traefik','le','ACME HTTP-01 on :80'],
+ ['auth_sql','auth','sql','Wbskt.Database.Auth as wbskt_auth'],
+ ['mgmt_sql','management','sql','Wbskt.Database as wbskt_management'],
+ ['dev_sql','devices','sql','Wbskt.Database as wbskt_management'],
+ ['eng_sql','engine','sql','Wbskt.Database as wbskt_engine'],
+ ['mgmt_auth','management','auth','JWKS; /api/internal with AUTH_INTERNAL_API_KEY'],
+ ['sock_mgmt','socket','management','JWKS for device tokens'],
+ ['auth_redis','auth','redis','publishes token revocations'],
+ ['mgmt_redis','management','redis','SignalR backplane, revocations'],
+ ['sock_redis','socket','redis','device revocation check'],
+ ['sock_rmq','socket','rabbitmq','AMQP 5672: device messages'],
+ ['rmq_eng','rabbitmq','engine','engine leader consumes'],
+ ['eng_rmq','engine','rabbitmq','commands and events'],
+ ['rmq_sock','rabbitmq','socket','commands to connected devices'],
+ ['rmq_mgmt','rabbitmq','management','events become console notifications'],
+ ['auth_smtp','auth','smtp','SMTP 587: confirm, invite, reset'],
+ ['eng_integ','engine','integ','HTTPS out through an integration'],
+ ['o_auth','auth','otel','OTLP 4317'],['o_mgmt','management','otel','OTLP 4317'],['o_dev','devices','otel','OTLP 4317'],['o_sock','socket','otel','OTLP 4317'],['o_eng','engine','otel','OTLP 4317'],
+ ['otel_prom','otel','prometheus','metrics'],['otel_loki','otel','loki','logs'],['otel_tempo','otel','tempo','traces'],
+ ['prom_rmq','prometheus','rabbitmq','scrape :15692'],
+ ['prom_push','prometheus','pushgateway','scrape :9091'],
+ ['prom_am','prometheus','alertmanager','fires alerts'],
+ ['graf_prom','grafana','prometheus','query'],['graf_loki','grafana','loki','query'],['graf_tempo','grafana','tempo','query'],
+ ['am_smtp','alertmanager','smtp','ALERT_EMAIL_TO via SMTP_*'],
+ ['laptop_sshd','laptop','sshd','SSH 22 with your key'],
+ ['sshd_graf','sshd','grafana','-L 3000 tunnel'],
+ ['gha_ghcr','gha','ghcr','push sha-<short> images'],
+ ['gha_sshd','gha','sshd','SSH 22, forced command → deploy.sh'],
+ ['sshd_ghcr','sshd','ghcr','docker compose pull'],
+ ['sshd_mig','sshd','migrator','compose run migrator'],
+ ['mig_sql','migrator','sql','sqlpackage publish as sa'],
+ ['dep_dev','sshd','devices','up -d --no-deps (first)'],['dep_mgmt','sshd','management','up -d --no-deps'],['dep_auth','sshd','auth','up -d --no-deps'],['dep_sock','sshd','socket','up -d --no-deps'],['dep_eng','sshd','engine','up -d --no-deps'],
+ ['dep_console','sshd','console','up -d --no-deps console'],
+ ['cron_sql','cron','sql','BACKUP DATABASE via compose exec'],
+ ['cron_off','cron','offsite','BACKUP_UPLOAD_CMD'],
+ ['cron_push','cron','pushgateway','success timestamp'],
+ ['cron_am','cron','alertmanager','alert.sh on failure'],
+].forEach(([id,f,t,l]) => E[id] = { id, f, t, l });
+
+const FLOWS = [
+ { id:'signin', name:'Console sign-in', desc:'A person opens the console and signs in. Sign-in and the refresh cookie live on auth; every later API call goes to api.DOMAIN with the user token.', steps:[
+   ['b_t','Browser opens https://console.DOMAIN'], ['t_console','nginx serves the app and config.json with the public URLs'], ['b_t','The app posts the sign-in to auth.DOMAIN'], ['t_auth','Traefik sends auth.DOMAIN to auth'], ['auth_sql','auth checks the account through stored procedures'], ['auth_smtp','Unconfirmed address: auth mails a confirmation link'], ['t_mgmt','The console calls api.DOMAIN with the user token'], ['mgmt_auth','management validates it against auth’s JWKS'] ] },
+ { id:'console', name:'Console API and live updates', desc:'Console pages read and write through management, which streams notifications over SignalR and starts workflow work in the engine.', steps:[
+   ['b_t','Browser calls api.DOMAIN; the SignalR hub is /hubs/notifications'], ['t_mgmt','Traefik picks a management replica, pinned by sticky cookie'], ['mgmt_sql','management runs stored procedures on Wbskt.Database'], ['mgmt_redis','Redis carries SignalR messages across replicas'], ['rmq_mgmt','Bus events turn into console notifications'], ['mgmt_t','Starting a run or a signal goes to traefik:8081'], ['t_eng','Traefik forwards to whichever engine is the leader'] ] },
+ { id:'devlogin', name:'Device registration and login', desc:'Devices register and log in on api.DOMAIN. Traefik sends those two paths to the devices host and falls back to management while devices restarts.', steps:[
+   ['d_t','Device calls api.DOMAIN/api/client-auth'], ['t_dev','Router priority 1000 sends it to devices'], ['dev_sql','devices verifies the device secret hash in SQL'], ['t_dev','Returns a device JWT signed with MANAGEMENT_JWT_SIGNING_KEY'] ] },
+ { id:'devmsg', name:'Device message to workflow run', desc:'A connected device sends a message, the engine runs the matching workflow, and commands flow back to devices.', steps:[
+   ['d_t','Device opens wss://ws.DOMAIN'], ['t_sock','Traefik hands the WebSocket to a socket replica'], ['sock_mgmt','socket validates the device token with management’s public keys'], ['sock_redis','and checks Redis for a revocation'], ['sock_rmq','socket publishes the message to RabbitMQ'], ['rmq_eng','The engine leader consumes it and starts or advances a run'], ['eng_sql','Run state is saved in Wbskt.Database'], ['eng_rmq','Commands for devices go back on the bus'], ['rmq_sock','socket delivers them to the connected device'] ] },
+ { id:'integ', name:'Integration send', desc:'Integration credentials are sealed by the engine, never by management, and workflow steps send through them.', steps:[
+   ['b_t','Someone saves a Telegram bot in the console'], ['t_mgmt','The request reaches management'], ['mgmt_t','management calls /internal/integrations on traefik:8081'], ['t_eng','The engine seals the secret with INTEGRATIONS_KEY_1'], ['eng_sql','Only the ciphertext is stored'], ['eng_integ','Later, a workflow step opens it and sends the message'] ] },
+ { id:'release', name:'Release deploy', desc:'A push to master builds, tests and publishes images, then deploy.sh rolls them out on the VM.', steps:[
+   ['gha_ghcr','Tests and E2E pass; five images pushed as sha-<short>'], ['gha_sshd','deploy.yml SSHes in; the forced command runs deploy.sh'], ['sshd_ghcr','Checkout reset to the commit, unused images pruned, 3 GB free checked, images pulled'], ['sshd_mig','The migrator runs (incremental, default on)'], ['mig_sql','sqlpackage applies the schema delta'], ['dep_dev','devices restarts first and must turn healthy'], ['dep_mgmt','then management'], ['dep_auth','auth'], ['dep_sock','socket'], ['dep_eng','engine; deploy.sh waits up to 240s for health'] ] },
+ { id:'backup', name:'Nightly backup', desc:'At 02:00 cron runs backup.sh. A backup that does not verify, or never leaves the VM, counts as no backup.', steps:[
+   ['cron_sql','BACKUP DATABASE with checksum and compression, then RESTORE VERIFYONLY'], ['cron_sql','The .bak is copied out to BACKUP_DIR on the host'], ['cron_off','BACKUP_UPLOAD_CMD pushes BACKUP_DIR off the box'], ['cron_push','Success timestamp pushed to the Pushgateway'], ['prom_push','Prometheus scrapes it; BackupMissing fires after 26h without one'], ['cron_am','On failure, alert.sh raises BackupFailed directly'], ['am_smtp','Alertmanager emails ALERT_EMAIL_TO'] ] },
+ { id:'telemetry', name:'Telemetry and alerts', desc:'Every host exports OTLP to the collector. You read it all in Grafana over an SSH tunnel.', steps:[
+   ['o_auth','auth exports OTLP'], ['o_mgmt','management exports OTLP'], ['o_dev','devices exports OTLP'], ['o_sock','socket exports OTLP'], ['o_eng','engine exports OTLP'], ['otel_prom','Metrics to Prometheus'], ['otel_loki','Logs to Loki'], ['otel_tempo','Traces to Tempo'], ['prom_rmq','Prometheus also scrapes RabbitMQ for dead letters'], ['prom_am','Rules fire to Alertmanager'], ['am_smtp','Alertmanager emails or calls the webhook'], ['laptop_sshd','You SSH in with a tunnel'], ['sshd_graf','and open Grafana on localhost:3000'], ['graf_prom','Grafana queries Prometheus'], ['graf_loki','Loki'], ['graf_tempo','and Tempo'] ] },
+];
+
+const ENV = [
+ // [name, group, kind(secret|plain), required, default, uses [[svc, key]], note, generate]
+ ['REGISTRY','Images and scale','plain',false,'ghcr.io/wbskt',[['all images','image prefix']],'Where the VM pulls images from.'],
+ ['IMAGE_TAG','Images and scale','plain',false,'latest',[['auth, management, devices, socket, engine, migrator','image tag']],'deploy.sh rewrites it on every backend deploy, so .env always names what is running.'],
+ ['CONSOLE_IMAGE_TAG','Images and scale','plain',false,'latest',[['console','image tag']],'Moved only by deploy.sh --console-tag.'],
+ ['SOCKET_REPLICAS','Images and scale','plain',false,'1',[['socket','deploy.replicas']],'Declare scale here, never with --scale, or the next deploy shrinks it back.'],
+ ['MANAGEMENT_REPLICAS','Images and scale','plain',false,'1',[['management','deploy.replicas']],''],
+ ['DEVICES_REPLICAS','Images and scale','plain',false,'1',[['devices','deploy.replicas']],''],
+ ['ENGINE_REPLICAS','Images and scale','plain',false,'1',[['engine','deploy.replicas']],'Replicas above 1 are warm standbys behind one leader lease.'],
+ ['DOMAIN','Domain and TLS','plain',true,'',[['traefik','router host rules'],['console','AUTH_URL, WORKSPACE_URL, NOTIFICATIONS_URL, SOCKET_URL']],'console., auth., api. and ws. must all resolve to the VM.'],
+ ['ACME_EMAIL','Domain and TLS','plain',true,'',[['traefik','acme.email']],''],
+ ['ACME_CASERVER','Domain and TLS','plain',false,'Let’s Encrypt production',[['traefik','acme.caserver']],'Set to the staging directory while iterating to avoid rate limits.'],
+ ['SQL_SA_PASSWORD','SQL','secret',true,'',[['sql','MSSQL_SA_PASSWORD'],['migrator','connection strings']],'Also used by backup.sh and restore.sh through the container.','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
+ ['SQL_AUTH_PASSWORD','SQL','secret',true,'',[['auth','ConnectionStrings__AuthDBConnection'],['migrator','creates login wbskt_auth']],'Compose refuses to start without it. Rotate: change, run migrator, recreate auth.','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
+ ['SQL_MANAGEMENT_PASSWORD','SQL','secret',true,'',[['management, devices','ConnectionStrings__DefaultConnection'],['migrator','creates login wbskt_management']],'','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
+ ['SQL_ENGINE_PASSWORD','SQL','secret',true,'',[['engine','ConnectionStrings__DefaultConnection'],['migrator','creates login wbskt_engine']],'','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
+ ['ROOT_ADMIN_PASSWORD_HASH','SQL','secret',false,'',[['migrator','root account, first run only']],'Clear it once the install is done.'],
+ ['RABBITMQ_USER','RabbitMQ','plain',true,'wbskt',[['rabbitmq','RABBITMQ_DEFAULT_USER'],['auth, management, devices, socket, engine','RabbitMQ__UserName']],''],
+ ['RABBITMQ_PASSWORD','RabbitMQ','secret',true,'',[['rabbitmq','RABBITMQ_DEFAULT_PASS'],['auth, management, devices, socket, engine','RabbitMQ__Password']],''],
+ ['AUTH_JWT_SIGNING_KEY','Tokens and keys','secret',true,'',[['auth','Jwt__SigningKey']],'Signs user tokens. Rotation keeps the old public half in AUTH_JWT_PREVIOUS_PUBLIC_KEY.','openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0'],
+ ['MANAGEMENT_JWT_SIGNING_KEY','Tokens and keys','secret',true,'',[['management, devices','Jwt__SigningKey']],'Signs device tokens for the socket host.','openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0'],
+ ['AUTH_JWT_PREVIOUS_PUBLIC_KEY','Tokens and keys','plain',false,'',[['auth','Jwt__AdditionalPublicKeys__0']],'Only while rotating. A public key, not a secret.'],
+ ['MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','Tokens and keys','plain',false,'',[['management, devices','Jwt__AdditionalPublicKeys__0']],'Only while rotating.'],
+ ['AUTH_EMAIL_FINGERPRINT_KEY','Tokens and keys','secret',false,'derived from AUTH_JWT_SIGNING_KEY',[['auth','Auth__Telemetry__EmailFingerprintKey']],'Keeps log fingerprints stable across signing-key rotations.','openssl rand -base64 32'],
+ ['ENGINE_INBOUND_API_KEY','Tokens and keys','secret',true,'',[['engine','Engine__InboundApiKey'],['management, devices','Services__WorkflowEngineApiKey']],'Required on every engine call except health probes.','openssl rand -hex 32'],
+ ['AUTH_INTERNAL_API_KEY','Tokens and keys','secret',true,'',[['auth','Internal__ApiKey'],['management, devices','Services__AuthInternalApiKey']],'Unset, the daily deleted-workspace sweep fails with 503.','openssl rand -hex 32'],
+ ['INTEGRATIONS_KEY_1','Tokens and keys','secret',true,'',[['engine','WorkflowEngine__Integrations__Keys__1']],'Seals integration secrets. Lose it and every saved integration secret is unreadable.','openssl rand -base64 32'],
+ ['CONSOLE_ORIGIN','Browser access','plain',true,'',[['auth, management','Cors__AllowedOrigins__0'],['auth','Auth__Email__ConsoleBaseUrl']],'Public console URL; every mail link points here.'],
+ ['CORS_EXTRA_ORIGINS','Browser access','plain',false,'',[['auth, management','Cors__ExtraOrigins']],'For ng serve against this backend. Clear before public launch.'],
+ ['REFRESH_COOKIE_SAMESITE','Browser access','plain',false,'Strict',[['auth','Auth__RefreshCookie__SameSite']],'None only for a cross-site console. Strict before launch.'],
+ ['API_DOCS_ENABLED','Browser access','plain',false,'false',[['auth, management','ApiDocs__Enabled']],'true serves /scalar anonymously.'],
+ ['SMTP_HOST','Mail','plain',true,'',[['auth','Auth__Email__Host'],['alertmanager','SMTP_HOST']],'Required for sign-ups: unconfirmed addresses cannot sign in.'],
+ ['SMTP_PORT','Mail','plain',false,'587',[['auth','Auth__Email__Port'],['alertmanager','SMTP_PORT']],''],
+ ['SMTP_USE_STARTTLS','Mail','plain',false,'true',[['auth','Auth__Email__UseStartTls'],['alertmanager','SMTP_USE_STARTTLS']],''],
+ ['SMTP_USERNAME','Mail','plain',false,'',[['auth','Auth__Email__UserName'],['alertmanager','SMTP_USERNAME']],''],
+ ['SMTP_PASSWORD','Mail','secret',false,'',[['auth','Auth__Email__Password'],['alertmanager','SMTP_PASSWORD']],''],
+ ['SMTP_FROM_ADDRESS','Mail','plain',true,'',[['auth','Auth__Email__FromAddress'],['alertmanager','SMTP_FROM_ADDRESS']],'Must be an address the relay will send as.'],
+ ['SMTP_FROM_NAME','Mail','plain',false,'Wbskt',[['auth','Auth__Email__FromDisplayName']],''],
+ ['BACKUP_DIR','Backups','plain',false,'/var/backups/wbskt',[['backup.sh (host)','local copies']],''],
+ ['BACKUP_RETENTION_DAYS','Backups','plain',false,'14',[['backup.sh (host)','local pruning']],'Remote retention is the remote’s job.'],
+ ['BACKUP_UPLOAD_CMD','Backups','plain',true,'',[['backup.sh (host)','stage 3 upload']],'backup.sh refuses to run without it. One executable, folder as $1.'],
+ ['BACKUP_ALLOW_LOCAL_ONLY','Backups','plain',false,'false',[['backup.sh (host)','skip the upload check']],'Only while setting the upload up.'],
+ ['BACKUP_ALERT_CMD','Backups','plain',false,'',[['backup.sh (host)','failure hook']],'Point at deploy/scripts/alert.sh.'],
+ ['GRAFANA_ADMIN_PASSWORD','Observability','secret',true,'',[['grafana','GF_SECURITY_ADMIN_PASSWORD']],''],
+ ['METRICS_RETENTION','Observability','plain',false,'15d',[['prometheus','--storage.tsdb.retention.time']],''],
+ ['ALERT_EMAIL_TO','Observability','plain',false,'',[['alertmanager','ALERT_EMAIL_TO']],'Set this or the webhook, or alerts reach nobody.'],
+ ['ALERT_WEBHOOK_URL','Observability','secret',false,'',[['alertmanager','ALERT_WEBHOOK_URL']],'Webhook URLs often embed a token.'],
+ ['MIGRATE_FRESH','Shell only (migrator)','plain',false,'false',[['migrator','MIGRATE_FRESH']],'Not in .env. Drops and recreates both databases.'],
+ ['MIGRATE_ALLOW_DATA_LOSS','Shell only (migrator)','plain',false,'false',[['migrator','MIGRATE_ALLOW_DATA_LOSS']],'Not in .env. Lets a schema change destroy rows.'],
+];
+const DEV_ENV = ['REGISTRY','IMAGE_TAG','CONSOLE_IMAGE_TAG','SOCKET_REPLICAS','MANAGEMENT_REPLICAS','ENGINE_REPLICAS','DOMAIN','ACME_EMAIL','SQL_SA_PASSWORD','SQL_AUTH_PASSWORD','SQL_MANAGEMENT_PASSWORD','SQL_ENGINE_PASSWORD','RABBITMQ_USER','RABBITMQ_PASSWORD','AUTH_JWT_SIGNING_KEY','MANAGEMENT_JWT_SIGNING_KEY','AUTH_JWT_PREVIOUS_PUBLIC_KEY','MANAGEMENT_JWT_PREVIOUS_PUBLIC_KEY','CONSOLE_ORIGIN','CORS_EXTRA_ORIGINS','API_DOCS_ENABLED','SMTP_HOST','SMTP_PORT','SMTP_USE_STARTTLS','SMTP_USERNAME','SMTP_PASSWORD','SMTP_FROM_ADDRESS','SMTP_FROM_NAME','ENGINE_INBOUND_API_KEY','BACKUP_DIR','BACKUP_RETENTION_DAYS','GRAFANA_ADMIN_PASSWORD','METRICS_RETENTION','ALERT_EMAIL_TO','ALERT_WEBHOOK_URL'];
+const OPTIONAL_DRIFT = new Set(['ACME_CASERVER','BACKUP_ALLOW_LOCAL_ONLY','MIGRATE_FRESH','MIGRATE_ALLOW_DATA_LOSS']);
+
+const ROUTES = [
+ ['console','Host(console.DOMAIN)','default','console:80',''],
+ ['auth','Host(auth.DOMAIN) && !PathPrefix(/api/internal)','default','auth:8080','Sign-in and the refresh cookie stay here.'],
+ ['auth-api','Host(api.DOMAIN) && (/api/tenants | /api/invitations | /api/workspaces[/{id}[/members|owner|permissions]])','900','auth:8080','Workspace admin moved to the one API host (#304).'],
+ ['devices','Host(api.DOMAIN) && (/api/client-auth | /api/client-registrations)','1000','devices:8080','Falls through to management while devices is unhealthy.'],
+ ['management','Host(api.DOMAIN) && !PathPrefix(/api/internal)','default (rule length)','management:8080','Sticky cookie for SignalR across replicas.'],
+ ['socket','Host(ws.DOMAIN)','default','socket:8080','WebSocket upgrade pins the connection.'],
+ ['engine','entrypoint engine :8081 && (/api/inbound | /internal/integrations)','default','engine:8080','Traefik health check on /healthz/ready routes to the leader only.'],
+];
+const PORTS = [
+ ['traefik','80, 443','Internet (host ports)','HTTP redirect + ACME, HTTPS/WSS'],
+ ['traefik','8081','Containers only','Engine entrypoint'],
+ ['console','80','Traefik (edge)','nginx'],
+ ['auth, management, devices, socket, engine','8080','Traefik and other containers','ASP.NET hosts'],
+ ['sql','1433','backend network','TDS'],
+ ['rabbitmq','5672','backend network','AMQP'],
+ ['rabbitmq','15672','backend network','Management UI (no tunnel today)'],
+ ['rabbitmq','15692','backend network','Prometheus metrics'],
+ ['redis','6379','backend network','Redis'],
+ ['otel-collector','4317','backend network','OTLP gRPC'],
+ ['prometheus','9090','backend network','Queries from Grafana'],
+ ['loki','3100','backend network','Log push and query'],
+ ['tempo','3200','backend network','Trace query'],
+ ['grafana','3000','127.0.0.1 on the VM','Dashboards (ssh -L)'],
+ ['alertmanager','9093','127.0.0.1 on the VM','Alerts API and UI'],
+ ['pushgateway','9091','127.0.0.1 on the VM','backup.sh pushes here'],
+ ['VM sshd','22','Internet (cloud firewall)','SSH for you and CI'],
+];
+const INTERNAL = [
+ ['management','http://auth:8080','AUTH_INTERNAL_API_KEY on /api/internal','Workspace data, deleted-workspace sweep'],
+ ['management','http://auth:8080/.well-known/jwks.json','none (public keys)','Validate user tokens'],
+ ['socket','http://management:8080/.well-known/jwks.json','none (public keys)','Validate device tokens'],
+ ['management','http://traefik:8081','ENGINE_INBOUND_API_KEY','Runs, signals, integration sealing'],
+ ['all five hosts','rabbitmq:5672','RABBITMQ_USER / RABBITMQ_PASSWORD','Message bus'],
+ ['auth, management, devices, socket','redis:6379','none (backend network only)','Backplane and revocations'],
+ ['auth, management, devices, engine','sql:1433','per-host SQL login','Stored procedures'],
+ ['all five hosts','http://otel-collector:4317','none','OTLP telemetry'],
+];
+const ALERTS = [
+ ['WorkflowRunFailureRateHigh','Workflows','Over 25% of at least 20 runs failed in 15 minutes'],
+ ['WorkflowWakeBacklog','Workflows','Timers or timeouts over a minute past due and unclaimed'],
+ ['WorkflowDispatchBacklog','Workflows','Over 500 branches queued in the engine for 10 minutes'],
+ ['WorkspaceRunCeilingReached','Workflows','A workspace is refusing triggers at its active-run ceiling (5 min)'],
+ ['EngineNotReporting','Workflows','No engine has reported metrics for 5 minutes'],
+ ['DeadLetteredMessages','Bus','Any MassTransit _error or _skipped queue holds messages'],
+ ['CallbackQueueBacklog','Bus','Public callbacks waiting for the engine (5 min)'],
+ ['CallbackQueueBytesBacklog','Bus','Bytes of public callbacks waiting for the engine (5 min)'],
+ ['SocketDisconnectRateHigh','Devices','Abnormal disconnects exceed half the connected devices in 10 minutes'],
+ ['DeletedWorkspaceRetiredBySweep','Data','The daily sweep retired a workspace whose delete event was missed'],
+ ['BackupMissing','Backups','No successful backup for 26 hours'],
+ ['BackupNeverReported','Backups','No backup has ever reported success'],
+ ['BackupFailed','Backups','backup.sh failed; raised directly by alert.sh, not a Prometheus rule'],
+];
+
+const TREE = [
+ ['head','{path}','The Wbskt checkout (<b>DEPLOY_PATH</b>). deploy.sh resets it to the deployed commit; it refuses to run with local edits to tracked files.'],
+ ['row','├─ deploy/compose/docker-compose.yml','The whole stack. Compose project name <b>wbskt</b>.'],
+ ['row','├─ deploy/compose/.env','<b>All secrets.</b> Untracked, never committed. deploy.sh rewrites <b>IMAGE_TAG</b> and <b>CONSOLE_IMAGE_TAG</b> here.'],
+ ['row','├─ deploy/config/serilog.json','Mounted read-only at <b>/Config</b> in auth, management, devices, socket, engine.'],
+ ['row','├─ deploy/observability/','Collector, Prometheus + alerts.yml, Loki, Tempo, Grafana datasources, Alertmanager entrypoint, RabbitMQ plugins and healthcheck. All mounted read-only.'],
+ ['row','└─ deploy/scripts/','deploy.sh, backup.sh, restore.sh, alert.sh, ssh-forced-command.sh.'],
+ ['head','/var/backups/wbskt/','<b>BACKUP_DIR</b>. Wbskt.Database_&lt;UTC stamp&gt;.bak and Wbskt.Database.Auth_&lt;stamp&gt;.bak, pruned after BACKUP_RETENTION_DAYS.'],
+ ['row','/var/log/wbskt-backup.log','Output of the nightly cron run.'],
+ ['row','crontab -l (deploy user)','<b>0 2 * * *</b> {path}/deploy/scripts/backup.sh'],
+ ['head','/var/lib/docker/volumes/','Named volumes. Never run <b>docker volume prune</b> or <b>system prune --volumes</b>.'],
+ ['row','├─ wbskt_sql-data','→ /var/opt/mssql in sql. Both databases; backup staging in /var/opt/mssql/backups.'],
+ ['row','├─ wbskt_rabbitmq-data','→ /var/lib/rabbitmq. In-flight messages only.'],
+ ['row','├─ wbskt_redis-data','→ /data. AOF file.'],
+ ['row','├─ wbskt_traefik-acme','→ /letsencrypt/acme.json. Certificates and ACME account.'],
+ ['row','└─ wbskt_prometheus-data, _loki-data, _tempo-data, _grafana-data, _alertmanager-data','Telemetry and dashboards.'],
+ ['head','/var/lib/containerd (or Docker root)','Image store. deploy.sh prunes unused images and requires <b>3 GB free</b> before pulling.'],
+ ['row','/var/lib/docker/containers/*/*-json.log','Container stdout, capped at 20 MB × 5 per container.'],
+ ['row','/var/log/journal','systemd journal; vacuum it if the disk fills.'],
+ ['head','~/ (deploy user)',''],
+ ['row','├─ .ssh/authorized_keys','CI key with <b>command="{path}/deploy/scripts/ssh-forced-command.sh"</b>, no-pty, no forwarding.'],
+ ['row','└─ .docker/config.json','GHCR login (classic PAT, read:packages only).'],
+ ['head','Inside containers',''],
+ ['row','/Config','Serilog config in each ASP.NET host.'],
+ ['row','/usr/share/nginx/html/config.json','console: written at start from AUTH_URL, WORKSPACE_URL, NOTIFICATIONS_URL, SOCKET_URL.'],
+ ['row','/opt/mssql-tools18/bin/sqlcmd','sql: the SQL client used by backups and the runbook.'],
+];
+
+const RUNBOOK = [
+ { t:'Status and logs', p:'What is running and why something is unhealthy.', c:[
+   ['Every container with health','docker compose ps'],
+   ['Which image tags are deployed','grep -E "^(IMAGE_TAG|CONSOLE_IMAGE_TAG)=" .env && docker compose images'],
+   ['Follow one service','docker compose logs -f --tail 200 engine'],
+   ['Follow all five hosts','docker compose logs -f --tail 50 auth management devices socket engine'],
+   ['Errors in the last hour','docker compose logs --since 1h auth management devices socket engine 2>&1 | grep -iE "error|fail|exception" | tail -50'],
+   ['Search older logs with trace links (laptop)','ssh -L 3000:127.0.0.1:3000 {vm}\n# then Grafana → Explore → Loki'] ] },
+ { t:'Database', p:'SQL Server is on the backend network only, so you go through the container.', c:[
+   ['SQL shell as sa','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C\''],
+   ['One query','docker compose exec sql bash -c \'/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d Wbskt.Database -Q "SELECT TOP 10 name FROM sys.procedures ORDER BY name"\''],
+   ['Incremental migration (safe, idempotent)','docker compose --profile migrate run --rm migrator'],
+   ['Temporary tunnel for a desktop SQL client','# on the VM: a throwaway forwarder on loopback 14330\ndocker run --rm -d --name sql-tunnel --network wbskt_backend -p 127.0.0.1:14330:1433 alpine/socat tcp-listen:1433,fork,reuseaddr tcp-connect:sql:1433\n# on your laptop, then connect to localhost,1433 as sa\nssh -L 1433:127.0.0.1:14330 {vm}\n# afterwards, on the VM\ndocker stop sql-tunnel','temp'] ] },
+ { t:'Backup and restore', p:'Nightly at 02:00 from cron. Rehearse the restore: until one has run, you have a script, not a backup.', c:[
+   ['Run a backup now','{path}/deploy/scripts/backup.sh'],
+   ['Is cron set up','crontab -l | grep backup.sh'],
+   ['Last run','tail -n 50 /var/log/wbskt-backup.log'],
+   ['Local backups','ls -lh /var/backups/wbskt'],
+   ['Rehearse: restore into a scratch database, prints row counts','{path}/deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_<stamp>.bak'],
+   ['Real recovery over the live database','docker compose stop auth management devices socket engine\n{path}/deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_<stamp>.bak --target Wbskt.Database --force\ndocker compose up -d --no-build auth management devices socket engine','danger'] ] },
+ { t:'RabbitMQ and Redis', p:'Neither is backed up; both hold short-lived state.', c:[
+   ['Queues, depth, consumers','docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers'],
+   ['Dead letters','docker compose exec rabbitmq rabbitmqctl list_queues name messages | grep -E "_error|_skipped"'],
+   ['Temporary tunnel to the RabbitMQ UI','# on the VM\ndocker run --rm -d --name rmq-tunnel --network wbskt_backend -p 127.0.0.1:15672:15672 alpine/socat tcp-listen:15672,fork,reuseaddr tcp-connect:rabbitmq:15672\n# on your laptop: http://localhost:15672, sign in with RABBITMQ_USER\nssh -L 15672:127.0.0.1:15672 {vm}\n# afterwards, on the VM\ndocker stop rmq-tunnel','temp'],
+   ['Redis health','docker compose exec redis redis-cli ping && docker compose exec redis redis-cli info memory | grep used_memory_human'] ] },
+ { t:'Deploy, roll back, restart', p:'Normal releases go through the Deploy workflow. These are the same steps by hand.', c:[
+   ['Deploy or roll back the backend to a tag','{path}/deploy/scripts/deploy.sh --tag sha-<short>'],
+   ['Only some hosts','{path}/deploy/scripts/deploy.sh --tag sha-<short> --services "auth management"'],
+   ['Console to a build','{path}/deploy/scripts/deploy.sh --console-tag sha-<short>'],
+   ['Restart one host without touching dependencies','docker compose up -d --no-build --no-deps auth'],
+   ['Change scale (edit .env, then apply)','sed -i "s/^SOCKET_REPLICAS=.*/SOCKET_REPLICAS=3/" .env\ndocker compose up -d --no-build --no-deps socket'],
+   ['Network definition changed (maintenance window)','docker compose down && docker compose up -d --no-build','danger'] ] },
+ { t:'Disk space', p:'The disk filled from old images once already. deploy.sh now prunes first and stops if under 3 GB is free.', c:[
+   ['Which filesystem is full','df -h / /var/lib/containerd /var/lib/docker'],
+   ['What Docker is using','docker system df'],
+   ['Remove unused images (running ones are kept)','docker image prune -af'],
+   ['Build cache','docker builder prune -af'],
+   ['Backups and journal','sudo du -sh /var/backups/wbskt /var/log/journal && sudo journalctl --vacuum-size=200M'] ] },
+ { t:'Keys and secrets', p:'Generate values on the VM straight into .env; never paste them into chat or tickets.', c:[
+   ['New SQL login password','printf \'Wb1%s\\n\' "$(openssl rand -hex 16)"'],
+   ['New JWT signing key (EC P-256)','openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt | base64 -w0'],
+   ['Public half of the current auth key (for rotation)','grep "^AUTH_JWT_SIGNING_KEY=" .env | cut -d= -f2- | base64 -d | openssl ec -pubout 2>/dev/null | base64 -w0'],
+   ['After editing a key, restart only its issuer','docker compose up -d --no-deps auth'],
+   ['Check which variables are set (names only)','grep -oE "^[A-Z_][A-Z0-9_]*=" .env | tr -d = | sort'] ] },
+ { t:'TLS and routing', p:'Traefik picks up label changes live; it only restarts for its own static config.', c:[
+   ['Certificate errors','docker compose logs traefik 2>&1 | grep -i acme | tail -20'],
+   ['Check a public route from the VM','curl -sI https://api.<DOMAIN>/healthz'],
+   ['Reset certificates after leaving staging','docker compose stop traefik && docker run --rm -v wbskt_traefik-acme:/letsencrypt busybox rm -f /letsencrypt/acme.json && docker compose up -d traefik','danger'] ] },
+];
+
+const GAPS = [
+ ['high','No disk or container metrics','Prometheus scrapes app metrics, RabbitMQ and backup age, but nothing watches disk usage or container restarts. The disk-full incident behind PR #427 and #429 would not alert today. Add node-exporter and cAdvisor plus a DiskAlmostFull rule.'],
+ ['high','Backups depend on settings the repo cannot show','backup.sh refuses to run without BACKUP_UPLOAD_CMD, and nothing alerts on failure without BACKUP_ALERT_CMD. Check both are set on the VM, that crontab has the 02:00 line, and that a restore rehearsal has been run with row counts compared.','check'],
+ ['med','Project copy of dev.env is stale','deploy-env/dev.env (formatted from master f55e6c9 on 4 Oct) lacks variables compose now requires or reads, including AUTH_INTERNAL_API_KEY and INTEGRATIONS_KEY_1. See the drift filter on the Env vars tab.'],
+ ['med','No laptop path to SQL or the RabbitMQ UI','Neither is published on the VM loopback, so there is nothing to SSH-tunnel to. The runbook has a temporary socat workaround. A permanent fix is 127.0.0.1:1433 and 127.0.0.1:15672 port publishes in compose.'],
+ ['med','Launch-time switches to reset','CORS_EXTRA_ORIGINS should be empty, REFRESH_COOKIE_SAMESITE Strict, and API_DOCS_ENABLED false before going public.','check'],
+ ['med','Everything shares one VM and one disk','SQL data, backups staging, images and logs compete for the same disk, and a VM loss takes the database with it until restored from off-box backups. The README suggests a VM-installed or managed SQL Server for production.'],
+ ['low','Console deploys without approval','build-and-deploy.yml deploys on every master push. Add required reviewers to the production-console environment if you want a gate.','check'],
+ ['low','Scaled tiers restart all at once','Compose has no rolling update, so redeploying a tier with 3 replicas recreates all three together. Only devices/management are sequenced by deploy.sh.'],
+];
+
+// ---------------------------------------------------------------- helpers
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const SNS = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs, parent) => { const el = document.createElementNS(SNS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); if (parent) parent.appendChild(el); return el; };
+const store = { get(k){ try { return localStorage.getItem(k); } catch(e) { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch(e) {} } };
+const ENVMAP = Object.fromEntries(ENV.map(e => [e[0], e]));
+const isSecret = n => ENVMAP[n] && ENVMAP[n][2] === 'secret';
+let settings = { vm: store.get('wim-vm') || 'deploy@<vm>', path: store.get('wim-path') || '/home/deploy/Wbskt' };
+const fill = s => s.replaceAll('{vm}', settings.vm).replaceAll('{path}', settings.path);
+
+function copyBtn(btn) {
+  btn.addEventListener('click', () => {
+    const pre = btn.parentElement.querySelector('pre');
+    const text = pre.textContent;
+    const done = ok => { btn.textContent = ok ? 'Copied' : 'Selected'; setTimeout(() => btn.textContent = 'Copy', 1400); };
+    const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(text).then(() => done(true), () => { select(); done(false); }); } catch (e) { select(); done(false); }
+  });
+}
+function cmdHTML(label, cmd, flag) {
+  const pill = flag === 'danger' ? '<span class="pill p-secret">destructive</span>' : flag === 'temp' ? '<span class="pill p-opt">temporary</span>' : '';
+  return `<div class="cmd${flag === 'danger' ? ' danger' : ''}"><div class="lbl">${esc(label)} ${pill}</div><div class="cmdbox"><pre data-tpl="${esc(cmd)}"></pre><button class="copy" type="button">Copy</button></div></div>`;
+}
+function refreshTemplates(root) {
+  (root || document).querySelectorAll('pre[data-tpl]').forEach(p => p.textContent = fill(p.dataset.tpl));
+  document.querySelectorAll('.pathref').forEach(c => c.textContent = settings.path);
+  document.querySelectorAll('[data-tpl-html]').forEach(el => el.innerHTML = el.dataset.tplHtml.replaceAll('{vm}', esc(settings.vm)).replaceAll('{path}', esc(settings.path)));
+}
+
+// ---------------------------------------------------------------- map
+const board = $('#board');
+// Layout: one row per network layer, generous gaps between rows so connectors have room to run.
+const ROWS = [
+ { ids:['browser','device','laptop','gha','ghcr','le','smtp','integ','offsite'], top:32, h:84, w:120, gap:18, x0:28, ny:44 },
+ { ids:['traefik'], top:180, h:110, w:1136, gap:0, x0:72, label:['Public edge','edge network 172.28.0.0/24, host ports 80 and 443'] },
+ { ids:['console','auth','management','devices','socket','engine'], top:318, h:116, w:166, gap:28, x0:72, label:['App hosts','ASP.NET on :8080'] },
+ { ids:['sql','rabbitmq','redis','migrator'], top:462, h:116, w:254, gap:40, x0:72, label:['Data','backend network 172.28.1.0/24, never published'] },
+ { ids:['otel','prometheus','loki','tempo'], top:606, h:116, w:254, gap:40, x0:72, label:['Telemetry','backend network'] },
+ { ids:['sshd','cron','grafana','alertmanager','pushgateway'], top:750, h:116, w:200, gap:34, x0:72, label:['VM host','SSH, cron, and ports bound to 127.0.0.1'] },
+];
+const SUBS = { traefik:'v3.7. The only container with host ports. TLS from Let’s Encrypt, plus an internal :8081 for the engine.', console:'nginx, edge only', auth:'sign-in, tenants', management:'console API, SignalR', devices:'device login', socket:'device WebSockets', engine:'workflows, backend only', sql:':1433, volume sql-data', rabbitmq:':5672, UI on :15672', redis:':6379, AOF on', migrator:'one-shot, profile migrate', otel:'OTLP on :4317', prometheus:'metrics and alert rules', loki:'logs, kept 7 days', tempo:'traces, kept 72 hours', sshd:'deploy user, docker group', cron:'nightly at 02:00', grafana:'127.0.0.1:3000', alertmanager:'127.0.0.1:9093', pushgateway:'127.0.0.1:9091' };
+N.cron.label = 'cron: backup.sh';
+ROWS.forEach((r, ri) => r.ids.forEach((id, i) => {
+  const n = N[id]; n.row = ri; n.x = r.x0 + i * (r.w + r.gap); n.w = r.w;
+  n.h = id === 'traefik' ? 56 : 60; n.y = r.ny || r.top + 38;
+  if (SUBS[id]) n.sub = SUBS[id];
+}));
+const channel = i => (ROWS[i].top + ROWS[i].h + ROWS[i + 1].top) / 2;   // the gap below row i
+function freeSpans(ri) {
+  const r = ROWS[ri], spans = []; let x = ri === 0 ? 0 : 44;
+  r.ids.forEach(id => { const n = N[id]; if (n.x > x) spans.push([x, n.x]); x = n.x + n.w; });
+  spans.push([x, ri === 0 ? 1280 : 1236]); return spans;
+}
+function corridor(r1, r2, want) {
+  // x where a vertical run can pass rows r1..r2 without crossing a box
+  let spans = [[0, 1280]];
+  for (let ri = r1; ri <= r2; ri++) {
+    const next = []; freeSpans(ri).forEach(([a, b]) => spans.forEach(([c, d]) => { const lo = Math.max(a, c), hi = Math.min(b, d); if (hi - lo >= 20) next.push([lo, hi]); })); spans = next;
+  }
+  let best = null; spans.forEach(([a, b]) => { const c = (a + b) / 2; if (!best || Math.abs(c - want) < Math.abs(best - want)) best = c; });
+  return best;
+}
+const laneCount = {};
+const lane = key => { const k = laneCount[key] = (laneCount[key] || 0) + 1; return [0, -8, 8, -4, 4][(k - 1) % 5]; };
+function sides(e) {
+  const a = N[e.f], b = N[e.t];
+  if (a.row === b.row) return a.row === 0 ? ['bottom', 'bottom'] : ['top', 'top'];
+  return b.row > a.row ? ['bottom', 'top'] : ['top', 'bottom'];
+}
+function assignPorts() {
+  const bySide = {};
+  Object.values(E).forEach(e => { const [sa, sb] = sides(e); (bySide[e.f + ':' + sa] = bySide[e.f + ':' + sa] || []).push([e, 'pa', N[e.t]]); (bySide[e.t + ':' + sb] = bySide[e.t + ':' + sb] || []).push([e, 'pb', N[e.f]]); });
+  Object.entries(bySide).forEach(([key, list]) => {
+    const n = N[key.split(':')[0]];
+    list.sort((p, q) => (p[2].x + p[2].w / 2) - (q[2].x + q[2].w / 2));
+    const inset = Math.min(18, n.w / 6), span = n.w - 2 * inset;
+    list.forEach(([e, which], k) => { e[which] = Math.round(n.x + inset + span * (k + 1) / (list.length + 1)); });
+  });
+}
+function rounded(pts, r) {
+  const p = pts.filter((q, i) => i === 0 || q[0] !== pts[i - 1][0] || q[1] !== pts[i - 1][1]);
+  const clean = p.filter((q, i) => i === 0 || i === p.length - 1 || !((p[i - 1][0] === q[0] && q[0] === p[i + 1][0]) || (p[i - 1][1] === q[1] && q[1] === p[i + 1][1])));
+  let d = `M${clean[0][0]} ${clean[0][1]}`;
+  for (let i = 1; i < clean.length - 1; i++) {
+    const [x0, y0] = clean[i - 1], [x1, y1] = clean[i], [x2, y2] = clean[i + 1];
+    const l1 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1), k1 = Math.min(r, l1 / 2), k2 = Math.min(r, l2 / 2);
+    d += ` L${x1 - (x1 - x0) / l1 * k1} ${y1 - (y1 - y0) / l1 * k1} Q${x1} ${y1} ${x1 + (x2 - x1) / l2 * k2} ${y1 + (y2 - y1) / l2 * k2}`;
+  }
+  const last = clean[clean.length - 1]; return d + ` L${last[0]} ${last[1]}`;
+}
+function edgePath(e) {
+  const a = N[e.f], b = N[e.t], [sa, sb] = sides(e);
+  const ya = sa === 'top' ? a.y : a.y + a.h, yb = sb === 'top' ? b.y : b.y + b.h;
+  const xa = e.pa, xb = e.pb; let pts;
+  if (a.row === b.row) {
+    const ch = a.row === 0 ? channel(0) - 18 : channel(a.row - 1), cy = ch + lane('c' + ch);
+    pts = [[xa, ya], [xa, cy], [xb, cy], [xb, yb]];
+  } else {
+    const down = b.row > a.row, lo = Math.min(a.row, b.row), hi = Math.max(a.row, b.row);
+    const chA = down ? channel(a.row) : channel(a.row - 1), chB = down ? channel(b.row - 1) : channel(b.row);
+    if (hi - lo === 1) { const cy = chA + lane('c' + chA); pts = [[xa, ya], [xa, cy], [xb, cy], [xb, yb]]; }
+    else {
+      const cx0 = corridor(lo + 1, hi - 1, (xa + xb) / 2), cx = cx0 + lane('x' + cx0 + ':' + lo);
+      const cy1 = chA + lane('c' + chA), cy2 = chB + lane('c' + chB);
+      pts = [[xa, ya], [xa, cy1], [cx, cy1], [cx, cy2], [xb, cy2], [xb, yb]];
+    }
+  }
+  return rounded(pts, 9);
+}
+function drawBoard() {
+  assignPorts();
+  const defs = svgEl('defs', {}, board);
+  const pat = svgEl('pattern', { id: 'dots', width: 16, height: 16, patternUnits: 'userSpaceOnUse' }, defs);
+  svgEl('circle', { cx: 1, cy: 1, r: 1, fill: '#262626' }, pat);
+  const mk = svgEl('marker', { id: 'port', viewBox: '0 0 10 10', refX: 5, refY: 5, markerWidth: 6, markerHeight: 6, markerUnits: 'userSpaceOnUse' }, defs);
+  svgEl('circle', { cx: 5, cy: 5, r: 3.6, fill: '#0e0e0e', stroke: '#e85d26', 'stroke-width': 1.6 }, mk);
+  svgEl('rect', { x: 0, y: 0, width: 1280, height: 914, fill: 'url(#dots)' }, board);
+  svgEl('rect', { x: 20, y: 136, width: 1240, height: 754, rx: 10, class: 'vm-rect' }, board);
+  ROWS.forEach(r => { if (r.label) svgEl('rect', { x: 44, y: r.top, width: 1192, height: r.h, rx: 8, class: 'band-rect' }, board); });
+  const eg = svgEl('g', { id: 'edges' }, board);
+  Object.values(E).forEach(e => { e.el = svgEl('path', { d: edgePath(e), class: 'edge' }, eg); const t = svgEl('title', {}, e.el); t.textContent = `${N[e.f].label} → ${N[e.t].label}: ${e.l}`; });
+  const lg = svgEl('g', { id: 'labels' }, board);
+  const lbl = (x, y, name, detail, cls, anchor) => { const t = svgEl('text', { x, y, class: cls, 'text-anchor': anchor || 'start' }, lg); svgEl('tspan', { class: 'n' }, t).textContent = name; if (detail) { const s = svgEl('tspan', { class: 'd', dx: 8 }, t); s.textContent = detail; } };
+  lbl(28, 24, 'Outside the VM', 'people, CI and the services Wbskt calls out to', 'band-label ext');
+  lbl(1240, 164, 'The VM', 'one Docker host, Compose project wbskt', 'band-label vm', 'end');
+  ROWS.forEach(r => { if (r.label) lbl(64, r.top + 24, r.label[0], r.label[1], 'band-label'); });
+  const ng = svgEl('g', { id: 'nodes' }, board);
+  Object.values(N).forEach(n => {
+    const g = svgEl('g', { class: `node k-${n.kind}`, tabindex: 0, role: 'button', 'aria-label': `${n.label}: ${n.sub}` }, ng);
+    svgEl('rect', { x: n.x - 3, y: n.y - 3, width: n.w + 6, height: n.h + 6, rx: 8, class: 'glow' }, g);
+    svgEl('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 5, class: 'card' }, g);
+    svgEl('rect', { x: n.x + 1, y: n.y, width: n.w - 2, height: 2, rx: 1, class: 'edge-top' }, g);
+    const wide = n.id === 'traefik';
+    if (n.kind !== 'ext') svgEl('text', { x: n.x + 12, y: n.y + (wide ? 16 : 17), class: 'kd' }, g).textContent = KINDNAME[n.kind];
+    svgEl('text', { x: n.x + 12, y: n.y + (n.kind === 'ext' ? 25 : wide ? 32 : 34), class: 'nm' }, g).textContent = n.label;
+    svgEl('text', { x: n.x + 12, y: n.y + (n.kind === 'ext' ? 43 : wide ? 47 : 50), class: 'sb' }, g).textContent = n.sub;
+    g.addEventListener('click', () => selectNode(n.id));
+    g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectNode(n.id); } });
+    n.el = g;
+  });
+  svgEl('g', { id: 'badges' }, board);
+}
+function midpoint(e) { const len = e.el.getTotalLength(); return e.el.getPointAtLength(len / 2); }
+function clearMap() {
+  Object.values(E).forEach(e => e.el.classList.remove('on', 'hot'));
+  Object.values(N).forEach(n => n.el.classList.remove('sel', 'dim'));
+  $('#badges').innerHTML = '';
+  document.querySelectorAll('#flows .chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+}
+let current = { type: 'flow', id: 'devmsg' };
+function selectNode(id) {
+  clearMap(); current = { type: 'node', id };
+  const n = N[id]; n.el.classList.add('sel');
+  const touching = Object.values(E).filter(e => e.f === id || e.t === id);
+  const near = new Set([id]); touching.forEach(e => { e.el.classList.add('on'); near.add(e.f); near.add(e.t); });
+  Object.values(N).forEach(m => { if (!near.has(m.id)) m.el.classList.add('dim'); });
+  renderNodeRail(n, touching);
+}
+function selectFlow(id) {
+  clearMap(); current = { type: 'flow', id };
+  const f = FLOWS.find(x => x.id === id);
+  document.querySelector(`#flows .chip[data-flow="${id}"]`).setAttribute('aria-pressed', 'true');
+  const near = new Set(); const bg = $('#badges'); const seen = {};
+  f.steps.forEach(([eid], i) => {
+    const e = E[eid]; e.el.classList.add('on'); near.add(e.f); near.add(e.t);
+    if (seen[eid]) return; seen[eid] = true;
+    const pt = midpoint(e); const b = svgEl('g', { class: 'badge', 'data-step': i }, bg);
+    svgEl('rect', { x: pt.x - 9, y: pt.y - 9, width: 18, height: 18, rx: 4 }, b); svgEl('text', { x: pt.x, y: pt.y + 3.5 }, b).textContent = i + 1;
+  });
+  Object.values(N).forEach(m => { if (!near.has(m.id)) m.el.classList.add('dim'); });
+  renderFlowRail(f);
+}
+function renderFlowRail(f) {
+  const rail = $('#rail');
+  rail.innerHTML = `<div class="rail-head"><span class="eyebrow">Flow</span></div><div class="rail-body"><h3>${esc(f.name)}</h3><p>${esc(f.desc)}</p><ol class="steps">${f.steps.map(([eid, txt], i) => { const e = E[eid]; return `<li data-i="${i}" data-e="${eid}"><span>${esc(txt)}<span class="via">${esc(N[e.f].label)} → ${esc(N[e.t].label)} · ${esc(e.l)}</span></span></li>`; }).join('')}</ol><p class="note">Hover a step to find it on the map. Click any card to leave the flow and inspect that component.</p></div>`;
+  rail.querySelectorAll('.steps li').forEach(li => {
+    li.addEventListener('mouseenter', () => { E[li.dataset.e].el.classList.add('hot'); const b = board.querySelector(`.badge[data-step="${li.dataset.i}"]`); if (b) b.classList.add('hot'); });
+    li.addEventListener('mouseleave', () => { E[li.dataset.e].el.classList.remove('hot'); board.querySelectorAll('.badge.hot').forEach(b => b.classList.remove('hot')); });
+  });
+}
+const KINDNAME = { ext:'Outside the VM', edge:'Public edge', app:'App host', data:'Data store', oneshot:'One-shot job', tele:'Telemetry', host:'VM host' };
+const KINDCOLOR = { ext:'var(--faint)', edge:'var(--accent)', app:'var(--green)', data:'var(--violet)', oneshot:'var(--violet)', tele:'var(--blue)', host:'var(--amber)' };
+function renderNodeRail(n, touching) {
+  const rail = $('#rail');
+  const facts = (n.facts || []).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+  const env = (n.env || []).map(v => `<button class="tag${isSecret(v) ? ' secret' : ''}" data-env="${v}" type="button">${v}</button>`).join('');
+  const out = touching.filter(e => e.f === n.id), inn = touching.filter(e => e.t === n.id);
+  const li = (e, other, dir) => `<li><span class="dir">${dir}</span><span><button type="button" data-node="${other}">${esc(N[other].label)}</button> · ${esc(e.l)}</span></li>`;
+  rail.innerHTML = `<div class="rail-head"><span class="kind" style="color:${KINDCOLOR[n.kind]}">${KINDNAME[n.kind]}</span></div><div class="rail-body"><h3>${esc(n.title || n.label)}</h3><p>${esc(n.what || '')}</p>
+   ${facts ? `<dl>${facts}</dl>` : ''}
+   ${env ? `<div class="sect"><span class="eyebrow">Env vars from .env</span><div class="tags">${env}</div>${n.extraEnv ? `<p class="note">${esc(n.extraEnv)}</p>` : ''}</div>` : ''}
+   ${touching.length ? `<div class="sect"><span class="eyebrow">Connections</span><ul class="conn">${out.map(e => li(e, e.t, '→')).join('')}${inn.map(e => li(e, e.f, '←')).join('')}</ul></div>` : ''}
+   ${n.notes ? `<p class="note warnnote">${esc(n.notes)}</p>` : ''}
+   ${n.cmds ? `<div class="sect"><span class="eyebrow">Commands</span>${n.cmds.map(([l, c]) => cmdHTML(l, c)).join('')}</div>` : ''}
+   ${n.go ? `<p style="margin-top:14px"><a href="#${n.go}" style="color:var(--accent);font-weight:600">More on the ${esc(document.querySelector(`nav a[href="#${n.go}"]`).textContent)} tab</a></p>` : ''}</div>`;
+  rail.querySelectorAll('.copy').forEach(copyBtn);
+  rail.querySelectorAll('[data-node]').forEach(b => b.addEventListener('click', () => selectNode(b.dataset.node)));
+  rail.querySelectorAll('[data-env]').forEach(b => b.addEventListener('click', () => gotoEnv(b.dataset.env)));
+  refreshTemplates(rail);
+}
+function buildFlowChips() {
+  const wrap = $('#flows');
+  FLOWS.forEach(f => { const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.dataset.flow = f.id; b.textContent = f.name; b.setAttribute('aria-pressed', 'false'); b.addEventListener('click', () => selectFlow(f.id)); wrap.appendChild(b); });
+}
+
+// ---------------------------------------------------------------- tables
+function buildRouting() {
+  $('#routes').innerHTML = ROUTES.map(r => `<tr><td><b>${r[0]}</b></td><td class="wrap"><code>${esc(r[1])}</code></td><td>${r[2]}</td><td><code>${r[3]}</code></td><td>${esc(r[4])}</td></tr>`).join('') + `<tr><td><b>blocked</b></td><td class="wrap"><code>/api/internal</code> on every public host</td><td></td><td></td><td>Host-to-host only; no public router matches it.</td></tr>`;
+  $('#ports').innerHTML = PORTS.map(r => `<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+  $('#internal').innerHTML = INTERNAL.map(r => `<tr><td>${r[0]}</td><td><code>${esc(r[1])}</code></td><td>${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join('');
+  $('#alertrows').innerHTML = ALERTS.map(r => `<tr><td><code>${r[0]}</code></td><td>${r[1]}</td><td>${esc(r[2])}</td></tr>`).join('');
+}
+const envState = { q: '', secret: false, drift: false };
+function driftOf(name) { if (DEV_ENV.includes(name)) return 'ok'; if (OPTIONAL_DRIFT.has(name)) return 'na'; return 'missing'; }
+function buildEnv() {
+  const q = envState.q.toLowerCase(); let rows = '', last = '', n = 0;
+  ENV.forEach(e => {
+    const [name, group, kind, req, def, uses, note, gen] = e;
+    const hay = (name + ' ' + group + ' ' + uses.flat().join(' ') + ' ' + note).toLowerCase();
+    if (q && !hay.includes(q)) return;
+    if (envState.secret && kind !== 'secret') return;
+    const d = driftOf(name);
+    if (envState.drift && d !== 'missing') return;
+    if (group !== last) { rows += `<tr class="grouprow"><td colspan="6">${group}</td></tr>`; last = group; }
+    n++;
+    rows += `<tr id="env-${name}"><td><code>${name}</code></td><td>${kind === 'secret' ? '<span class="pill p-secret">secret</span> ' : ''}${req ? '<span class="pill p-req">required</span>' : '<span class="pill p-opt">optional</span>'}</td><td>${def ? `<code>${esc(def)}</code>` : '<span style="color:var(--muted)">none</span>'}</td><td>${uses.map(([s, k]) => `<div>${esc(s)} → <code>${esc(k)}</code></div>`).join('')}</td><td>${esc(note)}${gen ? `<div class="cmd"><div class="lbl" style="font-size:12px;color:var(--muted)">Generate</div><div class="cmdbox"><pre data-tpl="${esc(gen)}"></pre><button class="copy" type="button">Copy</button></div></div>` : ''}</td><td>${d === 'ok' ? '<span class="pill p-ok">present</span>' : d === 'missing' ? '<span class="pill p-missing">missing</span>' : '<span style="color:var(--muted)">n/a</span>'}</td></tr>`;
+  });
+  $('#envrows').innerHTML = rows || '<tr><td colspan="6">No variables match that filter.</td></tr>';
+  const missing = ENV.filter(e => driftOf(e[0]) === 'missing').length;
+  $('#env-count').textContent = `${n} of ${ENV.length} shown · ${ENV.filter(e => e[2] === 'secret').length} secrets · ${missing} missing from dev.env`;
+  $('#envrows').querySelectorAll('.copy').forEach(copyBtn);
+  refreshTemplates($('#envrows'));
+}
+function gotoEnv(name) {
+  envState.q = ''; envState.secret = false; envState.drift = false; $('#env-q').value = '';
+  $('#env-secret').setAttribute('aria-pressed', 'false'); $('#env-drift').setAttribute('aria-pressed', 'false');
+  buildEnv(); location.hash = 'env';
+  requestAnimationFrame(() => { const r = document.getElementById('env-' + name); if (r) { r.scrollIntoView({ block: 'center' }); r.classList.add('flash'); setTimeout(() => r.classList.remove('flash'), 1800); } });
+}
+function buildTree() {
+  $('#tree').innerHTML = TREE.map(([t, p, d]) => `<div class="row${t === 'head' ? ' head' : ''}"><div class="p" data-tpl-html="${esc(esc(p))}"></div><div class="d" data-tpl-html="${esc(d)}"></div></div>`).join('');
+}
+function buildRunbook() {
+  $('#runbook').innerHTML = RUNBOOK.map(c => `<div class="card"><h3>${esc(c.t)}</h3><p>${esc(c.p)}</p>${c.c.map(([l, cmd, flag]) => cmdHTML(l, cmd, flag)).join('')}</div>`).join('');
+  $('#runbook').querySelectorAll('.copy').forEach(copyBtn);
+}
+function buildPipeline() {
+  $('#pipeline').innerHTML = `
+  <div class="lane"><div class="lane-head"><h3>Backend · wbskt/Wbskt</h3><span class="meta">build-images.yml → deploy.yml · GitHub-hosted ubuntu-latest (public repo) · environment <code>production</code></span></div>
+    <div class="stages">
+      <div class="stage"><b>Push to master</b><span>PRs run tests and scan only</span></div>
+      <div class="stage"><b>Gate</b><span>unit, integration, package scan, E2E</span></div>
+      <div class="stage"><b>Publish 5 images</b><span>auth, management, socket, engine, migrator → GHCR as sha-&lt;short&gt; + latest</span></div>
+      <div class="stage"><b>Deploy workflow</b><span>queued on deploy-production; approval if production has reviewers</span></div>
+      <div class="stage vm"><b>deploy.sh on the VM</b><span>--tag sha-&lt;short&gt;, every host, migrations on</span></div>
+    </div></div>
+  <div class="lane"><div class="lane-head"><h3>Console · wbskt/Wbskt.Console</h3><span class="meta">build-and-deploy.yml · self-hosted runner [self-hosted, linux] on the Mac (OrbStack) · environment <code>production-console</code></span></div>
+    <div class="stages">
+      <div class="stage"><b>Push to master</b><span>queued on console-deploy</span></div>
+      <div class="stage"><b>Gate</b><span>lint and unit tests</span></div>
+      <div class="stage"><b>Publish image</b><span>wbskt-console, linux/amd64</span></div>
+      <div class="stage vm"><b>deploy.sh on the VM</b><span>--console-tag sha-&lt;short&gt;, no checkout sync</span></div>
+    </div></div>
+  <div class="twocol">
+    <div class="card"><h3>What deploy.sh does, in order</h3><ol class="ol">
+      <li>Validates the tag and services (auth, management, devices, socket, engine).</li>
+      <li>Refuses if tracked files on the VM have local edits, then <code>git reset --hard</code> to the tag's commit and re-runs itself.</li>
+      <li>Writes <code>IMAGE_TAG</code> into <code>.env</code>.</li>
+      <li>Dry-runs Compose and stops if networks would be recreated.</li>
+      <li>Prunes unused images; stops if under 3 GB is free. Nothing is stopped yet.</li>
+      <li>Pulls the images, then runs the migrator unless <code>--skip-migrations</code>.</li>
+      <li>Starts devices and waits for health, then the other hosts with <code>--no-deps</code>.</li>
+      <li>Waits up to 240 s for health; on timeout prints the last 20 log lines per failing service.</li>
+    </ol></div>
+    <div class="card"><h3>Secrets and access</h3>
+      <div class="sheet" style="margin-top:8px"><table><thead><tr><th>GitHub secret</th><th>Holds</th></tr></thead><tbody>
+        <tr><td><code>DEPLOY_HOST</code></td><td>VM hostname or IP</td></tr>
+        <tr><td><code>DEPLOY_USER</code></td><td>SSH user, in the docker group</td></tr>
+        <tr><td><code>DEPLOY_PATH</code></td><td>Checkout path on the VM</td></tr>
+        <tr><td><code>DEPLOY_SSH_KEY</code></td><td>Private half of the deploy key</td></tr>
+        <tr><td><code>DEPLOY_KNOWN_HOSTS</code></td><td>Pinned host key (ssh-keyscan)</td></tr>
+      </tbody></table></div>
+      <p class="note">The deploy key can only run deploy.sh, but the deploy user is root-equivalent through Docker, and the key can deploy any tag already in GHCR. Rollback is dispatching Deploy with an older tag; compose and config roll back with it.</p>
+      <div class="cmd"><div class="lbl">authorized_keys line on the VM</div><div class="cmdbox"><pre data-tpl='command="{path}/deploy/scripts/ssh-forced-command.sh",no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding ssh-ed25519 AAAA... ci-deploy'></pre><button class="copy" type="button">Copy</button></div></div>
+    </div>
+  </div>`;
+  $('#pipeline').querySelectorAll('.copy').forEach(copyBtn);
+}
+function buildGaps() {
+  $('#gaplist').innerHTML = GAPS.map(([s, t, p, chk]) => `<div class="gap s-${s}"><div class="stripe"></div><div><h3>${esc(t)} <span class="pill ${s === 'high' ? 'p-secret' : s === 'med' ? 'p-missing' : 'p-opt'}">${s === 'med' ? 'medium' : s}</span>${chk ? ' <span class="pill p-opt">check</span>' : ''}</h3><p>${esc(p)}</p></div></div>`).join('');
+}
+
+// ---------------------------------------------------------------- routing between views
+const VIEWS = ['map','routing','env','paths','runbook','pipeline','alerts','gaps'];
+function route() {
+  const h = (location.hash || '#map').slice(1); const v = VIEWS.includes(h) ? h : 'map';
+  VIEWS.forEach(x => { $('#v-' + x).hidden = x !== v; });
+  document.querySelectorAll('nav.tabs a').forEach(a => { if (a.getAttribute('href') === '#' + v) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  if (v === 'map' && current) { requestAnimationFrame(() => current.type === 'flow' ? selectFlow(current.id) : selectNode(current.id)); }
+}
+
+// ---------------------------------------------------------------- boot
+drawBoard(); buildFlowChips(); buildRouting(); buildEnv(); buildTree(); buildRunbook(); buildPipeline(); buildGaps();
+document.querySelectorAll('#v-alerts .copy').forEach(copyBtn);
+$('#set-vm').value = settings.vm; $('#set-path').value = settings.path;
+$('#set-vm').addEventListener('input', e => { settings.vm = e.target.value.trim() || 'deploy@<vm>'; store.set('wim-vm', settings.vm); refreshTemplates(); });
+$('#set-path').addEventListener('input', e => { settings.path = e.target.value.trim().replace(/\/$/, '') || '/home/deploy/Wbskt'; store.set('wim-path', settings.path); refreshTemplates(); });
+$('#env-q').addEventListener('input', e => { envState.q = e.target.value; buildEnv(); });
+$('#env-secret').addEventListener('click', e => { envState.secret = !envState.secret; e.target.setAttribute('aria-pressed', envState.secret); buildEnv(); });
+$('#env-drift').addEventListener('click', e => { envState.drift = !envState.drift; e.target.setAttribute('aria-pressed', envState.drift); buildEnv(); });
+window.addEventListener('hashchange', route);
+refreshTemplates();
+route();
+selectFlow('devmsg');
+</script>
+
+</body>
+</html>

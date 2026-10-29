@@ -9,6 +9,9 @@ there. See [Build and release flow](#build-and-release-flow).
 
 ## Layout
 
+- `infra-map.html` — an interactive map of this deployment: the services, ports, networks,
+  env var names, VM paths, scripts and runbooks. Open it in a browser; it has no dependencies
+  besides Google Fonts. Update it in the same PR as any change to the stack it describes.
 - `docker/Dockerfile` — one parameterized multi-stage image for all 4 ASP.NET Core hosts
   (`HOST_PROJECT` / `HOST_DLL` build args).
 - `docker/Dockerfile.migrator` + `docker/migrate.sh` — builds both DACPACs and publishes them
