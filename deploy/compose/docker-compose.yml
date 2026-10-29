@@ -433,6 +433,10 @@ services:
       # Adds rabbitmq_prometheus (port 15692, backend network only) for the dead-letter alert.
       - ../observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
       - ../observability/rabbitmq/healthcheck.sh:/usr/local/bin/wbskt-healthcheck.sh:ro
+    # Loopback only, for the management UI over an SSH tunnel (ssh -L 15672:127.0.0.1:15672 <vm>).
+    # AMQP (5672) and metrics (15692) stay on the backend network.
+    ports:
+      - "127.0.0.1:15672:15672"
     healthcheck:
       # A ping, and the policy that caps the public callback queue (see the script).
       test: ["CMD", "sh", "/usr/local/bin/wbskt-healthcheck.sh"]
@@ -467,6 +471,9 @@ services:
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
     volumes:
       - sql-data:/var/opt/mssql
+    # Loopback only, for a desktop SQL client over an SSH tunnel (ssh -L 1433:127.0.0.1:1433 <vm>).
+    ports:
+      - "127.0.0.1:1433:1433"
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
       interval: 10s

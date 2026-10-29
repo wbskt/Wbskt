@@ -381,11 +381,21 @@ trace and span ids, and Grafana links the two both ways. `docker compose logs` k
 the hosts still write to stdout, now rotated (20 MB x 5 per container).
 
 None of it is publicly routed. Grafana, Alertmanager and the Pushgateway listen on the VM's
-loopback only:
+loopback only, as do SQL Server (1433) and the RabbitMQ management UI (15672):
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 -L 9093:127.0.0.1:9093 <vm>
 # Grafana: http://localhost:3000 (admin / GRAFANA_ADMIN_PASSWORD), Alertmanager: http://localhost:9093
+
+ssh -L 1433:127.0.0.1:1433 -L 15672:127.0.0.1:15672 <vm>
+# SQL client: localhost,1433 as sa (SQL_SA_PASSWORD), RabbitMQ UI: http://localhost:15672 (RABBITMQ_USER)
+```
+
+On a VM that predates these two ports, recreate `sql` and `rabbitmq` once to publish them. Each is
+down for well under a minute and the hosts reconnect on their own, but do it at a quiet time:
+
+```bash
+docker compose up -d --no-deps sql rabbitmq
 ```
 
 The stack adds nine containers and roughly 1.2 GB of memory at idle. On a 4 GB VM, add swap first
