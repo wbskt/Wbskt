@@ -7,7 +7,10 @@ using Wbskt.Workflow.Integrations;
 
 namespace Wbskt.Workflow.NodeExecutors.Actions;
 
-/// <summary>Posts a message to a Discord channel through the webhook integration the step names.</summary>
+/// <summary>
+/// Posts a message to a Discord channel through the webhook integration the step names, and writes the
+/// posted message's ids to <c>discord</c>.
+/// </summary>
 internal sealed class DiscordNodeExecutor(IIntegrationResolver resolver, DiscordChannel channel) : INodeExecutor
 {
     public string Kind => NodeKind.ActionDiscord;
@@ -25,16 +28,22 @@ internal sealed class DiscordNodeExecutor(IIntegrationResolver resolver, Discord
         }
 
         var integration = resolution.Integration!;
-        var result = await channel.SendAsync(integration, config.Message, config.Username, ct);
+        var result = await channel.SendAsync(integration, config, ct);
         if (!result.Ok)
         {
             return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
         }
 
         await resolver.MarkUsedAsync(integration, ct);
-        return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
+        var patch = new Dictionary<string, JsonElement>
         {
-            ["status"] = JsonSerializer.SerializeToElement(result.Status ?? 204)
-        });
+            ["status"] = JsonSerializer.SerializeToElement(result.Status ?? 200)
+        };
+        if (result.Metadata is { } sent)
+        {
+            patch["discord"] = sent;
+        }
+
+        return new NodeExecutionResult.Continue("default", patch);
     }
 }

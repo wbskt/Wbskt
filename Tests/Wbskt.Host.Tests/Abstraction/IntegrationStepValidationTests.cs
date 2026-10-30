@@ -78,6 +78,80 @@ public sealed class IntegrationStepValidationTests
     }
 
     [Fact]
+    public void Discord_message_may_be_left_out_when_there_is_an_embed()
+    {
+        var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Embeds = [new DiscordEmbed { Title = "Tank low" }] });
+
+        Assert.DoesNotContain(IssuesFor(node), i => i.Code.StartsWith("DISCORD_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discord_embed_needs_something_to_show()
+    {
+        var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Embeds = [new DiscordEmbed { Color = "#112233" }] });
+
+        Assert.Contains(IssuesFor(node), i => i.Code == "DISCORD_EMBED_INVALID");
+    }
+
+    [Theory]
+    [InlineData("#E03C31", true)]
+    [InlineData("#e03c31", true)]
+    [InlineData("E03C31", false)]
+    [InlineData("#E03C3", false)]
+    [InlineData("#GGGGGG", false)]
+    public void Discord_embed_color_is_hex(string color, bool valid)
+    {
+        var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Embeds = [new DiscordEmbed { Title = "t", Color = color }] });
+
+        Assert.Equal(!valid, IssuesFor(node).Any(i => i.Code == "DISCORD_EMBED_INVALID"));
+    }
+
+    [Fact]
+    public void Discord_embeds_keep_to_discords_limits()
+    {
+        DiscordEmbed Ok() => new() { Title = "t" };
+        var cases = new DiscordConfig[]
+        {
+            new() { Embeds = Enumerable.Range(0, 11).Select(_ => Ok()).ToList() },
+            new() { Embeds = [new DiscordEmbed { Title = new string('a', 257) }] },
+            new() { Embeds = [new DiscordEmbed { Description = new string('a', 4097) }] },
+            new() { Embeds = [new DiscordEmbed { Footer = new string('a', 2049) }] },
+            new() { Embeds = [new DiscordEmbed { Fields = Enumerable.Range(0, 26).Select(_ => new DiscordEmbedField { Name = "n", Value = "v" }).ToList() }] },
+            new() { Embeds = [new DiscordEmbed { Fields = [new DiscordEmbedField { Name = " ", Value = "v" }] }] },
+            new() { Embeds = [new DiscordEmbed { Fields = [new DiscordEmbedField { Name = "n", Value = new string('a', 1025) }] }] },
+            new() { Embeds = [new DiscordEmbed { Title = "t", ImageUrl = "/chart.png" }] },
+            new() { Embeds = [new DiscordEmbed { Description = new string('a', 4000) }, new DiscordEmbed { Description = new string('a', 2001) }] }
+        };
+
+        foreach (var config in cases)
+        {
+            Assert.Contains(IssuesFor(DiscordWith(config with { IntegrationRef = Guid.NewGuid() })), i => i.Code == "DISCORD_EMBED_INVALID");
+        }
+    }
+
+    [Theory]
+    [InlineData("1200000000000000002", true)]
+    [InlineData("general", false)]
+    [InlineData("", false)]
+    public void Discord_thread_is_a_discord_id(string threadId, bool valid)
+    {
+        var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Message = "m", ThreadId = threadId });
+
+        Assert.Equal(!valid, IssuesFor(node).Any(i => i.Code == "DISCORD_THREAD_INVALID"));
+    }
+
+    [Theory]
+    [InlineData("https://example.test/pump.png", true)]
+    [InlineData("pump.png", false)]
+    [InlineData("ftp://example.test/pump.png", false)]
+    public void Discord_avatar_is_an_absolute_web_url(string avatarUrl, bool valid)
+    {
+        var node = DiscordWith(new DiscordConfig { IntegrationRef = Guid.NewGuid(), Message = "m", AvatarUrl = avatarUrl });
+
+        Assert.Equal(!valid, IssuesFor(node).Any(i => i.Code == "DISCORD_AVATAR_URL_INVALID"));
+    }
+
+    [Fact]
     public void Ntfy_needs_a_message()
     {
         var node = Ntfy(Guid.NewGuid()) with { Config = new NtfyConfig { IntegrationRef = Guid.NewGuid(), Message = " " } };
@@ -228,6 +302,8 @@ public sealed class IntegrationStepValidationTests
         Ports = [],
         Config = new EmailConfig { IntegrationRef = integrationRef, To = "a@example.test", Subject = "s", Body = "b" }
     };
+
+    private static DiscordNotificationNode DiscordWith(DiscordConfig config) => Discord(Guid.NewGuid()) with { Config = config };
 
     private static DiscordNotificationNode Discord(Guid? integrationRef) => new()
     {

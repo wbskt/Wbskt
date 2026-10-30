@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Integrations;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Engine.Contracts;
 using Wbskt.Workflow.Integrations;
 using Wbskt.Workflow.Runtime;
@@ -116,31 +117,100 @@ public sealed class IntegrationChannelTests
     // -------------------------------------------------------------- discord
 
     [Fact]
-    public async Task Discord_posts_the_message_with_mentions_disabled()
+    public async Task Discord_posts_the_message_with_mentions_disabled_and_waits_for_it()
     {
-        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, "{\"id\":\"1300000000000000001\",\"channel_id\":\"555\"}"));
 
-        var result = await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), "@everyone tank low", "Pump bot", CancellationToken.None);
+        var result = await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), new DiscordConfig { Message = "@everyone tank low", Username = "Pump bot" }, CancellationToken.None);
 
         Assert.True(result.Ok);
-        Assert.Equal(204, result.Status);
+        Assert.Equal(200, result.Status);
         Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
-        Assert.Equal(DiscordWebhook, handler.LastUri);
+        Assert.Equal(DiscordWebhook + "?wait=true", handler.LastUri);
         using var body = JsonDocument.Parse(handler.LastBody);
         Assert.Equal("@everyone tank low", body.RootElement.GetProperty("content").GetString());
         Assert.Equal("Pump bot", body.RootElement.GetProperty("username").GetString());
         Assert.Equal(0, body.RootElement.GetProperty("allowed_mentions").GetProperty("parse").GetArrayLength());
+        Assert.False(body.RootElement.TryGetProperty("embeds", out _));
+        Assert.Equal("1300000000000000001", result.Metadata!.Value.GetProperty("messageId").GetString());
+        Assert.Equal("555", result.Metadata.Value.GetProperty("channelId").GetString());
     }
 
     [Fact]
     public async Task Discord_leaves_out_a_blank_username()
     {
-        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, "{}"));
 
-        await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), "hi", " ", CancellationToken.None);
+        await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), new DiscordConfig { Message = "hi", Username = " " }, CancellationToken.None);
 
         using var body = JsonDocument.Parse(handler.LastBody);
         Assert.False(body.RootElement.TryGetProperty("username", out _));
+    }
+
+    [Fact]
+    public async Task Discord_posts_into_the_thread_with_the_avatar()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, "{}"));
+
+        await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(
+            DiscordIntegration(),
+            new DiscordConfig { Message = "hi", ThreadId = "1200000000000000002", AvatarUrl = "https://example.test/pump.png" },
+            CancellationToken.None);
+
+        Assert.Equal(DiscordWebhook + "?wait=true&thread_id=1200000000000000002", handler.LastUri);
+        using var body = JsonDocument.Parse(handler.LastBody);
+        Assert.Equal("https://example.test/pump.png", body.RootElement.GetProperty("avatar_url").GetString());
+    }
+
+    [Fact]
+    public async Task Discord_sends_embeds_in_discords_shape()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, "{}"));
+        var now = new DateTimeOffset(2026, 10, 30, 14, 32, 0, TimeSpan.Zero);
+        var config = new DiscordConfig
+        {
+            Embeds =
+            [
+                new DiscordEmbed
+                {
+                    Title = "Freezer 2",
+                    Url = "https://example.test/freezer",
+                    Description = "Above -10 °C for 20 min",
+                    Color = "#E03C31",
+                    Fields = [new DiscordEmbedField { Name = "Temp", Value = "-8 °C", Inline = true }],
+                    Footer = "Wbskt",
+                    ImageUrl = "https://example.test/chart.png",
+                    ThumbnailUrl = "https://example.test/icon.png",
+                    Timestamp = true
+                }
+            ]
+        };
+
+        await new DiscordChannel(new SingleClientFactory(handler), new FixedClock(now)).SendAsync(DiscordIntegration(), config, CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.LastBody);
+        Assert.False(body.RootElement.TryGetProperty("content", out _));
+        var embed = body.RootElement.GetProperty("embeds")[0];
+        Assert.Equal("Freezer 2", embed.GetProperty("title").GetString());
+        Assert.Equal("https://example.test/freezer", embed.GetProperty("url").GetString());
+        Assert.Equal(0xE03C31, embed.GetProperty("color").GetInt32());
+        Assert.Equal("Temp", embed.GetProperty("fields")[0].GetProperty("name").GetString());
+        Assert.True(embed.GetProperty("fields")[0].GetProperty("inline").GetBoolean());
+        Assert.Equal("Wbskt", embed.GetProperty("footer").GetProperty("text").GetString());
+        Assert.Equal("https://example.test/chart.png", embed.GetProperty("image").GetProperty("url").GetString());
+        Assert.Equal("https://example.test/icon.png", embed.GetProperty("thumbnail").GetProperty("url").GetString());
+        Assert.Equal(now, embed.GetProperty("timestamp").GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task Discord_send_that_answers_without_a_message_still_succeeds()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        var result = await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), new DiscordConfig { Message = "hi" }, CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Null(result.Metadata);
     }
 
     [Theory]
@@ -152,7 +222,7 @@ public sealed class IntegrationChannelTests
     {
         var handler = new FakeHandler(_ => new HttpResponseMessage(status));
 
-        var result = await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), "hi", null, CancellationToken.None);
+        var result = await new DiscordChannel(new SingleClientFactory(handler)).SendAsync(DiscordIntegration(), new DiscordConfig { Message = "hi" }, CancellationToken.None);
 
         Assert.Equal(code, result.Code);
         Assert.Equal(retryable, result.Retryable);
@@ -408,5 +478,10 @@ public sealed class IntegrationChannelTests
     private sealed class BlockingGuard : IOutboundAddressGuard
     {
         public ValueTask<OutboundAddressDecision> EvaluateAsync(Uri uri, CancellationToken ct) => ValueTask.FromResult(OutboundAddressDecision.Block("private address"));
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

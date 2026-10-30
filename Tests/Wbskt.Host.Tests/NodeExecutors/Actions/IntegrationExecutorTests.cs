@@ -21,15 +21,20 @@ public sealed class IntegrationExecutorTests
     [Fact]
     public async Task Discord_posts_through_the_integrations_webhook_and_marks_it_used()
     {
-        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"id\":\"1300000000000000001\",\"channel_id\":\"555\"}", System.Text.Encoding.UTF8, "application/json")
+        });
         var resolver = new StubResolver(Discord());
         var executor = new DiscordNodeExecutor(resolver, new DiscordChannel(new SingleClientFactory(handler)));
 
         var result = Assert.IsType<NodeExecutionResult.Continue>(await executor.ExecuteAsync(DiscordContext("Tank low", "Pump"), CancellationToken.None));
 
         Assert.Equal("default", result.OutboundPort);
-        Assert.Equal(204, result.LocalStatePatch["status"].GetInt32());
-        Assert.Equal(WebhookUrl, handler.LastUri);
+        Assert.Equal(200, result.LocalStatePatch["status"].GetInt32());
+        Assert.Equal("1300000000000000001", result.LocalStatePatch["discord"].GetProperty("messageId").GetString());
+        Assert.Equal("555", result.LocalStatePatch["discord"].GetProperty("channelId").GetString());
+        Assert.Equal(WebhookUrl + "?wait=true", handler.LastUri);
         Assert.Contains("\"content\":\"Tank low\"", handler.LastBody);
         Assert.Equal(IntegrationType.Discord, resolver.Expected);
         Assert.Equal(1, resolver.MarkedUsed);
