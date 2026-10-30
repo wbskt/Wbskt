@@ -614,8 +614,8 @@ public sealed class WorkflowValidator
                 case TelegramNotificationNode telegram when string.IsNullOrWhiteSpace(telegram.Config?.ChatId):
                     issues.Add(new ValidationIssue(ValidationSeverity.Error, "TELEGRAM_CHAT_MISSING", $"Step '{node.Name}' has no chat to send to (chatId).", node.NodeId));
                     break;
-                case DiscordNotificationNode discord when string.IsNullOrWhiteSpace(discord.Config?.Message) || discord.Config.Message.Length > DiscordMaxMessageLength:
-                    issues.Add(new ValidationIssue(ValidationSeverity.Error, "DISCORD_MESSAGE_INVALID", $"Step '{node.Name}': the message must be 1-{DiscordMaxMessageLength} characters.", node.NodeId));
+                case DiscordNotificationNode discord:
+                    ValidateDiscordStep(discord, issues);
                     break;
                 case NtfyNotificationNode ntfy:
                     if (string.IsNullOrWhiteSpace(ntfy.Config?.Message))
@@ -633,8 +633,132 @@ public sealed class WorkflowValidator
         }
     }
 
-    /// <summary>Discord refuses a message longer than this.</summary>
+    // Discord's own limits; a message over any of them is refused whole.
     private const int DiscordMaxMessageLength = 2000;
+    private const int DiscordMaxEmbeds = 10;
+    private const int DiscordMaxEmbedTitle = 256;
+    private const int DiscordMaxEmbedDescription = 4096;
+    private const int DiscordMaxEmbedFields = 25;
+    private const int DiscordMaxFieldName = 256;
+    private const int DiscordMaxFieldValue = 1024;
+    private const int DiscordMaxEmbedFooter = 2048;
+    private const int DiscordMaxEmbedTotal = 6000;
+
+    private static void ValidateDiscordStep(DiscordNotificationNode node, List<ValidationIssue> issues)
+    {
+        var config = node.Config;
+        if (config is null)
+        {
+            return;
+        }
+
+        void Add(string code, string message) =>
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, code, $"Step '{node.Name}': {message}", node.NodeId));
+
+        int embedCount = config.Embeds?.Count ?? 0;
+        if (string.IsNullOrWhiteSpace(config.Message) && embedCount == 0)
+        {
+            Add("DISCORD_MESSAGE_INVALID", "needs a message or at least one embed.");
+        }
+        else if (config.Message?.Length > DiscordMaxMessageLength)
+        {
+            Add("DISCORD_MESSAGE_INVALID", $"the message must be at most {DiscordMaxMessageLength} characters.");
+        }
+
+        if (config.AvatarUrl is not null && !IsHttpUrl(config.AvatarUrl))
+        {
+            Add("DISCORD_AVATAR_URL_INVALID", "avatarUrl must be an absolute http or https URL.");
+        }
+
+        if (config.ThreadId is not null && !IsSnowflake(config.ThreadId))
+        {
+            Add("DISCORD_THREAD_INVALID", "threadId must be a Discord id (digits only).");
+        }
+
+        if (embedCount > DiscordMaxEmbeds)
+        {
+            Add("DISCORD_EMBED_INVALID", $"a message can carry at most {DiscordMaxEmbeds} embeds.");
+        }
+
+        int total = 0;
+        for (int i = 0; i < embedCount; i++)
+        {
+            var embed = config.Embeds![i];
+            string at = $"embed {i + 1}";
+            int fieldCount = embed.Fields?.Count ?? 0;
+
+            if (string.IsNullOrWhiteSpace(embed.Title) && string.IsNullOrWhiteSpace(embed.Description) && fieldCount == 0
+                && string.IsNullOrWhiteSpace(embed.Footer) && embed.ImageUrl is null && embed.ThumbnailUrl is null)
+            {
+                Add("DISCORD_EMBED_INVALID", $"{at} has nothing to show; give it a title, description, field, footer or image.");
+            }
+
+            if (embed.Title?.Length > DiscordMaxEmbedTitle)
+            {
+                Add("DISCORD_EMBED_INVALID", $"{at}: the title must be at most {DiscordMaxEmbedTitle} characters.");
+            }
+
+            if (embed.Description?.Length > DiscordMaxEmbedDescription)
+            {
+                Add("DISCORD_EMBED_INVALID", $"{at}: the description must be at most {DiscordMaxEmbedDescription} characters.");
+            }
+
+            if (embed.Footer?.Length > DiscordMaxEmbedFooter)
+            {
+                Add("DISCORD_EMBED_INVALID", $"{at}: the footer must be at most {DiscordMaxEmbedFooter} characters.");
+            }
+
+            if (embed.Color is not null && !IsHexColor(embed.Color))
+            {
+                Add("DISCORD_EMBED_INVALID", $"{at}: color must be #RRGGBB.");
+            }
+
+            foreach (var (name, url) in new[] { ("url", embed.Url), ("imageUrl", embed.ImageUrl), ("thumbnailUrl", embed.ThumbnailUrl) })
+            {
+                if (url is not null && !IsHttpUrl(url))
+                {
+                    Add("DISCORD_EMBED_INVALID", $"{at}: {name} must be an absolute http or https URL.");
+                }
+            }
+
+            if (fieldCount > DiscordMaxEmbedFields)
+            {
+                Add("DISCORD_EMBED_INVALID", $"{at} can have at most {DiscordMaxEmbedFields} fields.");
+            }
+
+            for (int f = 0; f < fieldCount; f++)
+            {
+                var field = embed.Fields![f];
+                if (string.IsNullOrWhiteSpace(field.Name) || field.Name.Length > DiscordMaxFieldName)
+                {
+                    Add("DISCORD_EMBED_INVALID", $"{at}, field {f + 1}: the name must be 1-{DiscordMaxFieldName} characters.");
+                }
+
+                if (string.IsNullOrWhiteSpace(field.Value) || field.Value.Length > DiscordMaxFieldValue)
+                {
+                    Add("DISCORD_EMBED_INVALID", $"{at}, field {f + 1}: the value must be 1-{DiscordMaxFieldValue} characters.");
+                }
+
+                total += (field.Name?.Length ?? 0) + (field.Value?.Length ?? 0);
+            }
+
+            total += (embed.Title?.Length ?? 0) + (embed.Description?.Length ?? 0) + (embed.Footer?.Length ?? 0);
+        }
+
+        if (total > DiscordMaxEmbedTotal)
+        {
+            Add("DISCORD_EMBED_INVALID", $"the embeds' text adds up to {total} characters; Discord allows {DiscordMaxEmbedTotal} in one message.");
+        }
+    }
+
+    private static bool IsHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+
+    // Discord ids are 64-bit snowflakes written as decimal strings.
+    private static bool IsSnowflake(string value) => value.Length is > 0 and <= 20 && value.All(char.IsAsciiDigit);
+
+    private static bool IsHexColor(string value) =>
+        value.Length == 7 && value[0] == '#' && value.Skip(1).All(char.IsAsciiHexDigit);
 
     private static void ValidateWebhookStep(WebhookNotificationNode node, List<ValidationIssue> issues)
     {

@@ -143,7 +143,7 @@ public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
     {
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
         await using var discord = FakeHttpServer.Start();
-        discord.Respond = _ => (204, string.Empty);
+        discord.Respond = _ => (200, "{\"id\":\"1300000000000000001\",\"channel_id\":\"555\"}");
         var (token, ws) = await _api.NewWorkspaceAsync();
         var hook = IntegrationsApi.RefOf(await _api.CreateAsync(token, ws, IntegrationsApi.Discord("Ops", $"{discord.BaseUrl}/api/webhooks/77/hook-token-abcdef")));
 
@@ -159,6 +159,7 @@ public sealed class IntegrationRunE2ETests(ServicesFixture fixture)
         var post = discord.Requests.Should().ContainSingle().Subject;
         post.Method.Should().Be("POST");
         post.Path.Should().Be("/api/webhooks/77/hook-token-abcdef");
+        post.Query.Should().Be("?wait=true", "the step waits for the message so it can report its id");
         using var body = JsonDocument.Parse(post.Body);
         body.RootElement.GetProperty("content").GetString().Should().Be("@everyone the door is open");
         body.RootElement.GetProperty("username").GetString().Should().Be("Garage");

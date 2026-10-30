@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Integrations;
+using Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 using Wbskt.Workflow.Engine.Contracts;
 using static Wbskt.Workflow.Integrations.IntegrationErrors;
 
@@ -10,9 +11,11 @@ namespace Wbskt.Workflow.Integrations;
 /// A Discord channel webhook. The URL is the credential and may only point at Discord's own hosts
 /// (checked when it is saved), so no address guard is needed.
 /// </summary>
-internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory) : IIntegrationChannel
+internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory, TimeProvider? timeProvider = null) : IIntegrationChannel
 {
     private const string ServiceName = "Discord";
+
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     private static readonly JsonSerializerOptions MessageJsonOptions = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -58,15 +61,21 @@ internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory) : IIn
         }
     }
 
-    public async Task<ChannelResult> SendAsync(ResolvedIntegration integration, string message, string? username, CancellationToken ct)
+    /// <summary>
+    /// Posts the step's message and asks Discord to wait for it to be saved, so the result carries the
+    /// message's <c>messageId</c> and <c>channelId</c>.
+    /// </summary>
+    public async Task<ChannelResult> SendAsync(ResolvedIntegration integration, DiscordConfig config, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, integration.Secrets.WebhookUrl)
+        using var request = new HttpRequestMessage(HttpMethod.Post, SendUri(integration.Secrets.WebhookUrl!, config.ThreadId))
         {
             // No mentions are parsed: a message built from device data must not be able to ping @everyone.
             Content = JsonContent.Create(new
             {
-                content = message,
-                username = string.IsNullOrWhiteSpace(username) ? null : username,
+                content = NullIfBlank(config.Message),
+                username = NullIfBlank(config.Username),
+                avatar_url = NullIfBlank(config.AvatarUrl),
+                embeds = config.Embeds is { Count: > 0 } embeds ? embeds.Select(Embed).ToArray() : null,
                 allowed_mentions = new { parse = Array.Empty<string>() }
             }, options: MessageJsonOptions)
         };
@@ -79,11 +88,60 @@ internal sealed class DiscordChannel(IHttpClientFactory httpClientFactory) : IIn
 
         using (response)
         {
-            return response!.IsSuccessStatusCode
-                ? ChannelResult.Success((int)response.StatusCode)
-                : Scrubbed(HttpChannelSupport.FromStatus(response.StatusCode, ServiceName).ForStep("DISCORD"), integration);
+            if (!response!.IsSuccessStatusCode)
+            {
+                return Scrubbed(HttpChannelSupport.FromStatus(response.StatusCode, ServiceName).ForStep("DISCORD"), integration);
+            }
+
+            JsonElement? sent = null;
+            try
+            {
+                var message = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+                sent = JsonSerializer.SerializeToElement(new
+                {
+                    messageId = message.TryGetProperty("id", out var id) ? id.GetString() : null,
+                    channelId = message.TryGetProperty("channel_id", out var c) ? c.GetString() : null
+                });
+            }
+            catch (JsonException)
+            {
+                // Posted all the same; only the ids are missing.
+            }
+
+            return ChannelResult.Success((int)response.StatusCode, sent);
         }
     }
+
+    private static Uri SendUri(string webhookUrl, string? threadId)
+    {
+        var builder = new UriBuilder(webhookUrl);
+        string query = builder.Query.TrimStart('?');
+        query += (query.Length > 0 ? "&" : string.Empty) + "wait=true";
+        if (!string.IsNullOrWhiteSpace(threadId))
+        {
+            query += "&thread_id=" + Uri.EscapeDataString(threadId);
+        }
+
+        builder.Query = query;
+        return builder.Uri;
+    }
+
+    private object Embed(DiscordEmbed embed) => new
+    {
+        title = NullIfBlank(embed.Title),
+        url = NullIfBlank(embed.Url),
+        description = NullIfBlank(embed.Description),
+        color = embed.Color is { Length: 7 } hex && int.TryParse(hex.AsSpan(1), System.Globalization.NumberStyles.HexNumber, null, out int rgb) ? rgb : (int?)null,
+        fields = embed.Fields is { Count: > 0 } fields
+            ? fields.Select(f => new { name = f.Name, value = f.Value, inline = f.Inline }).ToArray()
+            : null,
+        footer = string.IsNullOrWhiteSpace(embed.Footer) ? null : new { text = embed.Footer },
+        image = string.IsNullOrWhiteSpace(embed.ImageUrl) ? null : new { url = embed.ImageUrl },
+        thumbnail = string.IsNullOrWhiteSpace(embed.ThumbnailUrl) ? null : new { url = embed.ThumbnailUrl },
+        timestamp = embed.Timestamp ? _clock.GetUtcNow().ToString("O") : null
+    };
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     private HttpClient Client() => httpClientFactory.CreateClient(HttpChannelSupport.ClientName);
 }
