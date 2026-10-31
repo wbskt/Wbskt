@@ -42,6 +42,8 @@ public static class HistoryEventKind
     public const string WebhookJsonUnparsable = "WebhookJsonUnparsable";
     // A branch's local state passed 80% of its size limit.
     public const string BranchStateLarge = "BranchStateLarge";
+    // A step's charge took the run past 80% of its credit budget.
+    public const string CreditBudgetLow = "CreditBudgetLow";
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
@@ -66,6 +68,7 @@ public static class HistoryEventKind
                 or CounterReset
                 or WebhookJsonUnparsable
                 or BranchStateLarge
+                or CreditBudgetLow
                 or BranchFailed
                 or NodeRetrying
                 or BranchCancelled

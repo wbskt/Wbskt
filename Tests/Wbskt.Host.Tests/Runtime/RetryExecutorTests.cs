@@ -740,7 +740,7 @@ public sealed class RetryExecutorTests
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var countersMock = new Mock<IRunCountersProvider>();
-        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync((CreditCharge?)null);
 
         NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
             node,
@@ -764,7 +764,7 @@ public sealed class RetryExecutorTests
         var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
 
         var countersMock = new Mock<IRunCountersProvider>();
-        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(new CreditCharge(1m, 100m));
 
         NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
             node,
@@ -780,6 +780,53 @@ public sealed class RetryExecutorTests
         Assert.Equal(1, executor.AttemptCount);
         countersMock.Verify(p => p.TryChargeAsync(42, It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Once);
         countersMock.Verify(p => p.GetByRunIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(85, true)]
+    [InlineData(80, false)]
+    [InlineData(95, false)]
+    public async Task Only_the_charge_that_crosses_80_percent_of_the_budget_warns(int spentAfter, bool warns)
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), 10m, It.IsAny<CancellationToken>())).ReturnsAsync(new CreditCharge(spentAfter, 100m));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), new FixedClock(), CancellationToken.None,
+            countersMock.Object, Mock.Of<ICreditCostCalculator>(c => c.Calculate(It.IsAny<BaseNode>()) == 10m));
+
+        if (warns)
+        {
+            NodeWarning warning = Assert.Single(result.Warnings);
+            Assert.Equal(HistoryEventKind.CreditBudgetLow, warning.EventKind);
+            Assert.Equal($$"""{"spent":{{spentAfter}},"budget":100}""", JsonSerializer.Serialize(warning.Payload));
+        }
+        else
+        {
+            Assert.Empty(result.Warnings);
+        }
+    }
+
+    [Fact]
+    public async Task The_budget_warning_outlives_a_retry_of_the_attempt_that_crossed()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 2, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(
+            new NodeExecutionResult.Fail("E_RETRY", "boom", true, null),
+            new NodeExecutionResult.Terminal(BranchTerminalReason.Completed));
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.SetupSequence(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreditCharge(85m, 100m))
+            .ReturnsAsync(new CreditCharge(95m, 100m));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), new InstantTimeProvider(), CancellationToken.None,
+            countersMock.Object, Mock.Of<ICreditCostCalculator>(c => c.Calculate(It.IsAny<BaseNode>()) == 10m));
+
+        Assert.IsType<NodeExecutionResult.Terminal>(result);
+        Assert.Equal(HistoryEventKind.CreditBudgetLow, Assert.Single(result.Warnings).EventKind);
     }
 
     /// <summary>

@@ -342,6 +342,7 @@ step's `NodeCompleted` / `NodeFailed`. Payloads never carry a value that may be 
 | `CounterReset` | Variable (local counter) | `var`, `kind`: the variable held something other than a number and was counted from 0 |
 | `WebhookJsonUnparsable` | Call a URL | `status`, `contentType`, `error` (a position, never the body): the response said JSON and didn't parse, so `json` was cleared |
 | `BranchStateLarge` | branch loop | `bytes`, `limit`, `largestKeys`: the step took the branch's local state past 80% of `MaxBranchLocalStateBytes`; written on the step that crosses the line, not on the steps after it while the state stays above |
+| `CreditBudgetLow` | retry executor | `spent`, `budget`: the step's charge took the run past 80% of its credit budget; written once per run, on the crossing charge |
 
 ## 11. Metrics
 

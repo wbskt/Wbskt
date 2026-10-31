@@ -290,7 +290,7 @@ public sealed class ErrorModelE2ETests
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
     }
 
     private sealed class InMemoryBookmarkProvider(InMemoryState state) : IBookmarkProvider

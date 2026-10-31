@@ -474,7 +474,7 @@ public sealed class BookmarkResumerBranchLoopIntegrationTests
         }
 
         public Task<long> SumActiveBranchesAsync(CancellationToken ct) => Task.FromResult((long)_activeBranches);
-        public Task<bool> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult(true);
+        public Task<CreditCharge?> TryChargeAsync(int runId, decimal cost, CancellationToken ct) => Task.FromResult<CreditCharge?>(new CreditCharge(0m, decimal.MaxValue));
         Task<BookmarkRow> IBookmarkProvider.CreateAsync(BookmarkRow row, CancellationToken ct)
         {
             Bookmarks.Add(row);

@@ -7,11 +7,12 @@ BEGIN
 
     -- Atomic budget-checked charge: the WHERE clause re-checks the budget under the same
     -- row lock as the increment, so concurrent callers on the same run can never overshoot
-    -- CreditBudget between them. Zero rows returned means the run is out of credits.
+    -- CreditBudget between them. Zero rows returned means the run is out of credits;
+    -- otherwise the row is the run's new total and its budget.
     UPDATE rc WITH (ROWLOCK)
     SET rc.CreditsConsumed = rc.CreditsConsumed + @Cost,
         rc.UpdatedAt = SYSUTCDATETIME()
-    OUTPUT inserted.CreditsConsumed
+    OUTPUT inserted.CreditsConsumed, r.CreditBudget
     FROM dbo.RunCounters rc
     JOIN dbo.Runs r ON r.Id = rc.RunId
     WHERE rc.RunId = @RunId
