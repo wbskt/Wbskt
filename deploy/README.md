@@ -641,8 +641,8 @@ Three stages, because a backup that never leaves the machine is not a backup:
 1. `BACKUP DATABASE ... WITH CHECKSUM` into a staging directory on the `sql-data`
    volume — a subdirectory of `/var/opt/mssql` specifically, because that path is already owned by
    the non-root `mssql` user the image runs as. Not `WITH COMPRESSION`: Express refuses it.
-2. `RESTORE VERIFYONLY WITH CHECKSUM`, then the file is copied out to `BACKUP_DIR` on the host,
-   gzipped there (`<database>_<stamp>.bak.gz`) and the staged copy deleted. A backup that does not
+2. `RESTORE VERIFYONLY WITH CHECKSUM`, then the file is gzipped on its way out to `BACKUP_DIR` on
+   the host (`<database>_<stamp>.bak.gz`) and the staged copy deleted. A backup that does not
    verify is treated as no backup at all.
 3. `BACKUP_UPLOAD_CMD` pushes `BACKUP_DIR` off the box.
 

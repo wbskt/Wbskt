@@ -310,8 +310,8 @@ deploy_backend() {
         # (an edition or memory setting, a new image), restarting the database mid-deploy. Changing
         # sql is a deliberate step of its own (see "SQL Server edition" in deploy/README.md).
         echo "==> running incremental database migration"
-        docker compose ps --status running --services 2>/dev/null | grep -qx sql \
-            || die "the sql service is not running; start it (docker compose up -d sql) and deploy again"
+        # The dependency wait --no-deps gives up: sql must be up and healthy, as after a VM reboot.
+        wait_for_health sql
         docker compose --profile migrate pull migrator
         MIGRATE_FRESH=false MIGRATE_ALLOW_DATA_LOSS=false \
             docker compose --profile migrate run --rm --no-deps migrator
