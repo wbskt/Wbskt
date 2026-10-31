@@ -279,6 +279,57 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatch_records_what_each_trigger_did_with_the_event()
+    {
+        // "I sent the message and nothing happened": the trigger's recent outcomes say why (#416).
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel) with { FilterExpression = Filter("messageType", "not-telemetry") };
+        var outcomes = new RecordingOutcomeProvider();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            outcomeLog: RecordingOutcomeProvider.Log(outcomes));
+        InboundEvent evt = CreateInboundEvent();
+
+        await dispatcher.DispatchAsync(evt, CancellationToken.None);
+
+        TriggerDispatchOutcomeRow row = Assert.Single(outcomes.Records);
+        Assert.Equal(registration.WorkflowRefId, row.WorkflowRefId);
+        Assert.Equal(registration.TriggerNodeId, row.TriggerNodeId);
+        Assert.Equal(nameof(TriggerDispatchOutcome.Filtered), row.Outcome);
+        Assert.Equal("client", row.ChannelKind);
+        Assert.Equal("telemetry", row.MessageType);
+        Assert.Equal(evt.ReceivedAt, row.OccurredAt);
+        Assert.Null(row.RunRefId);
+    }
+
+    [Fact]
+    public async Task Dispatch_records_the_run_a_trigger_started()
+    {
+        var outcomes = new RecordingOutcomeProvider();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            outcomeLog: RecordingOutcomeProvider.Log(outcomes));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        TriggerDispatchOutcomeRow row = Assert.Single(outcomes.Records);
+        Assert.Equal(nameof(TriggerDispatchOutcome.StartedRun), row.Outcome);
+        Assert.Equal(result.RunRefId, row.RunRefId);
+        Assert.Equal(result.Reason, row.CorrelationKey);
+    }
+
+    [Fact]
+    public async Task A_failed_outcome_record_does_not_fail_the_dispatch()
+    {
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            outcomeLog: RecordingOutcomeProvider.Log(new RecordingOutcomeProvider(fail: true)));
+
+        TriggerDispatchResult result = await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
+    }
+
+    [Fact]
     public async Task Dispatch_skips_a_registration_whose_filter_rejects_the_payload()
     {
         // The whole point of a filter: no run, no credits burned, no run history to explain.
@@ -817,7 +868,8 @@ public sealed class TriggerDispatcherTests
         RecordingRunDispatcher? runDispatcher = null,
         InMemoryIdempotencyKeyProvider? idempotency = null,
         Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>? logger = null,
-        IRunRefusalReporter? refusalReporter = null)
+        IRunRefusalReporter? refusalReporter = null,
+        TriggerOutcomeLog? outcomeLog = null)
     {
         return new TriggerDispatcher(
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
@@ -831,7 +883,8 @@ public sealed class TriggerDispatcherTests
             idempotency ?? new InMemoryIdempotencyKeyProvider(),
             new ExpressionEvaluator(new DispatcherTestClock()),
             logger,
-            refusalReporter);
+            refusalReporter,
+            outcomeLog);
     }
 
     private sealed class LevelRecorder : Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>

@@ -4,6 +4,7 @@ using Wbskt.Workflow.Abstraction.Entities;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.Providers;
+using Wbskt.Workflow.Runtime;
 
 namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 
@@ -20,7 +21,11 @@ namespace Wbskt.Workflow.Engine.Host.InboundAdapters;
 /// a due hold through the trigger dispatcher, which reads the registration again and drops the hold
 /// when it is gone.
 /// </remarks>
-public sealed class ClientHoldRecorder(IClientHoldStateProvider provider, ITriggerFilterEvaluator filterEvaluator, ITriggerRegistrationCache registrationCache)
+public sealed class ClientHoldRecorder(
+    IClientHoldStateProvider provider,
+    ITriggerFilterEvaluator filterEvaluator,
+    ITriggerRegistrationCache registrationCache,
+    TriggerOutcomeLog? outcomeLog = null)
 {
     public async Task RecordAsync(InboundEvent message, Guid clientRefId, string messageType, int workspaceId, DateTime sentAtUtc, CancellationToken ct)
     {
@@ -46,6 +51,11 @@ public sealed class ClientHoldRecorder(IClientHoldStateProvider provider, ITrigg
 
             bool matches = await filterEvaluator.PassesAsync(registration, message, ct);
             await provider.RecordAsync(registration.TriggerKey, matches, sentAtUtc, holdSeconds, payload, ct);
+            if (outcomeLog is not null)
+            {
+                string outcome = matches ? TriggerDispatchOutcomeRow.HeldOutcome : nameof(TriggerDispatchOutcome.Filtered);
+                await outcomeLog.RecordAsync(message, registration, outcome, null, null, ct);
+            }
         }
     }
 }
