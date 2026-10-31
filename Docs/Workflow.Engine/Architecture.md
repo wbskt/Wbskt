@@ -99,6 +99,12 @@ For each inbound event:
      `DropIfRunning`, `Queue` (to `PendingTriggerEvents`) or `CancelExisting` (cancel every matching
      run, then start);
    * start the run with `RunStarter`.
+
+   The policy reads the active runs before the start, so `Run_Start` checks again (`ActiveRunGuard`)
+   under a transaction applock on `trigger-start:{workflow}:{triggerNode}:{sha256(key)}`: any active
+   run for `DropIfRunning` and `Queue`, any not already `Cancelling` for `CancelExisting`. A start that
+   finds one is refused (50028) and the dispatcher decides again, up to three times. Skipped for
+   `AllowParallel` and for events without a correlation key.
 5. **Outcome** per registration: `StartedRun`, `Queued`, `Dropped`, `Refused`, `Filtered`,
    `SecretMismatch`, `NoRegistration`, `Idempotent` or `ResumedBookmark`.
 

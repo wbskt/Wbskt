@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using Wbskt.Workflow.Abstraction.Configuration;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
@@ -15,6 +16,7 @@ namespace Wbskt.Workflow.Runtime;
 internal sealed class RunStarter : IRunStarter
 {
     private const int WorkspaceRunCeilingError = 50026; // THROW in dbo.Run_Start
+    private const int ActiveRunConflictError = 50028; // THROW in dbo.Run_Start
 
     private readonly IRunProvider _runProvider;
     private readonly IRunJournal _journal;
@@ -56,7 +58,7 @@ internal sealed class RunStarter : IRunStarter
         _logger = logger;
     }
 
-    public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false)
+    public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None)
     {
         try
         {
@@ -111,7 +113,12 @@ internal sealed class RunStarter : IRunStarter
                     triggerStartKey,
                     definition.WorkspaceId,
                     exemptFromCeiling ? null : _maxActiveRunsPerWorkspace,
+                    activeRunGuard,
                     ct);
+            }
+            catch (SqlException ex) when (ex.Number == ActiveRunConflictError)
+            {
+                throw new ActiveRunConflictException(correlationKey);
             }
             catch (SqlException ex) when (ex.Number == WorkspaceRunCeilingError)
             {
@@ -163,7 +170,7 @@ internal sealed class RunStarter : IRunStarter
 
             return new RunStartResult(createdRun.Id, createdRun.RefId, started.RootBranchId, true);
         }
-        catch (Exception ex) when (ex is not WorkspaceRunCeilingException)
+        catch (Exception ex) when (ex is not WorkspaceRunCeilingException and not ActiveRunConflictException)
         {
             _logger?.LogError(ex, "Failed to start run for workflow definition {WorkflowDefinitionId} and trigger {TriggerNodeId}", workflowDefinitionId, triggerNodeId);
             throw;

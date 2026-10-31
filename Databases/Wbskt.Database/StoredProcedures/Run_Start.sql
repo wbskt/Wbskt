@@ -12,7 +12,8 @@ CREATE PROCEDURE dbo.Run_Start
     @BranchLocalJson      NVARCHAR(MAX),
     @WorkspaceId          INT = NULL,
     @MaxActiveRuns        INT = NULL,
-    @ParentRunRefId       UNIQUEIDENTIFIER = NULL
+    @ParentRunRefId       UNIQUEIDENTIFIER = NULL,
+    @ActiveRunGuard       TINYINT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -35,6 +36,29 @@ BEGIN
     BEGIN
         BEGIN TRY
             BEGIN TRANSACTION;
+
+            -- The concurrency policy read the active runs before this call; another event with the
+            -- same key may have started one since (#467). Checked again under a lock per workflow,
+            -- trigger and key so concurrent starts take turns. ActiveRunGuard: 1 refuses while any run
+            -- is active (DropIfRunning, Queue), 2 ignores Cancelling, which is where CancelExisting has
+            -- just put the runs it found. Taken before the workspace lock below, always in that order.
+            IF @ActiveRunGuard > 0 AND @CorrelationKey IS NOT NULL
+            BEGIN
+                DECLARE @KeyResource NVARCHAR(255) = CONCAT(N'trigger-start:', @WorkflowRefId, N':', @TriggerNodeId, N':',
+                    CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', @CorrelationKey), 2));
+                DECLARE @KeyLockResult INT;
+                EXEC @KeyLockResult = sp_getapplock @Resource = @KeyResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+                IF @KeyLockResult < 0
+                    THROW 50028, 'Another start for this trigger and correlation key is in progress.', 1;
+
+                IF EXISTS (SELECT 1
+                           FROM dbo.Runs
+                           WHERE WorkflowRefId = @WorkflowRefId
+                             AND TriggerNodeId = @TriggerNodeId
+                             AND CorrelationKey = @CorrelationKey
+                             AND (Status IN (N'Running', N'Failing') OR (@ActiveRunGuard = 1 AND Status = N'Cancelling')))
+                    THROW 50028, 'A run is already active for this trigger and correlation key.', 1;
+            END
 
             -- The workspace's ceiling on runs going at once (Running, Failing or Cancelling, as in
             -- IX_Runs_WorkflowRefId_CorrelationKey_Active). Counted under an application lock per

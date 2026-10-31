@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Engine.Host.IntegrationTests.Infrastructure;
 
@@ -13,6 +14,7 @@ namespace Wbskt.Workflow.Engine.Host.IntegrationTests.Providers;
 public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
 {
     private const int WorkspaceRunCeilingError = 50026;
+    private const int ActiveRunConflictError = 50028;
     private const string SkipReason = "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.";
 
     [SkippableFact]
@@ -244,6 +246,110 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(WorkspaceRunCeilingError);
         await tx.RollbackAsync();
         (await ProviderFactory.Run(fixture.ConnectionString).FindRowByRefIdAsync(run.RefId, CancellationToken.None)).Should().BeNull();
+    }
+
+    [SkippableFact]
+    public async Task A_guarded_start_is_refused_while_a_run_holds_its_key()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        await runProvider.StartAsync(first, firstBranch, null, 0, null, ActiveRunGuard.AnyActive, CancellationToken.None);
+
+        (RunRow sameKey, BranchRow sameKeyBranch) = SameTrigger(first, wd, first.CorrelationKey!);
+        Func<Task> act = () => runProvider.StartAsync(sameKey, sameKeyBranch, null, 0, null, ActiveRunGuard.AnyActive, CancellationToken.None);
+        (RunRow otherKey, BranchRow otherKeyBranch) = SameTrigger(first, wd, "another-key");
+        RunStartRow otherStarted = await runProvider.StartAsync(otherKey, otherKeyBranch, null, 0, null, ActiveRunGuard.AnyActive, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(ActiveRunConflictError);
+        (await runProvider.FindRowByRefIdAsync(sameKey.RefId, CancellationToken.None)).Should().BeNull();
+        otherStarted.Created.Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task A_start_guarded_for_CancelExisting_passes_a_run_that_is_cancelling()
+    {
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow first, BranchRow firstBranch) = NewRun(wd);
+        RunStartRow firstStarted = await runProvider.StartAsync(first, firstBranch, null, 0, null, ActiveRunGuard.None, CancellationToken.None);
+        await runProvider.TransitionStatusAsync(firstStarted.Run.Id, RunStatus.Running, RunStatus.Cancelling, DateTime.UtcNow, "IT", CancellationToken.None);
+
+        (RunRow drop, BranchRow dropBranch) = SameTrigger(first, wd, first.CorrelationKey!);
+        Func<Task> dropAct = () => runProvider.StartAsync(drop, dropBranch, null, 0, null, ActiveRunGuard.AnyActive, CancellationToken.None);
+        (RunRow replace, BranchRow replaceBranch) = SameTrigger(first, wd, first.CorrelationKey!);
+        RunStartRow replaced = await runProvider.StartAsync(replace, replaceBranch, null, 0, null, ActiveRunGuard.NotCancelling, CancellationToken.None);
+
+        replaced.Created.Should().BeTrue();
+        (await dropAct.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(ActiveRunConflictError);
+    }
+
+    [SkippableFact]
+    public async Task Guarded_starts_that_meet_on_one_key_create_one_run()
+    {
+        // #467. Both starts are held at the key's lock until both are waiting, so they really do meet.
+        Skip.IfNot(fixture.IsAvailable, SkipReason);
+
+        WorkflowDefinitionRow wd = await CreateDefinitionAsync();
+        var runProvider = ProviderFactory.Run(fixture.ConnectionString);
+        (RunRow a, BranchRow aBranch) = NewRun(wd);
+        (RunRow b, BranchRow bBranch) = SameTrigger(a, wd, a.CorrelationKey!);
+
+        await using var holder = new SqlConnection(fixture.ConnectionString);
+        await holder.OpenAsync();
+        await using SqlTransaction tx = (SqlTransaction)await holder.BeginTransactionAsync();
+        await using (var hold = new SqlCommand(
+            """
+            DECLARE @Resource NVARCHAR(255) = CONCAT(N'trigger-start:', @WorkflowRefId, N':', @TriggerNodeId, N':',
+                CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', @CorrelationKey), 2));
+            EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
+            """, holder, tx))
+        {
+            hold.Parameters.AddWithValue("@WorkflowRefId", a.WorkflowRefId);
+            hold.Parameters.AddWithValue("@TriggerNodeId", a.TriggerNodeId);
+            hold.Parameters.AddWithValue("@CorrelationKey", a.CorrelationKey!);
+            await hold.ExecuteNonQueryAsync();
+        }
+
+        Task<RunStartRow> startA = runProvider.StartAsync(a, aBranch, null, 0, null, ActiveRunGuard.AnyActive, CancellationToken.None);
+        Task<RunStartRow> startB = runProvider.StartAsync(b, bBranch, null, 0, null, ActiveRunGuard.AnyActive, CancellationToken.None);
+        await WaitForAppLockWaitersAsync(2);
+        await tx.RollbackAsync();
+
+        Task all = Task.WhenAll(startA, startB);
+        try { await all; } catch (SqlException) { }
+
+        new[] { startA, startB }.Count(t => t.IsCompletedSuccessfully).Should().Be(1);
+        Task<RunStartRow> refused = startA.IsCompletedSuccessfully ? startB : startA;
+        refused.Exception!.InnerException.Should().BeOfType<SqlException>().Which.Number.Should().Be(ActiveRunConflictError);
+    }
+
+    private static (RunRow Run, BranchRow Branch) SameTrigger(RunRow existing, WorkflowDefinitionRow wd, string correlationKey)
+    {
+        (RunRow run, BranchRow branch) = NewRun(wd);
+        return (run with { TriggerNodeId = existing.TriggerNodeId, CorrelationKey = correlationKey }, branch with { NodeId = existing.TriggerNodeId });
+    }
+
+    private async Task WaitForAppLockWaitersAsync(int count)
+    {
+        await using var probe = new SqlConnection(fixture.ConnectionString);
+        await probe.OpenAsync();
+        for (int i = 0; i < 100; i++)
+        {
+            await using var cmd = new SqlCommand("SELECT COUNT(*) FROM sys.dm_tran_locks WHERE resource_type = 'APPLICATION' AND request_status = 'WAIT'", probe);
+            if ((int)(await cmd.ExecuteScalarAsync())! >= count)
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException($"Fewer than {count} sessions ever waited on an application lock.");
     }
 
     private static int NewWorkspaceId() => Random.Shared.Next(1_000_000, int.MaxValue);

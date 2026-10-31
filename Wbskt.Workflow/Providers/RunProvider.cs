@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Wbskt.Infrastructure;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Providers;
 
 namespace Wbskt.Workflow.Providers;
@@ -37,7 +38,10 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
     public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, CancellationToken ct)
         => StartAsync(run, rootBranch, triggerStartKey, 0, null, ct);
 
-    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
+    public Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, CancellationToken ct)
+        => StartAsync(run, rootBranch, triggerStartKey, workspaceId, maxActiveRuns, ActiveRunGuard.None, ct);
+
+    public async Task<RunStartRow> StartAsync(RunRow run, BranchRow rootBranch, string? triggerStartKey, int workspaceId, int? maxActiveRuns, ActiveRunGuard activeRunGuard, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.Run_Start",
@@ -55,6 +59,7 @@ internal sealed class RunProvider : BaseSqlProvider, IRunProvider
                 p.AddWithValue("@BranchRefId", rootBranch.RefId);
                 p.AddWithValue("@BranchLocalJson", rootBranch.LocalJson);
                 p.AddWithValue("@ParentRunRefId", (object?)run.ParentRunRefId ?? DBNull.Value);
+                p.AddWithValue("@ActiveRunGuard", (byte)activeRunGuard);
                 if (maxActiveRuns is not null)
                 {
                     p.AddWithValue("@WorkspaceId", workspaceId);

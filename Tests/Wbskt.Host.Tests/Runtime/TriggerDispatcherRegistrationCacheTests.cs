@@ -1,3 +1,4 @@
+using Wbskt.Workflow.Abstraction.Enums;
 using System.Text.Json;
 using Moq;
 using Wbskt.Workflow.Abstraction.Entities;
@@ -45,7 +46,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
 
         Assert.Equal(TriggerDispatchOutcome.StartedRun, result.Outcome);
         Assert.Equal(2, harness.Registrations.Reads);
-        harness.RunStarter.Verify(s => s.StartAsync(105, It.IsAny<string>(), It.IsAny<InboundEvent>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Once);
+        harness.RunStarter.Verify(s => s.StartAsync(105, It.IsAny<string>(), It.IsAny<InboundEvent>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<ActiveRunGuard>()), Times.Once);
     }
 
     [Fact]
@@ -63,7 +64,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
         Assert.Equal(TriggerDispatchOutcome.NoRegistration, second.Outcome);
         Assert.Equal(2, harness.Registrations.Reads);
         Assert.Equal([true, false], harness.Bookmarks.HasRegistrations);
-        harness.RunStarter.Verify(s => s.StartAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<InboundEvent>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Once);
+        harness.RunStarter.Verify(s => s.StartAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<InboundEvent>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<ActiveRunGuard>()), Times.Once);
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public sealed class TriggerDispatcherRegistrationCacheTests
         public Harness(params TriggerRegistrationRow[] rows)
         {
             Registrations = new CountingRegistrationProvider(rows);
-            RunStarter.Setup(s => s.StartAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<InboundEvent>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()))
+            RunStarter.Setup(s => s.StartAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<InboundEvent>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<ActiveRunGuard>()))
                 .ReturnsAsync(() => new RunStartResult(1, Guid.NewGuid(), 2, true));
             var enforcer = new Mock<ITriggerConcurrencyEnforcer>();
             enforcer.Setup(e => e.EvaluateAsync(It.IsAny<TriggerRegistrationRow>(), It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))

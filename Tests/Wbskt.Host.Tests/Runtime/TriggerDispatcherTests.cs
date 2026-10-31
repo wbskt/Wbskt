@@ -671,6 +671,87 @@ public sealed class TriggerDispatcherTests
         CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel, id: 6, workflowRefId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")));
 
     /// <summary>Lets every registration proceed, except that it throws the first time it sees one.</summary>
+    [Fact]
+    public async Task Simultaneous_events_with_one_key_start_one_run_under_DropIfRunning()
+    {
+        // #467: the first event reads "nothing running", then the second starts a run before the first
+        // gets to Run_Start. The first must lose at the start's guard and decide again, not start a second.
+        var runStarter = new RecordingRunStarter([]) { EnforceGuard = true };
+        var enforcer = new CheckThenActEnforcer(runStarter);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.DropIfRunning)),
+            concurrencyEnforcer: enforcer,
+            runStarter: runStarter);
+
+        Task<TriggerDispatchResult> first = dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+        await enforcer.FirstReading.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        TriggerDispatchResult second = await dispatcher.DispatchAsync(CreateInboundEvent() with { InboundEventId = "evt-2" }, CancellationToken.None);
+        enforcer.ReleaseFirst.SetResult();
+        TriggerDispatchResult firstResult = await first;
+
+        Assert.Equal(1, runStarter.RunsCreated);
+        Assert.Equal(TriggerDispatchOutcome.StartedRun, second.Outcome);
+        Assert.Equal(TriggerDispatchOutcome.Dropped, firstResult.Outcome);
+    }
+
+    [Theory]
+    [InlineData(WorkflowConcurrencyPolicy.AllowParallel, ActiveRunGuard.None)]
+    [InlineData(WorkflowConcurrencyPolicy.DropIfRunning, ActiveRunGuard.AnyActive)]
+    [InlineData(WorkflowConcurrencyPolicy.Queue, ActiveRunGuard.AnyActive)]
+    [InlineData(WorkflowConcurrencyPolicy.CancelExisting, ActiveRunGuard.NotCancelling)]
+    public async Task Dispatch_asks_the_start_to_guard_against_active_runs_by_policy(WorkflowConcurrencyPolicy policy, ActiveRunGuard expected)
+    {
+        var runStarter = new RecordingRunStarter([]);
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(policy)),
+            runStarter: runStarter);
+
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal([expected], runStarter.Guards);
+    }
+
+    [Fact]
+    public async Task Dispatch_gives_up_after_losing_the_start_race_three_times()
+    {
+        var runStarter = new RecordingRunStarter([]) { AlwaysConflict = true };
+        var idempotency = new InMemoryIdempotencyKeyProvider();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.DropIfRunning)),
+            runStarter: runStarter,
+            idempotency: idempotency);
+
+        await Assert.ThrowsAsync<ActiveRunConflictException>(() => dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None));
+
+        Assert.Equal(3, runStarter.Guards.Count);
+        Assert.Contains("trigger-start:5:" + EventHash("evt-1"), idempotency.Failed);
+    }
+
+    /// <summary>
+    /// Drops when the starter has started anything, as the real enforcer does when it finds an active run.
+    /// Holds the first evaluation after its read and before its answer, the window #467 raced in.
+    /// </summary>
+    private sealed class CheckThenActEnforcer(RecordingRunStarter runStarter) : ITriggerConcurrencyEnforcer
+    {
+        private int _evaluations;
+
+        public TaskCompletionSource FirstReading { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseFirst { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<TriggerConcurrencyDecision> EvaluateAsync(TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
+        {
+            bool active = runStarter.RunsCreated > 0;
+            if (Interlocked.Increment(ref _evaluations) == 1)
+            {
+                FirstReading.SetResult();
+                await ReleaseFirst.Task;
+            }
+
+            return new TriggerConcurrencyDecision(active ? TriggerConcurrencyOutcome.Dropped : TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns);
+        }
+    }
+
     private sealed class FlakyConcurrencyEnforcer(long? failOnceFor) : ITriggerConcurrencyEnforcer
     {
         private bool _failed;
@@ -953,6 +1034,7 @@ public sealed class TriggerDispatcherTests
     {
         private readonly Lock _gate = new();
         private readonly Dictionary<string, RunStartResult> _byKey = [];
+        private readonly HashSet<string> _activeCorrelationKeys = [];
         private int _started;
 
         /// <summary>Awaited inside every start, so a test can hold an attempt mid-start.</summary>
@@ -969,12 +1051,25 @@ public sealed class TriggerDispatcherTests
         /// <summary>What each start was told about the ceiling, in order.</summary>
         public List<bool> ExemptFromCeiling { get; } = [];
 
-        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false)
+        /// <summary>The active-run guard each start was given, in order.</summary>
+        public List<ActiveRunGuard> Guards { get; } = [];
+
+        /// <summary>
+        /// Refuses a guarded start while a run it created holds the same correlation key, as Run_Start does.
+        /// Runs never finish here, so a key once taken stays taken.
+        /// </summary>
+        public bool EnforceGuard { get; init; }
+
+        /// <summary>Refuses every guarded start, as for a key that never stops losing the race.</summary>
+        public bool AlwaysConflict { get; init; }
+
+        public async Task<RunStartResult> StartAsync(int workflowDefinitionId, string triggerNodeId, InboundEvent triggerEvent, string? triggerStartKey, CancellationToken ct, bool exemptFromCeiling = false, ActiveRunGuard activeRunGuard = ActiveRunGuard.None)
         {
             lock (_gate)
             {
                 operations.Add("start");
                 ExemptFromCeiling.Add(exemptFromCeiling);
+                Guards.Add(activeRunGuard);
                 if ((AtCeiling || RefuseFirst) && !exemptFromCeiling)
                 {
                     RefuseFirst = false;
@@ -984,6 +1079,12 @@ public sealed class TriggerDispatcherTests
                 if (triggerStartKey != null && _byKey.TryGetValue(triggerStartKey, out RunStartResult? existing))
                 {
                     return existing with { Created = false };
+                }
+
+                if (activeRunGuard != ActiveRunGuard.None
+                    && (AlwaysConflict || (EnforceGuard && _activeCorrelationKeys.Contains(triggerEvent.CorrelationKey ?? string.Empty))))
+                {
+                    throw new ActiveRunConflictException(triggerEvent.CorrelationKey ?? string.Empty);
                 }
             }
 
@@ -996,6 +1097,7 @@ public sealed class TriggerDispatcherTests
             {
                 // Distinct ids per call so a fan-out over several registrations is distinguishable.
                 int offset = _started++;
+                _activeCorrelationKeys.Add(triggerEvent.CorrelationKey ?? string.Empty);
                 var created = new RunStartResult(501L + offset, RunRefFor(501L + offset), 801L + offset, true);
                 if (triggerStartKey != null)
                 {
