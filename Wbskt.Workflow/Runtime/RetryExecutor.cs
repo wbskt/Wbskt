@@ -81,6 +81,7 @@ internal static class RetryExecutor
         int startAttempt = Math.Clamp(firstAttempt, 1, Math.Max(1, policy.MaxAttempts));
 
         // Held across attempts: the charge that crosses the line may be on an attempt that is retried.
+        // Every way out of an attempt carries its warnings, a retry park and a thrown failure included.
         List<NodeWarning> chargeWarnings = [];
 
         for (int attempt = startAttempt; attempt <= policy.MaxAttempts; attempt++)
@@ -237,7 +238,7 @@ internal static class RetryExecutor
                         new Dictionary<string, JsonElement>
                         {
                             [RetryAttemptKey] = JsonSerializer.SerializeToElement(attempt + 1)
-                        });
+                        }) { Warnings = fail.Warnings };
                 }
 
                 // On the injected clock, not the wall clock, so backoff follows the same time source as
@@ -301,7 +302,7 @@ internal static class RetryExecutor
             }
             catch (TransientNodeException ex)
             {
-                var fail = new NodeExecutionResult.Fail("TRANSIENT_ERROR", ex.Message, true, ex);
+                var fail = new NodeExecutionResult.Fail("TRANSIENT_ERROR", ex.Message, true, ex) { Warnings = nodeContext.Warnings.ToArray() };
                 string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);
@@ -313,7 +314,7 @@ internal static class RetryExecutor
             }
             catch (PermanentNodeException ex)
             {
-                var fail = new NodeExecutionResult.Fail(ex.ErrorCode, ex.Message, false, ex);
+                var fail = new NodeExecutionResult.Fail(ex.ErrorCode, ex.Message, false, ex) { Warnings = nodeContext.Warnings.ToArray() };
                 string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);
@@ -331,7 +332,7 @@ internal static class RetryExecutor
             }
             catch (Exception ex)
             {
-                var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex);
+                var fail = new NodeExecutionResult.Fail("EXECUTOR_CRASH", ex.Message, false, ex) { Warnings = nodeContext.Warnings.ToArray() };
                 string errorJson = JsonSerializer.Serialize(fail, EngineJson.Options);
 
                 await RecordOutcomeAsync(false, errorJson);
