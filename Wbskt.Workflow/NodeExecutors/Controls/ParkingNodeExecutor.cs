@@ -66,7 +66,7 @@ internal abstract class ParkingNodeExecutor : INodeExecutor
         {
         }
 
-        /// <summary>Go on waiting on what the node parked on (see <see cref="KeepWaitingOn"/>).</summary>
+        /// <summary>Go on waiting on what the node parked on (see <see cref="KeepWaitingOnAsync"/>).</summary>
         public static ResumeStep KeepWaiting { get; } = new Wait();
 
         /// <summary>The park is spent: run the first visit again, which parks afresh.</summary>
@@ -91,7 +91,7 @@ internal abstract class ParkingNodeExecutor : INodeExecutor
 
     /// <summary>
     /// A resume visit with no wake of this node's on the branch: none at all, or a stale one once going
-    /// on waiting is not possible (the deadline has passed, or <see cref="KeepWaitingOn"/> has nothing).
+    /// on waiting is not possible (the deadline has passed, or <see cref="KeepWaitingOnAsync"/> has nothing).
     /// <paramref name="deadlinePassed"/> is false when the node keeps no deadline.
     /// </summary>
     protected abstract ResumeStep OnNoWake(NodeContext ctx, string? waitingOn, bool deadlinePassed);
@@ -101,7 +101,7 @@ internal abstract class ParkingNodeExecutor : INodeExecutor
     /// left of the deadline. Null when the marker does not say what that was; a stale wake then goes to
     /// <see cref="OnNoWake"/>, and a <see cref="ResumeStep.KeepWaiting"/> starts over.
     /// </summary>
-    protected abstract WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline);
+    protected abstract ValueTask<WakeCondition?> KeepWaitingOnAsync(NodeContext ctx, string? waitingOn, DateTime? deadline, CancellationToken ct);
 
     /// <summary>
     /// True when the branch holds a park of this node written before the marker named its node and
@@ -140,13 +140,14 @@ internal abstract class ParkingNodeExecutor : INodeExecutor
             case ResumeStep.Leave exit:
                 return Leave(exit);
 
-            case ResumeStep.Wait when KeepWaitingOn(ctx, waitingOn, deadline) is { } condition:
-                return KeepWaiting(condition, deadline);
+            case ResumeStep.Wait:
+                if (await KeepWaitingOnAsync(ctx, waitingOn, deadline, ct) is { } condition)
+                {
+                    return KeepWaiting(condition, deadline);
+                }
 
-            case ResumeStep.Wait when owner != ParkMarker.WakeOwner.None:
                 // Nothing to go on waiting on: decide as if no wake had come.
-                step = OnNoWake(ctx, waitingOn, deadlinePassed);
-                if (step is ResumeStep.Leave staleExit)
+                if (owner != ParkMarker.WakeOwner.None && OnNoWake(ctx, waitingOn, deadlinePassed) is ResumeStep.Leave staleExit)
                 {
                     return Leave(staleExit);
                 }

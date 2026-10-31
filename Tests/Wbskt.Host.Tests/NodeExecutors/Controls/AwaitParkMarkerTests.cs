@@ -30,7 +30,7 @@ public sealed class AwaitParkMarkerTests
     [Fact]
     public async Task Two_AwaitSignal_nodes_in_sequence_each_park()
     {
-        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0));
+        var executor = new AwaitSignalNodeExecutor(new MutableClock(T0), Actions.TestTemplates.Create());
         AwaitSignalNode first = Await("first");
         AwaitSignalNode second = Await("second");
         var state = new Dictionary<string, JsonElement>();
@@ -50,7 +50,7 @@ public sealed class AwaitParkMarkerTests
     [Fact]
     public async Task AwaitSignal_inside_a_ForEach_parks_on_every_iteration()
     {
-        var awaitExecutor = new AwaitSignalNodeExecutor(new MutableClock(T0));
+        var awaitExecutor = new AwaitSignalNodeExecutor(new MutableClock(T0), Actions.TestTemplates.Create());
         var loopExecutor = new ForEachNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
         var loop = new ForEachNode { NodeId = Guid.NewGuid(), Name = "loop", Ports = [], Config = new ForEachConfig { Collection = "items" } };
         AwaitSignalNode wait = Await("approve");
@@ -84,7 +84,7 @@ public sealed class AwaitParkMarkerTests
     public async Task Ttl_timeout_after_an_earlier_successful_await_exits_via_timeout()
     {
         var clock = new MutableClock(T0);
-        var executor = new AwaitSignalNodeExecutor(clock);
+        var executor = new AwaitSignalNodeExecutor(clock, Actions.TestTemplates.Create());
         AwaitSignalNode first = Await("first");
         AwaitSignalNode second = Await("second", TimeSpan.FromMinutes(10));
         var state = new Dictionary<string, JsonElement>();
@@ -105,7 +105,7 @@ public sealed class AwaitParkMarkerTests
     [Fact]
     public async Task SubWorkflow_after_AwaitSignal_parks_and_gets_its_own_child_result()
     {
-        var awaitExecutor = new AwaitSignalNodeExecutor(new MutableClock(T0));
+        var awaitExecutor = new AwaitSignalNodeExecutor(new MutableClock(T0), Actions.TestTemplates.Create());
         var hub = new Mock<IInboundHub>();
         hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 99, null, "ok"));

@@ -564,6 +564,15 @@ public sealed class WorkflowValidator
                     node.NodeId));
             }
 
+            if (node is AwaitSignalNode { Config.Correlation: { } correlation } && FindCorrelationProblem(correlation) is { } problem)
+            {
+                issues.Add(new ValidationIssue(
+                    ValidationSeverity.Error,
+                    "AWAIT_SIGNAL_CORRELATION_INVALID",
+                    $"Step '{node.Name}', correlation '{correlation}': {problem}",
+                    node.NodeId));
+            }
+
             if (node is WaitForHttpNode waitForHttp)
             {
                 string? token = waitForHttp.Config?.Token?.Trim();
@@ -577,6 +586,39 @@ public sealed class WorkflowValidator
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Why a Wait for signal correlation can never fill in to a value of its own, or null. Every run
+    /// would park on the same text as written and answer the others' signals. An unclosed or empty
+    /// placeholder is <c>TEMPLATE_INVALID</c>'s, so it is left to that check.
+    /// </summary>
+    private static string? FindCorrelationProblem(string correlation)
+    {
+        if (!TemplatePlaceholders.TryParse(correlation, out IReadOnlyList<TemplatePlaceholders.Part> parts, out _))
+        {
+            return null;
+        }
+
+        if (!TemplatePlaceholders.Contains(correlation) && correlation.TrimStart().StartsWith("$trigger.", StringComparison.OrdinalIgnoreCase))
+        {
+            return "a step's correlation is filled in from placeholders only, so write it as '{{trigger.…}}'.";
+        }
+
+        foreach (TemplatePlaceholders.Part part in parts)
+        {
+            if (!part.IsPlaceholder && (part.Text.Contains('{') || part.Text.Contains('}')))
+            {
+                return "it has a brace outside a '{{…}}' placeholder.";
+            }
+
+            if (part.IsPlaceholder && !TemplatePlaceholders.IsReference(part.Text))
+            {
+                return $"'{{{{{part.Text}}}}}' is not a value it can look up; a placeholder holds a path such as 'trigger.payload.room' or '$shared.NAME'.";
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

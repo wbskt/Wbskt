@@ -32,11 +32,11 @@ internal abstract class AwaitInboundNodeExecutor(TimeProvider clock) : ParkingNo
     /// Builds the first-visit park plan: the wake condition to register, what the node waits on
     /// (recorded in the marker), and the absolute deadline (null parks with no TTL).
     /// </summary>
-    protected abstract ParkPlan CreateParkPlan(NodeContext ctx);
+    protected abstract ValueTask<ParkPlan> CreateParkPlanAsync(NodeContext ctx, CancellationToken ct);
 
-    protected override Task<NodeExecutionResult> FirstVisitAsync(NodeContext ctx, CancellationToken ct)
+    protected override async Task<NodeExecutionResult> FirstVisitAsync(NodeContext ctx, CancellationToken ct)
     {
-        return Task.FromResult<NodeExecutionResult>(Park(ctx, CreateParkPlan(ctx)));
+        return Park(ctx, await CreateParkPlanAsync(ctx, ct));
     }
 
     // The resumer stores the inbound payload under "__wake" when an event arrives; its presence
@@ -52,9 +52,9 @@ internal abstract class AwaitInboundNodeExecutor(TimeProvider clock) : ParkingNo
         return new ResumeStep.Leave(deadlinePassed ? DefaultTimeoutPort : DefaultPort);
     }
 
-    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
+    protected override async ValueTask<WakeCondition?> KeepWaitingOnAsync(NodeContext ctx, string? waitingOn, DateTime? deadline, CancellationToken ct)
     {
-        return CreateParkPlan(ctx).Condition;
+        return (await CreateParkPlanAsync(ctx, ct)).Condition;
     }
 
     // Surface the caller-supplied "body" from the raw wake payload under a friendly key.

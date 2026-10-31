@@ -99,11 +99,33 @@ internal sealed class ActionTemplates(IExpressionEvaluator evaluator)
         }
     }
 
+    /// <summary>
+    /// The value with its placeholders filled in as one line, and the placeholders that had no value.
+    /// For a key a step matches on, where a blank left in the text would match the wrong thing, so the
+    /// caller decides what a missing value means instead of getting a warning.
+    /// </summary>
+    public async Task<(string Text, IReadOnlyList<string> Missing)> FillLineAsync(NodeContext ctx, string value, CancellationToken ct)
+    {
+        (string text, List<string>? missing) = await RenderPartsAsync(ctx, value, singleLine: true, ct);
+        return (text, missing ?? []);
+    }
+
     private async Task<string> RenderAsync(NodeContext ctx, string field, string value, bool singleLine, CancellationToken ct)
+    {
+        (string text, List<string>? missing) = await RenderPartsAsync(ctx, value, singleLine, ct);
+        if (missing is not null)
+        {
+            Warn(ctx, field, missing);
+        }
+
+        return text;
+    }
+
+    private async Task<(string Text, List<string>? Missing)> RenderPartsAsync(NodeContext ctx, string value, bool singleLine, CancellationToken ct)
     {
         if (!TemplatePlaceholders.Contains(value))
         {
-            return value;
+            return (value, null);
         }
 
         var builder = new StringBuilder(value.Length);
@@ -128,12 +150,7 @@ internal sealed class ActionTemplates(IExpressionEvaluator evaluator)
             builder.Append(singleLine ? text.ReplaceLineEndings(" ") : text);
         }
 
-        if (missing is not null)
-        {
-            Warn(ctx, field, missing);
-        }
-
-        return builder.ToString();
+        return (builder.ToString(), missing);
     }
 
     private Task<JsonElement> ResolveAsync(string reference, NodeContext ctx, CancellationToken ct)

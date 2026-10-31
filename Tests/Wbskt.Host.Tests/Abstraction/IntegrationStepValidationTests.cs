@@ -246,7 +246,7 @@ public sealed class IntegrationStepValidationTests
             .Where(t => typeof(Wbskt.Workflow.Abstraction.Templates.ITemplatedStep).IsAssignableFrom(t) && !t.IsInterface)
             .ToList();
 
-        Assert.Equal(7, steps.Count);
+        Assert.Equal(8, steps.Count);
         foreach (var step in steps)
         {
             Type config = step.GetProperty("Config")!.PropertyType;

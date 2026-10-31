@@ -53,9 +53,9 @@ internal sealed class DelayNodeExecutor(TimeProvider clock) : ParkingNodeExecuto
         return deadlinePassed ? new ResumeStep.Leave(DefaultPort) : ResumeStep.KeepWaiting;
     }
 
-    protected override WakeCondition? KeepWaitingOn(NodeContext ctx, string? waitingOn, DateTime? deadline)
+    protected override ValueTask<WakeCondition?> KeepWaitingOnAsync(NodeContext ctx, string? waitingOn, DateTime? deadline, CancellationToken ct)
     {
-        return deadline is DateTime wakeAt ? new TimerWakeCondition(wakeAt) : null;
+        return ValueTask.FromResult<WakeCondition?>(deadline is DateTime wakeAt ? new TimerWakeCondition(wakeAt) : null);
     }
 
     // A Delay parked before it wrote a marker left only its deadline. Every exit clears the deadline,
