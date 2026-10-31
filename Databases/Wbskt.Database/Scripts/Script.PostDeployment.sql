@@ -33,6 +33,44 @@ UPDATE dbo.Clients
         AND ConnectedHostId IS NULL;
 GO
 
+-- 3. Move dbo.EventLogIds past the ids already used.
+-- dbo.EventLogs.Id was an IDENTITY until device traffic moved to dbo.DeviceTraffic and the two began
+-- sharing this sequence. The schema change keeps the existing ids, and the sequence starts at 1, so
+-- without this the next insert would collide with the oldest row. It moves only when the highest id
+-- is past the last one the sequence handed out, so it runs on the first deploy over existing rows and
+-- is a no-op after that and on a fresh database. Rows written by a host in the moment between the
+-- table rebuild and this script fail their insert and are retried by the event logger, not lost.
+-- Advanced by taking a range rather than ALTER SEQUENCE ... RESTART, which changes the start value:
+-- sqlpackage would see that as drift from the model and restart the sequence at 1 on every publish.
+IF EXISTS (
+    SELECT 1
+    FROM sys.sequences AS s
+    WHERE s.object_id = OBJECT_ID(N'dbo.EventLogIds')
+      AND ISNULL(CAST(s.last_used_value AS BIGINT), 0) < (
+          SELECT MAX(Id)
+          FROM (
+              SELECT ISNULL(MAX(Id), 0) AS Id FROM dbo.EventLogs
+              UNION ALL
+              SELECT ISNULL(MAX(Id), 0) FROM dbo.DeviceTraffic
+          ) AS Highest))
+BEGIN
+    DECLARE @EventLogIdGap BIGINT = (
+        SELECT MAX(Id)
+        FROM (
+            SELECT ISNULL(MAX(Id), 0) AS Id FROM dbo.EventLogs
+            UNION ALL
+            SELECT ISNULL(MAX(Id), 0) FROM dbo.DeviceTraffic
+        ) AS Highest)
+        - (SELECT ISNULL(CAST(last_used_value AS BIGINT), 0) FROM sys.sequences WHERE object_id = OBJECT_ID(N'dbo.EventLogIds'));
+    PRINT '>>> Advancing dbo.EventLogIds by ' + CAST(@EventLogIdGap AS NVARCHAR(20));
+    DECLARE @EventLogIdRangeFirst SQL_VARIANT;
+    EXEC sys.sp_sequence_get_range
+        @sequence_name = N'dbo.EventLogIds',
+        @range_size = @EventLogIdGap,
+        @range_first_value = @EventLogIdRangeFirst OUTPUT;
+END
+GO
+
 -- Login for the management host: [wbskt_management], which may execute this database's procedures and nothing else.
 -- Created here, not in the model, because a login is a server object and its password is a secret
 -- that varies per environment. The password arrives as the $(ManagementHostPassword) SQLCMD variable; empty (the

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MassTransit;
 using Wbskt.EventBus.Abstractions;
+using Wbskt.Events;
 using Wbskt.Events.Abstractions;
 using Wbskt.Management.Host.Models;
 using Wbskt.Management.Host.Providers;
@@ -13,13 +14,17 @@ using Wbskt.Models;
 namespace Wbskt.Management.Host.Handlers.Events;
 
 /// <summary>
-/// Writes every event on the bus to dbo.EventLogs, a batch at a time. The batch is inserted before
-/// the consumer returns, so RabbitMQ only drops the messages once they are saved: a crash, a deploy
-/// or a SQL outage leaves them on the queue to be redelivered rather than lost. A redelivered
-/// message is not logged twice, because the insert skips a MessageId the table already holds.
+/// Writes every event on the bus to the event log, a batch at a time: device traffic (events marked
+/// <see cref="DeviceTrafficAttribute"/>) to dbo.DeviceTraffic, everything else to dbo.EventLogs. The
+/// batch is inserted before the consumer returns, so RabbitMQ only drops the messages once they are
+/// saved: a crash, a deploy or a SQL outage leaves them on the queue to be redelivered rather than
+/// lost. A redelivered message is not logged twice, because each insert skips a MessageId its table
+/// already holds.
 /// </summary>
 public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
 {
+    private static readonly HashSet<string> DeviceTrafficEvents = new(DeviceTrafficAttribute.EventNames, StringComparer.Ordinal);
+
     private readonly IEventRegistry _registry;
     private readonly IEventProvider _eventProvider;
     private readonly ILogger<EventLoggerHandler> _logger;
@@ -36,30 +41,40 @@ public sealed class EventLoggerHandler : IConsumer<Batch<IEvent>>
 
     public async Task Consume(ConsumeContext<Batch<IEvent>> context)
     {
-        var entries = new List<EventLogEntry>(context.Message.Length);
+        var auditEntries = new List<EventLogEntry>(context.Message.Length);
+        var trafficEntries = new List<EventLogEntry>(context.Message.Length);
         foreach (ConsumeContext<IEvent> message in context.Message)
         {
-            entries.AddRange(await BuildEntriesAsync(message));
+            var eventName = EventName(message);
+            var entries = await BuildEntriesAsync(message, eventName);
+            (DeviceTrafficEvents.Contains(eventName) ? trafficEntries : auditEntries).AddRange(entries);
         }
 
-        if (entries.Count > 0)
+        // Throwing here fails the whole batch, so the retry policy and then the broker keep every
+        // message in it until both inserts succeed. A retry after only the first succeeded is harmless:
+        // its rows are skipped as already logged.
+        if (auditEntries.Count > 0)
         {
-            // Throwing here fails the whole batch, so the retry policy and then the broker keep every
-            // message in it until the insert succeeds.
-            await _eventProvider.InsertBatchAsync(EventLogTable.Build(entries), context.CancellationToken);
+            await _eventProvider.InsertBatchAsync(EventLogTable.Build(auditEntries), context.CancellationToken);
+        }
+
+        if (trafficEntries.Count > 0)
+        {
+            await _eventProvider.InsertDeviceTrafficBatchAsync(EventLogTable.Build(trafficEntries), context.CancellationToken);
         }
     }
+
+    /// <summary>The event's type name, as the event log stores it.</summary>
+    private static string EventName(ConsumeContext<IEvent> context) =>
+        context.SupportedMessageTypes.FirstOrDefault()?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
 
     /// <summary>
     /// The event's rows: one, or one per workspace for an event about a tenant's people or a person's
     /// own account (<see cref="IWorkspacesContext"/>), which belongs in several workspaces' logs.
     /// </summary>
-    private async Task<IReadOnlyList<EventLogEntry>> BuildEntriesAsync(ConsumeContext<IEvent> context)
+    private async Task<IReadOnlyList<EventLogEntry>> BuildEntriesAsync(ConsumeContext<IEvent> context, string eventName)
     {
         var @event = context.Message;
-        var messageTypeUrn = context.SupportedMessageTypes.FirstOrDefault();
-        var eventName = messageTypeUrn?.Split(':').Last().Split('.').Last() ?? "UnknownEvent";
-
         var eventId = _registry.GetEventId(eventName);
 
         if (eventId <= 0)

@@ -9,6 +9,7 @@
 
     <ItemGroup>
         <SqlFiles Include="StoredProcedures\*.sql" />
+        <SqlFiles Include="Sequences\*.sql" />
         <SqlFiles Include="Tables\*.sql" />
         <SqlFiles Include="Types\*.sql" />
         <SqlFiles Include="Types\UserDefinedTableTypes\*.sql" />
