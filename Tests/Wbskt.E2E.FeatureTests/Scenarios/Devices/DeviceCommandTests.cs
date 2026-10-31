@@ -36,7 +36,7 @@ public sealed class DeviceCommandTests(ServicesFixture fixture)
         var queued = await fixture.SendAsync(HttpMethod.Get, Command(workspace, clientRef) + "?status=queued", token);
         queued.StatusCode.Should().Be(HttpStatusCode.OK);
         var waiting = JsonDocument.Parse(await queued.Content.ReadAsStringAsync()).RootElement;
-        waiting.EnumerateArray().Select(c => c.GetProperty("commandId").GetGuid()).Should().Equal(commandId);
+        waiting.GetProperty("items").EnumerateArray().Select(c => c.GetProperty("commandId").GetGuid()).Should().Equal(commandId);
 
         var cancel = await fixture.SendAsync(HttpMethod.Delete, $"{Command(workspace, clientRef)}/{commandId}", token);
         cancel.StatusCode.Should().Be(HttpStatusCode.NoContent);

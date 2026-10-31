@@ -328,7 +328,7 @@ public class ClientsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("{clientRef:guid}/commands")]
     [RequiresPermission(PermissionNames.ClientsRead)]
-    public async Task<ActionResult<IReadOnlyList<QueuedClientCommandResponse>>> GetCommands([FromWorkspace] int workspaceId, Guid clientRef, [FromQuery] string status, CancellationToken cancellationToken)
+    public async Task<ActionResult<Page<QueuedClientCommandResponse>>> GetCommands([FromWorkspace] int workspaceId, Guid clientRef, [FromQuery] string status, CancellationToken cancellationToken)
     {
         // Sent commands live in the event log (the comms feed); only waiting ones are listed here.
         if (!string.Equals(status, ClientCommandStatus.Queued, StringComparison.OrdinalIgnoreCase))
@@ -336,7 +336,14 @@ public class ClientsController : ApiControllerBase
             return MapError(Error.Validation("COMMAND_STATUS_INVALID", "status must be 'queued'."));
         }
 
-        return MapResult(await _commandService.GetQueuedAsync(workspaceId, clientRef, cancellationToken));
+        var result = await _commandService.GetQueuedAsync(workspaceId, clientRef, cancellationToken);
+        if (result.IsFailure)
+        {
+            return MapResult(Result<Page<QueuedClientCommandResponse>>.Failure(result.Error));
+        }
+
+        // A device holds at most CommandQueue:MaxPerClient waiting commands, so they come as one page.
+        return Ok(new Page<QueuedClientCommandResponse> { Items = result.Value, TotalCount = result.Value.Count });
     }
 
     /// <summary>Cancels a command still waiting for an offline client.</summary>
