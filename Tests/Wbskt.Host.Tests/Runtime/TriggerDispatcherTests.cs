@@ -55,6 +55,20 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatch_logs_nothing_at_information_or_above_when_no_trigger_matches()
+    {
+        // Arrange
+        var logger = new LevelRecorder();
+        var dispatcher = CreateDispatcher(logger: logger);
+
+        // Act
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        // Assert
+        Assert.DoesNotContain(logger.Levels, level => level >= Microsoft.Extensions.Logging.LogLevel.Information);
+    }
+
+    [Fact]
     public async Task Dispatch_starts_new_run_when_registration_exists_and_policy_permits()
     {
         // Arrange
@@ -683,7 +697,8 @@ public sealed class TriggerDispatcherTests
         RecordingRunCancellationService? runCancellationService = null,
         RecordingRunStarter? runStarter = null,
         RecordingRunDispatcher? runDispatcher = null,
-        InMemoryIdempotencyKeyProvider? idempotency = null)
+        InMemoryIdempotencyKeyProvider? idempotency = null,
+        Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>? logger = null)
     {
         return new TriggerDispatcher(
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
@@ -695,7 +710,22 @@ public sealed class TriggerDispatcherTests
             runStarter ?? new RecordingRunStarter([]),
             runDispatcher ?? new RecordingRunDispatcher([]),
             idempotency ?? new InMemoryIdempotencyKeyProvider(),
-            new ExpressionEvaluator(new DispatcherTestClock()));
+            new ExpressionEvaluator(new DispatcherTestClock()),
+            logger);
+    }
+
+    private sealed class LevelRecorder : Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>
+    {
+        public List<Microsoft.Extensions.Logging.LogLevel> Levels { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Levels.Add(logLevel);
+        }
     }
 
     private sealed class DispatcherTestClock : TimeProvider

@@ -43,6 +43,7 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
         DispatcherQueueDepth = _meter.CreateObservableGauge("wbskt_workflow_dispatcher_queue_depth", () => { return _dispatcherQueueDepth; });
         CreditsConsumed = _meter.CreateCounter<double>("wbskt_workflow_credits_consumed_total");
         WorkerTicks = _meter.CreateCounter<long>("wbskt_workflow_worker_ticks_total");
+        InboundEvents = _meter.CreateCounter<long>("wbskt_workflow_inbound_events_total");
 
         PendingTriggers = _meter.CreateObservableGauge("wbskt_workflow_pending_triggers", () =>
         {
@@ -64,6 +65,9 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
 
     /// <summary>Ticks of the periodic background workers, tagged <c>worker</c> and <c>outcome</c> (ok or failed).</summary>
     public Counter<long> WorkerTicks { get; }
+
+    /// <summary>Every inbound event the engine handled, tagged <c>channel</c> and <c>outcome</c> (the dispatch outcome, or Failed).</summary>
+    public Counter<long> InboundEvents { get; }
     public ObservableGauge<long> PendingTriggers { get; }
 
     public void UpdateSnapshot(long activeBranches, long dispatcherQueueDepth, long pendingTriggerDepth, IReadOnlyDictionary<string, long> bookmarksByWakeKind)
@@ -133,6 +137,11 @@ public sealed class WorkflowMetrics : IWorkerTickMetrics, IDisposable
     public void RecordWorkerTick(string worker, string outcome)
     {
         WorkerTicks.Add(1, new TagList { { "worker", worker }, { "outcome", outcome } });
+    }
+
+    public void RecordInboundEvent(string channel, string outcome)
+    {
+        InboundEvents.Add(1, new TagList { { "channel", channel }, { "outcome", outcome } });
     }
 
     public void Dispose()

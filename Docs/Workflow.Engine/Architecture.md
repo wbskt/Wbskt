@@ -328,7 +328,12 @@ cancellations and abandoned joins.
 `wbskt_workflow_node_duration_ms`, `wbskt_workflow_branches_active`,
 `wbskt_workflow_dispatcher_queue_depth`, `wbskt_workflow_bookmarks_outstanding`,
 `wbskt_workflow_bookmarks_overdue`, `wbskt_workflow_pending_triggers`,
-`wbskt_workflow_worker_ticks_total`.
+`wbskt_workflow_worker_ticks_total`, `wbskt_workflow_inbound_events_total`.
+
+`wbskt_workflow_inbound_events_total{channel, outcome}` counts every event `InboundHub` handles,
+by dispatch outcome or `Failed`. It replaces the per-event log line, which is Debug: at device
+message rates a line each would fill Loki, so "how many messages matched nothing" is
+`sum by (outcome) (rate(wbskt_workflow_inbound_events_total[5m]))`, not a log search.
 
 ## 12. Configuration
 
