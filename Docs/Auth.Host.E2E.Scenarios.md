@@ -138,6 +138,10 @@ Highest priority: these encode defects that shipped, so they must fail against t
 | `AUTH_REG_19` | − | Two concurrent registrations of the same email | Exactly one **204**, one **409**; never two accounts |
 | `AUTH_REG_20` | + | Endpoint is anonymous — no `Authorization` header needed | **204** |
 | `AUTH_REG_21` | + | Password is not recoverable: register, then confirm no endpoint echoes it back | `GET /api/tenants/{t}/members` exposes only `refId`, `username`, `email`, `isActive` |
+| `AUTH_REG_25` | − | Register with no `challenge`/`solution` | **400** `SIGNUP_CHALLENGE_REQUIRED` |
+| `AUTH_REG_26` | − | A solved challenge used for a second registration | First **204**, second **400** `SIGNUP_CHALLENGE_INVALID` |
+| `AUTH_REG_27` | − | A challenge sent with a solution that does not meet its difficulty | **400** `SIGNUP_CHALLENGE_INVALID` |
+| `AUTH_REG_28` | + | `GET /api/auth/register/challenge` anonymously | **200**, `challenge` starting `v1.`, `difficulty` > 0, `expiresAt` within ten minutes |
 
 ---
 

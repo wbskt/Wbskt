@@ -18,18 +18,31 @@ public class AuthController : ApiControllerBase
     private readonly IPasswordService _passwords;
     private readonly IRegistrationService _registration;
     private readonly RefreshTokenCookie _refreshCookie;
+    private readonly SignUpChallenges _signUpChallenges;
 
     public AuthController(
         ISignInService signIn,
         IPasswordService passwords,
         IRegistrationService registration,
-        RefreshTokenCookie refreshCookie)
+        RefreshTokenCookie refreshCookie,
+        SignUpChallenges signUpChallenges)
     {
         _signIn = signIn;
         _passwords = passwords;
         _registration = registration;
         _refreshCookie = refreshCookie;
+        _signUpChallenges = signUpChallenges;
     }
+
+    /// <summary>
+    /// Issues the proof-of-work puzzle that <see cref="Register"/> asks for. Solve it (see
+    /// <see cref="SignUpProofOfWork"/>) and send the challenge and the solution with the
+    /// registration. Each challenge registers at most one account and expires after ten minutes.
+    /// </summary>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.TokenRefresh)]
+    [HttpGet("register/challenge")]
+    public ActionResult<SignUpChallengeResponse> GetSignUpChallenge() => Ok(_signUpChallenges.Issue());
 
     /// <summary>
     /// Registers a new user in the system and mails them a confirmation link. The account cannot
@@ -41,8 +54,13 @@ public class AuthController : ApiControllerBase
     /// out who is registered. A username that is already taken is still reported as a 409: it
     /// discloses nothing about any address, and a caller retrying a name that can never be accepted
     /// needs to be told.
+    /// <para>
+    /// Needs a solved challenge from <see cref="GetSignUpChallenge"/>, checked before anything else
+    /// and spent whatever the outcome: 400 <c>SIGNUP_CHALLENGE_REQUIRED</c> without one, 400
+    /// <c>SIGNUP_CHALLENGE_INVALID</c> for a forged, expired, unsolved or already used one.
+    /// </para>
     /// </remarks>
-    /// <param name="request">The registration details (username, email, password).</param>
+    /// <param name="request">The registration details (username, email, password, challenge and solution).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [AllowAnonymous]
@@ -51,6 +69,12 @@ public class AuthController : ApiControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
+        var challenge = await _signUpChallenges.RedeemAsync(request.Challenge, request.Solution);
+        if (challenge.IsFailure)
+        {
+            return MapError(challenge.Error);
+        }
+
         var result = await _registration.RegisterUserAsync(request.Username, request.Email, request.Password, request.InvitationToken, cancellationToken);
         return MapResult(result);
     }

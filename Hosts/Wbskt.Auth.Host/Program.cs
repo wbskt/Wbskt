@@ -78,6 +78,13 @@ public static class Program
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<MailCooldown>>()));
         builder.Services.AddHostedService<OutboundMailDispatcher>();
+        builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:SignUpChallenge").Get<SignUpChallengeOptions>() ?? new SignUpChallengeOptions()));
+        builder.Services.AddSingleton(sp => new SignUpChallenges(
+            sp.GetRequiredService<IOptions<SignUpChallengeOptions>>(),
+            sp.GetService<IConnectionMultiplexer>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<AuthMetrics>(),
+            sp.GetRequiredService<ILogger<SignUpChallenges>>()));
         builder.Services.AddSingleton(Options.Create(builder.Configuration.GetSection("Auth:RefreshCookie").Get<RefreshCookieOptions>() ?? new RefreshCookieOptions()));
         builder.Services.AddSingleton<RefreshTokenCookie>();
 
