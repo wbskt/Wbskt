@@ -3,6 +3,8 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Runtime;
 
+using Wbskt.Workflow.Runtime;
+
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
@@ -36,7 +38,7 @@ internal sealed class EndNodeExecutor(IExpressionEvaluator? evaluator = null) : 
                 throw new InvalidOperationException("No expression evaluator is available to evaluate the End node's output.");
             }
 
-            output = (await evaluator.EvaluateAsync(outputExpression, ctx.Branch, ct)).Clone();
+            output = (await evaluator.EvaluateForStepAsync(outputExpression, ctx, "output", ct)).Clone();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

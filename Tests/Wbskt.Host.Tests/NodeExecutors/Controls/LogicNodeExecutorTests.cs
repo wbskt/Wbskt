@@ -29,6 +29,24 @@ public sealed class LogicNodeExecutorTests
     }
 
     [Fact]
+    public async Task A_misspelled_path_still_routes_to_false_and_warns_naming_it()
+    {
+        var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));
+        var condition = new BinaryExpression(new BranchStateRefExpression("tmep"), BinaryOperator.Equal, new LiteralExpression(5));
+        NodeContext context = CreateContext(new LogicGateNode { NodeId = Guid.NewGuid(), Name = "logic", Ports = CreatePorts(), Config = new LogicGateConfig { Condition = condition } }, new Dictionary<string, JsonElement>
+        {
+            ["temp"] = JsonSerializer.SerializeToElement(5)
+        });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal("false", Assert.IsType<NodeExecutionResult.Continue>(result).OutboundPort);
+        NodeWarning warning = Assert.Single(context.Warnings);
+        Assert.Equal(HistoryEventKind.BranchStatePathMissing, warning.EventKind);
+        Assert.Equal("""{"field":"condition","paths":["tmep"]}""", JsonSerializer.Serialize(warning.Payload));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_false_condition_routes_to_false_port()
     {
         var executor = new LogicNodeExecutor(new ExpressionEvaluator(TimeProvider.System));

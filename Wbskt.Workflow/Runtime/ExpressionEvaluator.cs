@@ -52,28 +52,33 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
         _sharedVariableProvider = sharedVariableProvider;
     }
 
-    public async Task<JsonElement> EvaluateAsync(WorkflowExpression expr, BranchContext context, CancellationToken ct)
+    public Task<JsonElement> EvaluateAsync(WorkflowExpression expr, BranchContext context, CancellationToken ct)
+    {
+        return EvaluateAsync(expr, context, null, ct);
+    }
+
+    public async Task<JsonElement> EvaluateAsync(WorkflowExpression expr, BranchContext context, ICollection<string>? missingPaths, CancellationToken ct)
     {
         return expr switch
         {
             LiteralExpression literal => ToJsonElement(literal.Value),
-            BranchStateRefExpression branchStateRef => ResolveBranchState(branchStateRef.Path, context),
-            MemberAccessExpression member => ResolveBranchState($"{member.Object}.{member.Member}", context),
-            JsonPathExpression jsonPathExpr => await EvaluateJsonPathAsync(jsonPathExpr, context, ct),
-            UnaryExpression unary => await EvaluateUnaryAsync(unary, context, ct),
-            BinaryExpression binary => await EvaluateBinaryAsync(binary, context, ct),
-            FunctionExpression function => await EvaluateFunctionAsync(function, context, ct),
+            BranchStateRefExpression branchStateRef => ResolveBranchState(branchStateRef.Path, context, missingPaths),
+            MemberAccessExpression member => ResolveBranchState($"{member.Object}.{member.Member}", context, missingPaths),
+            JsonPathExpression jsonPathExpr => await EvaluateJsonPathAsync(jsonPathExpr, context, missingPaths, ct),
+            UnaryExpression unary => await EvaluateUnaryAsync(unary, context, missingPaths, ct),
+            BinaryExpression binary => await EvaluateBinaryAsync(binary, context, missingPaths, ct),
+            FunctionExpression function => await EvaluateFunctionAsync(function, context, missingPaths, ct),
             SharedVariableRefExpression sharedRef => await ResolveSharedVariableAsync(sharedRef.Name, context, ct),
-            TemplateExpression template => await EvaluateTemplateAsync(template, context, ct),
+            TemplateExpression template => await EvaluateTemplateAsync(template, context, missingPaths, ct),
             _ => throw NotImplemented(expr)
         };
     }
 
     // ---------------------------------------------------------------- unary
 
-    private async Task<JsonElement> EvaluateUnaryAsync(UnaryExpression unary, BranchContext context, CancellationToken ct)
+    private async Task<JsonElement> EvaluateUnaryAsync(UnaryExpression unary, BranchContext context, ICollection<string>? missingPaths, CancellationToken ct)
     {
-        JsonElement operand = await EvaluateAsync(unary.Operand, context, ct);
+        JsonElement operand = await EvaluateAsync(unary.Operand, context, missingPaths, ct);
 
         return unary.Operator switch
         {
@@ -85,13 +90,13 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
 
     // --------------------------------------------------------------- binary
 
-    private async Task<JsonElement> EvaluateBinaryAsync(BinaryExpression binary, BranchContext context, CancellationToken ct)
+    private async Task<JsonElement> EvaluateBinaryAsync(BinaryExpression binary, BranchContext context, ICollection<string>? missingPaths, CancellationToken ct)
     {
         // And/Or short-circuit: the right operand is not evaluated when the left already decides the
         // result, so a guard like `isPresent && value > 10` cannot fail on the missing value.
         if (binary.Operator is BinaryOperator.And or BinaryOperator.Or)
         {
-            bool left = RequireBoolean(await EvaluateAsync(binary.Left, context, ct), binary.Operator.ToString());
+            bool left = RequireBoolean(await EvaluateAsync(binary.Left, context, missingPaths, ct), binary.Operator.ToString());
 
             if (binary.Operator == BinaryOperator.And && !left)
             {
@@ -103,11 +108,11 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
                 return ToJsonElement(true);
             }
 
-            return ToJsonElement(RequireBoolean(await EvaluateAsync(binary.Right, context, ct), binary.Operator.ToString()));
+            return ToJsonElement(RequireBoolean(await EvaluateAsync(binary.Right, context, missingPaths, ct), binary.Operator.ToString()));
         }
 
-        JsonElement leftValue = await EvaluateAsync(binary.Left, context, ct);
-        JsonElement rightValue = await EvaluateAsync(binary.Right, context, ct);
+        JsonElement leftValue = await EvaluateAsync(binary.Left, context, missingPaths, ct);
+        JsonElement rightValue = await EvaluateAsync(binary.Right, context, missingPaths, ct);
 
         if (binary.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual)
         {
@@ -215,12 +220,14 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
 
     // ------------------------------------------------------------- functions
 
-    private async Task<JsonElement> EvaluateFunctionAsync(FunctionExpression function, BranchContext context, CancellationToken ct)
+    private async Task<JsonElement> EvaluateFunctionAsync(FunctionExpression function, BranchContext context, ICollection<string>? missingPaths, CancellationToken ct)
     {
+        // IsNull and IsEmpty are how an author tests for an absent path, so the paths they read are expected to be missing.
+        ICollection<string>? argumentMissingPaths = function.Function is FunctionName.IsNull or FunctionName.IsEmpty ? null : missingPaths;
         var arguments = new List<JsonElement>(function.Arguments.Count);
         foreach (WorkflowExpression argument in function.Arguments)
         {
-            arguments.Add(await EvaluateAsync(argument, context, ct));
+            arguments.Add(await EvaluateAsync(argument, context, argumentMissingPaths, ct));
         }
 
         switch (function.Function)
@@ -412,14 +419,14 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
     /// falls back to the trigger payload). Missing values render as an empty string; the result is
     /// always a JSON string.
     /// </summary>
-    private async Task<JsonElement> EvaluateTemplateAsync(TemplateExpression template, BranchContext context, CancellationToken ct)
+    private async Task<JsonElement> EvaluateTemplateAsync(TemplateExpression template, BranchContext context, ICollection<string>? missingPaths, CancellationToken ct)
     {
         string source = template.Template ?? string.Empty;
         var builder = new System.Text.StringBuilder(source.Length);
         foreach (TemplatePlaceholders.Part part in TemplatePlaceholders.Parse(source))
         {
             builder.Append(part.IsPlaceholder
-                ? ToStringValue(await EvaluateAsync(TemplatePlaceholders.ToExpression(part.Text), context, ct))
+                ? ToStringValue(await EvaluateAsync(TemplatePlaceholders.ToExpression(part.Text), context, missingPaths, ct))
                 : part.Text);
         }
 
@@ -428,7 +435,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
 
     // ------------------------------------------------------------ resolution
 
-    private static JsonElement ResolveBranchState(string path, BranchContext context)
+    private static JsonElement ResolveBranchState(string path, BranchContext context, ICollection<string>? missingPaths)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -444,6 +451,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
         if (!context.LocalState.TryGetValue(segments[0], out JsonElement current) &&
             !context.TriggerPayload.TryGetValue(segments[0], out current))
         {
+            missingPaths?.Add(path);
             return JsonNull;
         }
 
@@ -451,6 +459,7 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
         {
             if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segments[index], out JsonElement next))
             {
+                missingPaths?.Add(path);
                 return JsonNull;
             }
 
@@ -460,9 +469,9 @@ internal sealed class ExpressionEvaluator : IExpressionEvaluator
         return current.Clone();
     }
 
-    private async Task<JsonElement> EvaluateJsonPathAsync(JsonPathExpression jsonPathExpr, BranchContext context, CancellationToken ct)
+    private async Task<JsonElement> EvaluateJsonPathAsync(JsonPathExpression jsonPathExpr, BranchContext context, ICollection<string>? missingPaths, CancellationToken ct)
     {
-        JsonElement baseElement = await EvaluateAsync(jsonPathExpr.BaseExpression, context, ct);
+        JsonElement baseElement = await EvaluateAsync(jsonPathExpr.BaseExpression, context, missingPaths, ct);
         if (baseElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
             return JsonNull;

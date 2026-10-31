@@ -529,6 +529,37 @@ public sealed class ExpressionEvaluatorTests
         public Task<int> CompareAndSetAsync(Guid workflowRefId, string varName, string expected, string newValue, CancellationToken ct) => throw new NotSupportedException();
     }
 
+    public static TheoryData<WorkflowExpression, string[]> MissingPathCases => new()
+    {
+        { new BranchStateRefExpression("tmep"), ["tmep"] },
+        { new BranchStateRefExpression("reading.unit"), ["reading.unit"] },
+        { new BranchStateRefExpression("reading.value.deep"), ["reading.value.deep"] },
+        { new BranchStateRefExpression("cleared"), [] },
+        { new BranchStateRefExpression("reading.value"), [] },
+        { new TemplateExpression("{{reading.value}} {{reading.unit}}"), ["reading.unit"] },
+        { new BinaryExpression(new LiteralExpression(false), BinaryOperator.And, new BranchStateRefExpression("tmep")), [] },
+        { new FunctionExpression(FunctionName.IsNull, [new BranchStateRefExpression("tmep")]), [] },
+        { new FunctionExpression(FunctionName.IsEmpty, [new BranchStateRefExpression("tmep")]), [] },
+        { new FunctionExpression(FunctionName.ToString, [new BranchStateRefExpression("tmep")]), ["tmep"] },
+    };
+
+    [Theory]
+    [MemberData(nameof(MissingPathCases))]
+    public async Task Reports_the_branch_state_paths_it_read_that_are_not_there(WorkflowExpression expression, string[] expected)
+    {
+        IExpressionEvaluator evaluator = new ExpressionEvaluator(TimeProvider.System);
+        BranchContext context = CreateBranchContext(new Dictionary<string, JsonElement>
+        {
+            ["cleared"] = JsonSerializer.SerializeToElement((string?)null),
+            ["reading"] = JsonSerializer.SerializeToElement(new { value = 21 })
+        });
+        var missing = new List<string>();
+
+        await evaluator.EvaluateAsync(expression, context, missing, CancellationToken.None);
+
+        Assert.Equal(expected, missing);
+    }
+
     private static BranchContext CreateBranchContext(IReadOnlyDictionary<string, JsonElement>? localState = null)
     {
         return new BranchContext(

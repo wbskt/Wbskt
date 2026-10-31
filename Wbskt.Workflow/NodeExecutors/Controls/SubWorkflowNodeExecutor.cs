@@ -10,6 +10,8 @@ using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Channels;
 
+using Wbskt.Workflow.Runtime;
+
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
@@ -157,7 +159,7 @@ internal sealed class SubWorkflowNodeExecutor(IInboundHub hub, IRunProvider runP
                     throw new InvalidOperationException($"Input '{key}' is reserved by the engine and cannot be supplied by the workflow.");
                 }
 
-                body[key] = (await evaluator.EvaluateAsync(expression, ctx.Branch, ct)).Clone();
+                body[key] = (await evaluator.EvaluateForStepAsync(expression, ctx, $"input.{key}", ct)).Clone();
             }
         }
 

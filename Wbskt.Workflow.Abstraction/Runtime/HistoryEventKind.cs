@@ -44,6 +44,8 @@ public static class HistoryEventKind
     public const string BranchStateLarge = "BranchStateLarge";
     // A step's charge took the run past 80% of its credit budget.
     public const string CreditBudgetLow = "CreditBudgetLow";
+    // An expression in a step's config read a branch-state path that is not there.
+    public const string BranchStatePathMissing = "BranchStatePathMissing";
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
@@ -69,6 +71,7 @@ public static class HistoryEventKind
                 or WebhookJsonUnparsable
                 or BranchStateLarge
                 or CreditBudgetLow
+                or BranchStatePathMissing
                 or BranchFailed
                 or NodeRetrying
                 or BranchCancelled
