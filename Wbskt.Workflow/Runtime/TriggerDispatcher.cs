@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Wbskt.Workflow.Abstraction.Entities;
+using Wbskt.Workflow.Abstraction.Enums;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
@@ -11,6 +12,10 @@ namespace Wbskt.Workflow.Runtime;
 
 internal sealed class TriggerDispatcher : ITriggerDispatcher
 {
+    // Each lost race means another event started a run on this key in the meantime. Past a few, the
+    // key is being hammered; the claim fails and the bus redelivers the event.
+    private const int MaxStartAttempts = 3;
+
     private readonly ICorrelationKeyResolver _correlationKeyResolver;
     private readonly IBookmarkResumer _bookmarkResumer;
     private readonly ITriggerRegistrationProvider _triggerRegistrationProvider;
@@ -260,42 +265,53 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             }
         }
 
-        TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
-        _logger?.LogDebug("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
-        switch (concurrencyDecision.Outcome)
-        {
-            case TriggerConcurrencyOutcome.Dropped:
-                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue), null);
-
-            case TriggerConcurrencyOutcome.Queued:
-                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue), null);
-
-            case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
-                foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
-                {
-                    await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
-                }
-                break;
-        }
-
-        // Some starts take a place under the workspace's active-run ceiling that is already held, so
-        // refusing them would lose work rather than shed it: a sub-workflow child (its parent is running),
-        // a queued event's replay (the run that finished made the room, and the event has left the queue),
-        // and a start replacing the runs it has just cancelled (refusing it would leave nothing running).
-        bool exemptFromCeiling = normalizedEvent.StartsChildRun
-            || normalizedEvent.ReplayFor is not null
-            || (concurrencyDecision.Outcome == TriggerConcurrencyOutcome.ProceedAfterCancellingActive && concurrencyDecision.RunIdsToCancel.Count > 0);
-
+        ActiveRunGuard activeRunGuard = GuardFor(registration, correlationValue);
         RunStartResult started;
-        try
+        for (int attempt = 1; ; attempt++)
         {
-            started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling);
-        }
-        catch (WorkspaceRunCeilingException)
-        {
-            // Settled like a drop: the claim records it, so a redelivered event is not refused twice
-            // or, worse, started late once the workspace has room.
-            return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+            TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
+            _logger?.LogDebug("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
+            switch (concurrencyDecision.Outcome)
+            {
+                case TriggerConcurrencyOutcome.Dropped:
+                    return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Dropped, null, correlationValue), null);
+
+                case TriggerConcurrencyOutcome.Queued:
+                    return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Queued, null, correlationValue), null);
+
+                case TriggerConcurrencyOutcome.ProceedAfterCancellingActive:
+                    foreach (long runIdToCancel in concurrencyDecision.RunIdsToCancel)
+                    {
+                        await _runCancellationService.RequestCancellationAsync(runIdToCancel, "Trigger-cancel-policy", ct);
+                    }
+                    break;
+            }
+
+            // Some starts take a place under the workspace's active-run ceiling that is already held, so
+            // refusing them would lose work rather than shed it: a sub-workflow child (its parent is running),
+            // a queued event's replay (the run that finished made the room, and the event has left the queue),
+            // and a start replacing the runs it has just cancelled (refusing it would leave nothing running).
+            bool exemptFromCeiling = normalizedEvent.StartsChildRun
+                || normalizedEvent.ReplayFor is not null
+                || (concurrencyDecision.Outcome == TriggerConcurrencyOutcome.ProceedAfterCancellingActive && concurrencyDecision.RunIdsToCancel.Count > 0);
+
+            try
+            {
+                started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling, activeRunGuard);
+                break;
+            }
+            catch (WorkspaceRunCeilingException)
+            {
+                // Settled like a drop: the claim records it, so a redelivered event is not refused twice
+                // or, worse, started late once the workspace has room.
+                return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
+            }
+            catch (ActiveRunConflictException) when (attempt < MaxStartAttempts)
+            {
+                // Another event with this key started a run after the policy read the active runs (#467).
+                // Deciding again sees that run: a drop or a queue now, or one more run to cancel.
+                _logger?.LogDebug("Registration {RegistrationId} lost a start race on its correlation key; deciding again (attempt {Attempt})", registration.Id, attempt);
+            }
         }
 
         _logger?.LogInformation("Event {EventId} started run {RunId} on branch {BranchId} for registration {RegistrationId}", normalizedEvent.InboundEventId, started.RunId, started.BranchId, registration.Id);
@@ -305,6 +321,25 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         // long since been handed to the pump.
         return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.StartedRun, started.RunId, correlationValue, started.RunRefId),
             started.Created ? started.BranchId : null);
+    }
+
+    /// <summary>
+    /// What Run_Start re-checks under its per-key lock. None where the policy never looks at active runs:
+    /// a parallel trigger, or an event with no correlation key, which the enforcer always lets through.
+    /// </summary>
+    private static ActiveRunGuard GuardFor(TriggerRegistrationRow registration, string? correlationKey)
+    {
+        if (string.IsNullOrEmpty(correlationKey))
+        {
+            return ActiveRunGuard.None;
+        }
+
+        return registration.ParseConcurrencyPolicy() switch
+        {
+            WorkflowConcurrencyPolicy.AllowParallel => ActiveRunGuard.None,
+            WorkflowConcurrencyPolicy.CancelExisting => ActiveRunGuard.NotCancelling,
+            _ => ActiveRunGuard.AnyActive
+        };
     }
 
     /// <summary>
