@@ -326,7 +326,7 @@ The console needs nothing here — pushing to the Dashboard repo builds and depl
 To do the same by hand on the VM (equivalent, and what the workflows end up executing):
 
 ```bash
-deploy/scripts/deploy.sh --tag sha-abc1234 --services "auth management"
+deploy/scripts/deploy.sh --tag sha-abc1234 --services auth,management
 deploy/scripts/deploy.sh --console-tag sha-def5678
 ```
 

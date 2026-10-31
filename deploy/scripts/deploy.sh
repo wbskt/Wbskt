@@ -4,7 +4,7 @@
 # repos with separate release streams:
 #
 #   deploy/scripts/deploy.sh --tag sha-abc1234                             # backend hosts
-#   deploy/scripts/deploy.sh --tag sha-abc1234 --services "auth management" --migrate
+#   deploy/scripts/deploy.sh --tag sha-abc1234 --services auth,management --skip-migrations
 #   deploy/scripts/deploy.sh --console-tag sha-def5678                     # console only
 #
 # Nothing is built here - images come from CI via GHCR (.github/workflows/build-images.yml here,
@@ -48,13 +48,15 @@ SKIP_MIGRATIONS=false
 
 usage() {
     cat <<'EOF'
-usage: deploy.sh --tag <image-tag> [--services "<a b c>"] [--ref <git-ref>] [--skip-migrations]
+usage: deploy.sh --tag <image-tag> [--services <a,b,c>] [--ref <git-ref>] [--skip-migrations]
        deploy.sh --console-tag <image-tag>
 
   --tag              Backend image tag, e.g. sha-abc1234. Also selects the commit this
                      checkout is reset to.
-  --services         Space-separated subset of: auth management devices socket engine.
-                     Defaults to all of them.
+  --services         Comma- or space-separated subset of: auth management devices socket
+                     engine. Defaults to all of them. Use commas over SSH: the remote side
+                     word-splits the command line, so a quoted space-separated list arrives
+                     as separate arguments.
   --ref              Git ref to reset the checkout to. Defaults to the commit embedded in a
                      sha-<commit> tag; required for any other tag shape.
   --skip-migrations  Don't run the migrator. Migrations run by DEFAULT - the incremental
@@ -79,7 +81,7 @@ parse_args() {
                            [[ -n "$CONSOLE_TAG" ]] || die "--console-tag needs a value"; shift 2 ;;
             --ref)         REF="${2:-}"; [[ -n "$REF" ]] || die "--ref needs a value"; shift 2 ;;
             --services)    [[ -n "${2:-}" ]] || die "--services needs a value"
-                           read -r -a SERVICES <<< "$2"; shift 2 ;;
+                           read -r -a SERVICES <<< "${2//,/ }"; shift 2 ;;
             --skip-migrations) SKIP_MIGRATIONS=true; shift ;;
             -h|--help)     usage; exit 0 ;;
             *)             usage >&2; die "unknown argument: $1" ;;
@@ -301,11 +303,13 @@ deploy_backend() {
         # Runs by default. sqlpackage's incremental publish is idempotent - a no-op when the
         # schema already matches - so the cost of running it needlessly is seconds, while the cost
         # of forgetting it is new code against an old schema. Opt-out beats opt-in here.
-        # MIGRATE_FRESH and MIGRATE_ALLOW_DATA_LOSS stay unreachable from this path: both destroy
-        # data with no confirmation, so they remain a deliberate manual act. See deploy/README.md.
+        # MIGRATE_FRESH and MIGRATE_ALLOW_DATA_LOSS are forced off: both destroy data with no
+        # confirmation, and compose would otherwise read them from .env or this shell, where one
+        # stray line would drop both databases on the next automatic deploy. See deploy/README.md.
         echo "==> running incremental database migration"
         docker compose --profile migrate pull migrator
-        docker compose --profile migrate run --rm migrator
+        MIGRATE_FRESH=false MIGRATE_ALLOW_DATA_LOSS=false \
+            docker compose --profile migrate run --rm migrator
     fi
 
     # devices and management both serve device login and registration: Traefik sends those paths to
