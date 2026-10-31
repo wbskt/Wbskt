@@ -42,6 +42,21 @@ public sealed class TriggerConcurrencyEnforcerTests
     }
 
     [Fact]
+    public async Task Evaluate_returns_Proceed_when_the_run_it_would_queue_behind_has_finished()
+    {
+        // #470: the run was active when the policy read it, and gone by the time the event reached the
+        // queue. The enqueue reports that, and the event starts a run instead of waiting for no one.
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.Queue);
+        var pendingProvider = new RecordingPendingTriggerEventProvider { RunFinishedBeforeEnqueue = true };
+        var enforcer = CreateEnforcer(activeRuns: [CreateRun(55)], pendingTriggerEventProvider: pendingProvider);
+
+        TriggerConcurrencyDecision decision = await enforcer.EvaluateAsync(registration, CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Equal(TriggerConcurrencyOutcome.Proceed, decision.Outcome);
+        Assert.Empty(decision.RunIdsToCancel);
+    }
+
+    [Fact]
     public async Task Evaluate_returns_ProceedAfterCancellingActive_when_cancel_policy_has_active_run()
     {
         // Arrange
@@ -245,6 +260,19 @@ public sealed class TriggerConcurrencyEnforcerTests
     private sealed class RecordingPendingTriggerEventProvider : IPendingTriggerEventProvider
     {
         public List<(Guid WorkflowRefId, Guid TriggerNodeId, string CorrelationKey, string InboundEventJson)> EnqueueCalls { get; } = [];
+
+        /// <summary>Answers the guarded enqueue as Run_Start's key holder would once the run has ended.</summary>
+        public bool RunFinishedBeforeEnqueue { get; init; }
+
+        public async Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
+        {
+            if (RunFinishedBeforeEnqueue)
+            {
+                return null;
+            }
+
+            return await EnqueueAsync(workflowRefId, triggerNodeId, correlationKey, inboundEventJson, ct);
+        }
 
         public Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
         {

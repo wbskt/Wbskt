@@ -29,6 +29,23 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
         );
     }
 
+    public async Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
+    {
+        return await ExecuteFindAsync(
+            "dbo.PendingTriggerEvent_Enqueue",
+            p =>
+            {
+                p.AddWithValue("@WorkflowRefId", workflowRefId);
+                p.AddWithValue("@TriggerNodeId", triggerNodeId);
+                p.AddWithValue("@CorrelationKey", correlationKey);
+                p.AddWithValue("@InboundEventJson", inboundEventJson);
+                p.AddWithValue("@RequireActiveRun", true);
+            },
+            Map,
+            ct
+        );
+    }
+
     public async Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
     {
         try

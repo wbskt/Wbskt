@@ -105,6 +105,11 @@ For each inbound event:
    run for `DropIfRunning` and `Queue`, any not already `Cancelling` for `CancelExisting`. A start that
    finds one is refused (50028) and the dispatcher decides again, up to three times. Skipped for
    `AllowParallel` and for events without a correlation key.
+
+   `Queue` enqueues through `PendingTriggerEvent_Enqueue @RequireActiveRun = 1`, which looks for the
+   active run again under the same lock and queues nothing if it has finished; the event then starts a
+   run instead. `PendingTriggerEvent_DequeueNext` takes the lock too, so a finalizer's drain never runs
+   between an enqueue's check and its insert. All three name the lock with `dbo.TriggerStartLockResource`.
 5. **Outcome** per registration: `StartedRun`, `Queued`, `Dropped`, `Refused`, `Filtered`,
    `SecretMismatch`, `NoRegistration`, `Idempotent` or `ResumedBookmark`.
 
