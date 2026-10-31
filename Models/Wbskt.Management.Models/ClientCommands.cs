@@ -6,7 +6,7 @@ public record ClientCommandRequest(string Type, string Payload, DateTimeOffset? 
 
 /// <param name="Status"><see cref="ClientCommandStatus.Sent"/>, or <see cref="ClientCommandStatus.Queued"/> when the device is offline.</param>
 /// <param name="ExpiresAt">When a queued command stops waiting for the device; the request's expiry for a sent one.</param>
-public record ClientCommandResponse(Guid CommandId, string Status = ClientCommandStatus.Sent, DateTimeOffset? ExpiresAt = null);
+public record ClientCommandResponse(Guid CommandId, string Status, DateTimeOffset? ExpiresAt);
 
 /// <summary>A command waiting for an offline device.</summary>
 public record QueuedClientCommandResponse(Guid CommandId, string Type, string Payload, DateTimeOffset QueuedAt, DateTimeOffset ExpiresAt);
