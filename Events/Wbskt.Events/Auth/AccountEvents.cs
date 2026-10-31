@@ -33,3 +33,10 @@ public sealed record SessionsRevokedEvent(int UserId, Guid UserRefId, string Whi
 
 [EventCriticality(EventCriticality.Info)]
 public sealed record EmailVerifiedEvent(int UserId, Guid UserRefId) : AccountEvent(UserId, UserRefId);
+
+/// <summary>
+/// The person deleted their account. Logged in the workspaces they belonged to that outlive it, those of
+/// tenants shared with others.
+/// </summary>
+[EventCriticality(EventCriticality.Warning)]
+public sealed record AccountDeletedEvent(int UserId, Guid UserRefId) : AccountEvent(UserId, UserRefId);

@@ -5,10 +5,9 @@
 --   passed in @DeletedWorkspaces, goes into the outbox for the management host to retire), roles,
 --   groups, invitations and the tenant row.
 -- * A tenant with other members loses only this member, through dbo.TenantMember_Remove: workspaces
---   they own pass to another administrator of that tenant (or, in a tenant with none, another
---   member). Refused (THROW 50018) while the user is that tenant's only administrator: deleting
---   them would leave the others in a tenant nobody can administer, so they must make someone else an
---   administrator first. The message names those tenants.
+--   they own pass to another administrator of that tenant. Refused (THROW 50018) while nobody else
+--   administers it: deleting them would leave the others in a tenant nobody can administer, so
+--   someone else must be made an administrator first. The message names those tenants.
 -- * Every session ends: refresh tokens, reset and verification tokens are deleted, along with the
 --   addresses they were requested from.
 -- * The user row stays, anonymised, because invitations and event logs refer to it by id and RefId:
@@ -33,6 +32,8 @@ BEGIN
 
     -- Lock every tenant the user belongs to first, as every procedure that guards the last
     -- administrator does (see dbo.Tenant_Administrators), then read membership under the locks.
+    -- HOLDLOCK on the membership read as well: accepting an invitation does not lock the tenant row,
+    -- so without the key-range lock someone could join a tenant already judged to be the user's alone.
     DECLARE @Locked INT;
     SELECT @Locked = COUNT(*)
     FROM dbo.Tenants T WITH (UPDLOCK, HOLDLOCK)
@@ -40,8 +41,8 @@ BEGIN
 
     INSERT INTO @Tenants (TenantId, IsSole)
     SELECT TM.TenantId,
-           IIF(EXISTS (SELECT 1 FROM dbo.TenantMembers O WHERE O.TenantId = TM.TenantId AND O.UserId <> @UserId), 0, 1)
-    FROM dbo.TenantMembers TM
+           IIF(EXISTS (SELECT 1 FROM dbo.TenantMembers O WITH (HOLDLOCK) WHERE O.TenantId = TM.TenantId AND O.UserId <> @UserId), 0, 1)
+    FROM dbo.TenantMembers TM WITH (HOLDLOCK)
     WHERE TM.UserId = @UserId;
 
     DECLARE @Blocking NVARCHAR(2000) = (
@@ -49,13 +50,12 @@ BEGIN
         FROM @Tenants T
         INNER JOIN dbo.Tenants TN ON TN.Id = T.TenantId
         WHERE T.IsSole = 0
-          AND EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(T.TenantId) A WHERE A.UserId = @UserId)
           AND NOT EXISTS (SELECT 1 FROM dbo.Tenant_Administrators(T.TenantId) A WHERE A.UserId <> @UserId));
 
     IF @Blocking IS NOT NULL
     BEGIN
         DECLARE @BlockingMessage NVARCHAR(2048) = LEFT(
-            N'You are the only administrator of ' + @Blocking + N'. Make another member an administrator, or remove the other members, before deleting your account.', 2048);
+            N'Nobody else administers ' + @Blocking + N'. Make another member an administrator, or remove the other members, before deleting your account.', 2048);
         THROW 50018, @BlockingMessage, 1;
     END
 
@@ -84,11 +84,8 @@ BEGIN
     FETCH NEXT FROM shared INTO @TenantId;
     WHILE @@FETCH_STATUS = 0
     BEGIN
+        -- There is one: the guard above refused every shared tenant without another administrator.
         SET @NewOwnerUserId = (SELECT MIN(UserId) FROM dbo.Tenant_Administrators(@TenantId) WHERE UserId <> @UserId);
-        IF @NewOwnerUserId IS NULL
-        BEGIN
-            SET @NewOwnerUserId = (SELECT MIN(UserId) FROM dbo.TenantMembers WHERE TenantId = @TenantId AND UserId <> @UserId);
-        END
 
         EXEC dbo.TenantMember_Remove @TenantId = @TenantId, @UserId = @UserId, @NewOwnerUserId = @NewOwnerUserId;
 
@@ -156,5 +153,8 @@ BEGIN
     WHERE Id = @UserId;
 
     COMMIT TRANSACTION;
+
+    -- The shared tenants the user left, for the caller to announce the departure in.
+    SELECT TenantId FROM @Tenants WHERE IsSole = 0 ORDER BY TenantId;
 END
 GO

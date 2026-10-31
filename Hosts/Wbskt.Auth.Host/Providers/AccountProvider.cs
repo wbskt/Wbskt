@@ -159,7 +159,7 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             cancellationToken);
     }
 
-    public async Task DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<int>> DeleteUserAsync(int userId, IReadOnlyDictionary<int, OutboxMessage> deletedWorkspaces, CancellationToken cancellationToken = default)
     {
         // The property names are what the procedure's OPENJSON reads.
         var planned = JsonSerializer.Serialize(deletedWorkspaces.Select(w => new Dictionary<string, object>
@@ -169,11 +169,15 @@ internal sealed class AccountProvider : BaseSqlProvider, IAccountProvider
             ["payload"] = w.Value.Payload
         }));
 
-        await ExecuteNonQueryAsync("dbo.User_Delete", p =>
-        {
-            p.AddWithValue("@UserId", userId);
-            p.Add("@DeletedWorkspaces", SqlDbType.NVarChar, -1).Value = planned;
-        }, cancellationToken);
+        return await ExecuteCollectionAsync(
+            "dbo.User_Delete",
+            p =>
+            {
+                p.AddWithValue("@UserId", userId);
+                p.Add("@DeletedWorkspaces", SqlDbType.NVarChar, -1).Value = planned;
+            },
+            reader => reader.GetInt32(0),
+            cancellationToken);
     }
 
     private static User MapUser(SqlDataReader reader)
