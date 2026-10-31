@@ -42,8 +42,8 @@ x-logging: &default-logging
 x-host-env: &host-env
   ASPNETCORE_ENVIRONMENT: Production
   RabbitMQ__HostName: rabbitmq
-  RabbitMQ__UserName: ${RABBITMQ_USER}
-  RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+  RabbitMQ__UserName: ${RABBITMQ_USER:?RABBITMQ_USER is required - see .env.example}
+  RabbitMQ__Password: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required - see .env.example}
   # Traces, metrics and logs, all to the collector below. Each service sets its own OTEL_SERVICE_NAME.
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
 
@@ -74,7 +74,7 @@ services:
       - --entrypoints.engine.address=:8081
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL is required - see .env.example}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       # Defaults to production Let's Encrypt; set ACME_CASERVER to the staging directory
       # (https://acme-staging-v02.api.letsencrypt.org/directory) while iterating, to avoid
@@ -105,7 +105,7 @@ services:
     # public hostnames - not the internal service names the backend containers use to reach
     # each other.
     environment:
-      AUTH_URL: https://auth.${DOMAIN}
+      AUTH_URL: https://auth.${DOMAIN:?DOMAIN is required - see .env.example}
       WORKSPACE_URL: https://api.${DOMAIN}
       NOTIFICATIONS_URL: https://api.${DOMAIN}/hubs/notifications
       # Where devices connect. The console never connects here itself; it only puts this in the
@@ -156,7 +156,7 @@ services:
       Auth__Telemetry__EmailFingerprintKey: ${AUTH_EMAIL_FINGERPRINT_KEY:-}
       # Publishes access-token revocations (logout-all, deactivation, password reset) to management.
       ConnectionStrings__Redis: redis:6379
-      Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+      Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN:?CONSOLE_ORIGIN is required - see .env.example}
       Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
       # The console's refresh cookie. Strict while the console is a sibling subdomain of this host.
       Auth__RefreshCookie__SameSite: ${REFRESH_COOKIE_SAMESITE:-Strict}
@@ -170,10 +170,10 @@ services:
       Auth__Email__Password: ${SMTP_PASSWORD:-}
       Auth__Email__FromAddress: ${SMTP_FROM_ADDRESS:-}
       Auth__Email__FromDisplayName: ${SMTP_FROM_NAME:-Wbskt}
-      Auth__Email__ConsoleBaseUrl: ${CONSOLE_ORIGIN}
+      Auth__Email__ConsoleBaseUrl: ${CONSOLE_ORIGIN:?CONSOLE_ORIGIN is required - see .env.example}
       # The key GET /api/internal/workspaces/deleted requires: management's deleted workspace sweep
       # has no user token to forward. Unset, that route answers 503 and the sweep fails each day.
-      Internal__ApiKey: ${AUTH_INTERNAL_API_KEY}
+      Internal__ApiKey: ${AUTH_INTERNAL_API_KEY:?AUTH_INTERNAL_API_KEY is required - see .env.example}
     volumes:
       - ../config:/Config:ro
     healthcheck:
@@ -233,9 +233,9 @@ services:
       Jwt__TrustedJwksUrl: http://auth:8080/.well-known/jwks.json
       Services__Auth: http://auth:8080
       Services__WorkflowEngine: http://traefik:8081
-      Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY}
-      Services__AuthInternalApiKey: ${AUTH_INTERNAL_API_KEY}
-      Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN}
+      Services__WorkflowEngineApiKey: ${ENGINE_INBOUND_API_KEY:?ENGINE_INBOUND_API_KEY is required - see .env.example}
+      Services__AuthInternalApiKey: ${AUTH_INTERNAL_API_KEY:?AUTH_INTERNAL_API_KEY is required - see .env.example}
+      Cors__AllowedOrigins__0: ${CONSOLE_ORIGIN:?CONSOLE_ORIGIN is required - see .env.example}
       Cors__ExtraOrigins: ${CORS_EXTRA_ORIGINS:-}
     volumes:
       - ../config:/Config:ro
@@ -378,7 +378,7 @@ services:
       OTEL_SERVICE_NAME: wbskt-engine
       # Its own login, limited to running the core database's procedures; the migrator creates it.
       ConnectionStrings__DefaultConnection: Server=sql;Database=Wbskt.Database;User Id=wbskt_engine;Password=${SQL_ENGINE_PASSWORD:?SQL_ENGINE_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
-      Engine__InboundApiKey: ${ENGINE_INBOUND_API_KEY}
+      Engine__InboundApiKey: ${ENGINE_INBOUND_API_KEY:?ENGINE_INBOUND_API_KEY is required - see .env.example}
       # Seals the secrets saved with integrations (bot tokens, relay passwords). Only the engine holds
       # it. Without it, saving or testing an integration answers 503 INTEGRATIONS_NOT_CONFIGURED.
       WorkflowEngine__Integrations__Keys__1: ${INTEGRATIONS_KEY_1:-}
@@ -426,8 +426,8 @@ services:
     container_name: wbskt-rabbitmq
     hostname: rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?RABBITMQ_USER is required - see .env.example}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required - see .env.example}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
       # Adds rabbitmq_prometheus (port 15692, backend network only) for the dead-letter alert.
@@ -468,7 +468,7 @@ services:
     container_name: wbskt-sql
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required - see .env.example}
       # Express is the free edition licensed for production; Developer is for dev and test only.
       # An existing volume switches edition when the container is recreated - see "SQL Server
       # edition" in deploy/README.md.
@@ -645,8 +645,8 @@ services:
     container_name: wbskt-migrator
     profiles: ["migrate"]
     environment:
-      AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
-      DEFAULT_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True;
+      AUTH_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database.Auth;User Id=sa;Password=${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
+      DEFAULT_DB_CONNECTION_STRING: Server=sql;Database=Wbskt.Database;User Id=sa;Password=${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required - see .env.example};TrustServerCertificate=True;Encrypt=True;
       # Both interpolate from the invoking shell (e.g. `MIGRATE_FRESH=true docker compose run ...`);
       # a literal value here would ignore the shell and make the documented commands silent no-ops.
       # MIGRATE_FRESH=true drops and recreates both DBs - only ever for a brand-new environment.
