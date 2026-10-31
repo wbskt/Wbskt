@@ -76,7 +76,7 @@ public sealed partial class HostArchitectureTests
     public void Every_host_has_the_controllers_this_suite_expects()
     {
         // Pins the discovered set, so the rules below cannot pass by finding nothing.
-        Assert.Equal(["AuthController", "InternalUsersController", "InternalWorkspacesController", "InvitationsController", "ManagementController", "WorkspacesController"], Names(ControllersIn(AuthHost)));
+        Assert.Equal(["AccountController", "AuthController", "InternalUsersController", "InternalWorkspacesController", "InvitationsController", "ManagementController", "WorkspacesController"], Names(ControllersIn(AuthHost)));
         Assert.NotEmpty(ControllersIn(ManagementHost));
         Assert.NotEmpty(ControllersIn(EngineHost));
 
