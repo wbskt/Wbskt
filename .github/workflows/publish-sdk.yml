@@ -1,0 +1,57 @@
+name: Publish SDK
+
+# Packs Wbskt.Client and Wbskt.Protocol and pushes them to NuGet when a tag sdk-v<version> is pushed
+# (for example sdk-v1.0.0-preview.1). The tag must match SdkPackageVersion in Clients/Directory.Build.props.
+# Needs the NUGET_API_KEY repository secret, scoped to push those two package ids.
+
+on:
+  push:
+    tags: ['sdk-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 8.0.x
+
+      - name: Check the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/sdk-v')
+        run: |
+          version="$(sed -n 's:.*<SdkPackageVersion>\(.*\)</SdkPackageVersion>.*:\1:p' Clients/Directory.Build.props)"
+          if [[ "sdk-v$version" != "${GITHUB_REF_NAME}" ]]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match SdkPackageVersion $version"
+            exit 1
+          fi
+
+      - name: Unit tests
+        run: dotnet test Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj --nologo -v q --filter "FullyQualifiedName~ClientSdk"
+
+      - name: Pack
+        run: |
+          dotnet pack Clients/Wbskt.Protocol/Wbskt.Protocol.csproj -c Release -o packages --nologo
+          dotnet pack Clients/Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj -c Release -o packages --nologo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-packages
+          path: packages/
+
+      - name: Push to NuGet
+        if: startsWith(github.ref, 'refs/tags/sdk-v')
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [[ -z "$NUGET_API_KEY" ]]; then
+            echo "::error::NUGET_API_KEY is not set"
+            exit 1
+          fi
+          dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -1,9 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>Wbskt.Protocol</PackageId>
+    <Version>$(SdkPackageVersion)</Version>
+    <Description>The Wbskt device protocol's message types, payloads and limits, shared by the Wbskt.Client SDK and the platform. See Docs/Device.Protocol.md.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

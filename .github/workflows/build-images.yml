@@ -32,6 +32,13 @@ jobs:
 
       # The project is named explicitly rather than running the solution: Tests/Wbskt.LoadTester is
       # an Exe, not a test project, and `dotnet test` on the solution would try to run it.
+      # The SDK packages also target net8.0, which nothing else here builds; packing them catches an
+      # API the older target lacks before a publish does (publish-sdk.yml).
+      - name: Pack the device SDK
+        run: |
+          dotnet pack Clients/Wbskt.Protocol/Wbskt.Protocol.csproj -c Release -o packages --nologo -v q
+          dotnet pack Clients/Wbskt.Client.Sdk/Wbskt.Client.Sdk.csproj -c Release -o packages --nologo -v q
+
       - name: Unit tests
         run: |
           dotnet test Tests/Wbskt.Host.Tests/Wbskt.Host.Tests.csproj \
