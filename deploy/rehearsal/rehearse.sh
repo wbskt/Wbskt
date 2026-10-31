@@ -39,11 +39,12 @@ migrate() {
 docker cp "$here/seed-every-table.sql" "$SQL_CONTAINER:/tmp/seed-every-table.sql"
 docker cp "$here/row-counts.sql" "$SQL_CONTAINER:/tmp/row-counts.sql"
 
-# -y 0: no width cap, so a long constraint error in the seed log is not cut off.
+# -y 0: no width cap, so a long constraint error in the seed log is not cut off. sqlcmd refuses
+# -h alongside it, so the header lines stay; every reader greps for the lines it wants.
 sql() {
   local db=$1 file=$2
   docker exec "$SQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
-    -S localhost -U sa -P "$SA_PASSWORD" -C -b -d "$db" -h -1 -y 0 -i "$file" | sed 's/[[:space:]]*$//'
+    -S localhost -U sa -P "$SA_PASSWORD" -C -b -d "$db" -y 0 -i "$file" | sed 's/[[:space:]]*$//'
 }
 
 echo "::group::Previous release: $PREVIOUS_IMAGE"
