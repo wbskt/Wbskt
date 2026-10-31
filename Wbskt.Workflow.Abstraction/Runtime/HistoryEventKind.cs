@@ -40,6 +40,8 @@ public static class HistoryEventKind
     public const string CounterReset = "CounterReset";
     // Call a URL got a response labelled JSON whose body did not parse.
     public const string WebhookJsonUnparsable = "WebhookJsonUnparsable";
+    // A branch's local state passed 80% of its size limit.
+    public const string BranchStateLarge = "BranchStateLarge";
 
     // Fan-out / fan-in
     public const string JoinContinuationSpawned = "JoinContinuationSpawned";
@@ -63,6 +65,7 @@ public static class HistoryEventKind
                 or CounterStepTruncated
                 or CounterReset
                 or WebhookJsonUnparsable
+                or BranchStateLarge
                 or BranchFailed
                 or NodeRetrying
                 or BranchCancelled

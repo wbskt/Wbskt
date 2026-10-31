@@ -319,12 +319,12 @@ internal sealed class BranchLoop : IBranchLoop
             return null;
         }
 
+        result = GuardLocalStateSize(result, branchRow);
+
         foreach (NodeWarning warning in result.Warnings)
         {
             await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, warning.EventKind, warning.Payload, ct);
         }
-
-        result = GuardLocalStateSize(result, branchRow);
 
         // durationMs travels on every node outcome. Deriving it by subtracting the NodeStarted
         // timestamp only works while both rows survive retention, and it silently includes any
@@ -353,10 +353,16 @@ internal sealed class BranchLoop : IBranchLoop
     /// </summary>
     private NodeExecutionResult GuardLocalStateSize(NodeExecutionResult result, BranchRow branchRow)
     {
+        IReadOnlyDictionary<string, JsonElement>? merged = result switch
+        {
+            NodeExecutionResult.Continue cont => BranchLocalState.Merge(branchRow.LocalJson, cont.LocalStatePatch, cont.RemoveKeys),
+            NodeExecutionResult.WaitForBookmark wait => BranchLocalState.Merge(branchRow.LocalJson, wait.LocalStatePatch, wait.RemoveKeys),
+            _ => null
+        };
+
         long bytes = result switch
         {
-            NodeExecutionResult.Continue cont => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, cont.LocalStatePatch, cont.RemoveKeys)),
-            NodeExecutionResult.WaitForBookmark wait => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, wait.LocalStatePatch, wait.RemoveKeys)),
+            _ when merged is not null => SizeOf(merged),
             // Each child gets the shared state plus its own; base plus the largest child is an upper
             // bound on any child's row without serializing the shared state once per child.
             NodeExecutionResult.Fork fork => SizeOf(BranchLocalState.Merge(branchRow.LocalJson, fork.LocalStatePatch))
@@ -364,17 +370,35 @@ internal sealed class BranchLoop : IBranchLoop
             _ => 0
         };
 
-        if (bytes <= _maxBranchLocalStateBytes)
+        if (bytes > _maxBranchLocalStateBytes)
         {
-            return result;
+            return new NodeExecutionResult.Fail(
+                "BRANCH_STATE_TOO_LARGE",
+                $"The node's output would grow the branch's local state to {bytes} bytes, over the limit of {_maxBranchLocalStateBytes} bytes.",
+                false,
+                null) { Warnings = result.Warnings };
         }
 
-        return new NodeExecutionResult.Fail(
-            "BRANCH_STATE_TOO_LARGE",
-            $"The node's output would grow the branch's local state to {bytes} bytes, over the limit of {_maxBranchLocalStateBytes} bytes.",
-            false,
-            null);
+        // Warned once, on the step that crosses the line, so a branch that stays large does not repeat it
+        // on every step after.
+        long threshold = (long)(_maxBranchLocalStateBytes * BranchStateWarnRatio);
+        if (merged is not null && bytes > threshold && System.Text.Encoding.UTF8.GetByteCount(branchRow.LocalJson) <= threshold)
+        {
+            string[] largestKeys = merged
+                .OrderByDescending(entry => System.Text.Encoding.UTF8.GetByteCount(entry.Value.GetRawText()))
+                .Take(3)
+                .Select(entry => entry.Key)
+                .ToArray();
+            return result with
+            {
+                Warnings = [.. result.Warnings, new NodeWarning(HistoryEventKind.BranchStateLarge, new { bytes, limit = _maxBranchLocalStateBytes, largestKeys })]
+            };
+        }
+
+        return result;
     }
+
+    private const double BranchStateWarnRatio = 0.8;
 
     private static long SizeOf(IReadOnlyDictionary<string, JsonElement> localState)
     {

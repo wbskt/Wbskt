@@ -224,6 +224,83 @@ public sealed class BranchLoopTests
         Assert.True(kinds.IndexOf(HistoryEventKind.TemplateValueMissing) < kinds.IndexOf(HistoryEventKind.NodeCompleted));
     }
 
+    [Theory]
+    [InlineData(0, 900, true)]    // crosses 80% of a 1000-byte limit on this step
+    [InlineData(0, 500, false)]   // stays under 80%
+    [InlineData(850, 10, false)]  // already over 80%, so an earlier step warned
+    public async Task RunAsync_warns_once_when_a_step_takes_the_branch_state_past_80_percent_of_its_limit(int startingBytes, int addedBytes, bool warns)
+    {
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var runCounters = new StubRunCountersProvider();
+        var loop = TestBranchLoop.Create(
+            new RecordingBranchProvider(nodeId, startingBytes == 0 ? null : JsonSerializer.Serialize(new { big = new string('x', startingBytes) })),
+            new StubRunProvider(),
+            runCounters,
+            new RecordingBookmarkProvider(),
+            new RunJournal(historyProvider, new FixedClock()),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new ScriptedExecutor(new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>
+            {
+                ["reading"] = JsonSerializer.SerializeToElement(new string('r', addedBytes))
+            }))),
+            new RecordingRunDispatcher(),
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new NoOpRunCancellationService(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider(),
+            engineOptions: Options.Create(new WorkflowEngineOptions { MaxBranchLocalStateBytes = 1000 }));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        var warnings = historyProvider.Events.Where(evt => evt.EventKind == HistoryEventKind.BranchStateLarge).ToList();
+        Assert.Equal(warns ? 1 : 0, warnings.Count);
+        if (warns)
+        {
+            var payload = JsonDocument.Parse(warnings[0].PayloadJson!).RootElement;
+            Assert.Equal(1000, payload.GetProperty("limit").GetInt32());
+            Assert.Equal("reading", payload.GetProperty("largestKeys")[0].GetString());
+            Assert.Contains(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.NodeCompleted);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_keeps_a_steps_warnings_when_its_output_is_too_large()
+    {
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var runCounters = new StubRunCountersProvider();
+        var loop = TestBranchLoop.Create(
+            new RecordingBranchProvider(nodeId),
+            new StubRunProvider(),
+            runCounters,
+            new RecordingBookmarkProvider(),
+            new RunJournal(historyProvider, new FixedClock()),
+            new StubWorkflowDefinitionCache(definition),
+            new StubNodeExecutorRegistry(new WarningExecutor(new string('r', 2000))),
+            new RecordingRunDispatcher(),
+            new InMemoryIdempotencyKeyProvider(),
+            new FixedClock(),
+            new SequentialIdGenerator(),
+            new BranchTerminator(runCounters, new Lazy<IRunFinalizer>(() => new NoOpRunFinalizer())),
+            new NoOpRunCancellationService(),
+            new DefaultCreditCostCalculator(),
+            new NoOpJoinAggregatorProvider(),
+            engineOptions: Options.Create(new WorkflowEngineOptions { MaxBranchLocalStateBytes = 1000 }));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.TemplateValueMissing);
+        Assert.Contains(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.NodeFailed && evt.PayloadJson!.Contains("BRANCH_STATE_TOO_LARGE"));
+    }
+
     [Fact]
     public async Task RunAsync_records_BranchFailed_alongside_NodeFailed()
     {
@@ -1844,14 +1921,20 @@ public sealed class BranchLoopTests
         }
     }
 
-    private sealed class WarningExecutor : INodeExecutor
+    private sealed class WarningExecutor(string? output = null) : INodeExecutor
     {
         public string Kind => "test";
 
         public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
         {
             ctx.Warnings.Add(new NodeWarning(HistoryEventKind.TemplateValueMissing, new { field = "message" }));
-            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>()));
+            var patch = new Dictionary<string, JsonElement>();
+            if (output is not null)
+            {
+                patch["reading"] = JsonSerializer.SerializeToElement(output);
+            }
+
+            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("next", patch));
         }
     }
 
