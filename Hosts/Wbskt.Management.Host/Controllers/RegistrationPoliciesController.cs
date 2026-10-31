@@ -128,6 +128,22 @@ public class RegistrationPoliciesController : ApiControllerBase
         return MapResult(result);
     }
 
+    /// <summary>
+    /// Deletes a registration policy, which cannot be undone. Its PIN stops registering devices,
+    /// message templates pinned to it are unpinned, and its event-log history stays. Refused while any
+    /// client is still enrolled through it.
+    /// </summary>
+    /// <param name="workspaceId">The workspace named by the route's workspace reference, once the caller's permission there is checked.</param>
+    /// <param name="policyRef">The unique reference ID of the policy to delete.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpDelete("{policyRef:guid}")]
+    [RequiresPermission(PermissionNames.PoliciesManage)]
+    public async Task<IActionResult> Delete([FromWorkspace] int workspaceId, Guid policyRef, CancellationToken cancellationToken)
+    {
+        var result = await _policyService.DeleteAsync(workspaceId, policyRef, cancellationToken);
+        return MapResult(result);
+    }
+
 
 
 }
