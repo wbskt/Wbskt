@@ -829,6 +829,39 @@ public sealed class RetryExecutorTests
         Assert.Equal(HistoryEventKind.CreditBudgetLow, Assert.Single(result.Warnings).EventKind);
     }
 
+    [Fact]
+    public async Task The_budget_warning_rides_on_a_retry_park()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.FromSeconds(30), Factor = null, MaxDelay = null, MaxAttempts = 3, JitterPct = 0, RetryOn = [] });
+        var executor = new RecordingExecutor(new NodeExecutionResult.Fail("E_RETRY", "boom", true, null));
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(new CreditCharge(85m, 100m));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), new InstantTimeProvider(), CancellationToken.None,
+            countersMock.Object, Mock.Of<ICreditCostCalculator>(c => c.Calculate(It.IsAny<BaseNode>()) == 10m),
+            retryParkThreshold: TimeSpan.FromSeconds(5));
+
+        Assert.IsType<NodeExecutionResult.WaitForBookmark>(result);
+        Assert.Equal(HistoryEventKind.CreditBudgetLow, Assert.Single(result.Warnings).EventKind);
+    }
+
+    [Fact]
+    public async Task The_budget_warning_rides_on_a_failure_the_executor_threw()
+    {
+        var node = CreateNode(new RetryPolicy { Strategy = RetryStrategy.Constant, InitialDelay = TimeSpan.Zero, Factor = null, MaxDelay = null, MaxAttempts = 1, JitterPct = 0, RetryOn = [] });
+        var executor = new ThrowingExecutor(() => throw new PermanentNodeException("bad"));
+        var countersMock = new Mock<IRunCountersProvider>();
+        countersMock.Setup(p => p.TryChargeAsync(It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>())).ReturnsAsync(new CreditCharge(85m, 100m));
+
+        NodeExecutionResult result = await RetryExecutor.RunWithRetryAsync(
+            node, CreateContext(), executor, new TestNodeExecutionServices(), new FixedClock(), CancellationToken.None,
+            countersMock.Object, Mock.Of<ICreditCostCalculator>(c => c.Calculate(It.IsAny<BaseNode>()) == 10m));
+
+        Assert.Equal("PERMANENT_ERROR", Assert.IsType<NodeExecutionResult.Fail>(result).ErrorCode);
+        Assert.Equal(HistoryEventKind.CreditBudgetLow, Assert.Single(result.Warnings).EventKind);
+    }
+
     /// <summary>
     /// A shared Increment writes outside the branch row before the pointer moves, so a crash in between
     /// replays it. The replay has to come back from the idempotency key rather than counting again.
