@@ -82,10 +82,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
             return new TriggerDispatchResult(TriggerDispatchOutcome.Idempotent, null, null, defaultCorrelation);
         }
 
-        _logger?.LogInformation("Found {Count} active trigger registrations for channel {ChannelKind} and keys {MatchKeys}", registrations.Count, resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
+        _logger?.LogDebug("Found {Count} active trigger registrations for channel {ChannelKind} and keys {MatchKeys}", registrations.Count, resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
         if (registrations.Count == 0)
         {
-            _logger?.LogWarning("No active trigger registrations found for channel {ChannelKind} and keys {MatchKeys}", resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
+            _logger?.LogDebug("No active trigger registrations found for channel {ChannelKind} and keys {MatchKeys}", resolvedEvent.ChannelKind, resolvedEvent.MatchKeys);
             if (bookmarkMatch.ClaimKey != null)
             {
                 // Otherwise this claim stays 'Pending' forever - a later redelivery of the same
@@ -261,7 +261,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         }
 
         TriggerConcurrencyDecision concurrencyDecision = await _triggerConcurrencyEnforcer.EvaluateAsync(registration, normalizedEvent, ct);
-        _logger?.LogInformation("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
+        _logger?.LogDebug("Concurrency decision for registration {RegistrationId} is {Outcome} (RunIdsToCancel: {RunIdsToCancel})", registration.Id, concurrencyDecision.Outcome, concurrencyDecision.RunIdsToCancel);
         switch (concurrencyDecision.Outcome)
         {
             case TriggerConcurrencyOutcome.Dropped:

@@ -1,6 +1,8 @@
+using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Runtime;
+using Wbskt.Workflow.Telemetry;
 
 namespace Wbskt.Host.Tests.Runtime;
 
@@ -66,6 +68,83 @@ public sealed class InboundHubTests
         Assert.Contains(logger.Messages, message => message.Contains("evt-1", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Handle_logs_nothing_at_information_or_above_for_an_event_that_matches_nothing()
+    {
+        // Arrange
+        var logger = new RecordingLogger();
+        var hub = new InboundHub(new RecordingTriggerDispatcher(), new FixedClock(), logger);
+
+        // Act
+        await hub.HandleAsync(new InboundEvent("client", ["key-1"], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None);
+
+        // Assert
+        Assert.DoesNotContain(logger.Levels, level => level >= LogLevel.Information);
+    }
+
+    [Fact]
+    public async Task Handle_counts_each_event_by_channel_and_outcome()
+    {
+        // Arrange
+        using var metrics = new WorkflowMetrics();
+        using var counts = new InboundEventCounts(metrics);
+        var hub = new InboundHub(new RecordingTriggerDispatcher(), new FixedClock(), new RecordingLogger(), metrics: metrics);
+
+        // Act
+        await hub.HandleAsync(new InboundEvent("client", [], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None);
+        await hub.HandleAsync(new InboundEvent("client", [], "evt-2", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, counts.Get("client", nameof(TriggerDispatchOutcome.NoRegistration)));
+    }
+
+    [Fact]
+    public async Task Handle_counts_a_failed_event()
+    {
+        // Arrange
+        using var metrics = new WorkflowMetrics();
+        using var counts = new InboundEventCounts(metrics);
+        var hub = new InboundHub(new ThrowingTriggerDispatcher(), new FixedClock(), new RecordingLogger(), metrics: metrics);
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(() => hub.HandleAsync(new InboundEvent("client", [], "evt-1", new Dictionary<string, System.Text.Json.JsonElement>(), DateTime.UtcNow), CancellationToken.None));
+
+        // Assert
+        Assert.Equal(1, counts.Get("client", "Failed"));
+    }
+
+    private sealed class InboundEventCounts : IDisposable
+    {
+        private readonly MeterListener _listener = new();
+        private readonly Dictionary<(string Channel, string Outcome), long> _counts = [];
+
+        public InboundEventCounts(WorkflowMetrics metrics)
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (ReferenceEquals(instrument, metrics.InboundEvents))
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            _listener.SetMeasurementEventCallback<long>((_, measurement, tags, _) =>
+            {
+                string channel = "", outcome = "";
+                foreach (KeyValuePair<string, object?> tag in tags)
+                {
+                    if (tag.Key == "channel") channel = (string)tag.Value!;
+                    if (tag.Key == "outcome") outcome = (string)tag.Value!;
+                }
+                _counts[(channel, outcome)] = _counts.GetValueOrDefault((channel, outcome)) + measurement;
+            });
+            _listener.Start();
+        }
+
+        public long Get(string channel, string outcome) => _counts.GetValueOrDefault((channel, outcome));
+
+        public void Dispose() => _listener.Dispose();
+    }
+
     private sealed class RecordingTriggerDispatcher(TriggerDispatchResult? result = null) : ITriggerDispatcher
     {
         public List<InboundEvent> Events { get; } = [];
@@ -95,6 +174,7 @@ public sealed class InboundHubTests
     private sealed class RecordingLogger : ILogger<InboundHub>
     {
         public List<string> Messages { get; } = [];
+        public List<LogLevel> Levels { get; } = [];
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
@@ -102,6 +182,7 @@ public sealed class InboundHubTests
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             Messages.Add(formatter(state, exception));
+            Levels.Add(logLevel);
         }
     }
 }
