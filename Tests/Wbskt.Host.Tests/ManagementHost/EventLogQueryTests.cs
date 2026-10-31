@@ -72,6 +72,19 @@ public sealed class EventLogQueryTests
 
         _asked!.EventNames.Should().BeEquivalentTo(EventLogGroups.All["policies"].Concat(["ClientDeletedEvent", "ClientRenamedEvent", "WorkflowDeletedEvent"]));
         _asked.ExcludeEventNames.Should().BeNull();
+        _asked.IncludeDeviceTraffic.Should().BeFalse("no event it names is device traffic, so the traffic table has nothing to give");
+    }
+
+    [Fact]
+    public async Task The_whole_log_and_a_view_naming_a_traffic_event_read_the_traffic_table()
+    {
+        var service = CreateService();
+
+        await service.GetLogsAsync(WorkspaceId, new EventLogQuery(), null, 50);
+        _asked!.IncludeDeviceTraffic.Should().BeTrue();
+
+        await service.GetLogsAsync(WorkspaceId, new EventLogQuery { EventNames = ["PolicyCreatedEvent", DeviceTrafficAttribute.EventNames[0]] }, null, 50);
+        _asked.IncludeDeviceTraffic.Should().BeTrue();
     }
 
     [Fact]
@@ -91,6 +104,7 @@ public sealed class EventLogQueryTests
 
         _asked!.EventNames.Should().BeNull();
         _asked.ExcludeEventNames.Should().BeEquivalentTo(DeviceTrafficAttribute.EventNames);
+        _asked.IncludeDeviceTraffic.Should().BeFalse();
     }
 
     [Fact]
@@ -178,7 +192,7 @@ public sealed class EventLogQueryTests
     public async Task The_summary_folds_events_into_groups_and_leaves_traffic_out_of_the_total_when_asked()
     {
         var traffic = DeviceTrafficAttribute.EventNames[0];
-        _provider.Setup(p => p.CountAsync(WorkspaceId, Now.UtcDateTime.AddDays(-7), Now.UtcDateTime, It.IsAny<CancellationToken>()))
+        _provider.Setup(p => p.CountAsync(WorkspaceId, Now.UtcDateTime.AddDays(-7), Now.UtcDateTime, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
                 new EventLogCount("PolicyCreatedEvent", null, null, 2),
@@ -193,6 +207,8 @@ public sealed class EventLogQueryTests
 
         withTraffic.Value.Total.Should().Be(109);
         withoutTraffic.Value.Total.Should().Be(9);
+        _provider.Verify(p => p.CountAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), true, It.IsAny<CancellationToken>()), Times.Once);
+        _provider.Verify(p => p.CountAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), false, It.IsAny<CancellationToken>()), Times.Once);
         withTraffic.Value.Groups.Should().Contain(new Dictionary<string, long>
         {
             ["policies"] = 2,
@@ -209,7 +225,7 @@ public sealed class EventLogQueryTests
         var pika = Guid.NewGuid();
         var amal = Guid.NewGuid();
         var traffic = DeviceTrafficAttribute.EventNames[0];
-        _provider.Setup(p => p.CountAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _provider.Setup(p => p.CountAsync(WorkspaceId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
                 new EventLogCount("ClientRenamedEvent", pika, EventSource.Console, 5),

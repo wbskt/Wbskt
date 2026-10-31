@@ -1,7 +1,7 @@
 CREATE TABLE dbo.EventLogs (
-    -- BIGINT: the table takes a row per device message, which would exhaust INT within a year at
-    -- modest fleet sizes. Retention (dbo.EventLogs_DeleteBefore) does not reset the identity.
-    Id          BIGINT        IDENTITY(1, 1) NOT NULL,
+    -- From dbo.EventLogIds, shared with dbo.DeviceTraffic, so the readers can page over both tables
+    -- by one id. BIGINT: device traffic used to land here too, and would exhaust INT within a year.
+    Id          BIGINT        NOT NULL CONSTRAINT DF_EventLogs_Id DEFAULT (NEXT VALUE FOR dbo.EventLogIds),
     EventId     INT           NOT NULL,
     WorkspaceId INT           NULL,
     PolicyId    INT           NULL,

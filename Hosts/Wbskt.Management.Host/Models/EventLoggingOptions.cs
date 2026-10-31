@@ -15,10 +15,11 @@ public sealed class EventLoggingOptions
 
     /// <summary>
     /// How long raw device traffic (events marked <c>[DeviceTraffic]</c>: messages, replies, command
-    /// delivery) is kept. Much shorter than the audit log, since it arrives at the rate devices talk;
-    /// readings keep their own, longer history in dbo.ClientReadings. Capped at <see cref="RetentionDays"/>.
+    /// delivery) is kept in dbo.DeviceTraffic. Much shorter than the audit log, since it arrives at the
+    /// rate devices talk; readings keep their own, longer history in dbo.ClientReadings, and the latest
+    /// latency and reported values stay on the client. Capped at <see cref="RetentionDays"/>.
     /// </summary>
-    public int DeviceTrafficRetentionDays { get; set; } = 14;
+    public int DeviceTrafficRetentionDays { get; set; } = 2;
 
     /// <summary>How often the retention sweep runs.</summary>
     public TimeSpan RetentionInterval { get; set; } = TimeSpan.FromHours(1);

@@ -66,6 +66,26 @@ public sealed class EventLogRetentionServiceTests
     }
 
     [Fact]
+    public async Task The_device_traffic_table_is_swept_batch_by_batch_after_its_own_window()
+    {
+        var provider = new Mock<IEventProvider>();
+        provider.SetupSequence(p => p.DeleteDeviceTrafficBeforeAsync(It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(EventLogRetentionService.BatchSize)
+            .ReturnsAsync(7);
+
+        var total = await CreateService(provider.Object, new EventRegistry(), retentionDays: 90, deviceTrafficRetentionDays: 2).SweepAsync(CancellationToken.None);
+
+        Assert.Equal(EventLogRetentionService.BatchSize + 7, total);
+        provider.Verify(p => p.DeleteDeviceTrafficBeforeAsync(Now.UtcDateTime.AddDays(-2), EventLogRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public void Device_traffic_is_kept_two_days_unless_configured()
+    {
+        Assert.Equal(2, new EventLoggingOptions().DeviceTrafficRetentionDays);
+    }
+
+    [Fact]
     public async Task No_separate_device_traffic_pass_when_its_window_is_not_shorter()
     {
         var registry = new EventRegistry();

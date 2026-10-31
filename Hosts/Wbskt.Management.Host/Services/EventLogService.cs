@@ -112,7 +112,8 @@ internal sealed class EventLogService : IEventLogService
             return Result<EventLogSummaryResponse>.Failure(range.Error);
         }
 
-        var counts = await _eventProvider.CountAsync(workspaceId, range.Value.FromUtc, range.Value.ToUtc, cancellationToken);
+        // The groups never hold device traffic, so a summary that leaves it out has no use for its counts.
+        var counts = await _eventProvider.CountAsync(workspaceId, range.Value.FromUtc, range.Value.ToUtc, traffic == EventLogTraffic.Include, cancellationToken);
         return Result<EventLogSummaryResponse>.Success(Summarize(counts, range.Value, traffic));
     }
 
@@ -211,7 +212,8 @@ internal sealed class EventLogService : IEventLogService
             UserRefId: query.UserRefId,
             FromUtc: range?.FromUtc,
             ToUtc: range?.ToUtc,
-            Search: search));
+            Search: search,
+            IncludeDeviceTraffic: excluded is null && (included is null || included.Any(DeviceTrafficAttribute.EventNames.Contains))));
     }
 
     /// <summary>The events the query's groups and names keep together, or null when it names neither.</summary>

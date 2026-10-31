@@ -1,5 +1,7 @@
 -- Live Comms backfill for the client detail page: the fixed set of in/out protocol events
 -- from the generic event log, so the UI has one stable contract regardless of event additions.
+-- Protocol rows live in dbo.DeviceTraffic and lifecycle rows in dbo.EventLogs; dbo.EventLogEntries
+-- reads both, ordered together by their shared id sequence.
 -- Newest first, a page at a time from @CursorId, as dbo.EventLog_GetBy_Workspace.
 CREATE PROCEDURE dbo.EventLog_GetCommsBy_Client
     @WorkspaceId INT,
@@ -44,7 +46,7 @@ BEGIN
         el.Source,
         el.ClientAddress,
         el.UserAgent
-    FROM dbo.EventLogs el
+    FROM dbo.EventLogEntries el
     JOIN dbo.Events e ON el.EventId = e.Id
     WHERE el.WorkspaceId = @WorkspaceId
       AND el.ClientId = @ClientId

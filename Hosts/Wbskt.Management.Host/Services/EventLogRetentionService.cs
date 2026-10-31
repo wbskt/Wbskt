@@ -10,9 +10,9 @@ namespace Wbskt.Management.Host.Services;
 /// <summary>
 /// Deletes event log entries older than <see cref="EventLoggingOptions.RetentionDays"/>, in batches,
 /// on <see cref="EventLoggingOptions.RetentionInterval"/>. Raw device traffic (events marked
-/// <see cref="DeviceTrafficAttribute"/>) goes sooner, after
-/// <see cref="EventLoggingOptions.DeviceTrafficRetentionDays"/>: it is most of the table, and the
-/// audit records (sign-ins, policy and workflow changes) are what is worth keeping longer.
+/// <see cref="DeviceTrafficAttribute"/>, kept in dbo.DeviceTraffic) goes sooner, after
+/// <see cref="EventLoggingOptions.DeviceTrafficRetentionDays"/>: it arrives at the rate devices talk,
+/// and the audit records (sign-ins, policy and workflow changes) are what is worth keeping longer.
 /// </summary>
 public sealed class EventLogRetentionService : PeriodicWorker
 {
@@ -61,13 +61,21 @@ public sealed class EventLogRetentionService : PeriodicWorker
     }
 
     /// <summary>One sweep: device traffic past its window, then everything past the audit window. Returns the total.</summary>
+    /// <remarks>
+    /// Traffic logged before it moved to dbo.DeviceTraffic is still in dbo.EventLogs, so the shorter
+    /// window is applied there too, by event, until those rows have aged out.
+    /// </remarks>
     private async Task<long> SweepAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         var provider = services.GetRequiredService<IEventProvider>();
         var registry = services.GetRequiredService<IEventRegistry>();
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
 
-        long total = 0;
+        var trafficCutoffUtc = nowUtc - _deviceTrafficRetention;
+        long total = await DeleteBatchesAsync(
+            batchSize => provider.DeleteDeviceTrafficBeforeAsync(trafficCutoffUtc, batchSize, cancellationToken),
+            trafficCutoffUtc,
+            "device traffic");
         if (_deviceTrafficRetention < _retention)
         {
             // Only the device traffic events this database has seen; one never logged has no id yet.
@@ -77,7 +85,7 @@ public sealed class EventLogRetentionService : PeriodicWorker
                 .ToArray();
             if (deviceTrafficIds.Length > 0)
             {
-                total += await DeleteAsync(provider, nowUtc - _deviceTrafficRetention, deviceTrafficIds, "device traffic", cancellationToken);
+                total += await DeleteAsync(provider, trafficCutoffUtc, deviceTrafficIds, "device traffic still in the event log", cancellationToken);
             }
         }
 
@@ -85,13 +93,16 @@ public sealed class EventLogRetentionService : PeriodicWorker
         return total;
     }
 
+    private Task<long> DeleteAsync(IEventProvider provider, DateTime cutoffUtc, IReadOnlyCollection<int>? eventIds, string scope, CancellationToken cancellationToken) =>
+        DeleteBatchesAsync(batchSize => provider.DeleteBeforeAsync(cutoffUtc, batchSize, eventIds, cancellationToken), cutoffUtc, scope);
+
     /// <summary>Deletes batch after batch until one comes back short.</summary>
-    private async Task<long> DeleteAsync(IEventProvider provider, DateTime cutoffUtc, IReadOnlyCollection<int>? eventIds, string scope, CancellationToken cancellationToken)
+    private async Task<long> DeleteBatchesAsync(Func<int, Task<int>> deleteBatchAsync, DateTime cutoffUtc, string scope)
     {
         long total = 0;
         while (true)
         {
-            var deleted = await provider.DeleteBeforeAsync(cutoffUtc, BatchSize, eventIds, cancellationToken);
+            var deleted = await deleteBatchAsync(BatchSize);
             total += deleted;
             if (deleted < BatchSize)
             {

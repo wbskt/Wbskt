@@ -82,7 +82,9 @@ public sealed record EventLogFilter(
     Guid? UserRefId = null,
     DateTime? FromUtc = null,
     DateTime? ToUtc = null,
-    string? Search = null);
+    string? Search = null,
+    // False when the query leaves out every device traffic event, so the read skips dbo.DeviceTraffic.
+    bool IncludeDeviceTraffic = true);
 
 /// <summary>How many entries of one event one user caused from one source, as the database counts them.</summary>
 public sealed record EventLogCount(string EventName, Guid? UserRefId, EventSource? Source, long Count);

@@ -11,7 +11,7 @@ SELECT
     el.CreatedAt,
     el.WorkspaceId,
     el.EventData
-FROM dbo.EventLogs AS el
+FROM dbo.EventLogEntries AS el
 INNER JOIN dbo.Events AS e
     ON e.Id = el.EventId;
 GO

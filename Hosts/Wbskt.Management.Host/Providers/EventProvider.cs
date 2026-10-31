@@ -35,6 +35,16 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
         }, cancellationToken);
     }
 
+    public async Task InsertDeviceTrafficBatchAsync(DataTable logs, CancellationToken cancellationToken = default)
+    {
+        await ExecuteNonQueryAsync("dbo.DeviceTraffic_InsertBatch", p =>
+        {
+            var parameter = p.AddWithValue("@Logs", logs);
+            parameter.SqlDbType = SqlDbType.Structured;
+            parameter.TypeName = "dbo.EventLogTableType";
+        }, cancellationToken);
+    }
+
     public async Task<int> DeleteBeforeAsync(DateTime cutoffUtc, int batchSize, IReadOnlyCollection<int>? eventIds = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteScalarAsync<int>("dbo.EventLogs_DeleteBefore", p =>
@@ -42,6 +52,15 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
             p.Add("@CutoffUtc", SqlDbType.DateTime2).Value = cutoffUtc;
             p.AddWithValue("@BatchSize", batchSize);
             p.Add("@EventIds", SqlDbType.NVarChar, -1).Value = eventIds is null ? DBNull.Value : string.Join(',', eventIds);
+        }, cancellationToken);
+    }
+
+    public async Task<int> DeleteDeviceTrafficBeforeAsync(DateTime cutoffUtc, int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteScalarAsync<int>("dbo.DeviceTraffic_DeleteBefore", p =>
+        {
+            p.Add("@CutoffUtc", SqlDbType.DateTime2).Value = cutoffUtc;
+            p.AddWithValue("@BatchSize", batchSize);
         }, cancellationToken);
     }
 
@@ -68,12 +87,13 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 p.Add("@Search", SqlDbType.NVarChar, 200).Value = filter.Search is null ? DBNull.Value : EscapeLike(filter.Search);
                 p.AddWithValue("@CursorId", (object?)cursorId ?? DBNull.Value);
                 p.AddWithValue("@Take", take);
+                p.AddWithValue("@IncludeDeviceTraffic", filter.IncludeDeviceTraffic);
             },
             MapEventLogRow,
             cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<EventLogCount>> CountAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<EventLogCount>> CountAsync(int workspaceId, DateTime fromUtc, DateTime toUtc, bool includeDeviceTraffic = true, CancellationToken cancellationToken = default)
     {
         return await ExecuteCollectionAsync(
             "dbo.EventLog_CountBy_Workspace",
@@ -82,6 +102,7 @@ internal sealed class EventProvider : BaseSqlProvider, IEventProvider
                 p.AddWithValue("@WorkspaceId", workspaceId);
                 p.Add("@FromUtc", SqlDbType.DateTime2).Value = fromUtc;
                 p.Add("@ToUtc", SqlDbType.DateTime2).Value = toUtc;
+                p.AddWithValue("@IncludeDeviceTraffic", includeDeviceTraffic);
             },
             reader => new EventLogCount(
                 reader.GetString(reader.GetOrdinal("EventName")),

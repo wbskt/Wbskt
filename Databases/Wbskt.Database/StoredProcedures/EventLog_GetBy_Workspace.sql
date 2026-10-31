@@ -7,7 +7,9 @@
 -- the first keeps only those events (a view such as "policies"), the second drops them (device
 -- traffic). @EventName is the older single filter, matched as a substring. @Sources is a
 -- comma-separated list of EventSource values. @SinceId keeps only entries newer than the newest one
--- the caller already has, for a view that stays live by asking again.
+-- the caller already has, for a view that stays live by asking again. It reads the audit log and
+-- device traffic together (dbo.EventLogEntries); @IncludeDeviceTraffic = 0, for a query that leaves
+-- every traffic event out, skips the traffic table instead of reading it to drop each row.
 CREATE PROCEDURE dbo.EventLog_GetBy_Workspace
     @WorkspaceId INT,
     @EventName NVARCHAR(100) = NULL,
@@ -26,7 +28,8 @@ CREATE PROCEDURE dbo.EventLog_GetBy_Workspace
     -- Already escaped for LIKE by the caller, with '\' as the escape character.
     @Search NVARCHAR(200) = NULL,
     @CursorId BIGINT = NULL,
-    @Take INT = 50
+    @Take INT = 50,
+    @IncludeDeviceTraffic BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -60,9 +63,10 @@ BEGIN
         el.Source,
         el.ClientAddress,
         el.UserAgent
-    FROM dbo.EventLogs el
+    FROM dbo.EventLogEntries el
     JOIN dbo.Events e ON el.EventId = e.Id
     WHERE el.WorkspaceId = @WorkspaceId
+      AND (@IncludeDeviceTraffic = 1 OR el.IsDeviceTraffic = 0)
       AND (@CursorId IS NULL OR el.Id < @CursorId)
       AND (@SinceId IS NULL OR el.Id > @SinceId)
       AND (@PolicyId IS NULL OR el.PolicyId = @PolicyId)
