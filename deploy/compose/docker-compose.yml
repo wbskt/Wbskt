@@ -651,6 +651,8 @@ services:
       # Only read when the migrator creates the root account; see "Root administrator" in deploy/README.md.
       ROOT_ADMIN_PASSWORD_HASH: ${ROOT_ADMIN_PASSWORD_HASH:-}
       MIGRATE_ALLOW_DATA_LOSS: ${MIGRATE_ALLOW_DATA_LOSS:-false}
+      # Seconds one statement of the publish may run; see deploy/README.md.
+      MIGRATE_COMMAND_TIMEOUT: ${MIGRATE_COMMAND_TIMEOUT:-1800}
       # The migrator still connects as sa: creating databases and logins needs it. It hands these
       # to the post-deployment scripts, which create or update one login per host.
       SQL_AUTH_PASSWORD: ${SQL_AUTH_PASSWORD:?SQL_AUTH_PASSWORD is required - see .env.example}

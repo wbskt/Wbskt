@@ -53,12 +53,21 @@ else
     BLOCK_ON_POSSIBLE_DATA_LOSS=True
 fi
 
+# Seconds sqlpackage lets one statement run (its own default is 60). A change that rebuilds a table
+# copies it in a single statement, which on the production disk outlasts a minute for a large
+# table; the publish then fails and rolls back. Override with MIGRATE_COMMAND_TIMEOUT; 0 is no limit.
+COMMAND_TIMEOUT="${MIGRATE_COMMAND_TIMEOUT:-1800}"
+case "$COMMAND_TIMEOUT" in
+    ''|*[!0-9]*) echo "MIGRATE_COMMAND_TIMEOUT must be a whole number of seconds" >&2; exit 1 ;;
+esac
+
 echo "Publishing Wbskt.Database.Auth (CreateNewDatabase=${CREATE_NEW_DATABASE}, BlockOnPossibleDataLoss=${BLOCK_ON_POSSIBLE_DATA_LOSS})..."
 sqlpackage /Action:Publish \
     /SourceFile:/app/Wbskt.Database.Auth.dacpac \
     /TargetConnectionString:"${AUTH_DB_CONNECTION_STRING}" \
     /p:BlockOnPossibleDataLoss="${BLOCK_ON_POSSIBLE_DATA_LOSS}" \
     /p:CreateNewDatabase="${CREATE_NEW_DATABASE}" \
+    /p:CommandTimeout="${COMMAND_TIMEOUT}" \
     /v:AuthHostPassword="${SQL_AUTH_PASSWORD}" \
     "${ROOT_HASH_ARGS[@]}"
 
@@ -68,6 +77,7 @@ sqlpackage /Action:Publish \
     /TargetConnectionString:"${DEFAULT_DB_CONNECTION_STRING}" \
     /p:BlockOnPossibleDataLoss="${BLOCK_ON_POSSIBLE_DATA_LOSS}" \
     /p:CreateNewDatabase="${CREATE_NEW_DATABASE}" \
+    /p:CommandTimeout="${COMMAND_TIMEOUT}" \
     /v:ManagementHostPassword="${SQL_MANAGEMENT_PASSWORD}" \
     /v:EngineHostPassword="${SQL_ENGINE_PASSWORD}"
 

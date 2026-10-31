@@ -491,6 +491,12 @@ sqlpackage reported, and if the loss is intended, rerun with:
 MIGRATE_ALLOW_DATA_LOSS=true docker compose --profile migrate run --rm migrator
 ```
 
+A statement may run for 30 minutes (`MIGRATE_COMMAND_TIMEOUT`, in seconds; sqlpackage's own
+default is 60). A change that rebuilds a table copies it in one statement, and on the production
+disk that outlasts a minute for a table of a few hundred MB, failing the publish. The device traffic
+split (#442) is one: its first deploy rebuilds `dbo.EventLogs`. A rebuild holds the table for its
+length, so the event logger's inserts wait and retry; nothing is lost.
+
 Archived one-time upgrade helpers (run by hand once, never by the migrator) live in `Databases/Migrations/archive/`.
 
 ### SQL logins
