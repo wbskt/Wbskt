@@ -33,8 +33,8 @@ public static class WorkflowServiceCollectionExtensions
     {
         // Only what management reads or writes: definitions and their trigger registrations (with the
         // schedule rows a registration writes), and the run, branch, history and shared-variable reads
-        // behind the console. Bookmarks, idempotency keys, pending trigger events, joins, leases,
-        // counters and retention are the engine's alone.
+        // behind the console, with each trigger's recent outcomes. Bookmarks, idempotency keys, pending
+        // trigger events, joins, leases, counters and retention are the engine's alone.
         services.AddSingleton<IWorkflowDefinitionProvider, WorkflowDefinitionProvider>();
         services.AddScoped<ITriggerRegistrationProvider, TriggerRegistrationProvider>();
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
@@ -42,6 +42,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IBranchProvider, BranchProvider>();
         services.AddScoped<IHistoryEventProvider, HistoryEventProvider>();
         services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
+        services.AddScoped<ITriggerDispatchOutcomeProvider, TriggerDispatchOutcomeProvider>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITriggerChannelRegistry>(TriggerChannelRegistry.Default);
         services.AddScoped<ITriggerRegistrationService, TriggerRegistrationService>();
@@ -69,6 +70,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IIdempotencyKeyProvider, IdempotencyKeyProvider>();
         services.AddScoped<ISharedVariableProvider, SharedVariableProvider>();
         services.AddScoped<IPendingTriggerEventProvider, PendingTriggerEventProvider>();
+        services.AddScoped<ITriggerDispatchOutcomeProvider, TriggerDispatchOutcomeProvider>();
         services.AddScoped<IScheduledFireProvider, ScheduledFireProvider>();
         services.AddScoped<IJoinAggregatorProvider, JoinAggregatorProvider>();
         services.AddScoped<ILeaseProvider, LeaseProvider>();
@@ -193,6 +195,7 @@ public static class WorkflowServiceCollectionExtensions
         services.AddScoped<IRunStartedPublisher, NullRunStartedPublisher>();
         services.AddScoped<IRunStarter, RunStarter>();
         services.AddScoped<ITriggerDispatcher, TriggerDispatcher>();
+        services.AddScoped<TriggerOutcomeLog>();
         services.AddScoped<ITriggerFilterEvaluator, TriggerFilterEvaluator>();
         services.AddScoped<IInboundHub, InboundHub>();
         services.AddScoped<ISubWorkflowCompletionHook, SubWorkflowCompletionHook>();
