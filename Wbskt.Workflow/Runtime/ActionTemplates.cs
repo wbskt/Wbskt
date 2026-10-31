@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Runtime;
 
 namespace Wbskt.Workflow.Runtime;
@@ -13,7 +14,7 @@ namespace Wbskt.Workflow.Runtime;
 /// <remarks>
 /// The warning records the placeholder, never a value: <c>$shared</c> variables may hold secrets.
 /// </remarks>
-internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJournal journal)
+internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJournal journal, ILogger<ActionTemplates>? logger = null)
 {
     /// <summary>Free text: a message, a body, a title.</summary>
     public Task<string> TextAsync(NodeContext ctx, string field, string value, CancellationToken ct)
@@ -159,15 +160,25 @@ internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJourna
 
     private static bool IsMissing(JsonElement value) => value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined;
 
-    private Task WarnAsync(NodeContext ctx, string field, IReadOnlyList<string> placeholders, CancellationToken ct)
+    // Best effort: the warning is a note on the run, and failing to write it must not stop, or fail, the
+    // send it describes. Written per attempt, so a retried step carries the attempt to tell them apart.
+    private async Task WarnAsync(NodeContext ctx, string field, IReadOnlyList<string> placeholders, CancellationToken ct)
     {
-        return journal.AppendAsync(
-            new RunJournalEntry(checked((int)ctx.Branch.RunId), HistoryEventKind.TemplateValueMissing)
-            {
-                BranchRefId = ctx.Branch.BranchRefId,
-                NodeId = ctx.Node.NodeId,
-                Payload = new { field, placeholders }
-            },
-            ct);
+        try
+        {
+            await journal.AppendAsync(
+                new RunJournalEntry(checked((int)ctx.Branch.RunId), HistoryEventKind.TemplateValueMissing)
+                {
+                    BranchRefId = ctx.Branch.BranchRefId,
+                    NodeId = ctx.Node.NodeId,
+                    Payload = new { field, placeholders, attempt = ctx.Branch.Attempt }
+                },
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger?.LogWarning(ex, "Could not record the empty placeholders {Placeholders} in {Field} of node {NodeId} on run {RunId}",
+                placeholders, field, ctx.Node.NodeId, ctx.Branch.RunId);
+        }
     }
 }

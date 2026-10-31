@@ -12,6 +12,7 @@ using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 using Wbskt.Workflow.Integrations;
 using Wbskt.Workflow.NodeExecutors.Actions;
+using Wbskt.Workflow.Runtime;
 using static Wbskt.Host.Tests.NodeExecutors.Actions.NotificationExecutorTests;
 
 namespace Wbskt.Host.Tests.NodeExecutors.Actions;
@@ -60,8 +61,35 @@ public sealed class ActionTemplatesTests
         Assert.Equal(BranchRefId, warning.BranchRefId);
         Assert.Equal(NodeId, warning.NodeId);
         Assert.Equal(
-            """{"field":"body","placeholders":["nope.temp","$shared.token"]}""",
+            """{"field":"body","placeholders":["nope.temp","$shared.token"],"attempt":1}""",
             JsonSerializer.Serialize(warning.Payload));
+    }
+
+    [Fact]
+    public async Task A_warning_that_cannot_be_written_does_not_stop_the_send()
+    {
+        var journal = new Mock<IRunJournal>();
+        journal.Setup(j => j.AppendAsync(It.IsAny<RunJournalEntry>(), It.IsAny<CancellationToken>())).ThrowsAsync(new TimeoutException("db"));
+        var templates = new ActionTemplates(new ExpressionEvaluator(TimeProvider.System), journal.Object);
+
+        string text = await templates.TextAsync(Context(), "message", "[{{nope}}]", CancellationToken.None);
+
+        Assert.Equal("[]", text);
+    }
+
+    [Fact]
+    public async Task A_long_number_is_filled_in_as_written()
+    {
+        var templates = TestTemplates.Create(_journal);
+        var ctx = Context() with
+        {
+            Branch = Context().Branch with
+            {
+                TriggerPayload = new Dictionary<string, JsonElement> { ["thread"] = JsonDocument.Parse("1200000000000000002").RootElement.Clone() }
+            }
+        };
+
+        Assert.Equal("1200000000000000002", await templates.LineAsync(ctx, "threadId", "{{thread}}", CancellationToken.None));
     }
 
     [Fact]
@@ -119,7 +147,7 @@ public sealed class ActionTemplatesTests
 
         Assert.Equal("""{"items":[{"on":""}]}""", filled!.Value.GetRawText());
         RunJournalEntry warning = Assert.Single(_journal.Entries);
-        Assert.Equal("""{"field":"payload.items[0].on","placeholders":["nope"]}""", JsonSerializer.Serialize(warning.Payload));
+        Assert.Equal("""{"field":"payload.items[0].on","placeholders":["nope"],"attempt":1}""", JsonSerializer.Serialize(warning.Payload));
     }
 
     // -------------------------------------------------------- executors
