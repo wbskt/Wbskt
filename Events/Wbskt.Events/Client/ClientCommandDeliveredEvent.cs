@@ -11,5 +11,5 @@ namespace Wbskt.Events.Client;
 /// </summary>
 [DeviceTraffic]
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientCommandDeliveredEvent")]
+[SignalRNotify("OnClientCommandDeliveredEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandDeliveredEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, Guid? CommandId = null) : BaseEvent, IClientContext;

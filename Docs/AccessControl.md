@@ -247,6 +247,7 @@ the slug is the second gate.
 | Workflows | `POST workflows/{ref}/deprecate`, `DELETE workflows/{ref}` | `workflows.delete` |
 | Workflows | `POST workflows/{ref}/runs`, `POST runs/{ref}/cancel`, `POST runs/{ref}/signals/{name}`, `PUT …/variables/{name}` | `workflows.execute` |
 | Realtime | `NotificationHub.JoinWorkspace` | `workspace.join` |
+| Realtime | `NotificationHub.JoinClient` | `workspace.join` + `logs.read` |
 
 `workflows.update` currently gates nothing on its own — authoring a new version goes through
 `workflows.create` (publish is versioned, never in-place) and the run-control endpoints that used to

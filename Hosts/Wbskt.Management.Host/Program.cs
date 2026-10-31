@@ -116,6 +116,7 @@ public static class Program
         builder.Services.AddTransient<WorkflowEngineApiKeyHandler>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<WorkspaceAccessCache>();
+        builder.Services.AddSingleton<ClientFeedThrottle>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<WorkspaceAccessCache>());
         builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>
         {

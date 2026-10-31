@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Wbskt.Infrastructure;
+using Wbskt.Management.Host.Services;
 using Wbskt.Management.Host.Services.Clients;
 using Wbskt.Primitives.Constants;
 
@@ -16,6 +17,12 @@ public class NotificationHub : Hub
     /// <see cref="LeaveWorkspace"/> reads it rather than resolving again — see there for why.
     /// </summary>
     private const string JoinedWorkspacesKey = "joined-workspaces";
+
+    /// <summary>Reference-to-internal-ID map for the clients this connection watches; see <see cref="LeaveClient"/>.</summary>
+    private const string JoinedClientsKey = "joined-clients";
+
+    /// <summary>Client method for <see cref="ClientFeedSkipped"/>.</summary>
+    internal const string ClientFeedSkippedMethod = "OnClientFeedSkipped";
 
     private readonly ILogger<NotificationHub> _logger;
 
@@ -82,23 +89,85 @@ public class NotificationHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(workspaceId));
     }
 
+    /// <summary>
+    /// Subscribes the caller to one client's live traffic (messages, commands and their outcomes,
+    /// pings): the events marked <see cref="Wbskt.Events.NotifyScope.Client"/>, which the workspace
+    /// group no longer carries. Needs <see cref="Permissions.LogsRead"/> as well as
+    /// <see cref="Permissions.WorkspaceJoin"/>, the same as reading the client's comms history.
+    /// A reference that doesn't resolve and one in another workspace fail alike.
+    /// </summary>
+    public async Task JoinClient(string workspaceRef, string clientRef)
+    {
+        if (!Guid.TryParse(workspaceRef, out var parsedWorkspaceRef))
+        {
+            throw new HubException("Workspace reference is not a valid identifier.");
+        }
+
+        if (!Guid.TryParse(clientRef, out var parsedClientRef))
+        {
+            throw new HubException("Client reference is not a valid identifier.");
+        }
+
+        var services = Context.GetHttpContext()!.RequestServices;
+        var authClient = services.GetRequiredService<IAuthServiceClient>();
+
+        var workspaceIdResult = await authClient.ResolveWorkspaceAsync(parsedWorkspaceRef, [Permissions.WorkspaceJoin, Permissions.LogsRead]);
+        if (workspaceIdResult.IsFailure)
+        {
+            throw new HubException(CallerSafeMessage(workspaceIdResult.Error));
+        }
+
+        var clientIdResult = await services.GetRequiredService<IClientQueryService>()
+            .EnsureClientInWorkspaceAsync(workspaceIdResult.Value, parsedClientRef);
+        if (clientIdResult.IsFailure)
+        {
+            throw new HubException(CallerSafeMessage(clientIdResult.Error));
+        }
+
+        JoinedClients[parsedClientRef] = clientIdResult.Value;
+        await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroupName(clientIdResult.Value));
+    }
+
+    /// <summary>
+    /// Stops the caller's feed for one client. Like <see cref="LeaveWorkspace"/>, it uses what this
+    /// connection joined and asks nobody, so a revoked permission can't strand it in the group.
+    /// </summary>
+    public async Task LeaveClient(string clientRef)
+    {
+        if (!Guid.TryParse(clientRef, out var parsedClientRef))
+        {
+            throw new HubException("Client reference is not a valid identifier.");
+        }
+
+        if (!JoinedClients.TryRemove(parsedClientRef, out var clientId))
+        {
+            return;
+        }
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, ClientGroupName(clientId));
+    }
+
     /// <summary>The broadcast group for a workspace. Must stay in sync with <c>SignalRForwardingHandler</c>.</summary>
     internal static string GroupName(int workspaceId) => $"ws:{workspaceId}";
 
-    private ConcurrentDictionary<Guid, int> JoinedWorkspaces
-    {
-        get
-        {
-            // Concurrent because a client may have several invocations in flight on one connection.
-            if (Context.Items.TryGetValue(JoinedWorkspacesKey, out var existing) && existing is ConcurrentDictionary<Guid, int> joined)
-            {
-                return joined;
-            }
+    /// <summary>The group for one client's live traffic. Must stay in sync with <c>SignalRForwardingHandler</c>.</summary>
+    internal static string ClientGroupName(int clientId) => $"client:{clientId}";
 
-            var created = new ConcurrentDictionary<Guid, int>();
-            Context.Items[JoinedWorkspacesKey] = created;
-            return created;
+    private ConcurrentDictionary<Guid, int> JoinedWorkspaces => ConnectionMap(JoinedWorkspacesKey);
+
+    private ConcurrentDictionary<Guid, int> JoinedClients => ConnectionMap(JoinedClientsKey);
+
+    private ConcurrentDictionary<Guid, int> ConnectionMap(string key)
+    {
+        // Concurrent because a client may have several invocations in flight on one connection.
+        if (Context.Items.TryGetValue(key, out var existing) && existing is ConcurrentDictionary<Guid, int> joined)
+        {
+            return joined;
         }
+
+        var created = new ConcurrentDictionary<Guid, int>();
+        Context.Items[key] = created;
+        return created;
     }
 
     /// <summary>

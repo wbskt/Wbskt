@@ -415,9 +415,19 @@ join their workspaces again; a group joined on the old connection does not carry
 |---|---|---|
 | `JoinWorkspace(workspaceRef)` | `workspace.join` | Subscribes the connection to the workspace's event feed. Resolves the reference to the internal ID the broadcast group is keyed by, and records the mapping on the connection. |
 | `LeaveWorkspace(workspaceRef)` | none | Unsubscribes, using the mapping the join recorded. Deliberately ungated: a permission check here could only fail *after* a successful join — membership removed, or the permission revoked — and failing it would strand the connection in a group it can no longer ask to leave. |
+| `JoinClient(workspaceRef, clientRef)` | `workspace.join` + `logs.read` | Subscribes the connection to one client's live traffic: the events marked `NotifyScope.Client` (message received, command, delivered, acked, failed, ping). The same permission as reading its comms history. A client in another workspace fails like one that doesn't exist. |
+| `LeaveClient(clientRef)` | none | Stops that client's traffic, using the mapping the join recorded; ungated for the same reason as `LeaveWorkspace`. |
 
-> **Known gap.** The feed is per workspace, not per permission. A member holding only
-> `workflows.read` still receives client command payloads over the hub. Narrowing it means
+Per-device traffic is **not** sent to the workspace group: only connections that called `JoinClient`
+get it, so a tab that isn't on that device's page receives none of it and no backplane publish is
+spent on it. Lifecycle events (connected, disconnected, status, rename, latency) stay workspace-wide
+because lists show them. The client feed is capped at 20 messages per device per second per
+management instance; when messages are dropped, the next second opens with
+`OnClientFeedSkipped { clientRefId, skipped, createdAtUtc }`, and the comms history still has them all.
+Like workspace groups, client groups don't survive a reconnect: the console joins again.
+
+> **Known gap.** The workspace feed is per workspace, not per permission. A member holding only
+> `workflows.read` still receives the workspace-wide events. Narrowing it further means
 > per-event-category groups.
 
 ### 2.9 Device edges (anonymous)
