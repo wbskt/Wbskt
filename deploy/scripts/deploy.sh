@@ -306,10 +306,15 @@ deploy_backend() {
         # MIGRATE_FRESH and MIGRATE_ALLOW_DATA_LOSS are forced off: both destroy data with no
         # confirmation, and compose would otherwise read them from .env or this shell, where one
         # stray line would drop both databases on the next automatic deploy. See deploy/README.md.
+        # --no-deps: without it, `run` recreates sql whenever its compose definition has changed
+        # (an edition or memory setting, a new image), restarting the database mid-deploy. Changing
+        # sql is a deliberate step of its own (see "SQL Server edition" in deploy/README.md).
         echo "==> running incremental database migration"
+        docker compose ps --status running --services 2>/dev/null | grep -qx sql \
+            || die "the sql service is not running; start it (docker compose up -d sql) and deploy again"
         docker compose --profile migrate pull migrator
         MIGRATE_FRESH=false MIGRATE_ALLOW_DATA_LOSS=false \
-            docker compose --profile migrate run --rm migrator
+            docker compose --profile migrate run --rm --no-deps migrator
     fi
 
     # devices and management both serve device login and registration: Traefik sends those paths to

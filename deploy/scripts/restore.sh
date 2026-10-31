@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Restores a backup produced by backup.sh. Runs on the VM from the repo checkout.
 #
-#   deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_20260825T020000Z.bak
+#   deploy/scripts/restore.sh --file /var/backups/wbskt/Wbskt.Database_20260825T020000Z.bak.gz
 #   deploy/scripts/restore.sh --file <path> --target Wbskt.Database --force
 #
 # Defaults to restoring into a scratch database named <original>_restorecheck_<stamp>, because the
@@ -36,9 +36,10 @@ log() {
 
 usage() {
     cat <<'EOF'
-usage: restore.sh --file <path-to-.bak> [--target <database>] [--force]
+usage: restore.sh --file <path-to-.bak.gz> [--target <database>] [--force]
 
-  --file    Backup file on this host, as written by backup.sh.
+  --file    Backup file on this host, as written by backup.sh: a .bak.gz, or a plain .bak
+            from before backups were gzipped.
   --target  Database to restore into. Defaults to a scratch name, for a rehearsal that
             cannot touch anything live.
   --force   Permit restoring over a database that already exists. Required for a real
@@ -87,7 +88,7 @@ main() {
     cd "$COMPOSE_DIR"
 
     local base stamp staged
-    base="$(basename "$BACKUP_FILE")"
+    base="$(basename "$BACKUP_FILE" .gz)"
     stamp="$(date -u +%Y%m%d%H%M%S)"
 
     if [[ -z "$TARGET_DB" ]]; then
@@ -99,7 +100,16 @@ main() {
     staged="$CONTAINER_DIR/restore_${stamp}_${base}"
 
     docker compose exec -T sql mkdir -p "$CONTAINER_DIR" || die "could not create $CONTAINER_DIR"
-    docker compose cp "$BACKUP_FILE" "sql:${staged}" || die "could not copy the backup into the container"
+    # Streamed in, so the staged file is written by the container's own mssql user. `docker compose
+    # cp` keeps the host file's owner and its 0640 mode, which SQL Server then cannot read. A .gz is
+    # decompressed on the way, so the host never holds the full-size copy.
+    if [[ "$BACKUP_FILE" == *.gz ]]; then
+        gzip -dc "$BACKUP_FILE" | docker compose exec -T sql sh -c "cat > '${staged}'" \
+            || die "could not decompress the backup into the container"
+    else
+        docker compose exec -T sql sh -c "cat > '${staged}'" < "$BACKUP_FILE" \
+            || die "could not copy the backup into the container"
+    fi
 
     # Verify before touching any database, so a corrupt file fails here rather than half way
     # through overwriting something.

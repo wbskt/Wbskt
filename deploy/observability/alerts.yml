@@ -145,6 +145,20 @@ groups:
         annotations:
           summary: "The backup job has never reported a success to this Prometheus"
 
+      - alert: DatabaseNearExpressLimit
+        # backup.sh pushes each database's allocated data-file size nightly. SQL Server Express caps
+        # a database's data at 10 GB, and past it every insert that needs a new page fails.
+        expr: max by (database) (wbskt_sql_data_file_bytes) > 8 * 1024 * 1024 * 1024
+        for: 15m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $labels.database }} has {{ $value | humanize1024 }}B of data files, near the Express limit of 10 GiB"
+          description: >-
+            Find what grew (sp_spaceused per table). If it is free space left by deleted rows, shrink
+            the file once (DBCC SHRINKFILE); if it is real data, plan the move off Express before the
+            database reaches 10 GB. See "SQL Server edition" in deploy/README.md.
+
       - alert: EngineNotReporting
         expr: absent(wbskt_workflow_dispatcher_queue_depth)
         for: 5m
