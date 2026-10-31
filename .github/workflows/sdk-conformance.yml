@@ -1,0 +1,58 @@
+name: SDK conformance
+
+# Runs the device protocol checklist (Tests/Conformance) against every SDK in this repository. The
+# suite fakes the API and socket hosts, so no database, broker or Wbskt host is started.
+
+on:
+  pull_request:
+    paths:
+      - 'Clients/**'
+      - 'Tests/Conformance/**'
+      - 'Docs/Device.Protocol.md'
+      - '.github/workflows/sdk-conformance.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'Clients/**'
+      - 'Tests/Conformance/**'
+      - '.github/workflows/sdk-conformance.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: Tests/Conformance
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [python, dotnet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements.txt
+
+      - name: Python harness
+        if: matrix.sdk == 'python'
+        run: |
+          pip install -e ../../Clients/python
+          echo "WBSKT_HARNESS=python harnesses/python/harness.py" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-dotnet@v4
+        if: matrix.sdk == 'dotnet'
+        with:
+          global-json-file: global.json
+      - name: .NET harness
+        if: matrix.sdk == 'dotnet'
+        run: |
+          dotnet build harnesses/dotnet/Wbskt.Conformance.Harness.csproj -c Release -o "$RUNNER_TEMP/harness" --nologo -v q
+          echo "WBSKT_HARNESS=dotnet $RUNNER_TEMP/harness/Wbskt.Conformance.Harness.dll" >> "$GITHUB_ENV"
+
+      - run: python -m pytest -v

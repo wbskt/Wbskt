@@ -20,6 +20,8 @@ public sealed class WbsktClient : IWbsktClient
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
     
     private bool _shouldReconnect = true;
+    // Set once this connection's capabilities are out; nothing else is sent before them.
+    private volatile bool _announced;
     private Guid? _resolvedRefId;
     private string? _resolvedSecret;
     private ClientCapabilities? _lastCapabilities;
@@ -61,13 +63,30 @@ public sealed class WbsktClient : IWbsktClient
         _socket.OnDisconnected += HandleDisconnect;
     }
 
+    /// <summary>
+    /// Makes the first connection attempt and returns once it has finished, connected or not. A
+    /// failed attempt is retried in the background; only <see cref="RegistrationRequiredException"/>
+    /// is thrown, because no retry can fix it.
+    /// </summary>
     public async Task StartAsync()
     {
         _shouldReconnect = true;
-        await ConnectInternalAsync();
-        
-        // Start background monitor for reconnection
-        _ = Task.Run(MonitorReconnectionAsync, _cts.Token);
+        var failures = 0;
+        TimeSpan? retryIn = null;
+        try
+        {
+            await ConnectInternalAsync();
+        }
+        catch (RegistrationRequiredException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            retryIn = FailureDelay(ex, failures++);
+        }
+
+        _ = Task.Run(() => MonitorReconnectionAsync(failures, retryIn), _cts.Token);
     }
 
     private async Task ConnectInternalAsync()
@@ -81,9 +100,22 @@ public sealed class WbsktClient : IWbsktClient
             }
 
             // 2. Obtain JWT, reusing the last one while it is still valid
-            var token = await _tokens.GetAsync();
+            string token;
+            try
+            {
+                token = await _tokens.GetAsync();
+            }
+            catch (CredentialsRejectedException)
+            {
+                // Deleted, or its secret rotated: these credentials never work again, so register anew.
+                await _storage.ClearCredentialsAsync();
+                _resolvedRefId = null;
+                _resolvedSecret = null;
+                throw;
+            }
 
             // 3. Connect to real-time gateway
+            _announced = false;
             try
             {
                 await _socket.ConnectAsync(token);
@@ -122,6 +154,7 @@ public sealed class WbsktClient : IWbsktClient
             return;
         }
 
+        _announced = true;
         await FlushOutboundAsync();
     }
 
@@ -137,12 +170,16 @@ public sealed class WbsktClient : IWbsktClient
 
     private void HandleDisconnect()
     {
+        _announced = false;
         OnDisconnected?.Invoke();
     }
 
-    private async Task MonitorReconnectionAsync()
+    private async Task MonitorReconnectionAsync(int failures, TimeSpan? retryIn)
     {
-        var failures = 0;
+        if (retryIn is { } firstWait)
+        {
+            await Task.Delay(firstWait, _cts.Token);
+        }
 
         while (!_cts.Token.IsCancellationRequested)
         {
@@ -165,18 +202,17 @@ public sealed class WbsktClient : IWbsktClient
                 await ConnectInternalAsync();
                 failures = 0;
             }
-            catch (DeviceLoginThrottledException ex) when (ex.RetryAfter is { } retryAfter)
+            catch (Exception ex)
             {
-                failures++;
-                await Task.Delay(_reconnect.AfterThrottle(retryAfter), _cts.Token);
-            }
-            catch (Exception)
-            {
-                await Task.Delay(_reconnect.RetryDelay(failures), _cts.Token);
-                failures++;
+                await Task.Delay(FailureDelay(ex, failures++), _cts.Token);
             }
         }
     }
+
+    private TimeSpan FailureDelay(Exception error, int failures) =>
+        error is DeviceLoginThrottledException { RetryAfter: { } retryAfter }
+            ? _reconnect.AfterThrottle(retryAfter)
+            : _reconnect.RetryDelay(failures);
 
     public async Task UpdateCapabilitiesAsync(ClientCapabilities capabilities)
     {
@@ -188,12 +224,30 @@ public sealed class WbsktClient : IWbsktClient
         }
     }
 
-    public async Task SendAsync(string type, object payload)
+    /// <exception cref="ArgumentException">
+    /// The type is empty, too long, or reserved for the protocol (<c>sys.*</c>, <c>capabilities</c>, <c>state.report</c>).
+    /// </exception>
+    public Task SendAsync(string type, object payload)
+    {
+        if (DeviceMessageRules.Check(type, null) is { } violation)
+        {
+            throw new ArgumentException(violation.Message, nameof(type));
+        }
+
+        return EnqueueAsync(type, payload);
+    }
+
+    private async Task EnqueueAsync(string type, object payload)
     {
         var message = new SocketMessage(type, payload) { SentAt = DateTimeOffset.UtcNow };
 
         if (_outbound.Capacity <= 0)
         {
+            if (!_announced)
+            {
+                throw new InvalidOperationException("Socket not connected.");
+            }
+
             await _socket.SendAsync(message);
             return;
         }
@@ -208,7 +262,7 @@ public sealed class WbsktClient : IWbsktClient
         await _flushLock.WaitAsync();
         try
         {
-            while (_socket.IsConnected && _outbound.TryPeek(out var next))
+            while (_announced && _socket.IsConnected && _outbound.TryPeek(out var next))
             {
                 try
                 {
@@ -232,7 +286,7 @@ public sealed class WbsktClient : IWbsktClient
     public async Task ReportStateAsync(IReadOnlyDictionary<string, object?> patch)
     {
         // Partial update: only the reported variables change; the platform keeps the rest.
-        await SendAsync(MessageTypes.StateReport, patch);
+        await EnqueueAsync(MessageTypes.StateReport, patch);
     }
 
     private async Task<(Guid RefId, string Secret)> ResolveCredentialsAsync()
@@ -246,7 +300,7 @@ public sealed class WbsktClient : IWbsktClient
 
         if (string.IsNullOrEmpty(_config.PolicyPin))
         {
-            throw new InvalidOperationException("No saved credentials and no Policy PIN provided.");
+            throw new RegistrationRequiredException();
         }
 
         var (newId, newSecret) = await _auth.RegisterAsync();

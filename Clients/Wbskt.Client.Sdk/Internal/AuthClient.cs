@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security;
+using System.Text.Json;
 using Wbskt.Client.Sdk.Models;
 using Wbskt.Protocol;
 
@@ -39,6 +40,11 @@ internal sealed class AuthClient : IDisposable
             throw new DeviceLoginThrottledException(RetryAfter(response));
         }
 
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await ErrorCodeAsync(response) == DeviceErrorCodes.Unauthorized)
+        {
+            throw new CredentialsRejectedException();
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             throw new SecurityException("Failed to authenticate client.");
@@ -48,6 +54,23 @@ internal sealed class AuthClient : IDisposable
         return result is { AccessToken.Length: > 0 }
             ? new DeviceToken(result.AccessToken, DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn))
             : throw new InvalidOperationException("Invalid login response.");
+    }
+
+    private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return body.RootElement.ValueKind == JsonValueKind.Object
+                   && body.RootElement.TryGetProperty("code", out var code)
+                   && code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static TimeSpan? RetryAfter(HttpResponseMessage response)
