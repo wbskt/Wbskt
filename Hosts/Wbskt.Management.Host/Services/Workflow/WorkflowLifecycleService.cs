@@ -44,6 +44,7 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowLifecycleService> _logger;
     private readonly IConfiguration? _configuration;
+    private readonly DeviceReferenceCheck? _deviceCheck;
 
     public WorkflowLifecycleService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
@@ -54,9 +55,11 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         IWorkflowEngineGateway engine,
         IEventBus eventBus,
         ILogger<WorkflowLifecycleService> logger,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        DeviceReferenceCheck? deviceCheck = null)
     {
         _configuration = configuration;
+        _deviceCheck = deviceCheck;
         _eventBus = eventBus;
         _engine = engine;
         _workflowDefinitionProvider = workflowDefinitionProvider;
@@ -93,6 +96,17 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
         if (integrationRefs.Issues.Count > 0)
         {
             return Result<WorkflowPublishResponse>.Failure(ValidationFailed(integrationRefs.Issues));
+        }
+
+        // A device that is gone fails every command to it and never fires its triggers; one that is
+        // only revoked is a warning, as it can be registered again.
+        if (_deviceCheck is not null)
+        {
+            var deviceIssues = await _deviceCheck.CheckAsync(workspaceId, request.Definition, ct);
+            if (deviceIssues.Any(issue => issue.Severity == ValidationSeverity.Error))
+            {
+                return Result<WorkflowPublishResponse>.Failure(ValidationFailed(deviceIssues));
+            }
         }
 
         // Only a genuine "no such workflow" means this is the first version. A database fault
@@ -299,9 +313,12 @@ public sealed class WorkflowLifecycleService : IWorkflowLifecycleService
     {
         string message = string.Join("; ", issues
             .Where(issue => issue.Severity == ValidationSeverity.Error)
-            .Select(issue => issue.NodeId is Guid nodeId
-                ? $"[{issue.Code}] {issue.Message} (node {nodeId})"
-                : $"[{issue.Code}] {issue.Message}"));
+            .Select(issue => (issue.NodeId, issue.Field) switch
+            {
+                (Guid nodeId, string field) => $"[{issue.Code}] {issue.Message} (node {nodeId}, {field})",
+                (Guid nodeId, null) => $"[{issue.Code}] {issue.Message} (node {nodeId})",
+                _ => $"[{issue.Code}] {issue.Message}"
+            }));
         _logger.LogWarning("Workflow publish failed: Validation issues: {Issues}", message);
         return Error.Validation("WORKFLOW_VALIDATION_FAILED", message);
     }

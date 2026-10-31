@@ -103,6 +103,7 @@ public static class Program
         builder.Services.AddScoped<IIntegrationProvider, IntegrationProvider>();
         builder.Services.AddScopedWithQueuedEvents<IIntegrationService, IntegrationService>();
         builder.Services.AddScoped<IntegrationReferenceCheck>();
+        builder.Services.AddScoped<DeviceReferenceCheck>();
         builder.Services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();

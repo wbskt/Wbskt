@@ -7,11 +7,11 @@ public sealed record DiscordEmbedField
 {
     [Templated]
     [JsonPropertyName("name")]
-    public required string Name { get; init; }
+    public string Name { get; init; } = string.Empty;
 
     [Templated]
     [JsonPropertyName("value")]
-    public required string Value { get; init; }
+    public string Value { get; init; } = string.Empty;
 
     /// <summary>When true, Discord may lay the field out beside its neighbours.</summary>
     [JsonPropertyName("inline")]

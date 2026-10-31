@@ -9,7 +9,7 @@ public sealed record NtfyConfig
 
     [Templated]
     [JsonPropertyName("message")]
-    public required string Message { get; init; }
+    public string Message { get; init; } = string.Empty;
 
     [Templated(TemplateText.Line)]
     [JsonPropertyName("title")]

@@ -9,15 +9,15 @@ public sealed record EmailConfig
 
     [Templated(TemplateText.Line)]
     [JsonPropertyName("to")]
-    public required string To { get; init; }
+    public string To { get; init; } = string.Empty;
 
     [Templated(TemplateText.Line)]
     [JsonPropertyName("subject")]
-    public required string Subject { get; init; }
+    public string Subject { get; init; } = string.Empty;
 
     [Templated]
     [JsonPropertyName("body")]
-    public required string Body { get; init; }
+    public string Body { get; init; } = string.Empty;
 
 }
 

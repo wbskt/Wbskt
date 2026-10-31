@@ -39,7 +39,7 @@ public sealed record WebhookNotificationConfig
 
     [Templated(TemplateText.Line)]
     [JsonPropertyName("url")]
-    public required string Url { get; init; }
+    public string Url { get; init; } = string.Empty;
 
     [JsonPropertyName("method")]
     public required string Method { get; init; }

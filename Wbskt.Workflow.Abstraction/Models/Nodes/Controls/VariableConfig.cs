@@ -12,7 +12,7 @@ public sealed record VariableConfig
     public required VariableOperation Op { get; init; }
 
     [JsonPropertyName("var")]
-    public required string Var { get; init; }
+    public string Var { get; init; } = string.Empty;
 
     [JsonPropertyName("value")]
     public System.Text.Json.JsonElement? Value { get; init; } = null;

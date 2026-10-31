@@ -3,7 +3,7 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 public sealed record DelayConfig
 {
     [JsonPropertyName("duration")]
-    public required TimeSpan Duration { get; init; }
+    public TimeSpan Duration { get; init; }
 
 }
 

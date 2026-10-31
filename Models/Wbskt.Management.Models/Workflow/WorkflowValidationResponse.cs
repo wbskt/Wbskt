@@ -3,8 +3,9 @@ namespace Wbskt.Management.Models.Workflow;
 /// <summary>
 /// One thing the validator found. <c>Severity</c> is "Error" or "Warning"; only errors block a
 /// publish, but warnings are returned too so an author can see them without guessing.
+/// <c>Field</c> names the setting at fault inside the node (<c>config.chatId</c>), when there is one.
 /// </summary>
-public record WorkflowValidationIssueDto(string Severity, string Code, string Message, Guid? NodeId);
+public record WorkflowValidationIssueDto(string Severity, string Code, string Message, Guid? NodeId, string? Field = null);
 
 /// <summary>
 /// The result of validating a definition. A definition with issues is still a successful

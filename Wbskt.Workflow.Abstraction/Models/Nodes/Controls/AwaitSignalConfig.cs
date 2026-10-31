@@ -5,7 +5,7 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 public sealed record AwaitSignalConfig
 {
     [JsonPropertyName("signalName")]
-    public required string SignalName { get; init; }
+    public string SignalName { get; init; } = string.Empty;
 
     /// <summary>
     /// What the signal must be sent to. Left out, the run's own RefId. Placeholders such as
