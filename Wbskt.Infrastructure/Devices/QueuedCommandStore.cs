@@ -49,14 +49,26 @@ public sealed record QueuedCommand(
         ActorRunRefId: sentBy.ActorRunRefId);
 }
 
+/// <summary>What became of a command handed to <see cref="IQueuedCommandStore.EnqueueAsync"/>.</summary>
+public enum EnqueueOutcome : byte
+{
+    /// <summary>The device already has as many commands waiting as it may, or no longer exists.</summary>
+    Refused = 0,
+
+    Queued = 1,
+
+    /// <summary>A command with this id was already waiting; nothing changed.</summary>
+    AlreadyQueued = 2
+}
+
 /// <summary>
 /// The commands waiting for offline devices. Every read that ends a wait takes the rows out, so a
 /// command is delivered, expired, cancelled or dropped once, by whichever caller takes it.
 /// </summary>
 public interface IQueuedCommandStore
 {
-    /// <summary>Queues the command; false when the device already has <paramref name="maxPerClient"/> waiting.</summary>
-    Task<bool> EnqueueAsync(QueuedCommand command, int maxPerClient, CancellationToken ct);
+    /// <summary>Queues the command, unless the device already has <paramref name="maxPerClient"/> waiting.</summary>
+    Task<EnqueueOutcome> EnqueueAsync(QueuedCommand command, int maxPerClient, CancellationToken ct);
 
     /// <summary>Takes the device's unexpired commands, oldest first, for delivery.</summary>
     Task<IReadOnlyList<QueuedCommand>> TakeAsync(int clientId, DateTime nowUtc, CancellationToken ct);
@@ -78,7 +90,7 @@ internal sealed class QueuedCommandStore : BaseSqlProvider, IQueuedCommandStore
 {
     public QueuedCommandStore(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<bool> EnqueueAsync(QueuedCommand command, int maxPerClient, CancellationToken ct)
+    public async Task<EnqueueOutcome> EnqueueAsync(QueuedCommand command, int maxPerClient, CancellationToken ct)
     {
         return await ExecuteSingleAsync(
             "dbo.QueuedCommand_Enqueue",
@@ -98,7 +110,7 @@ internal sealed class QueuedCommandStore : BaseSqlProvider, IQueuedCommandStore
                 p.AddWithValue("@ActorRunRefId", (object?)command.ActorRunRefId ?? DBNull.Value);
                 p.AddWithValue("@MaxPerClient", maxPerClient);
             },
-            reader => reader.GetBoolean(reader.GetOrdinal("Queued")),
+            reader => (EnqueueOutcome)reader.GetByte(reader.GetOrdinal("Outcome")),
             cancellationToken: ct);
     }
 

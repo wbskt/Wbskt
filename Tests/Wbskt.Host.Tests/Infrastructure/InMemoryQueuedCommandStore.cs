@@ -16,20 +16,20 @@ internal sealed class InMemoryQueuedCommandStore : IQueuedCommandStore
     /// <summary>Client ids <see cref="EnqueueAsync"/> treats as deleted.</summary>
     public HashSet<int> MissingClients { get; } = [];
 
-    public Task<bool> EnqueueAsync(QueuedCommand command, int maxPerClient, CancellationToken ct)
+    public Task<EnqueueOutcome> EnqueueAsync(QueuedCommand command, int maxPerClient, CancellationToken ct)
     {
         if (_rows.Any(r => r.CommandId == command.CommandId))
         {
-            return Task.FromResult(true);
+            return Task.FromResult(EnqueueOutcome.AlreadyQueued);
         }
 
         if (MissingClients.Contains(command.ClientId) || _rows.Count(r => r.ClientId == command.ClientId) >= maxPerClient)
         {
-            return Task.FromResult(false);
+            return Task.FromResult(EnqueueOutcome.Refused);
         }
 
         _rows.Add(command with { Sequence = ++_sequence, QueuedAtUtc = command.QueuedAtUtc == default ? DateTime.UtcNow : command.QueuedAtUtc });
-        return Task.FromResult(true);
+        return Task.FromResult(EnqueueOutcome.Queued);
     }
 
     public Task<IReadOnlyList<QueuedCommand>> TakeAsync(int clientId, DateTime nowUtc, CancellationToken ct) =>
