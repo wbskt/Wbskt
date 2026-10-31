@@ -203,7 +203,7 @@ internal sealed class VariableNodeExecutor : INodeExecutor
         {
             // Counters move in whole steps; the fraction is dropped, which reads as a counter that
             // "doesn't count" when the step is below 1.
-            ctx.Warnings.Add(new NodeWarning(HistoryEventKind.CounterStepTruncated, new { var = config.Var, step, applied = Math.Abs(delta) }));
+            ctx.Warnings.Add(new NodeWarning(HistoryEventKind.CounterStepTruncated, new { var = config.Var, step, applied = negate ? -delta : delta }));
         }
 
         if (config.Scope == VariableScope.Local)
