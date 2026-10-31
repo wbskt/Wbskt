@@ -1693,13 +1693,15 @@
             "type": "string"
           },
           "expiresAt": {
-            "format": "date-time"
+            "format": "date-time",
+            "type": "string"
           },
           "payload": {
             "type": "string"
           },
           "queuedAt": {
-            "format": "date-time"
+            "format": "date-time",
+            "type": "string"
           },
           "type": {
             "type": "string"
