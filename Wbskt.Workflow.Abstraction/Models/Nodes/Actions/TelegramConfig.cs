@@ -12,11 +12,11 @@ public sealed record TelegramConfig
     /// <summary>A numeric chat id, or <c>@channelusername</c> for a public channel.</summary>
     [Templated(TemplateText.Line)]
     [JsonPropertyName("chatId")]
-    public required string ChatId { get; init; }
+    public string ChatId { get; init; } = string.Empty;
 
     [Templated]
     [JsonPropertyName("message")]
-    public required string Message { get; init; }
+    public string Message { get; init; } = string.Empty;
 
     /// <summary>Optional: <c>MarkdownV2</c> or <c>HTML</c>. Left out, the message is sent as plain text.</summary>
     [JsonPropertyName("parseMode")]

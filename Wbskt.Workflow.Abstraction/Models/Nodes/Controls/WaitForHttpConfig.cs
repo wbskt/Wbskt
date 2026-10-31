@@ -3,7 +3,7 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 public sealed record WaitForHttpConfig
 {
     [JsonPropertyName("ttl")]
-    public required TimeSpan Ttl { get; init; }
+    public TimeSpan Ttl { get; init; }
 
     // Required design-time wake token. The branch parks on "http-wake:{Token}" and an external
     // caller resumes it by POSTing that token to the public wake callback - so the author knows the

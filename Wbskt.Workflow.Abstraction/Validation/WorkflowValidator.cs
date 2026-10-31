@@ -13,7 +13,7 @@ using Wbskt.Workflow.Abstraction.Templates;
 
 namespace Wbskt.Workflow.Abstraction.Validation;
 
-public sealed class WorkflowValidator
+public sealed partial class WorkflowValidator
 {
     // A WaitForHttp wake token is the sole secret gating an anonymous public callback, so it must be
     // long enough not to be brute-forceable. 24 characters ~= 128 bits when random (e.g. a GUID "N"
@@ -44,6 +44,8 @@ public sealed class WorkflowValidator
         ValidatePorts(definition, issues);
         ValidateNodeKinds(definition, issues);
         ValidateNodeConfigs(definition, issues);
+        ValidateStepSettings(definition, issues);
+        ValidateExpressions(definition, issues);
         ValidateIntegrationSteps(definition, issues);
         ValidateTemplatedFields(definition, issues);
         ValidateOnFailure(definition, issues);
@@ -58,6 +60,8 @@ public sealed class WorkflowValidator
         ValidateTriggerConfigs(definition, issues);
         WarnIfNoTriggers(definition, issues);
         WarnIfOrphans(definition, issues);
+        WarnOnDeadEndErrorPaths(definition, issues);
+        WarnOnUndeclaredSharedVariables(definition, issues);
         return new ValidationResult(issues);
     }
 
@@ -176,7 +180,7 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "RETRY_FACTOR_INVALID",
                     $"Node '{node.NodeId}': the retry factor must be a number greater than zero.",
-                    node.NodeId));
+                    node.NodeId, "retry.factor"));
             }
 
             if (retry.MaxDelay is { } maxDelay && maxDelay < retry.InitialDelay)
@@ -185,7 +189,7 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "RETRY_MAX_DELAY_BELOW_INITIAL",
                     $"Node '{node.NodeId}': the retry maxDelay must not be less than the initialDelay.",
-                    node.NodeId));
+                    node.NodeId, "retry.maxDelay"));
             }
         }
     }
@@ -210,7 +214,8 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "SUBWORKFLOW_INPUT_KEY_RESERVED",
                     $"SubWorkflow node '{node.NodeId}' supplies input '{key}', which the engine writes itself; rename it.",
-                    node.NodeId));
+                    node.NodeId,
+                    $"config.input.{key}"));
             }
         }
     }
@@ -233,7 +238,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "END_OUTPUT_WITHOUT_MANUAL_TRIGGER",
                 $"End node '{node.NodeId}' declares an output, but the workflow has no manual trigger, so no parent can start it as a sub-workflow to read it; add a manual trigger or remove the output.",
-                node.NodeId));
+                node.NodeId, "config.output"));
         }
     }
 
@@ -258,7 +263,7 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "SUBWORKFLOW_SELF_REFERENCE",
                     $"SubWorkflow node '{node.NodeId}' starts its own workflow, which would start children without end; point it at another workflow.",
-                    node.NodeId));
+                    node.NodeId, "config.workflowRefId"));
             }
         }
     }
@@ -284,7 +289,7 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "VARIABLE_NAME_RESERVED",
                     $"Variable node '{node.NodeId}' sets local variable '{config.Var}', a name the engine keeps for itself (names starting with '{BranchStateKeys.EnginePrefix}', and '{BranchStateKeys.Trigger}'); rename it.",
-                    node.NodeId));
+                    node.NodeId, "config.var"));
             }
         }
     }
@@ -422,7 +427,8 @@ public sealed class WorkflowValidator
                             ValidationSeverity.Error,
                             "INVALID_CRON",
                             $"Schedule trigger '{node.NodeId}' has an invalid cron expression '{schedule.Config?.Cron}'.",
-                            node.NodeId));
+                            node.NodeId,
+                            "config.cron"));
                     }
                     WarnOnCorrelation(node.NodeId, schedule.Config?.CorrelationKey, issues);
                     break;
@@ -444,7 +450,7 @@ public sealed class WorkflowValidator
                             ValidationSeverity.Error,
                             "INVALID_CLIENT_REF",
                             $"Presence trigger '{node.NodeId}' needs a client id, but has '{presence.Config?.ClientRef}'.",
-                            node.NodeId));
+                            node.NodeId, "config.clientRef"));
                     }
                     if (presence.Config is { } config
                         && (config.ForSeconds < 0 || config.ForSeconds > ClientPresenceTriggerConfig.MaxForSeconds))
@@ -453,7 +459,7 @@ public sealed class WorkflowValidator
                             ValidationSeverity.Error,
                             "INVALID_PRESENCE_DURATION",
                             $"Presence trigger '{node.NodeId}' has forSeconds {config.ForSeconds}; it must be between 0 and {ClientPresenceTriggerConfig.MaxForSeconds}.",
-                            node.NodeId));
+                            node.NodeId, "config.forSeconds"));
                     }
                     WarnOnCorrelation(node.NodeId, presence.Config?.CorrelationKey, issues);
                     break;
@@ -473,7 +479,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "INVALID_HOLD_DURATION",
                 $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds}; it must be between 0 and {ClientTriggerConfig.MaxHoldSeconds}.",
-                nodeId));
+                nodeId, "config.holdSeconds"));
             return;
         }
 
@@ -489,7 +495,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "HOLD_REQUIRES_FILTER",
                 $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds} but no filter; a hold time needs a filter to hold.",
-                nodeId));
+                nodeId, "config.filter"));
         }
 
         // An any-type hold is recorded against every message the device sends, and a message of another
@@ -500,7 +506,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "HOLD_REQUIRES_MESSAGE_TYPE",
                 $"Client trigger '{nodeId}' has holdSeconds {config.HoldSeconds} on any message type; a hold time needs one message type, because every other type would reset it.",
-                nodeId));
+                nodeId, "config.type"));
         }
 
         // The hold key is built from the parsed GUID, as presence keys are.
@@ -510,7 +516,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "INVALID_CLIENT_REF",
                 $"Client trigger '{nodeId}' has a hold time and needs a client id, but has '{config.ClientRef}'.",
-                nodeId));
+                nodeId, "config.clientRef"));
         }
     }
 
@@ -525,7 +531,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "INVALID_CORRELATION_KEY",
                 $"Trigger '{nodeId}' has correlationKey '{correlationKey}'. A template must be the whole key and name a trigger field, e.g. '{{{{trigger.payload.room}}}}'; as written every run would share one key.",
-                nodeId));
+                nodeId, "config.correlationKey"));
         }
         else if (correlationKey is not null
             && !CorrelationKeyExpression.TryGetTriggerPath(correlationKey, out _)
@@ -535,7 +541,7 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Warning,
                 "SUSPICIOUS_CORRELATION_KEY",
                 $"Trigger '{nodeId}' has correlationKey '{correlationKey}', which is neither a '$trigger.' path nor a plain constant; it will be used verbatim.",
-                nodeId));
+                nodeId, "config.correlationKey"));
         }
     }
 
@@ -545,13 +551,15 @@ public sealed class WorkflowValidator
         {
             // The same rules the console applies, so a workflow cannot send a device a sys.* frame.
             if (node is SendClientMessageNode sendMessage
-                && DeviceMessageRules.FindViolation(sendMessage.Config?.Type, sendMessage.Config?.Payload?.GetRawText()) is { } violation)
+                && !string.IsNullOrWhiteSpace(sendMessage.Config?.Type)
+                && DeviceMessageRules.Check(sendMessage.Config.Type, sendMessage.Config.Payload?.GetRawText()) is { } violation)
             {
                 issues.Add(new ValidationIssue(
                     ValidationSeverity.Error,
                     "CLIENT_MESSAGE_INVALID",
-                    $"ClientMessage node '{node.NodeId}': {violation}",
-                    node.NodeId));
+                    $"ClientMessage node '{node.NodeId}': {violation.Message}",
+                    node.NodeId,
+                    violation.Rule == DeviceMessageRule.PayloadSize ? "config.payload" : "config.type"));
             }
 
             if (node is SendClientMessageNode { Config.AckTimeout: { } ackTimeout }
@@ -561,7 +569,8 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "CLIENT_MESSAGE_ACK_TIMEOUT",
                     $"ClientMessage node '{node.NodeId}': the ack timeout must be more than zero and at most {SendClientMessageConfig.MaxAckTimeout.TotalHours:0} hours.",
-                    node.NodeId));
+                    node.NodeId,
+                    "config.ackTimeout"));
             }
 
             if (node is AwaitSignalNode { Config.Correlation: { } correlation } && FindCorrelationProblem(correlation) is { } problem)
@@ -582,7 +591,8 @@ public sealed class WorkflowValidator
                         ValidationSeverity.Error,
                         "WAITFORHTTP_WEAK_TOKEN",
                         $"WaitForHttp node '{node.NodeId}' must define a 'token' of at least {MinWakeTokenLength} characters; it is the only secret gating the public wake callback.",
-                        node.NodeId));
+                        node.NodeId,
+                        "config.token"));
                 }
             }
         }
@@ -654,7 +664,8 @@ public sealed class WorkflowValidator
                         ValidationSeverity.Error,
                         "TEMPLATE_INVALID",
                         $"Step '{node.Name}', {field.Path}: {error}",
-                        node.NodeId));
+                        node.NodeId,
+                        $"config.{field.Path}"));
                 }
             }
         }
@@ -675,7 +686,8 @@ public sealed class WorkflowValidator
                     ValidationSeverity.Error,
                     "INTEGRATION_REF_MISSING",
                     $"Step '{node.Name}' must name the {IntegrationTypes.NameOf(IntegrationTypes.ForStepKind(node.Kind)!.Value)} integration it sends through (integrationRef).",
-                    node.NodeId));
+                    node.NodeId,
+                    "config.integrationRef"));
             }
 
             switch (node)
@@ -692,12 +704,12 @@ public sealed class WorkflowValidator
                 case NtfyNotificationNode ntfy:
                     if (string.IsNullOrWhiteSpace(ntfy.Config?.Message))
                     {
-                        issues.Add(new ValidationIssue(ValidationSeverity.Error, "NTFY_MESSAGE_MISSING", $"Step '{node.Name}' has no message.", node.NodeId));
+                        issues.Add(new ValidationIssue(ValidationSeverity.Error, "NTFY_MESSAGE_MISSING", $"Step '{node.Name}' has no message.", node.NodeId, "config.message"));
                     }
 
                     if (ntfy.Config?.Priority is < 1 or > 5)
                     {
-                        issues.Add(new ValidationIssue(ValidationSeverity.Error, "NTFY_PRIORITY_INVALID", $"Step '{node.Name}': priority must be 1 to 5.", node.NodeId));
+                        issues.Add(new ValidationIssue(ValidationSeverity.Error, "NTFY_PRIORITY_INVALID", $"Step '{node.Name}': priority must be 1 to 5.", node.NodeId, "config.priority"));
                     }
 
                     break;
@@ -714,12 +726,12 @@ public sealed class WorkflowValidator
     private static void ValidateTelegramStep(TelegramNotificationNode node, List<ValidationIssue> issues)
     {
         var config = node.Config;
-        void Add(string code, string message) =>
-            issues.Add(new ValidationIssue(ValidationSeverity.Error, code, $"Step '{node.Name}': {message}", node.NodeId));
+        void Add(string code, string message, string field) =>
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, code, $"Step '{node.Name}': {message}", node.NodeId, field));
 
         if (string.IsNullOrWhiteSpace(config?.ChatId))
         {
-            issues.Add(new ValidationIssue(ValidationSeverity.Error, "TELEGRAM_CHAT_MISSING", $"Step '{node.Name}' has no chat to send to (chatId).", node.NodeId));
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, "TELEGRAM_CHAT_MISSING", $"Step '{node.Name}' has no chat to send to (chatId).", node.NodeId, "config.chatId"));
         }
 
         if (config is null)
@@ -729,17 +741,17 @@ public sealed class WorkflowValidator
 
         if (string.IsNullOrWhiteSpace(config.Message) || config.Message.Length > TelegramMaxMessageLength)
         {
-            Add("TELEGRAM_MESSAGE_INVALID", $"the message must be 1-{TelegramMaxMessageLength} characters.");
+            Add("TELEGRAM_MESSAGE_INVALID", $"the message must be 1-{TelegramMaxMessageLength} characters.", "config.message");
         }
 
         if (config.ParseMode is not null && !TelegramParseModes.Contains(config.ParseMode, StringComparer.Ordinal))
         {
-            Add("TELEGRAM_PARSE_MODE_INVALID", $"parseMode must be {string.Join(" or ", TelegramParseModes)}, or left out for plain text.");
+            Add("TELEGRAM_PARSE_MODE_INVALID", $"parseMode must be {string.Join(" or ", TelegramParseModes)}, or left out for plain text.", "config.parseMode");
         }
 
         if (config.MessageThreadId is not null && !IsTelegramId(config.MessageThreadId))
         {
-            Add("TELEGRAM_THREAD_INVALID", "messageThreadId must be a topic id (digits only).");
+            Add("TELEGRAM_THREAD_INVALID", "messageThreadId must be a topic id (digits only).", "config.messageThreadId");
         }
     }
 
@@ -883,13 +895,15 @@ public sealed class WorkflowValidator
 
         // Relative to what? Only an integration's base URL can answer that. A leading '/' is relative
         // too, though on Unix Uri reads it as an absolute file path.
-        if (node.IntegrationRef is null && !TemplatePlaceholders.Contains(config.Url) && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
+        if (node.IntegrationRef is null && !string.IsNullOrWhiteSpace(config.Url) && !TemplatePlaceholders.Contains(config.Url)
+            && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
         {
             issues.Add(new ValidationIssue(
                 ValidationSeverity.Error,
                 "WEBHOOK_URL_RELATIVE",
                 $"Step '{node.Name}': '{config.Url}' is not an absolute URL. A relative URL needs an HTTP auth integration to be relative to.",
-                node.NodeId));
+                node.NodeId,
+                "config.url"));
         }
 
         if (config.TimeoutSeconds is < 1 or > WebhookNotificationConfig.MaxTimeoutSeconds)
@@ -898,7 +912,8 @@ public sealed class WorkflowValidator
                 ValidationSeverity.Error,
                 "WEBHOOK_TIMEOUT_INVALID",
                 $"Step '{node.Name}': the timeout must be 1 to {WebhookNotificationConfig.MaxTimeoutSeconds} seconds.",
-                node.NodeId));
+                node.NodeId,
+                "config.timeoutSeconds"));
         }
 
         if (config.Headers is null)
@@ -908,7 +923,7 @@ public sealed class WorkflowValidator
 
         if (config.Headers.Count > WebhookNotificationConfig.MaxHeaders)
         {
-            issues.Add(new ValidationIssue(ValidationSeverity.Error, "WEBHOOK_HEADERS_TOO_MANY", $"Step '{node.Name}' sets more than {WebhookNotificationConfig.MaxHeaders} headers.", node.NodeId));
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, "WEBHOOK_HEADERS_TOO_MANY", $"Step '{node.Name}' sets more than {WebhookNotificationConfig.MaxHeaders} headers.", node.NodeId, "config.headers"));
         }
 
         foreach (var (name, value) in config.Headers)

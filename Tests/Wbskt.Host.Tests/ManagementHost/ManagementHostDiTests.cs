@@ -38,6 +38,8 @@ public sealed class ManagementHostDiTests
         services.AddScoped<IWorkflowEngineGateway, WorkflowEngineGateway>();
         services.AddScoped<IIntegrationProvider, IntegrationProvider>();
         services.AddScoped<IntegrationReferenceCheck>();
+        services.AddSingleton(Mock.Of<IClientProvider>());
+        services.AddScoped<DeviceReferenceCheck>();
         services.AddScoped<IWorkflowQueryService, WorkflowQueryService>();
         services.AddScopedWithQueuedEvents<IWorkflowLifecycleService, WorkflowLifecycleService>();
         services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();

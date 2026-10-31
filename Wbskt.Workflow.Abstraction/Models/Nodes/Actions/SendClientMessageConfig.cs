@@ -4,10 +4,10 @@ namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 public sealed record SendClientMessageConfig
 {
     [JsonPropertyName("clientRef")]
-    public required string ClientRef { get; init; }
+    public string ClientRef { get; init; } = string.Empty;
 
     [JsonPropertyName("type")]
-    public required string Type { get; init; }
+    public string Type { get; init; } = string.Empty;
 
     [Templated]
     [JsonPropertyName("payload")]

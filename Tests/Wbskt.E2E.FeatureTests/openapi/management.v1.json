@@ -2635,6 +2635,12 @@
           "code": {
             "type": "string"
           },
+          "field": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "message": {
             "type": "string"
           },

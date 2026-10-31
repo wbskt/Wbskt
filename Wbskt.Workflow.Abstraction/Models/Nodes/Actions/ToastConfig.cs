@@ -5,11 +5,11 @@ public sealed record ToastConfig
 {
     [Templated]
     [JsonPropertyName("title")]
-    public required string Title { get; init; }
+    public string Title { get; init; } = string.Empty;
 
     [Templated]
     [JsonPropertyName("message")]
-    public required string Message { get; init; }
+    public string Message { get; init; } = string.Empty;
 
 }
 

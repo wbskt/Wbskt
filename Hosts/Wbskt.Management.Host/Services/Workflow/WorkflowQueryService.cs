@@ -21,15 +21,18 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
     private readonly IWorkflowDefinitionProvider _workflowDefinitionProvider;
     private readonly WorkflowValidator _validator;
     private readonly IntegrationReferenceCheck _integrationCheck;
+    private readonly DeviceReferenceCheck? _deviceCheck;
     private readonly ILogger<WorkflowQueryService> _logger;
 
     public WorkflowQueryService(
         IWorkflowDefinitionProvider workflowDefinitionProvider,
         WorkflowValidator validator,
         IntegrationReferenceCheck integrationCheck,
-        ILogger<WorkflowQueryService> logger)
+        ILogger<WorkflowQueryService> logger,
+        DeviceReferenceCheck? deviceCheck = null)
     {
         _integrationCheck = integrationCheck;
+        _deviceCheck = deviceCheck;
         _workflowDefinitionProvider = workflowDefinitionProvider;
         _validator = validator;
         _logger = logger;
@@ -39,19 +42,21 @@ public sealed class WorkflowQueryService : IWorkflowQueryService
     {
         ValidationResult validation = _validator.Validate(definition);
 
-        // The workspace's half - do the integrations the steps name exist here, with the right type -
-        // so a draft hears what publishing it would.
+        // The workspace's half - do the integrations and devices the steps name exist here - so a draft
+        // hears what publishing it would.
         IntegrationReferences integrations = await _integrationCheck.CheckAsync(workspaceId, definition, ct);
-        var issues = validation.Issues.Concat(integrations.Issues).ToList();
+        IReadOnlyList<ValidationIssue> devices = _deviceCheck is null ? [] : await _deviceCheck.CheckAsync(workspaceId, definition, ct);
+        var issues = validation.Issues.Concat(integrations.Issues).Concat(devices).ToList();
 
         return new WorkflowValidationResponse(
-            validation.IsValid && integrations.Issues.Count == 0,
+            issues.All(issue => issue.Severity != ValidationSeverity.Error),
             issues
                 .Select(issue => new WorkflowValidationIssueDto(
                     issue.Severity.ToString(),
                     issue.Code,
                     issue.Message,
-                    issue.NodeId))
+                    issue.NodeId,
+                    issue.Field))
                 .ToList());
     }
 
