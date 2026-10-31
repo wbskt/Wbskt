@@ -6,8 +6,8 @@
 # Three stages, because a backup that never leaves the machine is not a backup:
 #
 #   1. BACKUP DATABASE inside the sql container, into a staging directory on the sql-data volume.
-#   2. RESTORE VERIFYONLY, then copy the file out to BACKUP_DIR on the host, gzip it there and
-#      delete the staged copy - so the volume never accumulates backups it would lose along with
+#   2. RESTORE VERIFYONLY, then gzip the file out to BACKUP_DIR on the host and delete the staged
+#      copy - so the volume never accumulates backups it would lose along with
 #      the data.
 #   3. BACKUP_UPLOAD_CMD pushes BACKUP_DIR off the box.
 #
@@ -85,8 +85,7 @@ sqlcmd() {
 back_up_one() {
     local db="$1"
     local staged="$STAGING_DIR/${db}_${STAMP}.bak"
-    local local_copy="$BACKUP_DIR/${db}_${STAMP}.bak"
-    local compressed="${local_copy}.gz"
+    local compressed="$BACKUP_DIR/${db}_${STAMP}.bak.gz"
 
     log "backing up $db"
 
@@ -101,7 +100,9 @@ back_up_one() {
     sqlcmd "RESTORE VERIFYONLY FROM DISK = N'${staged}' WITH CHECKSUM;" \
         || die "backup of $db did not verify - treating it as no backup at all"
 
-    docker compose cp "sql:${staged}" "$local_copy" \
+    # Compressed on its way out, so the host never holds a full-size copy next to the staged one:
+    # uncompressed, a large database would need twice its size free on the disk for a moment.
+    docker compose exec -T sql cat "$staged" | nice gzip > "$compressed" \
         || die "could not copy $db backup out of the container"
 
     # The staged copy lives on the same volume as the data files, so leaving it there would grow
@@ -109,9 +110,7 @@ back_up_one() {
     docker compose exec -T sql rm -f "$staged" \
         || log "warning: could not remove staged copy $staged"
 
-    [[ -s "$local_copy" ]] || die "$local_copy is empty"
-
-    nice gzip "$local_copy" || die "could not compress $local_copy"
+    [[ -s "$compressed" ]] || die "$compressed is empty"
     gzip --test "$compressed" || die "$compressed does not decompress"
 
     log "wrote $compressed ($(du -h "$compressed" | cut -f1))"
@@ -167,7 +166,8 @@ main() {
     load_env
     cd "$COMPOSE_DIR"
 
-    docker compose ps --status running --services 2>/dev/null | grep -qx sql \
+    # grep without -q: an early exit would SIGPIPE docker compose, which pipefail reports as failure.
+    docker compose ps --status running --services 2>/dev/null | grep -x sql > /dev/null \
         || die "the sql service is not running"
 
     docker compose exec -T sql mkdir -p "$STAGING_DIR" || die "could not create $STAGING_DIR"

@@ -470,7 +470,8 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
       # Express is the free edition licensed for production; Developer is for dev and test only.
-      # An existing volume switches edition on the next start - see "SQL Server edition" in deploy/README.md.
+      # An existing volume switches edition when the container is recreated - see "SQL Server
+      # edition" in deploy/README.md.
       MSSQL_PID: ${MSSQL_PID:-Express}
       MSSQL_MEMORY_LIMIT_MB: ${SQL_MEMORY_LIMIT_MB:-2048}
     volumes:
