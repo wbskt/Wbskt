@@ -9,6 +9,8 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
+using Wbskt.Workflow.Runtime;
+
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 internal sealed class ParallelForEachNodeExecutor : INodeExecutor
@@ -40,7 +42,7 @@ internal sealed class ParallelForEachNodeExecutor : INodeExecutor
             return new NodeExecutionResult.Fail("PFE_CONFIG_INVALID", "ParallelForEach node config is required.", false, null);
         }
 
-        JsonElement collection = await _expressionEvaluator.EvaluateAsync(new BranchStateRefExpression(node.Config.Collection), ctx.Branch, ct);
+        JsonElement collection = await _expressionEvaluator.EvaluateForStepAsync(new BranchStateRefExpression(node.Config.Collection), ctx, "collection", ct);
         if (collection.ValueKind != JsonValueKind.Array)
         {
             return new NodeExecutionResult.Fail("PFE_COLLECTION_NOT_ARRAY", $"ParallelForEach collection evaluated to {collection.ValueKind} instead of array.", false, null);

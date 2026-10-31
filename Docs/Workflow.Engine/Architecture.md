@@ -343,6 +343,11 @@ step's `NodeCompleted` / `NodeFailed`. Payloads never carry a value that may be 
 | `WebhookJsonUnparsable` | Call a URL | `status`, `contentType`, `error` (a position, never the body): the response said JSON and didn't parse, so `json` was cleared |
 | `BranchStateLarge` | branch loop | `bytes`, `limit`, `largestKeys`: the step took the branch's local state past 80% of `MaxBranchLocalStateBytes`; written on the step that crosses the line, not on the steps after it while the state stays above |
 | `CreditBudgetLow` | retry executor | `spent`, `budget`: the step's charge took the run past 80% of its credit budget; written once per run, on the crossing charge |
+| `BranchStatePathMissing` | Logic, Variable, ForEach, Parallel ForEach, Sub-workflow, End | `field`, `paths`: an expression read a branch-state path that isn't there, so it read as null. A path holding `null` is not missing, and nor is one passed to `isNull` / `isEmpty` |
+
+`TemplateValueMissing` and `BranchStatePathMissing` stay separate: the first says an action sent a
+blank (and also covers an unset `$shared` variable), the second says a decision or a value inside the
+run was made from a path that doesn't exist.
 
 ## 11. Metrics
 

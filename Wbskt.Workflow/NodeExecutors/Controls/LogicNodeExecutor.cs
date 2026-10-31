@@ -4,6 +4,8 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Runtime;
 
+using Wbskt.Workflow.Runtime;
+
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 internal sealed class LogicNodeExecutor : INodeExecutor
@@ -30,7 +32,7 @@ internal sealed class LogicNodeExecutor : INodeExecutor
         // The condition is a full expression tree, so comparisons and functions work here. A
         // malformed one raises ExpressionEvaluationException, which the retry executor turns into a
         // non-retryable EXPRESSION_EVALUATION_ERROR naming the offending types.
-        JsonElement evaluation = await _expressionEvaluator.EvaluateAsync(node.Config.Condition, ctx.Branch, ct);
+        JsonElement evaluation = await _expressionEvaluator.EvaluateForStepAsync(node.Config.Condition, ctx, "condition", ct);
         if (evaluation.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
         {
             return new NodeExecutionResult.Fail("LOGIC_CONDITION_NOT_BOOL", $"Logic condition evaluated to {evaluation.ValueKind} instead of bool.", false, null);

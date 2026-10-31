@@ -4,6 +4,8 @@ using Wbskt.Workflow.Abstraction.Models.Nodes;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Runtime;
 
+using Wbskt.Workflow.Runtime;
+
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
@@ -40,7 +42,7 @@ internal sealed class ForEachNodeExecutor : INodeExecutor
             return new NodeExecutionResult.Fail("FOREACH_CONFIG_INVALID", "ForEach node config is required.", false, null);
         }
 
-        JsonElement collection = await _expressionEvaluator.EvaluateAsync(new BranchStateRefExpression(node.Config.Collection), ctx.Branch, ct);
+        JsonElement collection = await _expressionEvaluator.EvaluateForStepAsync(new BranchStateRefExpression(node.Config.Collection), ctx, "collection", ct);
         if (collection.ValueKind != JsonValueKind.Array)
         {
             return new NodeExecutionResult.Fail("FOREACH_COLLECTION_NOT_ARRAY", $"ForEach collection evaluated to {collection.ValueKind} instead of array.", false, null);

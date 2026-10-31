@@ -6,6 +6,8 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Providers;
 using Wbskt.Workflow.Abstraction.Runtime;
 
+using Wbskt.Workflow.Runtime;
+
 namespace Wbskt.Workflow.NodeExecutors.Controls;
 
 /// <summary>
@@ -127,8 +129,8 @@ internal sealed class VariableNodeExecutor : INodeExecutor
                 null);
         }
 
-        JsonElement newValue = await ResolveValueAsync(ctx, config, config.Value, ct);
-        JsonElement expected = await ResolveValueAsync(ctx, config, config.Expected, ct);
+        JsonElement newValue = await ResolveValueAsync(ctx, config.Value, "value", ct);
+        JsonElement expected = await ResolveValueAsync(ctx, config.Expected, "expected", ct);
 
         // Comparison is on canonical JSON text, because SharedVariable_CompareAndSet compares text in SQL
         // (ValueJson = @Expected) and every shared write stores the canonical form. Local compares the
@@ -252,16 +254,15 @@ internal sealed class VariableNodeExecutor : INodeExecutor
 
     private Task<JsonElement> ResolveValueAsync(NodeContext ctx, VariableConfig config, CancellationToken ct)
     {
-        return ResolveValueAsync(ctx, config, config.Value, ct);
+        return ResolveValueAsync(ctx, config.Value, "value", ct);
     }
 
     /// <summary>
     /// Resolves a configured value, evaluating it when it is an expression tree (detected by the
     /// polymorphic "kind" discriminator) rather than a plain JSON literal.
     /// </summary>
-    private async Task<JsonElement> ResolveValueAsync(NodeContext ctx, VariableConfig config, JsonElement? configured, CancellationToken ct)
+    private async Task<JsonElement> ResolveValueAsync(NodeContext ctx, JsonElement? configured, string field, CancellationToken ct)
     {
-        _ = config;
         JsonElement value = configured?.Clone() ?? JsonSerializer.SerializeToElement((string?)null);
 
         if (value.ValueKind == JsonValueKind.Object
@@ -271,7 +272,7 @@ internal sealed class VariableNodeExecutor : INodeExecutor
             var expression = JsonSerializer.Deserialize<WorkflowExpression>(value.GetRawText(), ExpressionJsonOptions);
             if (expression is not null)
             {
-                value = await _expressionEvaluator.EvaluateAsync(expression, ctx.Branch, ct);
+                value = await _expressionEvaluator.EvaluateForStepAsync(expression, ctx, field, ct);
             }
         }
 
