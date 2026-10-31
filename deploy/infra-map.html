@@ -990,6 +990,7 @@ function buildPipeline() {
       <li>Pulls the images, then runs the migrator unless <code>--skip-migrations</code>.</li>
       <li>Starts devices and waits for health, then the other hosts with <code>--no-deps</code>.</li>
       <li>Waits up to 240 s for health; on timeout prints the last 20 log lines per failing service.</li>
+      <li>Compares every other running service with the compose file and warns about any that changed, have stale bind-mounted config, or have no container. It never recreates them.</li>
     </ol></div>
     <div class="card"><h3>Secrets and access</h3>
       <div class="sheet" style="margin-top:8px"><table><thead><tr><th>GitHub secret</th><th>Holds</th></tr></thead><tbody>

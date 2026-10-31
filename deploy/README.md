@@ -337,6 +337,13 @@ or stops anything and names the variable. A new required variable therefore has 
 VM's `.env` before the commit that requires it is deployed: the deploy resets the checkout first,
 so from then on the nightly backup reads the new compose file as well.
 
+A backend deploy only recreates the five hosts, but it lands every other service's definition and
+config file too. It ends by comparing each running container with the compose file and prints a
+`::warning::` (an annotation on the Deploy run) for each service that is behind: a changed
+definition, a bind-mounted file such as `alerts.yml` changed since the container started, or no
+container at all. It prints the command that applies them. Nothing is recreated for you, since
+recreating sql, rabbitmq or traefik is a decision of its own.
+
 ## Network changes
 
 `deploy.sh` will refuse to run — before stopping anything — if the `networks:` block in
