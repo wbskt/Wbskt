@@ -43,6 +43,7 @@ public static class EventLogGroups
         nameof(PolicyPinRotatedEvent),
         nameof(PolicyRegistrationAttemptedOnDisabledEvent),
         nameof(PolicyRegistrationLimitReachedEvent),
+        nameof(PolicyDeletedEvent),
         nameof(WorkflowDeletedEvent),
         nameof(IntegrationSecretRotatedEvent),
         nameof(IntegrationDeletedEvent)

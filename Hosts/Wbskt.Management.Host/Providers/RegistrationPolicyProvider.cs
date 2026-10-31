@@ -151,6 +151,15 @@ internal sealed class RegistrationPolicyProvider : BaseSqlProvider, IRegistratio
         }, cancellationToken);
     }
 
+    public async Task<PolicyDeleteOutcome> DeleteAsync(int workspaceId, int id, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteSingleAsync("dbo.RegistrationPolicy_Delete", p =>
+        {
+            p.AddWithValue("@Id", id);
+            p.AddWithValue("@WorkspaceId", workspaceId);
+        }, reader => new PolicyDeleteOutcome(reader.GetBoolean(reader.GetOrdinal("Deleted")), reader.GetInt32(reader.GetOrdinal("ClientCount"))), null, cancellationToken);
+    }
+
     private static RegistrationPolicy MapPolicy(SqlDataReader reader)
     {
         return new RegistrationPolicy

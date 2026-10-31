@@ -193,6 +193,35 @@ internal sealed class RegistrationPolicyService : IRegistrationPolicyService
         return Result.Success();
     }
 
+    public async Task<Result> DeleteAsync(int workspaceId, Guid policyRefId, CancellationToken cancellationToken = default)
+    {
+        var lookup = await FindInWorkspaceAsync(workspaceId, policyRefId, cancellationToken);
+        if (lookup.IsFailure)
+        {
+            return Result.Failure(lookup.Error);
+        }
+
+        var policy = lookup.Value;
+        var outcome = await _provider.DeleteAsync(workspaceId, policy.Id, cancellationToken);
+        if (outcome.ClientCount > 0)
+        {
+            _logger.LogInformation("Policy delete refused: policy ID {PolicyId} still has {ClientCount} clients", policy.Id, outcome.ClientCount);
+            return Result.Failure(Error.Conflict(
+                "POLICY_HAS_CLIENTS",
+                string.Create(CultureInfo.InvariantCulture, $"This policy still has {outcome.ClientCount} {(outcome.ClientCount == 1 ? "client" : "clients")}. Move or delete them first.")));
+        }
+
+        if (!outcome.Deleted)
+        {
+            // Deleted by another request between the lookup and the delete.
+            return Result.Failure(WorkspaceOwnership.PolicyNotFound);
+        }
+
+        _logger.LogInformation("Registration policy ID {PolicyId} deleted", policy.Id);
+        await _eventBus.PublishAsync(new PolicyDeletedEvent(policy.RefId, policy.Id, workspaceId, policy.Name), cancellationToken);
+        return Result.Success();
+    }
+
     private static RegistrationPolicyResponse MapToResponse(RegistrationPolicy p)
     {
         return new RegistrationPolicyResponse(
