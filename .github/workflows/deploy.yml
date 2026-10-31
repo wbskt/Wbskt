@@ -84,7 +84,9 @@ jobs:
         run: |
           args=(--tag "$TAG")
           if [[ -n "$SERVICES" ]]; then
-            args+=(--services "$SERVICES")
+            # Comma-joined: ssh flattens the command into one string the VM word-splits, so a
+            # space-separated list would arrive as one service per argument.
+            args+=(--services "${SERVICES// /,}")
           fi
           if [[ "$SKIP_MIGRATIONS" == "true" ]]; then
             args+=(--skip-migrations)
