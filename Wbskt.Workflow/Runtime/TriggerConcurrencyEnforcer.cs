@@ -48,7 +48,11 @@ internal sealed class TriggerConcurrencyEnforcer : ITriggerConcurrencyEnforcer
     private async Task<TriggerConcurrencyDecision> QueueAsync(Abstraction.Entities.TriggerRegistrationRow registration, InboundEvent evt, CancellationToken ct)
     {
         string inboundEventJson = JsonSerializer.Serialize(evt, EngineJson.Options);
-        await _pendingTriggerEventProvider.EnqueueAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey ?? string.Empty, inboundEventJson, ct);
-        return new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, TriggerConcurrencyDecision.NoRuns);
+        Abstraction.Entities.PendingTriggerEventRow? queued = await _pendingTriggerEventProvider.EnqueueBehindActiveRunAsync(registration.WorkflowRefId, registration.TriggerNodeId, evt.CorrelationKey ?? string.Empty, inboundEventJson, ct);
+
+        // The run it would have waited for finished in the meantime, and nothing else holds the key.
+        return queued is null
+            ? new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Proceed, TriggerConcurrencyDecision.NoRuns)
+            : new TriggerConcurrencyDecision(TriggerConcurrencyOutcome.Queued, TriggerConcurrencyDecision.NoRuns);
     }
 }

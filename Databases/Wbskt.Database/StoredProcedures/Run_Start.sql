@@ -44,10 +44,7 @@ BEGIN
             -- just put the runs it found. Taken before the workspace lock below, always in that order.
             IF @ActiveRunGuard > 0 AND @CorrelationKey IS NOT NULL
             BEGIN
-                -- Upper-cased: the EXISTS below compares keys case-insensitively, so "Dev-1" and "dev-1"
-                -- are one key there and must take one lock.
-                DECLARE @KeyResource NVARCHAR(255) = CONCAT(N'trigger-start:', @WorkflowRefId, N':', @TriggerNodeId, N':',
-                    CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', UPPER(@CorrelationKey)), 2));
+                DECLARE @KeyResource NVARCHAR(255) = dbo.TriggerStartLockResource(@WorkflowRefId, @TriggerNodeId, @CorrelationKey);
                 DECLARE @KeyLockResult INT;
                 EXEC @KeyLockResult = sp_getapplock @Resource = @KeyResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
                 IF @KeyLockResult < 0
