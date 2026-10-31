@@ -101,7 +101,7 @@ public sealed class PendingTriggerEventDrainerTests
     {
         public int DequeueCalls { get; private set; }
 
-        public Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct) => throw new NotSupportedException();
         public Task<PendingTriggerEventRow?> DequeueNextAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, CancellationToken ct)
         {
             DequeueCalls++;

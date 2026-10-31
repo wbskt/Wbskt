@@ -12,23 +12,6 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
 {
     public PendingTriggerEventProvider(IConfiguration configuration) : base(configuration) { }
 
-    public async Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
-    {
-        return await ExecuteSingleAsync(
-            "dbo.PendingTriggerEvent_Enqueue",
-            p =>
-            {
-                p.AddWithValue("@WorkflowRefId", workflowRefId);
-                p.AddWithValue("@TriggerNodeId", triggerNodeId);
-                p.AddWithValue("@CorrelationKey", correlationKey);
-                p.AddWithValue("@InboundEventJson", inboundEventJson);
-            },
-            Map,
-            new InvalidOperationException("PendingTriggerEvent_Enqueue did not return a row."),
-            ct
-        );
-    }
-
     public async Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
     {
         return await ExecuteFindAsync(
@@ -39,7 +22,6 @@ internal sealed class PendingTriggerEventProvider : BaseSqlProvider, IPendingTri
                 p.AddWithValue("@TriggerNodeId", triggerNodeId);
                 p.AddWithValue("@CorrelationKey", correlationKey);
                 p.AddWithValue("@InboundEventJson", inboundEventJson);
-                p.AddWithValue("@RequireActiveRun", true);
             },
             Map,
             ct

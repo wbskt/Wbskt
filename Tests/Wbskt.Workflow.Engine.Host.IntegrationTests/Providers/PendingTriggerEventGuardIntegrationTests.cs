@@ -92,29 +92,7 @@ public sealed class PendingTriggerEventGuardIntegrationTests(SqlEdgeFixture fixt
             PublishedBy = 1, CreatedAt = DateTime.UtcNow
         }, CancellationToken.None);
 
-        DateTime now = DateTime.UtcNow;
-        Guid triggerNodeId = Guid.NewGuid();
-        var run = new RunRow
-        {
-            Id = 0, RefId = Guid.NewGuid(),
-            WorkflowDefinitionId = wd.Id, WorkflowRefId = wd.RefId, WorkflowVersion = wd.Version,
-            TriggerNodeId = triggerNodeId,
-            CorrelationKey = $"device-{Guid.NewGuid():N}",
-            Status = RunStatus.Running,
-            StartedAt = now, CompletedAt = null, CancellationRequestedAt = null, CancellationReason = null,
-            CreditBudget = 10m, CreatedAt = now
-        };
-        var branch = new BranchRow
-        {
-            Id = 0, RefId = Guid.NewGuid(), RunId = 0,
-            ParentBranchId = null, ForkCohortId = null,
-            NodeId = triggerNodeId, Status = BranchStatus.Active, PendingTakePort = null,
-            LocalJson = """{"trigger":{}}""", LastOutputJson = null,
-            CreatedAt = now, UpdatedAt = now, RowVersion = Array.Empty<byte>()
-        };
-
-        RunStartRow started = await ProviderFactory.Run(fixture.ConnectionString).StartAsync(run, branch, null, CancellationToken.None);
-        return started.Run;
+        return await ActiveRunSeeder.StartAsync(fixture.ConnectionString, wd.Id, wd.RefId, Guid.NewGuid(), $"device-{Guid.NewGuid():N}");
     }
 
     private async Task FinishAsync(RunRow run)
