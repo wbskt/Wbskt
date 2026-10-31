@@ -2188,6 +2188,67 @@
         ],
         "type": "object"
       },
+      "TelegramChatResponse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "username"
+        ],
+        "type": "object"
+      },
+      "TelegramChatsResponse": {
+        "properties": {
+          "chats": {
+            "items": {
+              "$ref": "#/components/schemas/TelegramChatResponse"
+            },
+            "type": "array"
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "code",
+          "message",
+          "chats"
+        ],
+        "type": "object"
+      },
       "UpdateClientRequest": {
         "properties": {
           "name": {
@@ -4498,6 +4559,55 @@
               "text/plain": {
                 "schema": {
                   "$ref": "#/components/schemas/IntegrationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/workspaces/{workspaceRef}/integrations/{integrationRef}/chats": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integrationRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramChatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramChatsResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramChatsResponse"
                 }
               }
             },
