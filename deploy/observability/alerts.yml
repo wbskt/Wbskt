@@ -206,6 +206,17 @@ groups:
         annotations:
           summary: "Prometheus cannot scrape node-exporter, so disk space is unwatched"
 
+      - alert: OtelCollectorDown
+        # Every host sends traces, metrics and logs through it, so while it is down EngineNotReporting
+        # and the workflow alerts go quiet too. It has no Docker healthcheck to show this instead.
+        expr: absent(up{job="otel-collector"} == 1)
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Prometheus cannot scrape the OpenTelemetry collector, so no host telemetry is arriving"
+          description: docker compose logs --tail 200 otel-collector on the VM shows why.
+
       - alert: ContainerRestarting
         # A container that crashes and is restarted in place keeps its series, so its start time
         # changes. A deploy recreates containers under new ids and does not count.
