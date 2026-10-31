@@ -56,7 +56,7 @@ Two repos, two independent release streams, one VM.
 ```
 Wbskt      push to master ─> build-images.yml ─> ghcr.io/wbskt/wbskt-<service>:sha-<short>
                                                               │
-      tests + E2E green ─> deploy.yml (automatic) ──────────-┘
+tests + E2E + rehearsal green ─> deploy.yml (automatic) ─────-┘
                                   │ ssh
                                   v
              deploy.sh --tag sha-<short>
@@ -75,7 +75,8 @@ Five images per backend commit — `wbskt-auth`, `wbskt-management`, `wbskt-sock
 `wbskt-migrator` — each tagged `sha-<short-commit>` and `latest`. The console is a sixth,
 published on the Dashboard repo's own cadence and tracked by its own `CONSOLE_IMAGE_TAG`.
 
-Every push to master deploys itself: once the tests, E2E and all five images succeed, **Build
+Every push to master deploys itself: once the tests, E2E, the upgrade rehearsal (below, under
+Database migrations) and all five images succeed, **Build
 images** calls the **Deploy** workflow with that run's tag, deploying every host (auth,
 management, devices, socket, engine) with migrations. If the `production` GitHub Environment has required reviewers, that deploy waits for
 an approval. To redeploy or pick services, dispatch **Deploy** by hand:
@@ -515,6 +516,28 @@ split (#442) is one: its first deploy rebuilds `dbo.EventLogs`. A rebuild holds 
 length, so the event logger's inserts wait and retry; nothing is lost.
 
 Archived one-time upgrade helpers (run by hand once, never by the migrator) live in `Databases/Migrations/archive/`.
+
+### Upgrade rehearsal
+
+Every pull request and every master push rehearses the upgrade production is about to get, in the
+`migration-rehearsal` job of `build-images.yml` (`rehearsal/rehearse.sh`). The image jobs, and so
+the deploy, wait on it.
+
+1. `wbskt-migrator:latest` builds both databases in a fresh SQL Server. That is the migrator the
+   last green master build published, which is what production last ran unless a deploy failed.
+2. `rehearsal/seed-every-table.sql` puts a row in every empty table. It is generic, because the
+   schema it seeds is the previous release's: each column gets a value of its type, foreign keys
+   take a row from the table they reference, and a table whose constraints refuse it is left empty
+   with a warning in the run.
+3. This commit's migrator upgrades them, incrementally and with `BlockOnPossibleDataLoss` on, as on
+   the VM.
+
+It fails when sqlpackage refuses the upgrade for possible data loss, when a table comes out with
+fewer rows than it went in with, or when `sqlpackage /Action:DeployReport` still finds a difference
+between the upgraded databases and this commit's DACPACs. For a loss that is intended, add a
+pre-deployment script that moves or clears the data first, so the upgrade itself loses nothing; the
+rehearsal output (row counts, seed log, deploy reports) is uploaded as the `migration-rehearsal`
+artifact.
 
 ### SQL logins
 

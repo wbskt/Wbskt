@@ -2,9 +2,10 @@ name: Build images
 
 # Builds the 4 host images + the migrator and pushes them to GHCR. The VM never builds anything;
 # deploy/scripts/deploy.sh only pulls what this workflow published. Pull requests run only the
-# tests and the package scan: the image jobs are skipped there, so a broken Dockerfile first shows
-# up on the master push that would publish it. On master, no image is built or pushed until the
-# tests, the scan and E2E have passed, so a red E2E never moves :latest; once every image has
+# tests, the package scan and the upgrade rehearsal: the image jobs are skipped there, so a broken
+# Dockerfile first shows up on the master push that would publish it. On master, no image is built
+# or pushed until the tests, the scan, E2E and the upgrade rehearsal have passed, so a red E2E never
+# moves :latest; once every image has
 # succeeded, the deploy job hands that run's sha-<short> tag to deploy.yml.
 #
 # Every job stays on GitHub-hosted runners. The repository is public, and a self-hosted runner would
@@ -427,6 +428,74 @@ jobs:
           fi
           echo "no vulnerable packages"
 
+  # Rehearses the upgrade production is about to get (#367): the migrator image production last ran
+  # (:latest, which only moves after a green master build) builds both databases, every table gets a
+  # row, and this commit's migrator upgrades them. Fails on possible data loss, on a table that comes
+  # out with fewer rows, and on any difference left between the upgraded schema and this commit's
+  # DACPACs. See "Upgrade rehearsal" in deploy/README.md. Skipped for pull requests from forks, which
+  # get no token to pull the image with.
+  migration-rehearsal:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Welcome1234
+          MSSQL_PID: Express
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Welcome1234 -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # This commit's migrator, loaded into the local daemon rather than pushed. Shares the migrator
+      # job's cache, so that job's build on master is mostly a cache hit.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.migrator
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: wbskt-migrator:rehearsal
+          cache-from: type=gha,scope=migrator
+
+      - name: Rehearse the upgrade
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SQL_CONTAINER: ${{ job.services.sqlserver.id }}
+          SA_PASSWORD: Welcome1234
+          CURRENT_IMAGE: wbskt-migrator:rehearsal
+        run: |
+          export PREVIOUS_IMAGE="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt-migrator:latest"
+          deploy/rehearsal/rehearse.sh
+
+      - name: Upload rehearsal output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-rehearsal
+          path: rehearsal-out/
+          if-no-files-found: ignore
+
   meta:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -444,7 +513,7 @@ jobs:
           echo "prefix=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/wbskt" >> "$GITHUB_OUTPUT"
 
   hosts:
-    needs: [meta, test, integration, scan, e2e]
+    needs: [meta, test, integration, scan, e2e, migration-rehearsal]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -497,7 +566,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   migrator:
-    needs: [meta, test, integration, scan, e2e]
+    needs: [meta, test, integration, scan, e2e, migration-rehearsal]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
