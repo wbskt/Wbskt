@@ -86,7 +86,6 @@ public static class Program
         services.AddScoped<ClientPresenceParker>();
         services.AddScoped<IClientHoldStateProvider, ClientHoldStateProvider>();
         services.AddScoped<ClientHoldRecorder>();
-        services.AddSingleton<RecentDeviceActivity>();
         services.AddScoped<IDeviceCommandPublisher, DeviceCommandPublisher>();
         services.AddScoped<IToastPublisher, ToastPublisher>();
         services.AddScoped<IVariableWritePublisher, VariableWritePublisher>();

@@ -31,7 +31,7 @@ public sealed class ClientUpdateTests
         var controller = new ClientsController(
             queries.Object,
             clients.Object,
-            new ClientCommandService(queries.Object, Mock.Of<Wbskt.Infrastructure.Devices.IDeviceCommandSender>(), Mock.Of<IEventBus>(), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()),
+            new ClientCommandService(queries.Object, Mock.Of<Wbskt.Infrastructure.Devices.IDeviceCommandSender>(), Mock.Of<Wbskt.Infrastructure.Devices.IQueuedCommandStore>(), Mock.Of<IEventBus>(), Microsoft.Extensions.Options.Options.Create(new Wbskt.Infrastructure.Devices.CommandQueueOptions()), NullLogger<ClientCommandService>.Instance, new Wbskt.Management.Host.Telemetry.ManagementMetrics()),
             Mock.Of<IRegistrationPolicyService>(),
             Mock.Of<IEventLogService>())
         {

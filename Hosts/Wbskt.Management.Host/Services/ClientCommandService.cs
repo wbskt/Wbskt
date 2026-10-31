@@ -2,7 +2,11 @@ using Wbskt.Protocol;
 using Wbskt.EventBus.Abstractions;
 using Wbskt.Events.Client;
 using Wbskt.Infrastructure;
+using Wbskt.Events.Abstractions;
 using Wbskt.Infrastructure.Devices;
+using Wbskt.Infrastructure.Events;
+using Wbskt.Infrastructure.Security;
+using Microsoft.Extensions.Options;
 using Wbskt.Management.Host.Telemetry;
 using Wbskt.Management.Models;
 using Wbskt.Models;
@@ -11,29 +15,45 @@ namespace Wbskt.Management.Host.Services;
 
 public sealed class ClientCommandService : IClientCommandService
 {
-    /// <summary>The furthest ahead a command's expiresAt may be.</summary>
-    private static readonly TimeSpan MaxCommandLifetime = TimeSpan.FromHours(24);
-
     /// <summary>How long a ping waits for the broker before the caller is told to retry.</summary>
     internal static readonly TimeSpan ActionPublishTimeout = TimeSpan.FromSeconds(5);
 
     public static readonly Error BrokerUnavailable = Error.Unavailable("EVENT_BUS_UNAVAILABLE", "The device could not be reached right now. Try again shortly.");
 
-    private static readonly Error DeviceOffline = Error.Conflict("DEVICE_OFFLINE", "The device is offline. Commands are only delivered to connected devices.");
+    private static readonly Error DeviceInactive = Error.Conflict("DEVICE_INACTIVE", "The device is offline and not registered, so a command cannot wait for it.");
+
+    private static readonly Error NotQueued = Error.NotFound("COMMAND_NOT_QUEUED", "The command is not waiting: it was delivered, expired or cancelled.");
 
     private readonly IClientQueryService _clientService;
     private readonly IDeviceCommandSender _sender;
+    private readonly IQueuedCommandStore _queue;
     private readonly IEventBus _eventBus;
+    private readonly IIdentityService? _identity;
+    private readonly IRequestOriginAccessor? _requestOrigin;
+    private readonly int _maxQueuedPerClient;
     private readonly ILogger<ClientCommandService> _logger;
     private readonly ManagementMetrics _metrics;
 
-    public ClientCommandService(IClientQueryService clientService, IDeviceCommandSender sender, IEventBus eventBus, ILogger<ClientCommandService> logger, ManagementMetrics metrics)
+    public ClientCommandService(
+        IClientQueryService clientService,
+        IDeviceCommandSender sender,
+        IQueuedCommandStore queue,
+        IEventBus eventBus,
+        IOptions<CommandQueueOptions> queueOptions,
+        ILogger<ClientCommandService> logger,
+        ManagementMetrics metrics,
+        IIdentityService? identity = null,
+        IRequestOriginAccessor? requestOrigin = null)
     {
         _clientService = clientService;
         _sender = sender;
+        _queue = queue;
         _eventBus = eventBus;
+        _maxQueuedPerClient = queueOptions.Value.MaxPerClient;
         _logger = logger;
         _metrics = metrics;
+        _identity = identity;
+        _requestOrigin = requestOrigin;
     }
 
     public async Task<Result<ClientCommandResponse>> SendAsync(int workspaceId, Guid clientRefId, ClientCommandRequest request, CancellationToken cancellationToken = default)
@@ -54,20 +74,75 @@ public sealed class ClientCommandService : IClientCommandService
         var commandId = Guid.NewGuid();
         var result = await _sender.SendAsync(
             new DeviceCommand(commandId, clientRefId, workspaceId, request.Type, request.Payload, request.ExpiresAt?.UtcDateTime),
-            attribute: null,
+            StampActor,
             cancellationToken);
 
-        // An offline device is a 409 now rather than a 202 for a command that goes nowhere.
         return result.Outcome switch
         {
-            DeviceCommandOutcome.Sent => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId)),
+            DeviceCommandOutcome.Sent => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Sent, request.ExpiresAt)),
+            DeviceCommandOutcome.Queued => Result<ClientCommandResponse>.Success(new ClientCommandResponse(commandId, ClientCommandStatus.Queued, Utc(result.ExpiresAtUtc!.Value))),
+            DeviceCommandOutcome.QueueFull => Result<ClientCommandResponse>.Failure(Error.Conflict(
+                "COMMAND_QUEUE_FULL",
+                $"The device is offline and already has {_maxQueuedPerClient} commands waiting. Cancel some, or wait for it to come back.")),
+            DeviceCommandOutcome.Inactive => Result<ClientCommandResponse>.Failure(DeviceInactive),
             DeviceCommandOutcome.UnknownClient => Result<ClientCommandResponse>.Failure(WorkspaceOwnership.ClientNotFound),
-            DeviceCommandOutcome.Offline => Result<ClientCommandResponse>.Failure(DeviceOffline),
             DeviceCommandOutcome.BrokerUnavailable => Result<ClientCommandResponse>.Failure(BrokerUnavailable),
             DeviceCommandOutcome.Invalid => Result<ClientCommandResponse>.Failure(ToError(result.Violation!)),
             _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
         };
     }
+
+    public async Task<Result<IReadOnlyList<QueuedClientCommandResponse>>> GetQueuedAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
+    {
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
+        {
+            return Result<IReadOnlyList<QueuedClientCommandResponse>>.Failure(clientResult.Error);
+        }
+
+        var queued = await _queue.GetAsync(clientResult.Value, cancellationToken);
+        return Result<IReadOnlyList<QueuedClientCommandResponse>>.Success(
+            [.. queued.Select(c => new QueuedClientCommandResponse(c.CommandId, c.Type, c.Payload, Utc(c.QueuedAtUtc), Utc(c.ExpiresAtUtc)))]);
+    }
+
+    public async Task<Result> CancelAsync(int workspaceId, Guid clientRefId, Guid commandId, CancellationToken cancellationToken = default)
+    {
+        var clientResult = await _clientService.EnsureClientInWorkspaceAsync(workspaceId, clientRefId, cancellationToken);
+        if (clientResult.IsFailure)
+        {
+            return Result.Failure(clientResult.Error);
+        }
+
+        var cancelled = await _queue.CancelAsync(clientResult.Value, commandId, cancellationToken);
+        if (cancelled is null)
+        {
+            return Result.Failure(NotQueued);
+        }
+
+        // The command is out of the queue whether or not this is heard.
+        try
+        {
+            await _eventBus.PublishAsync(new ClientCommandCancelledEvent(clientRefId, cancelled.ClientId, workspaceId, cancelled.Type, commandId), cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Queued command '{CommandId}' was cancelled, but the cancellation could not be announced. {Message}", commandId, ex.Message);
+        }
+
+        return Result.Success();
+    }
+
+    // A command that waits is delivered later by background work with no request in scope, so who sent
+    // it is named now, from this request, and stored with it.
+    private void StampActor(ActorEvent @event)
+    {
+        if (_identity is not null)
+        {
+            ActorStampingEventBus.Stamp(@event, _identity, _requestOrigin);
+        }
+    }
+
+    private static DateTimeOffset Utc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     public async Task<Result> PingAsync(int workspaceId, Guid clientRefId, CancellationToken cancellationToken = default)
     {
@@ -96,7 +171,7 @@ public sealed class ClientCommandService : IClientCommandService
         }
 
         if (request.ExpiresAt is { } expiresAt
-            && (expiresAt <= DateTimeOffset.UtcNow || expiresAt > DateTimeOffset.UtcNow.Add(MaxCommandLifetime)))
+            && (expiresAt <= DateTimeOffset.UtcNow || expiresAt > DateTimeOffset.UtcNow.Add(CommandQueueOptions.MaxLifetime)))
         {
             return Error.Validation("COMMAND_EXPIRY_INVALID", "expiresAt must be in the future and at most 24 hours away.");
         }

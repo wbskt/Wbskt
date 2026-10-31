@@ -108,6 +108,11 @@ public static class Program
         builder.Services.AddScoped<IWorkflowRunQueryService, WorkflowRunQueryService>();
         builder.Services.AddScopedWithQueuedEvents<IWorkflowRunService, WorkflowRunService>();
         builder.Services.AddDeviceCommandSender();
+        if (role == HostRole.All)
+        {
+            builder.Services.AddHostedService<QueuedCommandExpirySweeper>();
+        }
+
         builder.Services.AddScoped<IClientCommandService, ClientCommandService>();
         builder.Services.AddScoped<IWorkflowHistoryService, WorkflowHistoryService>();
         builder.Services.AddScopedWithQueuedEvents<ISharedVariableService, SharedVariableService>();

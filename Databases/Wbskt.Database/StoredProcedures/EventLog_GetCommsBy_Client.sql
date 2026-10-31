@@ -24,7 +24,7 @@ BEGIN
     IF @Direction IS NULL OR @Direction = N'out'
     BEGIN
         INSERT INTO @Names (EventName)
-        VALUES (N'ClientCommandEvent'), (N'ClientCommandDeliveredEvent'), (N'ClientCommandFailedEvent'), (N'ClientPingEvent');
+        VALUES (N'ClientCommandEvent'), (N'ClientCommandQueuedEvent'), (N'ClientCommandCancelledEvent'), (N'ClientCommandDeliveredEvent'), (N'ClientCommandFailedEvent'), (N'ClientPingEvent');
     END
 
     IF @Direction IS NULL

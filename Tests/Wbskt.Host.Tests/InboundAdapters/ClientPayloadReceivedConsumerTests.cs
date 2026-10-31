@@ -19,7 +19,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         // Act
         await consumer.Consume(context.Object);
@@ -40,26 +40,6 @@ public sealed class ClientPayloadReceivedConsumerTests
     }
 
     [Fact]
-    public async Task Consume_marks_the_device_as_just_heard_from_before_dispatching()
-    {
-        // A run this message starts may command the device before its presence is recorded.
-        var activity = new RecentDeviceActivity(TimeProvider.System);
-        ClientMessageReceivedEvent evt = new(Guid.NewGuid(), 12, 34, "sensor", "{}");
-        bool heardAtDispatch = false;
-        var hub = new Mock<IInboundHub>();
-        hub.Setup(h => h.HandleAsync(It.IsAny<InboundEvent>(), It.IsAny<CancellationToken>()))
-            .Callback(() => heardAtDispatch = activity.WasRecentlyActive(evt.ClientRefId))
-            .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
-        var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
-        context.SetupGet(c => c.Message).Returns(evt);
-        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-
-        await new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), activity).Consume(context.Object);
-
-        Assert.True(heardAtDispatch);
-    }
-
-    [Fact]
     public async Task Consume_uses_device_ref_id_and_message_type_as_correlation_key()
     {
         // Arrange
@@ -70,7 +50,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         // Act
         await consumer.Consume(context.Object);
@@ -94,7 +74,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         // Act
         await consumer.Consume(context.Object);
@@ -123,7 +103,7 @@ public sealed class ClientPayloadReceivedConsumerTests
             .Callback<InboundEvent, CancellationToken>((e, _) => capturedIds.Add(e.InboundEventId))
             .ReturnsAsync(new TriggerDispatchResult(TriggerDispatchOutcome.StartedRun, 1, null, "ok"));
 
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
         await consumer.Consume(ContextWithMessageId(evt, messageId).Object);
@@ -152,7 +132,7 @@ public sealed class ClientPayloadReceivedConsumerTests
         var context = new Mock<ConsumeContext<ClientMessageReceivedEvent>>();
         context.SetupGet(c => c.Message).Returns(evt);
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder(), new RecentDeviceActivity(TimeProvider.System));
+        var consumer = new ClientPayloadReceivedConsumer(hub.Object, RecordingHoldStateProvider.EmptyRecorder());
 
         await consumer.Consume(context.Object);
 

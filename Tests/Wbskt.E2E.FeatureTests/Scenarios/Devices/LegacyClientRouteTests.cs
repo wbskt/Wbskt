@@ -71,10 +71,10 @@ public sealed class LegacyClientRouteTests(ServicesFixture fixture)
         var old = await Send(HttpMethod.Post, workspace, $"clients/{clientRef}/command", token, command);
         var current = await Send(HttpMethod.Post, workspace, $"clients/{clientRef}/commands", token, command);
 
-        old.StatusCode.Should().Be(HttpStatusCode.Conflict, "the device has never connected");
+        old.StatusCode.Should().Be(HttpStatusCode.Conflict, "the device is offline and still pending, so nothing can wait for it");
         current.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await ServicesFixture.ReadErrorCodeAsync(old)).Should().Be("DEVICE_OFFLINE");
-        (await ServicesFixture.ReadErrorCodeAsync(current)).Should().Be("DEVICE_OFFLINE");
+        (await ServicesFixture.ReadErrorCodeAsync(old)).Should().Be("DEVICE_INACTIVE");
+        (await ServicesFixture.ReadErrorCodeAsync(current)).Should().Be("DEVICE_INACTIVE");
     }
 
     [SkippableFact]

@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Configuration;
+using Wbskt.Protocol;
 
 namespace Wbskt.Infrastructure.Devices;
 
-/// <summary>A client as a command sees it: whose it is, and which socket host holds its connection.</summary>
-public sealed record ClientCommandTarget(int ClientId, int WorkspaceId, bool IsConnected, string? HostId);
+/// <summary>
+/// A client as a command sees it: whose it is, which socket host holds its connection, and whether it
+/// is registered (only a registered device can have a command wait for it).
+/// </summary>
+public sealed record ClientCommandTarget(int ClientId, int WorkspaceId, bool IsConnected, string? HostId, ClientStatus Status = ClientStatus.Registered);
 
 public interface IClientCommandTargetProvider
 {
@@ -27,7 +31,8 @@ internal sealed class ClientCommandTargetProvider : BaseSqlProvider, IClientComm
                     reader.GetInt32(reader.GetOrdinal("Id")),
                     reader.GetInt32(reader.GetOrdinal("WorkspaceId")),
                     reader.GetBoolean(reader.GetOrdinal("IsConnected")),
-                    reader.IsDBNull(hostOrdinal) ? null : reader.GetString(hostOrdinal));
+                    reader.IsDBNull(hostOrdinal) ? null : reader.GetString(hostOrdinal),
+                    (ClientStatus)reader.GetByte(reader.GetOrdinal("Status")));
             },
             ct);
     }

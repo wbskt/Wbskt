@@ -14,8 +14,9 @@ using Wbskt.Socket.Host.Infrastructure;
 namespace Wbskt.Host.Tests.SocketHost;
 
 /// <summary>
-/// Every socket host receives every command. A missing connection must be reported exactly once (by
-/// the host the sender saw holding it), and an expired command must never reach the device.
+/// Every socket host receives every command. A missing connection is handled exactly once (by the host
+/// the sender saw holding it, which hands the command back to the device's queue), and an expired
+/// command must never reach the device.
 /// </summary>
 public sealed class ClientCommandHandlerTests
 {
@@ -26,11 +27,12 @@ public sealed class ClientCommandHandlerTests
 
     private readonly Mock<IConnectionManager> _connections = new();
     private readonly Mock<IEventBus> _bus = new();
+    private readonly Mock<ICommandSender> _commands = new();
     private readonly List<string> _sentFrames = [];
 
     private ClientCommandHandler CreateHandler()
     {
-        return new ClientCommandHandler(_connections.Object, NullLogger<ClientCommandHandler>.Instance, _bus.Object, new BusInstanceId(ThisHost), new FixedTime(Now));
+        return new ClientCommandHandler(_connections.Object, NullLogger<ClientCommandHandler>.Instance, _bus.Object, _commands.Object, new BusInstanceId(ThisHost), new FixedTime(Now));
     }
 
     private void Connected()
@@ -53,13 +55,35 @@ public sealed class ClientCommandHandlerTests
     }
 
     [Fact]
-    public async Task The_target_host_reports_a_missing_connection_as_a_failed_command()
+    public async Task The_target_host_hands_a_command_whose_connection_has_gone_back_to_the_queue()
     {
-        await CreateHandler().Consume(Context(targetHostId: ThisHost));
+        var ctx = new Mock<ConsumeContext<ClientCommandEvent>>();
+        var expiresAt = Now.UtcDateTime.AddMinutes(5);
+        ctx.SetupGet(x => x.Message).Returns(new ClientCommandEvent(ClientRefId, 42, 7, "pump.start", "{\"on\":true}", CommandId, ThisHost, expiresAt) { ActorUserId = 99 });
+        ctx.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
+
+        await CreateHandler().Consume(ctx.Object);
+
+        _commands.Verify(x => x.SendAsync(
+            It.Is<RequeueClientCommand>(c => c.CommandId == CommandId && c.ClientRefId == ClientRefId && c.Type == "pump.start"
+                && c.Payload == "{\"on\":true}" && c.ExpiresAtUtc == expiresAt && c.ActorUserId == 99),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _bus.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_command_with_no_id_whose_connection_has_gone_fails_as_not_connected()
+    {
+        var ctx = new Mock<ConsumeContext<ClientCommandEvent>>();
+        ctx.SetupGet(x => x.Message).Returns(new ClientCommandEvent(ClientRefId, 42, 7, "pump.start", "{}", null, ThisHost));
+        ctx.SetupGet(x => x.CancellationToken).Returns(CancellationToken.None);
+
+        await CreateHandler().Consume(ctx.Object);
 
         _bus.Verify(x => x.PublishAsync(
-            It.Is<ClientCommandFailedEvent>(e => e.CommandId == CommandId && e.Reason == ClientCommandFailedEvent.NotConnectedReason && e.Type == "pump.start"),
+            It.Is<ClientCommandFailedEvent>(e => e.CommandId == null && e.Reason == ClientCommandFailedEvent.NotConnectedReason),
             It.IsAny<CancellationToken>()), Times.Once);
+        _commands.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -70,12 +94,13 @@ public sealed class ClientCommandHandlerTests
         await CreateHandler().Consume(Context(targetHostId));
 
         _bus.VerifyNoOtherCalls();
+        _commands.VerifyNoOtherCalls();
     }
 
     [Fact]
     public async Task A_host_the_sender_did_not_address_leaves_the_command_alone_even_holding_the_device()
     {
-        // The device moved here after the sender looked; its old host answers "not connected".
+        // The device moved here after the sender looked; its old host hands the command back to the queue.
         Connected();
 
         await CreateHandler().Consume(Context(targetHostId: "socket-b"));
