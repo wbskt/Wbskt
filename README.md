@@ -110,3 +110,6 @@ research, and use by charities, schools and public institutions are all allowed.
 
 Commercial use is not covered by that license. If you want to use Wbskt commercially, contact
 the maintainers for a commercial license.
+
+The device SDKs and protocol types under [`Clients/`](Clients/) are the exception: they are
+[MIT licensed](Clients/LICENSE), so they can ship inside any device or product, commercial or not.
