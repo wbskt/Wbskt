@@ -159,6 +159,7 @@ public sealed class VariableNodeExecutorTests
     [Theory]
     [InlineData(VariableOperation.Increment, 1.7, 1d)]
     [InlineData(VariableOperation.Decrement, 0.5, 0d)]
+    [InlineData(VariableOperation.Increment, -1.5, -1d)]
     public async Task ExecuteAsync_counter_warns_when_it_drops_the_fraction_of_its_step(VariableOperation op, double step, double applied)
     {
         var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator());
@@ -169,6 +170,18 @@ public sealed class VariableNodeExecutorTests
         NodeWarning warning = Assert.Single(context.Warnings);
         Assert.Equal(HistoryEventKind.CounterStepTruncated, warning.EventKind);
         Assert.Equal($$"""{"var":"hits","step":{{step}},"applied":{{applied}}}""", JsonSerializer.Serialize(warning.Payload));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_counter_with_a_step_past_the_long_range_still_counts()
+    {
+        var executor = new VariableNodeExecutor(new RecordingSharedVariableProvider(), new MockExpressionEvaluator());
+        NodeContext context = CreateContext(new VariableNode { NodeId = Guid.NewGuid(), Name = "counter", Ports = CreatePorts(), Config = new VariableConfig { Scope = VariableScope.Local, Op = VariableOperation.Increment, Var = "hits", Value = JsonSerializer.SerializeToElement(-1e19) } });
+
+        NodeExecutionResult result = await executor.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.IsType<NodeExecutionResult.Continue>(result);
+        Assert.Equal(HistoryEventKind.CounterStepTruncated, Assert.Single(context.Warnings).EventKind);
     }
 
     [Fact]
