@@ -429,7 +429,8 @@ jobs:
           echo "no vulnerable packages"
 
   # Rehearses the upgrade production is about to get (#367): the migrator image production last ran
-  # (:latest, which only moves after a green master build) builds both databases, every table gets a
+  # (:latest, which only moves after a green master build; a deploy that failed or still awaits
+  # approval since then makes it newer than production) builds both databases, every table gets a
   # row, and this commit's migrator upgrades them. Fails on possible data loss, on a table that comes
   # out with fewer rows, and on any difference left between the upgraded schema and this commit's
   # DACPACs. See "Upgrade rehearsal" in deploy/README.md. Skipped for pull requests from forks, which
@@ -466,8 +467,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # This commit's migrator, loaded into the local daemon rather than pushed. Shares the migrator
-      # job's cache, so that job's build on master is mostly a cache hit.
+      # This commit's migrator, loaded into the local daemon rather than pushed. Writes the migrator
+      # job's cache scope, so that job's build on master is mostly a cache hit.
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -477,6 +478,7 @@ jobs:
           push: false
           tags: wbskt-migrator:rehearsal
           cache-from: type=gha,scope=migrator
+          cache-to: type=gha,mode=max,scope=migrator
 
       - name: Rehearse the upgrade
         env:

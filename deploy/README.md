@@ -519,25 +519,32 @@ Archived one-time upgrade helpers (run by hand once, never by the migrator) live
 
 ### Upgrade rehearsal
 
-Every pull request and every master push rehearses the upgrade production is about to get, in the
-`migration-rehearsal` job of `build-images.yml` (`rehearsal/rehearse.sh`). The image jobs, and so
-the deploy, wait on it.
+Every master push, and every pull request from a branch of this repository, rehearses the upgrade
+production is about to get, in the `migration-rehearsal` job of `build-images.yml`
+(`rehearsal/rehearse.sh`). The image jobs, and so the deploy, wait on it. Pull requests from forks
+skip it, since they get no token to pull the image, so their first rehearsal is the master push.
 
 1. `wbskt-migrator:latest` builds both databases in a fresh SQL Server. That is the migrator the
-   last green master build published, which is what production last ran unless a deploy failed.
+   last green master build published, which is what production last ran unless a deploy since then
+   failed or is still waiting for approval.
 2. `rehearsal/seed-every-table.sql` puts a row in every empty table. It is generic, because the
    schema it seeds is the previous release's: each column gets a value of its type, foreign keys
    take a row from the table they reference, and a table whose constraints refuse it is left empty
    with a warning in the run.
-3. This commit's migrator upgrades them, incrementally and with `BlockOnPossibleDataLoss` on, as on
-   the VM.
+3. This commit's migrator upgrades them, incrementally and with `BlockOnPossibleDataLoss` on, as
+   `deploy.sh` runs it.
 
 It fails when sqlpackage refuses the upgrade for possible data loss, when a table comes out with
 fewer rows than it went in with, or when `sqlpackage /Action:DeployReport` still finds a difference
-between the upgraded databases and this commit's DACPACs. For a loss that is intended, add a
-pre-deployment script that moves or clears the data first, so the upgrade itself loses nothing; the
-rehearsal output (row counts, seed log, deploy reports) is uploaded as the `migration-rehearsal`
-artifact.
+between the upgraded databases and this commit's DACPACs. A table that disappears is a warning,
+since a refactorlog rename looks the same. The output (row counts, seed log, deploy reports) is
+uploaded as the `migration-rehearsal` artifact.
+
+A refused upgrade here means the deploy would be refused too: `deploy.sh` never sets
+`MIGRATE_ALLOW_DATA_LOSS`. sqlpackage blocks on any table that has rows, not on whether the column
+holds data, so clearing the column is not enough. For an intended drop, do the destructive part in a
+pre-deployment script (guarded, e.g. `IF COL_LENGTH('dbo.T', 'C') IS NOT NULL ALTER TABLE dbo.T
+DROP COLUMN C`), so that by the time sqlpackage compares, nothing is left for it to drop.
 
 ### SQL logins
 

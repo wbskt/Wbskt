@@ -3,10 +3,13 @@
 -- something to block on. Generic on purpose: the schema it seeds is the previous release's, which
 -- this repository no longer describes, so a hand-written seed would rot with every schema change.
 --
--- Each column gets a value of its type; a foreign key takes a row from the table it references. Tables
--- are retried pass after pass until no more can be filled, which settles foreign-key order without
--- working it out. A table whose constraints refuse both attempts (full values, then defaults and
--- NULLs) is left empty and listed at the end; the rehearsal warns about it rather than failing.
+-- Each column gets a value of its type (a string column named *Json gets '{}'); a foreign key takes
+-- a row from the table it references. Strict passes come first: a table waits until every other
+-- table it references has a row, so its foreign keys point at a real parent. When strict passes stop
+-- making progress (a cycle, or a parent that cannot be seeded), lenient passes let a nullable
+-- foreign key stay NULL. Each table gets two attempts per pass: full values, then defaults, NULLs and
+-- '{}'. A table refused every time is left empty and listed at the end; the rehearsal warns about it
+-- rather than failing.
 SET NOCOUNT ON;
 
 DECLARE @tables TABLE (object_id int PRIMARY KEY, name nvarchar(300) NOT NULL, seeded bit NOT NULL, error nvarchar(2048) NULL);
@@ -20,10 +23,10 @@ JOIN sys.schemas s ON s.schema_id = t.schema_id
 WHERE t.is_ms_shipped = 0
   AND t.temporal_type <> 1;
 
-DECLARE @pass int = 0, @progress bit = 1, @mode int, @oid int, @tname nvarchar(300),
+DECLARE @pass int = 0, @strict bit = 1, @progress bit, @mode int, @oid int, @tname nvarchar(300),
         @cols nvarchar(max), @vals nvarchar(max), @sql nvarchar(max);
 
-WHILE @progress = 1 AND @pass < 25
+WHILE 1 = 1
 BEGIN
     SET @pass += 1;
     SET @progress = 0;
@@ -33,13 +36,20 @@ BEGIN
     FETCH NEXT FROM pending INTO @oid, @tname;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        SET @mode = 1;
+        -- Strict: wait for every other referenced table to have a row.
+        SET @mode = CASE WHEN @strict = 1 AND EXISTS (
+                SELECT 1
+                FROM sys.foreign_keys f
+                JOIN @tables parent ON parent.object_id = f.referenced_object_id
+                WHERE f.parent_object_id = @oid AND f.referenced_object_id <> @oid AND parent.seeded = 0)
+            THEN 3 ELSE 1 END;
+
         WHILE @mode <= 2 AND EXISTS (SELECT 1 FROM @tables WHERE object_id = @oid AND seeded = 0)
         BEGIN
             SELECT @cols = STRING_AGG(CAST(QUOTENAME(c.name) AS nvarchar(max)), N', ') WITHIN GROUP (ORDER BY c.column_id),
                    @vals = STRING_AGG(CAST(v.expr AS nvarchar(max)), N', ') WITHIN GROUP (ORDER BY c.column_id)
             FROM sys.columns c
-            JOIN sys.types ty ON ty.user_type_id = c.system_type_id
+            LEFT JOIN sys.types ty ON ty.user_type_id = c.system_type_id
             OUTER APPLY (
                 SELECT TOP 1 N'(SELECT TOP 1 ' + QUOTENAME(rc.name) + N' FROM ' + QUOTENAME(rs.name) + N'.' + QUOTENAME(rt.name) + N')' AS expr
                 FROM sys.foreign_key_columns fkc
@@ -54,12 +64,14 @@ BEGIN
                 WHEN @mode = 2 AND c.is_nullable = 1 THEN N'NULL'
                 WHEN ty.name = N'bit' THEN N'1'
                 WHEN ty.name IN (N'tinyint', N'smallint', N'int', N'bigint', N'decimal', N'numeric', N'money', N'smallmoney', N'float', N'real') THEN N'1'
+                WHEN ty.name = N'xml' THEN N'''<seed/>'''
+                WHEN ty.name IN (N'char', N'varchar', N'nchar', N'nvarchar')
+                     AND (@mode = 2 OR c.name LIKE N'%Json')
+                     AND (c.max_length = -1 OR c.max_length >= CASE WHEN ty.name LIKE N'n%' THEN 4 ELSE 2 END) THEN N'''{}'''
                 WHEN ty.name IN (N'char', N'varchar') THEN
-                    CASE WHEN @mode = 2 AND (c.max_length = -1 OR c.max_length >= 2) THEN N'''{}'''
-                         ELSE N'LEFT(''seed-'' + CONVERT(varchar(36), NEWID()), ' + CAST(CASE WHEN c.max_length = -1 THEN 64 ELSE c.max_length END AS nvarchar(10)) + N')' END
+                    N'LEFT(''seed-'' + CONVERT(varchar(36), NEWID()), ' + CAST(CASE WHEN c.max_length = -1 THEN 64 ELSE c.max_length END AS nvarchar(10)) + N')'
                 WHEN ty.name IN (N'nchar', N'nvarchar') THEN
-                    CASE WHEN @mode = 2 AND (c.max_length = -1 OR c.max_length >= 4) THEN N'N''{}'''
-                         ELSE N'LEFT(N''seed-'' + CONVERT(nvarchar(36), NEWID()), ' + CAST(CASE WHEN c.max_length = -1 THEN 64 ELSE c.max_length / 2 END AS nvarchar(10)) + N')' END
+                    N'LEFT(N''seed-'' + CONVERT(nvarchar(36), NEWID()), ' + CAST(CASE WHEN c.max_length = -1 THEN 64 ELSE c.max_length / 2 END AS nvarchar(10)) + N')'
                 WHEN ty.name = N'uniqueidentifier' THEN N'NEWID()'
                 WHEN ty.name = N'date' THEN N'CAST(SYSUTCDATETIME() AS date)'
                 WHEN ty.name = N'time' THEN N'CAST(SYSUTCDATETIME() AS time)'
@@ -71,7 +83,7 @@ BEGIN
             WHERE c.object_id = @oid
               AND c.is_identity = 0
               AND c.is_computed = 0
-              AND ty.name NOT IN (N'timestamp', N'rowversion');
+              AND ISNULL(ty.name, N'') NOT IN (N'timestamp', N'rowversion');
 
             SET @sql = CASE WHEN @cols IS NULL
                 THEN N'INSERT INTO ' + @tname + N' DEFAULT VALUES;'
@@ -93,6 +105,16 @@ BEGIN
     END;
     CLOSE pending;
     DEALLOCATE pending;
+
+    IF @pass >= 50 OR NOT EXISTS (SELECT 1 FROM @tables WHERE seeded = 0)
+        BREAK;
+
+    IF @progress = 0
+    BEGIN
+        IF @strict = 0
+            BREAK;
+        SET @strict = 0;
+    END;
 END;
 
-SELECT N'UNSEEDED|' + name + N'|' + ISNULL(error, N'') FROM @tables WHERE seeded = 0 ORDER BY name;
+SELECT N'UNSEEDED|' + name + N'|' + ISNULL(error, N'waits on a table that was not seeded') FROM @tables WHERE seeded = 0 ORDER BY name;
