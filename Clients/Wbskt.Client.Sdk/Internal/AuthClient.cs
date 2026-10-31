@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Security;
 using Wbskt.Client.Sdk.Models;
@@ -29,9 +30,14 @@ internal sealed class AuthClient : IDisposable
         return result != null ? (result.ClientRefId, result.Secret) : throw new InvalidOperationException("Invalid registration response.");
     }
 
-    public async Task<string> LoginAsync(Guid clientRefId, string secret)
+    public async Task<DeviceToken> LoginAsync(Guid clientRefId, string secret)
     {
         var response = await _httpClient.PostAsJsonAsync("api/v1/client-auth/login", new ClientLoginRequest(clientRefId, secret));
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            throw new DeviceLoginThrottledException(RetryAfter(response));
+        }
 
         if (!response.IsSuccessStatusCode)
         {
@@ -39,7 +45,20 @@ internal sealed class AuthClient : IDisposable
         }
 
         var result = await response.Content.ReadFromJsonAsync<ClientLoginResponse>();
-        return result?.AccessToken ?? throw new InvalidOperationException("Invalid login response.");
+        return result is { AccessToken.Length: > 0 }
+            ? new DeviceToken(result.AccessToken, DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn))
+            : throw new InvalidOperationException("Invalid login response.");
+    }
+
+    private static TimeSpan? RetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        if (header?.Delta is { } delta)
+        {
+            return delta;
+        }
+
+        return header?.Date is { } date ? date - DateTimeOffset.UtcNow : null;
     }
 
     public void Dispose() => _httpClient.Dispose();

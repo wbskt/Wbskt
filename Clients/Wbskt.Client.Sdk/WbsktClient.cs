@@ -13,6 +13,11 @@ public sealed class WbsktClient : IWbsktClient
     private readonly OutboundBuffer _outbound;
     private readonly SemaphoreSlim _flushLock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
+    private readonly ReconnectPolicy _reconnect = new();
+    private readonly DeviceTokenCache _tokens;
+
+    /// <summary>How often a connected client checks whether its socket is still open.</summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
     
     private bool _shouldReconnect = true;
     private Guid? _resolvedRefId;
@@ -48,6 +53,7 @@ public sealed class WbsktClient : IWbsktClient
         _auth = new AuthClient(config);
         _socket = new SocketClient(config.BaseSocketUrl);
         _outbound = new OutboundBuffer(config.OfflineBufferSize);
+        _tokens = new DeviceTokenCache(() => _auth.LoginAsync(_resolvedRefId!.Value, _resolvedSecret!));
 
         // Forward internal events to public surface
         _socket.OnMessageReceived += (type, payload, commandId) => OnMessageReceived?.Invoke(type, payload, commandId);
@@ -74,11 +80,19 @@ public sealed class WbsktClient : IWbsktClient
                 (_resolvedRefId, _resolvedSecret) = await ResolveCredentialsAsync();
             }
 
-            // 2. Obtain JWT
-            var token = await _auth.LoginAsync(_resolvedRefId.Value, _resolvedSecret!);
+            // 2. Obtain JWT, reusing the last one while it is still valid
+            var token = await _tokens.GetAsync();
 
             // 3. Connect to real-time gateway
-            await _socket.ConnectAsync(token);
+            try
+            {
+                await _socket.ConnectAsync(token);
+            }
+            catch (Exception) when (_socket.TokenRejected)
+            {
+                _tokens.Invalidate();
+                throw;
+            }
         }
         catch (Exception)
         {
@@ -128,28 +142,38 @@ public sealed class WbsktClient : IWbsktClient
 
     private async Task MonitorReconnectionAsync()
     {
-        var backoff = TimeSpan.FromSeconds(2);
-        var maxBackoff = TimeSpan.FromMinutes(1);
+        var failures = 0;
 
         while (!_cts.Token.IsCancellationRequested)
         {
-            // If we shouldn't reconnect, or we're already connected, just wait.
             if (!_shouldReconnect || _socket.IsConnected)
             {
-                await Task.Delay(5000, _cts.Token);
+                failures = 0;
+                await Task.Delay(PollInterval, _cts.Token);
                 continue;
+            }
+
+            if (failures == 0)
+            {
+                // Just dropped. Every device that shared this socket host noticed at the same moment,
+                // so each waits a random part of the window before its first attempt.
+                await Task.Delay(_reconnect.FirstDelay(_socket.ServerRestarting), _cts.Token);
             }
 
             try
             {
                 await ConnectInternalAsync();
-                backoff = TimeSpan.FromSeconds(2); // Reset backoff on success
+                failures = 0;
+            }
+            catch (DeviceLoginThrottledException ex) when (ex.RetryAfter is { } retryAfter)
+            {
+                failures++;
+                await Task.Delay(_reconnect.AfterThrottle(retryAfter), _cts.Token);
             }
             catch (Exception)
             {
-                // Wait with exponential backoff if connection fails
-                await Task.Delay(backoff, _cts.Token);
-                backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, maxBackoff.Ticks));
+                await Task.Delay(_reconnect.RetryDelay(failures), _cts.Token);
+                failures++;
             }
         }
     }

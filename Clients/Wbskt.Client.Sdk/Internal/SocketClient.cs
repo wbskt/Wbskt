@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +18,12 @@ internal sealed class SocketClient : IAsyncDisposable
     public event Action? OnDisconnected;
 
     public bool IsConnected => _webSocket.State == WebSocketState.Open;
+
+    /// <summary>The last connection was closed by a server shutting down (<c>EndpointUnavailable</c>).</summary>
+    public bool ServerRestarting { get; private set; }
+
+    /// <summary>The last connect attempt was refused with 401: the token is no longer accepted.</summary>
+    public bool TokenRejected { get; private set; }
 
     public SocketClient(string baseUrl)
     {
@@ -40,10 +47,22 @@ internal sealed class SocketClient : IAsyncDisposable
         _webSocket.Dispose();
         _webSocket = new ClientWebSocket();
 
+        ServerRestarting = false;
+        TokenRejected = false;
+
         var uri = new Uri($"{_baseUrl.TrimEnd('/')}/ws");
         _webSocket.Options.SetRequestHeader("Authorization", $"Bearer {token}");
         _webSocket.Options.AddSubProtocol(SocketProtocol.V1);
-        await _webSocket.ConnectAsync(uri, _cts.Token);
+        _webSocket.Options.CollectHttpResponseDetails = true;
+        try
+        {
+            await _webSocket.ConnectAsync(uri, _cts.Token);
+        }
+        catch (WebSocketException)
+        {
+            TokenRejected = _webSocket.HttpStatusCode == HttpStatusCode.Unauthorized;
+            throw;
+        }
         OnConnected?.Invoke();
         
         _ = Task.Run(ReceiveLoopAsync, _cts.Token);
@@ -87,6 +106,7 @@ internal sealed class SocketClient : IAsyncDisposable
                 switch (read.Kind)
                 {
                     case FrameKind.Closed:
+                        ServerRestarting = _webSocket.CloseStatus == WebSocketCloseStatus.EndpointUnavailable;
                         await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", _cts.Token);
                         return;
                     case FrameKind.TooBig:
