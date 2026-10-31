@@ -51,13 +51,18 @@ public class Program
         ];
     }
 
+    // Example devices: a client message step names its device by RefId.
+    private const string DeviceA = "aaaaaaaa-0000-4000-8000-00000000000a";
+    private const string DeviceB = "bbbbbbbb-0000-4000-8000-00000000000b";
+    private const string DeviceC = "cccccccc-0000-4000-8000-00000000000c";
+
     private static Wbskt.Workflow.Abstraction.Models.WorkflowDefinition BuildHappyPath()
     {
         var builder = new WorkflowBuilder("Linear Happy Path", Guid.NewGuid());
         return builder
             .AddClientTrigger("sensor-A", "telemetry", WorkflowConcurrencyPolicy.AllowParallel, out _)
             .AddDelay(TimeSpan.FromMinutes(1))
-            .AddClientMessage("client-A", "OpenVent")
+            .AddClientMessage(DeviceA, "OpenVent")
             .BuildAndValidate();
     }
 
@@ -77,10 +82,10 @@ public class Program
         {
             logic.OnTrue(b => 
             {
-                b.AddClientMessage("client-B", "AlarmOn")
+                b.AddClientMessage(DeviceB, "AlarmOn")
                  .AddParallelForEach("event.subItems", loop => 
                  {
-                     loop.OnBody(lb => lb.AddClientMessage("client-C", "CheckItem"));
+                     loop.OnBody(lb => lb.AddClientMessage(DeviceC, "CheckItem"));
                  });
                  
                 // Note: Linear flow after ParallelForEach automatically connects from "empty" port
@@ -108,7 +113,7 @@ public class Program
 
         // Webhook success path
         builder.SetHead(webhookId, PortNames.Default)
-               .AddClientMessage("client-A", "Initialize")
+               .AddClientMessage(DeviceA, "Initialize")
                .AddAwaitSignal("ProcessCompleted", TimeSpan.FromMinutes(60), out var waitId);
 
         // Signal Timeout path

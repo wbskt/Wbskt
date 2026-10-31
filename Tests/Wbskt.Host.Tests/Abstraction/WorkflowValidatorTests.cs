@@ -97,15 +97,15 @@ public class WorkflowValidatorTests
     }
 
     [Theory]
-    [InlineData("sys.ping")]
-    [InlineData("capabilities")]
-    [InlineData("state.report")]
-    [InlineData("")]
-    public void Validate_refuses_a_client_message_the_console_would_refuse(string type)
+    [InlineData("sys.ping", "CLIENT_MESSAGE_INVALID")]
+    [InlineData("capabilities", "CLIENT_MESSAGE_INVALID")]
+    [InlineData("state.report", "CLIENT_MESSAGE_INVALID")]
+    [InlineData("", "COMMAND_REQUIRED")]
+    public void Validate_refuses_a_client_message_the_console_would_refuse(string type, string code)
     {
         var def = ValidWorkflowBuilder.Build();
         var result = Validator.Validate(def with { Nodes = [.. def.Nodes, CreateClientMessage(type)] });
-        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == "CLIENT_MESSAGE_INVALID");
+        Assert.Contains(result.Issues, i => i.Severity == ValidationSeverity.Error && i.Code == code);
     }
 
     [Fact]
