@@ -201,6 +201,17 @@ public sealed class IntegrationChannelTests
         Assert.Empty(chats);
     }
 
+    [Fact]
+    public async Task Telegram_chats_tells_another_poller_apart_from_a_webhook()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.Conflict, "{\"ok\":false,\"description\":\"Conflict: terminated by other getUpdates request; make sure that only one bot instance is running\"}"));
+
+        var (result, _) = await Telegram(handler).GetChatsAsync(TelegramIntegration(), CancellationToken.None);
+
+        Assert.Equal("INTEGRATION_BOT_BUSY", result.Code);
+        Assert.True(result.Retryable);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, "INTEGRATION_AUTH_FAILED")]
     [InlineData(HttpStatusCode.NotFound, "INTEGRATION_AUTH_FAILED")]

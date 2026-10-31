@@ -56,7 +56,8 @@ public sealed record TelegramChatResponse(string Id, string Type, string? Title,
 /// <summary>
 /// The chats a Telegram integration's bot has heard from in the last 24 hours, most recent first.
 /// Like a test, a refusal is a 200 with <c>Ok</c> false: <c>INTEGRATION_WEBHOOK_ACTIVE</c> when the
-/// bot has a webhook set, which stops Telegram from listing them.
+/// bot has a webhook set, which stops Telegram from listing them, and <c>INTEGRATION_BOT_BUSY</c>
+/// (worth retrying) when another program is polling the bot at that moment.
 /// </summary>
 public sealed record TelegramChatsResponse(bool Ok, string? Code, string? Message, IReadOnlyList<TelegramChatResponse> Chats);
 

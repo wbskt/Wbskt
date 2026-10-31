@@ -141,7 +141,8 @@ internal sealed class TelegramChannel(IHttpClientFactory httpClientFactory, IOpt
     /// <summary>
     /// The chats the bot has heard from lately, from <c>getUpdates</c>, most recent first. Telegram keeps
     /// updates for 24 hours, and answers 409 while the bot has a webhook set. No offset is sent, so
-    /// nothing is marked as read and the updates stay for whoever else polls the bot.
+    /// nothing is marked as read and the updates stay for whoever else polls the bot. Telegram answers
+    /// with at most the 100 oldest pending updates, so a busy bot may not show its newest chats.
     /// </summary>
     public async Task<TelegramChatsResult> GetChatsAsync(ResolvedIntegration integration, CancellationToken ct)
     {
@@ -159,10 +160,17 @@ internal sealed class TelegramChannel(IHttpClientFactory httpClientFactory, IOpt
                 string? description = await DescriptionAsync(response, ct);
                 var refused = response.StatusCode switch
                 {
-                    System.Net.HttpStatusCode.Conflict => ChannelResult.Fail(
+                    // 409 is also what a getUpdates gets when another poller is mid-request; only the
+                    // description tells the two apart.
+                    System.Net.HttpStatusCode.Conflict when description?.Contains("webhook", StringComparison.OrdinalIgnoreCase) != false => ChannelResult.Fail(
                         "INTEGRATION_WEBHOOK_ACTIVE",
                         "This bot has a webhook set, so Telegram will not list its recent chats. Type the chat id instead, or remove the webhook.",
                         false,
+                        409),
+                    System.Net.HttpStatusCode.Conflict => ChannelResult.Fail(
+                        "INTEGRATION_BOT_BUSY",
+                        "Another program is reading this bot's updates right now, so Telegram will not list its recent chats. Try again, or type the chat id.",
+                        true,
                         409),
                     System.Net.HttpStatusCode.NotFound => ChannelResult.Fail("INTEGRATION_AUTH_FAILED", "Telegram does not know this bot token.", false, 404),
                     _ => HttpChannelSupport.FromStatus(response.StatusCode, ServiceName, description).ForTest()
