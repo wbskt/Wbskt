@@ -205,6 +205,26 @@ public sealed class BranchLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_writes_a_steps_warnings_to_history_before_its_outcome()
+    {
+        var nodeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var definition = TestWorkflowDefinition.Create(
+            new TestNode { NodeId = nodeId, Name = "n", Ports = Array.Empty<PortDefinition>(), KindValue = "test" });
+        var historyProvider = new RecordingHistoryEventProvider();
+        var loop = CreateLoop(definition, new RecordingBranchProvider(nodeId), historyProvider,
+            new StubNodeExecutorRegistry(new WarningExecutor()));
+
+        await loop.RunAsync(42, 1001, BranchExecutionReason.TriggerStarted, CancellationToken.None);
+
+        var kinds = historyProvider.Events.Select(evt => evt.EventKind).ToList();
+        var warning = Assert.Single(historyProvider.Events, evt => evt.EventKind == HistoryEventKind.TemplateValueMissing);
+        Assert.Equal("Warn", warning.Severity);
+        Assert.Equal(nodeId, warning.NodeId);
+        Assert.Equal("""{"field":"message"}""", warning.PayloadJson);
+        Assert.True(kinds.IndexOf(HistoryEventKind.TemplateValueMissing) < kinds.IndexOf(HistoryEventKind.NodeCompleted));
+    }
+
+    [Fact]
     public async Task RunAsync_records_BranchFailed_alongside_NodeFailed()
     {
         // NodeFailed alone said which node broke, not that the branch ended nor how the failure was
@@ -1821,6 +1841,17 @@ public sealed class BranchLoopTests
             CallCount++;
             Contexts.Add(ctx);
             return Task.FromResult(_results.Dequeue());
+        }
+    }
+
+    private sealed class WarningExecutor : INodeExecutor
+    {
+        public string Kind => "test";
+
+        public Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
+        {
+            ctx.Warnings.Add(new NodeWarning(HistoryEventKind.TemplateValueMissing, new { field = "message" }));
+            return Task.FromResult<NodeExecutionResult>(new NodeExecutionResult.Continue("next", new Dictionary<string, JsonElement>()));
         }
     }
 

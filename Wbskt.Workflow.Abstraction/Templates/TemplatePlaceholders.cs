@@ -1,14 +1,14 @@
 using Wbskt.Workflow.Abstraction.Exceptions;
 using Wbskt.Workflow.Abstraction.Models.Expressions;
 
-namespace Wbskt.Workflow.Runtime;
+namespace Wbskt.Workflow.Abstraction.Templates;
 
 /// <summary>
-/// The <c>{{ ... }}</c> placeholder syntax, shared by <see cref="TemplateExpression"/> and the action
-/// steps' text fields so the two cannot drift apart. A placeholder holds <c>$shared.NAME</c> or a
-/// branch-state path.
+/// The <c>{{ ... }}</c> placeholder syntax, shared by <see cref="TemplateExpression"/>, the action steps'
+/// <see cref="TemplatedAttribute">templated fields</see> and the validator, so the three cannot drift
+/// apart. A placeholder holds <c>$shared.NAME</c> or a branch-state path.
 /// </summary>
-internal static class TemplatePlaceholders
+public static class TemplatePlaceholders
 {
     private const string Open = "{{";
     private const string Close = "}}";
@@ -19,41 +19,54 @@ internal static class TemplatePlaceholders
     public static bool Contains(string? source) => source?.Contains(Open, StringComparison.Ordinal) == true;
 
     /// <summary>The text split into literal runs and placeholder references (trimmed).</summary>
+    /// <exception cref="ExpressionEvaluationException">An unclosed or empty placeholder.</exception>
     public static IReadOnlyList<Part> Parse(string source)
     {
-        var parts = new List<Part>();
+        return TryParse(source, out IReadOnlyList<Part> parts, out string? error)
+            ? parts
+            : throw new ExpressionEvaluationException(error);
+    }
+
+    public static bool TryParse(string source, out IReadOnlyList<Part> parts, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? error)
+    {
+        var found = new List<Part>();
+        parts = found;
+        error = null;
+
         int index = 0;
         while (index < source.Length)
         {
             int open = source.IndexOf(Open, index, StringComparison.Ordinal);
             if (open < 0)
             {
-                parts.Add(new Part(source[index..], false));
+                found.Add(new Part(source[index..], false));
                 break;
             }
 
             if (open > index)
             {
-                parts.Add(new Part(source[index..open], false));
+                found.Add(new Part(source[index..open], false));
             }
 
             int close = source.IndexOf(Close, open + Open.Length, StringComparison.Ordinal);
             if (close < 0)
             {
-                throw new ExpressionEvaluationException($"Template has an unclosed '{{{{' placeholder: \"{source}\".");
+                error = $"Template has an unclosed '{{{{' placeholder: \"{source}\".";
+                return false;
             }
 
             string reference = source[(open + Open.Length)..close].Trim();
             if (reference.Length == 0)
             {
-                throw new ExpressionEvaluationException($"Template contains an empty placeholder: \"{source}\".");
+                error = $"Template contains an empty placeholder: \"{source}\".";
+                return false;
             }
 
-            parts.Add(new Part(reference, true));
+            found.Add(new Part(reference, true));
             index = close + Close.Length;
         }
 
-        return parts;
+        return true;
     }
 
     /// <summary>The reference when the whole text is one placeholder and nothing else.</summary>
@@ -64,8 +77,7 @@ internal static class TemplatePlaceholders
             return null;
         }
 
-        IReadOnlyList<Part> parts = Parse(source);
-        return parts is [{ IsPlaceholder: true } only] ? only.Text : null;
+        return Parse(source) is [{ IsPlaceholder: true } only] ? only.Text : null;
     }
 
     public static WorkflowExpression ToExpression(string reference)

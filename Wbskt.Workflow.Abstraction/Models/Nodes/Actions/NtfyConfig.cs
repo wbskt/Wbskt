@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Wbskt.Workflow.Abstraction.Templates;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 public sealed record NtfyConfig
 {
@@ -6,9 +7,11 @@ public sealed record NtfyConfig
     [JsonPropertyName("integrationRef")]
     public Guid? IntegrationRef { get; init; }
 
+    [Templated]
     [JsonPropertyName("message")]
     public required string Message { get; init; }
 
+    [Templated(TemplateText.Line)]
     [JsonPropertyName("title")]
     public string? Title { get; init; }
 
@@ -17,6 +20,7 @@ public sealed record NtfyConfig
     public int? Priority { get; init; }
 
     /// <summary>ntfy tags, which it also shows as emoji where a tag names one.</summary>
+    [Templated(TemplateText.Line)]
     [JsonPropertyName("tags")]
     public IReadOnlyList<string>? Tags { get; init; }
 }

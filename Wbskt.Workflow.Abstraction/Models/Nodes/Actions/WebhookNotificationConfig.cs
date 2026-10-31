@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Wbskt.Workflow.Abstraction.Templates;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 public sealed record WebhookNotificationConfig
 {
@@ -32,15 +33,18 @@ public sealed record WebhookNotificationConfig
     public Guid? IntegrationRef { get; init; }
 
     /// <summary>Extra request headers, by name. Never a credential: that belongs in an integration.</summary>
+    [Templated(TemplateText.Line)]
     [JsonPropertyName("headers")]
     public IReadOnlyDictionary<string, string>? Headers { get; init; }
 
+    [Templated(TemplateText.Line)]
     [JsonPropertyName("url")]
     public required string Url { get; init; }
 
     [JsonPropertyName("method")]
     public required string Method { get; init; }
 
+    [Templated]
     [JsonPropertyName("body")]
     public System.Text.Json.JsonElement? Body { get; init; } = null;
 

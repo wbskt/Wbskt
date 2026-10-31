@@ -29,7 +29,7 @@ internal sealed class DiscordNodeExecutor(IIntegrationResolver resolver, Discord
         }
 
         var integration = resolution.Integration!;
-        var result = await channel.SendAsync(integration, await RenderAsync(ctx, config, ct), ct);
+        var result = await channel.SendAsync(integration, await templates.FillAsync(ctx, config, ct), ct);
         if (!result.Ok)
         {
             return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
@@ -46,48 +46,5 @@ internal sealed class DiscordNodeExecutor(IIntegrationResolver resolver, Discord
         }
 
         return new NodeExecutionResult.Continue("default", patch);
-    }
-
-    private async Task<DiscordConfig> RenderAsync(NodeContext ctx, DiscordConfig config, CancellationToken ct)
-    {
-        List<DiscordEmbed>? embeds = null;
-        for (int i = 0; i < (config.Embeds?.Count ?? 0); i++)
-        {
-            (embeds ??= []).Add(await RenderAsync(ctx, $"embeds[{i}]", config.Embeds![i], ct));
-        }
-
-        return config with
-        {
-            Message = await templates.TextOrNullAsync(ctx, "message", config.Message, ct),
-            Username = await templates.LineOrNullAsync(ctx, "username", config.Username, ct),
-            AvatarUrl = await templates.LineOrNullAsync(ctx, "avatarUrl", config.AvatarUrl, ct),
-            ThreadId = await templates.LineOrNullAsync(ctx, "threadId", config.ThreadId, ct),
-            Embeds = embeds
-        };
-    }
-
-    private async Task<DiscordEmbed> RenderAsync(NodeContext ctx, string at, DiscordEmbed embed, CancellationToken ct)
-    {
-        List<DiscordEmbedField>? fields = null;
-        for (int i = 0; i < (embed.Fields?.Count ?? 0); i++)
-        {
-            DiscordEmbedField field = embed.Fields![i];
-            (fields ??= []).Add(field with
-            {
-                Name = await templates.TextAsync(ctx, $"{at}.fields[{i}].name", field.Name, ct),
-                Value = await templates.TextAsync(ctx, $"{at}.fields[{i}].value", field.Value, ct)
-            });
-        }
-
-        return embed with
-        {
-            Title = await templates.TextOrNullAsync(ctx, $"{at}.title", embed.Title, ct),
-            Url = await templates.LineOrNullAsync(ctx, $"{at}.url", embed.Url, ct),
-            Description = await templates.TextOrNullAsync(ctx, $"{at}.description", embed.Description, ct),
-            Footer = await templates.TextOrNullAsync(ctx, $"{at}.footer", embed.Footer, ct),
-            ImageUrl = await templates.LineOrNullAsync(ctx, $"{at}.imageUrl", embed.ImageUrl, ct),
-            ThumbnailUrl = await templates.LineOrNullAsync(ctx, $"{at}.thumbnailUrl", embed.ThumbnailUrl, ct),
-            Fields = fields
-        };
     }
 }

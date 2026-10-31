@@ -222,6 +222,39 @@ public sealed class IntegrationStepValidationTests
         Assert.DoesNotContain(IssuesFor(Webhook(url, Guid.NewGuid())), i => i.Code == "WEBHOOK_URL_RELATIVE");
     }
 
+    [Theory]
+    [InlineData("Frost: {{reading.temp", "unclosed")]
+    [InlineData("Frost: {{ }}", "empty")]
+    public void A_placeholder_that_cannot_parse_is_refused_on_save(string message, string expected)
+    {
+        var node = DiscordWith(new DiscordConfig
+        {
+            IntegrationRef = Guid.NewGuid(),
+            Message = "m",
+            Embeds = [new DiscordEmbed { Title = "t", Fields = [new DiscordEmbedField { Name = "n", Value = message }] }]
+        });
+
+        var issue = Assert.Single(IssuesFor(node), i => i.Code == "TEMPLATE_INVALID");
+        Assert.Contains("embeds[0].fields[0].value", issue.Message);
+        Assert.Contains(expected, issue.Message);
+    }
+
+    [Fact]
+    public void Every_templated_steps_config_can_be_walked()
+    {
+        var steps = typeof(Wbskt.Workflow.Abstraction.Templates.ITemplatedStep).Assembly.GetTypes()
+            .Where(t => typeof(Wbskt.Workflow.Abstraction.Templates.ITemplatedStep).IsAssignableFrom(t) && !t.IsInterface)
+            .ToList();
+
+        Assert.Equal(7, steps.Count);
+        foreach (var step in steps)
+        {
+            Type config = step.GetProperty("Config")!.PropertyType;
+            // Building a config's plan throws on a [Templated] property of a shape it cannot fill.
+            Assert.Empty(Wbskt.Workflow.Abstraction.Templates.TemplateFields.Find(System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(config)));
+        }
+    }
+
     [Fact]
     public void A_url_filled_in_from_a_placeholder_is_checked_when_the_step_runs()
     {

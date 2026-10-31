@@ -319,6 +319,11 @@ internal sealed class BranchLoop : IBranchLoop
             return null;
         }
 
+        foreach (NodeWarning warning in result.Warnings)
+        {
+            await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, warning.EventKind, warning.Payload, ct);
+        }
+
         result = GuardLocalStateSize(result, branchRow);
 
         // durationMs travels on every node outcome. Deriving it by subtracting the NodeStarted
