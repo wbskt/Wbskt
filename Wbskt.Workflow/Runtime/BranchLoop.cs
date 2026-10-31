@@ -113,7 +113,7 @@ internal sealed class BranchLoop : IBranchLoop
             entryKind,
             new { reason = reason.ToString() },
             ct);
-        _logger?.LogInformation("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
+        _logger?.LogDebug("Started branch loop for run {RunId} branch {BranchId} reason {Reason}", runId, branchId, reason);
 
         long step = 0;
         while (true)
@@ -224,7 +224,9 @@ internal sealed class BranchLoop : IBranchLoop
     {
         NodeExecutionResult? result = null;
         await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, HistoryEventKind.NodeStarted, ct);
-        _logger?.LogInformation("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
+        // Per-node lines are Debug: a workflow triggered by every device message would otherwise log
+        // two lines per node per message, and NodeStarted/NodeCompleted are journaled to history anyway.
+        _logger?.LogDebug("Executing node {NodeId} ({NodeKind}) on run {RunId} branch {BranchId}", node.NodeId, node.Kind, runId, branchId);
 
         System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
         string outcome = "Succeeded";
@@ -331,7 +333,7 @@ internal sealed class BranchLoop : IBranchLoop
             _ => new { durationMs, creditsCharged }
         };
 
-        _logger?.LogInformation("Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);
+        _logger?.Log(result is NodeExecutionResult.Fail ? LogLevel.Information : LogLevel.Debug, "Node {NodeId} ({NodeKind}) completed with outcome {Outcome} on run {RunId} branch {BranchId}", node.NodeId, node.Kind, result.GetType().Name, runId, branchId);
         await _journal.AppendBranchEventAsync(runRow.Id, branchRow.RefId, node.NodeId, result is NodeExecutionResult.Fail ? HistoryEventKind.NodeFailed : HistoryEventKind.NodeCompleted, eventPayload, ct);
 
         return result;
