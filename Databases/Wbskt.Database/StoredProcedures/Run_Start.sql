@@ -44,19 +44,24 @@ BEGIN
             -- just put the runs it found. Taken before the workspace lock below, always in that order.
             IF @ActiveRunGuard > 0 AND @CorrelationKey IS NOT NULL
             BEGIN
+                -- Upper-cased: the EXISTS below compares keys case-insensitively, so "Dev-1" and "dev-1"
+                -- are one key there and must take one lock.
                 DECLARE @KeyResource NVARCHAR(255) = CONCAT(N'trigger-start:', @WorkflowRefId, N':', @TriggerNodeId, N':',
-                    CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', @CorrelationKey), 2));
+                    CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', UPPER(@CorrelationKey)), 2));
                 DECLARE @KeyLockResult INT;
                 EXEC @KeyLockResult = sp_getapplock @Resource = @KeyResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
                 IF @KeyLockResult < 0
                     THROW 50028, 'Another start for this trigger and correlation key is in progress.', 1;
 
+                -- The Status IN list is IX_Runs_WorkflowRefId_CorrelationKey_Active's filter word for word;
+                -- any other shape of it and the optimizer scans dbo.Runs instead.
                 IF EXISTS (SELECT 1
                            FROM dbo.Runs
                            WHERE WorkflowRefId = @WorkflowRefId
                              AND TriggerNodeId = @TriggerNodeId
                              AND CorrelationKey = @CorrelationKey
-                             AND (Status IN (N'Running', N'Failing') OR (@ActiveRunGuard = 1 AND Status = N'Cancelling')))
+                             AND Status IN (N'Running', N'Failing', N'Cancelling')
+                             AND (@ActiveRunGuard = 1 OR Status <> N'Cancelling'))
                     THROW 50028, 'A run is already active for this trigger and correlation key.', 1;
             END
 

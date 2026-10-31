@@ -291,13 +291,14 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
     [SkippableFact]
     public async Task Guarded_starts_that_meet_on_one_key_create_one_run()
     {
-        // #467. Both starts are held at the key's lock until both are waiting, so they really do meet.
+        // #467. Both starts are held at the key's lock until both are waiting, so they really do meet. The
+        // keys differ only in case, which the database's collation treats as one key, so they share a lock.
         Skip.IfNot(fixture.IsAvailable, SkipReason);
 
         WorkflowDefinitionRow wd = await CreateDefinitionAsync();
         var runProvider = ProviderFactory.Run(fixture.ConnectionString);
         (RunRow a, BranchRow aBranch) = NewRun(wd);
-        (RunRow b, BranchRow bBranch) = SameTrigger(a, wd, a.CorrelationKey!);
+        (RunRow b, BranchRow bBranch) = SameTrigger(a, wd, a.CorrelationKey!.ToUpperInvariant());
 
         await using var holder = new SqlConnection(fixture.ConnectionString);
         await holder.OpenAsync();
@@ -305,7 +306,7 @@ public sealed class RunStartIntegrationTests(SqlEdgeFixture fixture)
         await using (var hold = new SqlCommand(
             """
             DECLARE @Resource NVARCHAR(255) = CONCAT(N'trigger-start:', @WorkflowRefId, N':', @TriggerNodeId, N':',
-                CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', @CorrelationKey), 2));
+                CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', UPPER(@CorrelationKey)), 2));
             EXEC sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
             """, holder, tx))
         {
