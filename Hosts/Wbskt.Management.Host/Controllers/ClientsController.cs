@@ -328,7 +328,7 @@ public class ClientsController : ApiControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("{clientRef:guid}/commands")]
     [RequiresPermission(PermissionNames.ClientsRead)]
-    public async Task<ActionResult<Page<QueuedClientCommandResponse>>> GetCommands([FromWorkspace] int workspaceId, Guid clientRef, [FromQuery] string status, CancellationToken cancellationToken)
+    public async Task<ActionResult<Page<QueuedClientCommandResponse>>> GetCommands([FromWorkspace] int workspaceId, Guid clientRef, [FromQuery] string? status, CancellationToken cancellationToken)
     {
         // Sent commands live in the event log (the comms feed); only waiting ones are listed here.
         if (!string.Equals(status, ClientCommandStatus.Queued, StringComparison.OrdinalIgnoreCase))

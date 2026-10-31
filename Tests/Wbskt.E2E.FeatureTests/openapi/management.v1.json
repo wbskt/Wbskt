@@ -135,10 +135,22 @@
           "commandId": {
             "format": "uuid",
             "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
           }
         },
         "required": [
-          "commandId"
+          "commandId",
+          "status",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -1525,6 +1537,35 @@
         ],
         "type": "object"
       },
+      "PageOfQueuedClientCommandResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueuedClientCommandResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "totalCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "PageOfRegistrationPolicyResponse": {
         "properties": {
           "items": {
@@ -1642,6 +1683,34 @@
           "label",
           "dataType",
           "description"
+        ],
+        "type": "object"
+      },
+      "QueuedClientCommandResponse": {
+        "properties": {
+          "commandId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "queuedAt": {
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "commandId",
+          "type",
+          "payload",
+          "queuedAt",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -3291,6 +3360,60 @@
       }
     },
     "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/commands": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfQueuedClientCommandResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfQueuedClientCommandResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfQueuedClientCommandResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Clients"
+        ]
+      },
       "post": {
         "parameters": [
           {
@@ -3351,6 +3474,47 @@
                 }
               }
             },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspaceRef}/clients/{clientRef}/commands/{commandId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "commandId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspaceRef",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": "OK"
           }
         },
