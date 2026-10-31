@@ -64,7 +64,8 @@ public sealed class LegacyClientRouteTests(ServicesFixture fixture)
         Skip.IfNot(fixture.HostsAvailable, "E2E hosts not running — skipping.");
 
         var (token, workspace) = await fixture.RegisterAndLoginUserAsync();
-        var (_, pin) = await fixture.CreatePolicyAsync(token, workspace);
+        // Approval by hand, so the device stays pending: a registered one would have the command queued.
+        var (_, pin) = await fixture.CreatePolicyAsync(token, workspace, autoApproval: false);
         var (clientRef, _) = await fixture.RegisterClientAsync(pin, "legacy-offline");
         var command = new { type = "e2e.blink", payload = "{}" };
 
