@@ -114,6 +114,106 @@ public sealed class IntegrationChannelTests
         Assert.Null(result.Metadata);
     }
 
+    [Fact]
+    public async Task Telegram_sends_the_steps_options()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, "{\"ok\":true,\"result\":{\"message_id\":5,\"chat\":{\"id\":-100}}}"));
+        var config = new TelegramConfig { ChatId = "-100", Message = "*low*", ParseMode = "MarkdownV2", Silent = true, MessageThreadId = "12", DisableLinkPreview = true };
+
+        var result = await Telegram(handler).SendAsync(TelegramIntegration(), config, CancellationToken.None);
+
+        Assert.True(result.Ok);
+        using var body = JsonDocument.Parse(handler.LastBody);
+        Assert.Equal("MarkdownV2", body.RootElement.GetProperty("parse_mode").GetString());
+        Assert.True(body.RootElement.GetProperty("disable_notification").GetBoolean());
+        Assert.Equal(12, body.RootElement.GetProperty("message_thread_id").GetInt32());
+        Assert.True(body.RootElement.GetProperty("link_preview_options").GetProperty("is_disabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Telegram_sends_plain_text_with_no_options_set()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, "{\"ok\":true,\"result\":{}}"));
+
+        await Telegram(handler).SendAsync(TelegramIntegration(), new TelegramConfig { ChatId = "@alerts", Message = "m" }, CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.LastBody);
+        Assert.Equal(["chat_id", "text"], body.RootElement.EnumerateObject().Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task Telegram_names_a_403_as_the_chat_refusing_the_bot()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.Forbidden, "{\"ok\":false,\"description\":\"Forbidden: bot was blocked by the user\"}"));
+
+        var result = await Telegram(handler).SendAsync(TelegramIntegration(), new TelegramConfig { ChatId = "42", Message = "m" }, CancellationToken.None);
+
+        Assert.Equal("TELEGRAM_CHAT_FORBIDDEN", result.Code);
+        Assert.False(result.Retryable);
+        Assert.Contains("bot was blocked by the user", result.Message);
+    }
+
+    [Fact]
+    public async Task Telegram_test_names_a_forbidden_chat_as_an_integration_failure()
+    {
+        var handler = new FakeHandler(r => r.RequestUri!.AbsolutePath.EndsWith("getMe")
+            ? Json(HttpStatusCode.OK, "{\"ok\":true,\"result\":{}}")
+            : Json(HttpStatusCode.Forbidden, "{\"ok\":false,\"description\":\"Forbidden: bot was kicked from the group chat\"}"));
+
+        var result = await Telegram(handler).TestAsync(TelegramIntegration(), new IntegrationTestOptions("-42", null), CancellationToken.None);
+
+        Assert.Equal("INTEGRATION_CHAT_FORBIDDEN", result.Code);
+    }
+
+    [Fact]
+    public async Task Telegram_lists_the_chats_it_heard_from_most_recent_first_once_each()
+    {
+        const string updates = """
+            {"ok":true,"result":[
+              {"update_id":1,"message":{"message_id":1,"chat":{"id":42,"type":"private","first_name":"Asha","last_name":"K","username":"asha"}}},
+              {"update_id":2,"channel_post":{"message_id":2,"chat":{"id":-1001,"type":"channel","title":"Alerts","username":"alerts"}}},
+              {"update_id":3,"my_chat_member":{"chat":{"id":-55,"type":"group","title":"Plant floor"}}},
+              {"update_id":4,"callback_query":{"id":"x","message":{"message_id":3,"chat":{"id":42,"type":"private","first_name":"Asha"}}}},
+              {"update_id":5,"poll":{"id":"p"}}
+            ]}
+            """;
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.OK, updates));
+
+        var (result, chats) = await Telegram(handler).GetChatsAsync(TelegramIntegration(), CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal(HttpMethod.Get, handler.LastRequest!.Method);
+        Assert.Equal($"https://tg.test/bot{BotToken}/getUpdates", handler.LastUri);
+        Assert.Equal(["42", "-55", "-1001"], chats.Select(c => c.Id));
+        Assert.Equal(new TelegramChat("-55", "group", "Plant floor", null), chats[1]);
+        Assert.Equal(new TelegramChat("-1001", "channel", "Alerts", "alerts"), chats[2]);
+        Assert.Equal("Asha", chats[0].Title);
+    }
+
+    [Fact]
+    public async Task Telegram_chats_explains_a_bot_with_a_webhook()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.Conflict, "{\"ok\":false,\"description\":\"Conflict: can't use getUpdates method while webhook is active\"}"));
+
+        var (result, chats) = await Telegram(handler).GetChatsAsync(TelegramIntegration(), CancellationToken.None);
+
+        Assert.Equal("INTEGRATION_WEBHOOK_ACTIVE", result.Code);
+        Assert.Empty(chats);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "INTEGRATION_AUTH_FAILED")]
+    [InlineData(HttpStatusCode.NotFound, "INTEGRATION_AUTH_FAILED")]
+    [InlineData(HttpStatusCode.BadGateway, "INTEGRATION_HTTP_ERROR")]
+    public async Task Telegram_chats_names_a_refusal(HttpStatusCode status, string code)
+    {
+        var handler = new FakeHandler(_ => Json(status, "{}"));
+
+        var (result, _) = await Telegram(handler).GetChatsAsync(TelegramIntegration(), CancellationToken.None);
+
+        Assert.Equal(code, result.Code);
+    }
+
     // -------------------------------------------------------------- discord
 
     [Fact]

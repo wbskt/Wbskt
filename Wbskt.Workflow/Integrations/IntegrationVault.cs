@@ -17,6 +17,8 @@ public interface IIntegrationVault
     Result<IntegrationSealResponse> Seal(IntegrationSealRequest request);
 
     Task<Result<IntegrationProbeResponse>> TestAsync(IntegrationProbeRequest request, CancellationToken ct);
+
+    Task<Result<IntegrationChatsResponse>> GetTelegramChatsAsync(IntegrationChatsRequest request, CancellationToken ct);
 }
 
 internal sealed class IntegrationVault(
@@ -86,6 +88,28 @@ internal sealed class IntegrationVault(
             result.Code,
             result.Message is null ? null : IntegrationErrors.Scrub(result.Message, integration.Secrets),
             result.Metadata));
+    }
+
+    public async Task<Result<IntegrationChatsResponse>> GetTelegramChatsAsync(IntegrationChatsRequest request, CancellationToken ct)
+    {
+        if (!cipher.IsConfigured)
+        {
+            return Result<IntegrationChatsResponse>.Failure(NotConfigured);
+        }
+
+        var prepared = Prepare(request.WorkspaceId, request.RefId, IntegrationTypes.NameOf(IntegrationType.Telegram), null, request.Config, null, request.Existing, null);
+        if (prepared.IsFailure)
+        {
+            return Result<IntegrationChatsResponse>.Failure(prepared.Error);
+        }
+
+        var integration = prepared.Value.Integration;
+        var (result, chats) = await ((TelegramChannel)_channels[IntegrationType.Telegram]).GetChatsAsync(integration, ct);
+        return Result<IntegrationChatsResponse>.Success(new IntegrationChatsResponse(
+            result.Ok,
+            result.Code,
+            result.Message is null ? null : IntegrationErrors.Scrub(result.Message, integration.Secrets),
+            chats));
     }
 
     /// <summary>

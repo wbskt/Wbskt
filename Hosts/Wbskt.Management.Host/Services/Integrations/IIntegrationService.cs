@@ -28,6 +28,9 @@ public interface IIntegrationService
 
     /// <summary>Tries a saved or a draft integration; see <see cref="IntegrationTestRequest"/>.</summary>
     Task<Result<IntegrationTestResponse>> TestAsync(int workspaceId, IntegrationTestRequest request, CancellationToken ct);
+
+    /// <summary>The chats a saved Telegram integration's bot has heard from lately; <c>INTEGRATION_TYPE_UNSUPPORTED</c> for another type.</summary>
+    Task<Result<TelegramChatsResponse>> GetTelegramChatsAsync(int workspaceId, Guid refId, CancellationToken ct);
 }
 
 /// <summary>A delete's outcome: done, refused with the steps in the way, or another failure.</summary>

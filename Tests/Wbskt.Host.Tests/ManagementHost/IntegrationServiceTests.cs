@@ -528,6 +528,50 @@ public sealed class IntegrationServiceTests
         harness.Provider.Verify(p => p.RecordTestAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task Listing_chats_asks_the_engine_with_whats_saved_and_records_nothing()
+    {
+        var harness = new Harness();
+        var saved = harness.Save(Saved(type: IntegrationType.Telegram, configJson: "{}"));
+        IntegrationChatsRequest? sent = null;
+        harness.Engine.Setup(e => e.GetTelegramChatsAsync(It.IsAny<IntegrationChatsRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<IntegrationChatsRequest, CancellationToken>((r, _) => sent = r)
+            .ReturnsAsync(Result<IntegrationChatsResponse>.Success(new IntegrationChatsResponse(true, null, null, [new TelegramChat("-55", "group", "Plant floor", null)])));
+
+        var result = await harness.Service.GetTelegramChatsAsync(WorkspaceId, saved.RefId, CancellationToken.None);
+
+        Assert.True(result.Value.Ok);
+        Assert.Equal(new TelegramChatResponse("-55", "group", "Plant floor", null), Assert.Single(result.Value.Chats));
+        Assert.Equal(saved.RefId, sent!.RefId);
+        Assert.Equal(WorkspaceId, sent.WorkspaceId);
+        Assert.Equal(saved.SecretCiphertext, sent.Existing.Ciphertext);
+        harness.Provider.Verify(p => p.RecordTestAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Only_a_telegram_integration_lists_chats()
+    {
+        var harness = new Harness();
+        var saved = harness.Save(Saved());
+
+        var result = await harness.Service.GetTelegramChatsAsync(WorkspaceId, saved.RefId, CancellationToken.None);
+
+        Assert.Equal("INTEGRATION_TYPE_UNSUPPORTED", result.Error.Code);
+        harness.Engine.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Another_workspaces_integration_lists_no_chats()
+    {
+        var harness = new Harness();
+        var saved = harness.Save(Saved(workspaceId: WorkspaceId + 1, type: IntegrationType.Telegram, configJson: "{}"));
+
+        var result = await harness.Service.GetTelegramChatsAsync(WorkspaceId, saved.RefId, CancellationToken.None);
+
+        Assert.Equal(ErrorType.NotFound, result.Error.Type);
+        harness.Engine.VerifyNoOtherCalls();
+    }
+
     // ----------------------------------------------------------------- glue
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();

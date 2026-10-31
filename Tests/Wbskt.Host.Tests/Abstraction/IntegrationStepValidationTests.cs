@@ -56,6 +56,45 @@ public sealed class IntegrationStepValidationTests
         Assert.Contains(IssuesFor(node), i => i.Code == "TELEGRAM_CHAT_MISSING");
     }
 
+    [Fact]
+    public void Telegram_message_is_1_to_4096_characters()
+    {
+        var ok = Telegram(Guid.NewGuid()) with { Config = new TelegramConfig { IntegrationRef = Guid.NewGuid(), ChatId = "-100", Message = new string('a', 4096) } };
+        var tooLong = ok with { Config = ok.Config with { Message = new string('a', 4097) } };
+        var blank = ok with { Config = ok.Config with { Message = " " } };
+
+        Assert.DoesNotContain(IssuesFor(ok), i => i.Code == "TELEGRAM_MESSAGE_INVALID");
+        Assert.Contains(IssuesFor(tooLong), i => i.Code == "TELEGRAM_MESSAGE_INVALID");
+        Assert.Contains(IssuesFor(blank), i => i.Code == "TELEGRAM_MESSAGE_INVALID");
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("MarkdownV2", true)]
+    [InlineData("HTML", true)]
+    [InlineData("Markdown", false)]
+    [InlineData("html", false)]
+    public void Telegram_parse_mode_is_one_telegram_accepts(string? parseMode, bool valid)
+    {
+        var node = Telegram(Guid.NewGuid()) with { Config = new TelegramConfig { IntegrationRef = Guid.NewGuid(), ChatId = "-100", Message = "m", ParseMode = parseMode } };
+
+        Assert.Equal(!valid, IssuesFor(node).Any(i => i.Code == "TELEGRAM_PARSE_MODE_INVALID"));
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("42", true)]
+    [InlineData("0", false)]
+    [InlineData("-3", false)]
+    [InlineData("12a", false)]
+    [InlineData("99999999999", false)]
+    public void Telegram_topic_is_an_id(string? threadId, bool valid)
+    {
+        var node = Telegram(Guid.NewGuid()) with { Config = new TelegramConfig { IntegrationRef = Guid.NewGuid(), ChatId = "-100", Message = "m", MessageThreadId = threadId } };
+
+        Assert.Equal(!valid, IssuesFor(node).Any(i => i.Code == "TELEGRAM_THREAD_INVALID"));
+    }
+
     [Theory]
     [InlineData("", false)]
     [InlineData(" ", false)]

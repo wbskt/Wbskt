@@ -46,6 +46,20 @@ public sealed record IntegrationTestRequest(
 /// <summary>The outcome of a test. A failed test is a 200 with <c>Ok</c> false, a code and a message safe to show.</summary>
 public sealed record IntegrationTestResponse(bool Ok, string? Code, string? Message, JsonElement? Metadata);
 
+/// <summary>
+/// A chat a Telegram bot can reach. <c>Id</c> is what a Telegram step's <c>chatId</c> takes; <c>Title</c>
+/// is a group's or channel's title, or the person's name for a private chat. <c>Type</c> is Telegram's:
+/// <c>private</c>, <c>group</c>, <c>supergroup</c> or <c>channel</c>.
+/// </summary>
+public sealed record TelegramChatResponse(string Id, string Type, string? Title, string? Username);
+
+/// <summary>
+/// The chats a Telegram integration's bot has heard from in the last 24 hours, most recent first.
+/// Like a test, a refusal is a 200 with <c>Ok</c> false: <c>INTEGRATION_WEBHOOK_ACTIVE</c> when the
+/// bot has a webhook set, which stops Telegram from listing them.
+/// </summary>
+public sealed record TelegramChatsResponse(bool Ok, string? Code, string? Message, IReadOnlyList<TelegramChatResponse> Chats);
+
 public sealed record IntegrationLastTest(DateTime At, bool Ok, string? Code, string? Message);
 
 /// <summary>How many live workflows, and how many of their steps, send through the integration.</summary>

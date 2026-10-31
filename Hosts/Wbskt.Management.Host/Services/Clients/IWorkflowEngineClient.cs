@@ -19,4 +19,7 @@ public interface IWorkflowEngineClient
 
     /// <summary>Has the engine try an integration against its service, with errors as <see cref="SealIntegrationAsync"/>.</summary>
     Task<Result<IntegrationProbeResponse>> ProbeIntegrationAsync(IntegrationProbeRequest request, CancellationToken ct);
+
+    /// <summary>Has the engine ask a Telegram bot for its recent chats, with errors as <see cref="SealIntegrationAsync"/>.</summary>
+    Task<Result<IntegrationChatsResponse>> GetTelegramChatsAsync(IntegrationChatsRequest request, CancellationToken ct);
 }
