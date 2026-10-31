@@ -50,3 +50,9 @@ scrape_configs:
     honor_labels: true
     static_configs:
       - targets: [pushgateway:9091]
+
+  # The collector's own metrics. It is how OtelCollectorDown knows the collector is up, since the
+  # image cannot run a Docker healthcheck.
+  - job_name: otel-collector
+    static_configs:
+      - targets: [otel-collector:8888]
