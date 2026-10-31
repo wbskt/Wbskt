@@ -37,6 +37,8 @@ public sealed class ManagementEndpointPermissionTests
         ["ClientsController.SetTags"] = PermissionNames.ClientsUpdate,
         ["ClientsController.SendCommand"] = PermissionNames.ClientsCommand,
         ["ClientsController.SendCommandLegacy"] = PermissionNames.ClientsCommand,
+        ["ClientsController.GetCommands"] = PermissionNames.ClientsRead,
+        ["ClientsController.CancelCommand"] = PermissionNames.ClientsCommand,
         ["ClientsController.GetComms"] = PermissionNames.LogsRead,
         ["ClientsController.Ping"] = PermissionNames.ClientsPing,
         ["EventLogsController.GetLogs"] = PermissionNames.LogsRead,
