@@ -541,6 +541,43 @@ public sealed class TriggerDispatcherTests
     }
 
     [Fact]
+    public async Task A_refusal_at_the_ceiling_is_reported_so_the_user_hears_of_it()
+    {
+        var registration = CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel);
+        var reporter = new RecordingRefusalReporter();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(registration),
+            runStarter: new RecordingRunStarter([]) { AtCeiling = true },
+            refusalReporter: reporter);
+        InboundEvent evt = CreateInboundEvent();
+
+        await dispatcher.DispatchAsync(evt, CancellationToken.None);
+
+        RunRefusal refusal = Assert.Single(reporter.Refusals);
+        Assert.Equal(new RunRefusal(1, registration.WorkflowDefinitionId, registration.WorkflowRefId, "client", 3, evt.ReceivedAt), refusal);
+    }
+
+    [Fact]
+    public async Task A_start_that_goes_through_reports_nothing()
+    {
+        var reporter = new RecordingRefusalReporter();
+        var dispatcher = CreateDispatcher(
+            triggerRegistrationProvider: new RecordingTriggerRegistrationProvider(CreateRegistration(WorkflowConcurrencyPolicy.AllowParallel)),
+            refusalReporter: reporter);
+
+        await dispatcher.DispatchAsync(CreateInboundEvent(), CancellationToken.None);
+
+        Assert.Empty(reporter.Refusals);
+    }
+
+    private sealed class RecordingRefusalReporter : IRunRefusalReporter
+    {
+        public List<RunRefusal> Refusals { get; } = [];
+
+        public void Report(RunRefusal refusal) => Refusals.Add(refusal);
+    }
+
+    [Fact]
     public async Task Dispatch_returns_Refused_when_the_workspace_is_at_its_run_ceiling()
     {
         var operations = new List<string>();
@@ -779,7 +816,8 @@ public sealed class TriggerDispatcherTests
         RecordingRunStarter? runStarter = null,
         RecordingRunDispatcher? runDispatcher = null,
         InMemoryIdempotencyKeyProvider? idempotency = null,
-        Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>? logger = null)
+        Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>? logger = null,
+        IRunRefusalReporter? refusalReporter = null)
     {
         return new TriggerDispatcher(
             new CorrelationKeyResolver(TriggerChannelRegistry.Default),
@@ -792,7 +830,8 @@ public sealed class TriggerDispatcherTests
             runDispatcher ?? new RecordingRunDispatcher([]),
             idempotency ?? new InMemoryIdempotencyKeyProvider(),
             new ExpressionEvaluator(new DispatcherTestClock()),
-            logger);
+            logger,
+            refusalReporter);
     }
 
     private sealed class LevelRecorder : Microsoft.Extensions.Logging.ILogger<TriggerDispatcher>
