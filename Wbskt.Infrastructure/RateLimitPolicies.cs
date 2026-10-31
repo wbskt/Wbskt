@@ -23,6 +23,12 @@ public static class RateLimitPolicies
     public const string EmailVerification = "email-verification";
 
     /// <summary>
+    /// Issuing sign-up proof-of-work challenges. Its own bucket so a script fetching challenges in a
+    /// loop cannot spend the refresh budget that signed-in consoles on the same address need.
+    /// </summary>
+    public const string SignUpChallenge = "signup-challenge";
+
+    /// <summary>
     /// Device enrollment by registration PIN. Anonymous by necessity - the device has no credential
     /// yet - and the PIN is the only thing standing between the internet and a device in someone's
     /// workspace, so guessing at it has to be slow. Partitioned per IP.
