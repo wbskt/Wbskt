@@ -44,10 +44,7 @@ internal sealed class CommandNodeExecutor(IDeviceCommandPublisher publisher, IBo
                 null);
         }
 
-        SendClientMessageConfig config = node.Config with
-        {
-            Payload = await templates.JsonAsync(ctx, "payload", node.Config.Payload, ct)
-        };
+        SendClientMessageConfig config = await templates.FillAsync(ctx, node.Config, ct);
 
         if (config.AwaitAck)
         {

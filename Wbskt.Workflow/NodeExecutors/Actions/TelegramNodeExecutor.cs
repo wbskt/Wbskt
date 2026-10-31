@@ -34,12 +34,7 @@ internal sealed class TelegramNodeExecutor(IIntegrationResolver resolver, Telegr
         }
 
         var integration = resolution.Integration!;
-        config = config with
-        {
-            ChatId = await templates.LineAsync(ctx, "chatId", config.ChatId, ct),
-            Message = await templates.TextAsync(ctx, "message", config.Message, ct)
-        };
-        var result = await channel.SendAsync(integration, config, ct);
+        var result = await channel.SendAsync(integration, await templates.FillAsync(ctx, config, ct), ct);
         if (!result.Ok)
         {
             // 4xx means the request itself is wrong - unknown chat, revoked token, a chat that blocked

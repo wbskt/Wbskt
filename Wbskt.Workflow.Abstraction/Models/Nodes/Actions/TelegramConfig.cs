@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Wbskt.Workflow.Abstraction.Templates;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 
@@ -9,9 +10,11 @@ public sealed record TelegramConfig
     public Guid? IntegrationRef { get; init; }
 
     /// <summary>A numeric chat id, or <c>@channelusername</c> for a public channel.</summary>
+    [Templated(TemplateText.Line)]
     [JsonPropertyName("chatId")]
     public required string ChatId { get; init; }
 
+    [Templated]
     [JsonPropertyName("message")]
     public required string Message { get; init; }
 

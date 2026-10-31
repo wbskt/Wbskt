@@ -26,15 +26,8 @@ internal sealed class NtfyNodeExecutor(IIntegrationResolver resolver, NtfyChanne
         }
 
         var integration = resolution.Integration!;
-        string message = await templates.TextAsync(ctx, "message", config.Message, ct);
-        string? title = await templates.LineOrNullAsync(ctx, "title", config.Title, ct);
-        List<string>? tags = null;
-        for (int i = 0; i < (config.Tags?.Count ?? 0); i++)
-        {
-            (tags ??= []).Add(await templates.LineAsync(ctx, $"tags[{i}]", config.Tags![i], ct));
-        }
-
-        var result = await channel.PublishAsync(integration, message, title, config.Priority, tags, ct);
+        config = await templates.FillAsync(ctx, config, ct);
+        var result = await channel.PublishAsync(integration, config.Message, config.Title, config.Priority, config.Tags, ct);
         if (!result.Ok)
         {
             return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);

@@ -1,11 +1,15 @@
 using System.Text.Json.Serialization;
 using Wbskt.Workflow.Abstraction.Integrations;
+using Wbskt.Workflow.Abstraction.Templates;
 
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
-public sealed record DiscordNotificationNode : BaseActionNode, IIntegrationStep
+public sealed record DiscordNotificationNode : BaseActionNode, IIntegrationStep, ITemplatedStep
 {
     [JsonPropertyName("config")]
     public required DiscordConfig Config { get; init; }
+
+    [JsonIgnore]
+    object? ITemplatedStep.TemplatedConfig => Config;
 
     [JsonIgnore]
     public Guid? IntegrationRef => Config?.IntegrationRef is { } r && r != Guid.Empty ? r : null;

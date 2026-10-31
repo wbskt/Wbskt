@@ -9,6 +9,7 @@ using Wbskt.Workflow.Abstraction.Models.Nodes.Controls;
 using Wbskt.Workflow.Abstraction.Models.Nodes.Triggers;
 using Wbskt.Workflow.Abstraction.Models.Triggers;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Templates;
 
 namespace Wbskt.Workflow.Abstraction.Validation;
 
@@ -44,6 +45,7 @@ public sealed class WorkflowValidator
         ValidateNodeKinds(definition, issues);
         ValidateNodeConfigs(definition, issues);
         ValidateIntegrationSteps(definition, issues);
+        ValidateTemplatedFields(definition, issues);
         ValidateOnFailure(definition, issues);
         ValidateRetryPolicies(definition, issues);
         ValidateParallelForEachPairing(definition, issues);
@@ -589,6 +591,34 @@ public sealed class WorkflowValidator
     };
 
     /// <summary>
+    /// A templated field's placeholders must parse: an unclosed or empty one would fail the step every
+    /// time it runs. Format checks on a field (a URL, an id) skip a value with a placeholder in it, as
+    /// only the filled-in value can be judged, when the step runs.
+    /// </summary>
+    private static void ValidateTemplatedFields(WorkflowDefinition def, List<ValidationIssue> issues)
+    {
+        foreach (var node in def.Nodes)
+        {
+            if (node is not ITemplatedStep step)
+            {
+                continue;
+            }
+
+            foreach (TemplateFields.Field field in TemplateFields.Find(step.TemplatedConfig))
+            {
+                if (TemplatePlaceholders.Contains(field.Value) && !TemplatePlaceholders.TryParse(field.Value, out _, out string? error))
+                {
+                    issues.Add(new ValidationIssue(
+                        ValidationSeverity.Error,
+                        "TEMPLATE_INVALID",
+                        $"Step '{node.Name}', {field.Path}: {error}",
+                        node.NodeId));
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// What can be checked about integration steps from the definition alone: a step that needs an
     /// integration names one, and Call a URL's headers and relative URL make sense. Whether the named
     /// integration exists, and is of the right type, is the workspace's to answer, at publish.
@@ -706,12 +736,12 @@ public sealed class WorkflowValidator
             Add("DISCORD_MESSAGE_INVALID", $"the message must be at most {DiscordMaxMessageLength} characters.");
         }
 
-        if (config.AvatarUrl is not null && !IsHttpUrl(config.AvatarUrl) && !HasPlaceholder(config.AvatarUrl))
+        if (config.AvatarUrl is not null && !IsHttpUrl(config.AvatarUrl) && !TemplatePlaceholders.Contains(config.AvatarUrl))
         {
             Add("DISCORD_AVATAR_URL_INVALID", "avatarUrl must be an absolute http or https URL.");
         }
 
-        if (config.ThreadId is not null && !IsSnowflake(config.ThreadId) && !HasPlaceholder(config.ThreadId))
+        if (config.ThreadId is not null && !IsSnowflake(config.ThreadId) && !TemplatePlaceholders.Contains(config.ThreadId))
         {
             Add("DISCORD_THREAD_INVALID", "threadId must be a Discord id (digits only).");
         }
@@ -756,7 +786,7 @@ public sealed class WorkflowValidator
 
             foreach (var (name, url) in new[] { ("url", embed.Url), ("imageUrl", embed.ImageUrl), ("thumbnailUrl", embed.ThumbnailUrl) })
             {
-                if (url is not null && !IsHttpUrl(url) && !HasPlaceholder(url))
+                if (url is not null && !IsHttpUrl(url) && !TemplatePlaceholders.Contains(url))
                 {
                     Add("DISCORD_EMBED_INVALID", $"{at}: {name} must be an absolute http or https URL.");
                 }
@@ -792,9 +822,6 @@ public sealed class WorkflowValidator
         }
     }
 
-    // A field filled in from {{ }} placeholders when the step runs can only be checked then.
-    private static bool HasPlaceholder(string value) => value.Contains("{{", StringComparison.Ordinal);
-
     private static bool IsHttpUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
@@ -814,7 +841,7 @@ public sealed class WorkflowValidator
 
         // Relative to what? Only an integration's base URL can answer that. A leading '/' is relative
         // too, though on Unix Uri reads it as an absolute file path.
-        if (node.IntegrationRef is null && !HasPlaceholder(config.Url) && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
+        if (node.IntegrationRef is null && !TemplatePlaceholders.Contains(config.Url) && (!Uri.TryCreate(config.Url, UriKind.Absolute, out _) || config.Url.StartsWith('/')))
         {
             issues.Add(new ValidationIssue(
                 ValidationSeverity.Error,

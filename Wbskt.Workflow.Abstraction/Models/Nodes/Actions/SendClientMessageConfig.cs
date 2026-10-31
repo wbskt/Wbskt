@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Wbskt.Workflow.Abstraction.Templates;
 namespace Wbskt.Workflow.Abstraction.Models.Nodes.Actions;
 public sealed record SendClientMessageConfig
 {
@@ -8,6 +9,7 @@ public sealed record SendClientMessageConfig
     [JsonPropertyName("type")]
     public required string Type { get; init; }
 
+    [Templated]
     [JsonPropertyName("payload")]
     public System.Text.Json.JsonElement? Payload { get; init; } = null;
 

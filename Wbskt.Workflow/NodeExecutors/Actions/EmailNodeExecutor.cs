@@ -16,11 +16,12 @@ internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChann
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         var node = (EmailNotificationNode)ctx.Node;
-        EmailConfig config = node.Config
-            ?? throw new InvalidOperationException($"Email node {node.NodeId} is missing config.");
+        EmailConfig config = await templates.FillAsync(
+            ctx,
+            node.Config ?? throw new InvalidOperationException($"Email node {node.NodeId} is missing config."),
+            ct);
 
-        string to = await templates.LineAsync(ctx, "to", config.To, ct);
-        if (string.IsNullOrWhiteSpace(to))
+        if (string.IsNullOrWhiteSpace(config.To))
         {
             return new NodeExecutionResult.Fail("EMAIL_RECIPIENT_MISSING", "The email node has no recipient.", false, null);
         }
@@ -35,9 +36,7 @@ internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChann
 
         // A malformed address, a refused sign-in or a refused recipient fails the same way every time;
         // a relay that is down, greylisting or busy is worth retrying, and the retry policy decides how hard.
-        string subject = await templates.LineAsync(ctx, "subject", config.Subject, ct);
-        string body = await templates.TextAsync(ctx, "body", config.Body, ct);
-        var result = await channel.SendAsync(integration, to, subject, body, ct);
+        var result = await channel.SendAsync(integration, config.To, config.Subject, config.Body, ct);
         if (!result.Ok)
         {
             return new NodeExecutionResult.Fail(result.Code!, result.Message!, result.Retryable, null);
@@ -46,7 +45,7 @@ internal sealed class EmailNodeExecutor(IIntegrationResolver resolver, SmtpChann
         await resolver.MarkUsedAsync(integration, ct);
         return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>
         {
-            ["to"] = JsonSerializer.SerializeToElement(to)
+            ["to"] = JsonSerializer.SerializeToElement(config.To)
         });
     }
 }

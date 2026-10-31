@@ -18,8 +18,7 @@ internal sealed class ToastNodeExecutor(IToastPublisher publisher, ActionTemplat
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         ToastNotificationNode node = (ToastNotificationNode)ctx.Node;
-        string title = await templates.TextAsync(ctx, "title", node.Config.Title, ct);
-        string message = await templates.TextAsync(ctx, "message", node.Config.Message, ct);
+        ToastConfig config = await templates.FillAsync(ctx, node.Config, ct);
 
         try
         {
@@ -28,8 +27,8 @@ internal sealed class ToastNodeExecutor(IToastPublisher publisher, ActionTemplat
                 ctx.Branch.WorkflowDefinitionId,
                 ctx.Branch.RunRefId,
                 ctx.Branch.WorkspaceId,
-                title,
-                message,
+                config.Title,
+                config.Message,
                 ct);
 
             return new NodeExecutionResult.Continue("default", new Dictionary<string, JsonElement>());

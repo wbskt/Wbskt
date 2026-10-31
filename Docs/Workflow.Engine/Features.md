@@ -87,8 +87,16 @@ sends `true`, not `"true"`. A placeholder with no value is sent as empty text an
 runs; the run's history gets a `TemplateValueMissing` warning naming the field and the placeholder
 (never a value). Line breaks a value brings into `to`, `subject`, a URL, a header or an id become
 spaces, so a value cannot add a header. The webhook's address checks run on the filled-in URL, and
-its failure messages quote the URL as written. An unclosed or empty placeholder fails the step with
-`EXPRESSION_EVALUATION_ERROR`. `clientRef`, `type` and other settings are used as written.
+its failure messages quote the URL as written. An unclosed or empty placeholder is refused when the
+workflow is saved (`TEMPLATE_INVALID`, naming the field); one in a definition saved earlier fails the
+step with `EXPRESSION_EVALUATION_ERROR`. `clientRef`, `type` and other settings are used as written.
+
+Which fields take placeholders is declared once, with `[Templated]` on the config property
+(`[Templated(TemplateText.Line)]` for a header, URL or id). The engine's `ActionTemplates` and the
+validator both read it through `TemplateFields`, so a new step's config only needs the attribute and
+one `FillAsync` call in its executor. The warnings go on the step's `NodeContext.Warnings`; the retry
+executor passes on those of the attempt that decided the step, and the branch loop writes them before
+the step's outcome event.
 
 ## 3. Branch state
 

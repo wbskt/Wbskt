@@ -21,4 +21,10 @@ public sealed record NodeContext
     public required CancellationToken CancellationToken { get; init; }
 
     public required string IdempotencyKey { get; init; }
+
+    /// <summary>
+    /// Where an executor notes what it wants on the run's history without failing the step. The retry
+    /// executor hands them on with the step's result, so only the attempt that decides the step counts.
+    /// </summary>
+    public List<NodeWarning> Warnings { get; } = [];
 }

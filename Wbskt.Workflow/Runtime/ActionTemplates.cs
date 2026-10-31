@@ -1,62 +1,44 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using Wbskt.Workflow.Abstraction.Runtime;
+using Wbskt.Workflow.Abstraction.Templates;
 
 namespace Wbskt.Workflow.Runtime;
 
 /// <summary>
-/// Fills the <c>{{ ... }}</c> placeholders in an action step's config from the branch, just before the
-/// step sends. A placeholder with no value is sent as empty text, as in a <c>TemplateExpression</c>,
-/// and a <see cref="HistoryEventKind.TemplateValueMissing"/> warning on the run names the field and
-/// the placeholder, so a message that went out with a blank can be traced.
+/// Fills the <c>{{ ... }}</c> placeholders in an action step's <see cref="TemplatedAttribute">templated</see>
+/// config fields from the branch, just before the step sends. A placeholder with no value is sent as
+/// empty text, as in a <c>TemplateExpression</c>, and the step gets a
+/// <see cref="HistoryEventKind.TemplateValueMissing"/> warning naming the field and the placeholder, so
+/// a message that went out with a blank can be traced.
 /// </summary>
 /// <remarks>
 /// The warning records the placeholder, never a value: <c>$shared</c> variables may hold secrets.
 /// </remarks>
-internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJournal journal, ILogger<ActionTemplates>? logger = null)
+internal sealed class ActionTemplates(IExpressionEvaluator evaluator)
 {
-    /// <summary>Free text: a message, a body, a title.</summary>
-    public Task<string> TextAsync(NodeContext ctx, string field, string value, CancellationToken ct)
+    public async Task<T> FillAsync<T>(NodeContext ctx, T config, CancellationToken ct) where T : class
     {
-        return RenderAsync(ctx, field, value, singleLine: false, ct);
+        return await TemplateFields.FillAsync(
+            config,
+            async (path, value, text) => await RenderAsync(ctx, path, value, text == TemplateText.Line, ct),
+            async (path, value) => await FillJsonAsync(ctx, path, value, ct));
     }
 
-    public async Task<string?> TextOrNullAsync(NodeContext ctx, string field, string? value, CancellationToken ct)
+    // Each string is filled in; a string that is exactly one placeholder takes the value's own JSON
+    // type, so { "on": "{{heaterOn}}" } sends a boolean. Property names are left as written.
+    private async Task<JsonElement> FillJsonAsync(NodeContext ctx, string path, JsonElement value, CancellationToken ct)
     {
-        return value is null ? null : await RenderAsync(ctx, field, value, singleLine: false, ct);
-    }
-
-    /// <summary>
-    /// A value that must stay on one line: an email or HTTP header, a URL, an id. Line breaks in what a
-    /// placeholder brings in become spaces, so a value cannot start a header of its own.
-    /// </summary>
-    public Task<string> LineAsync(NodeContext ctx, string field, string value, CancellationToken ct)
-    {
-        return RenderAsync(ctx, field, value, singleLine: true, ct);
-    }
-
-    public async Task<string?> LineOrNullAsync(NodeContext ctx, string field, string? value, CancellationToken ct)
-    {
-        return value is null ? null : await RenderAsync(ctx, field, value, singleLine: true, ct);
-    }
-
-    /// <summary>
-    /// A JSON value: each string in it is filled in, and a string that is exactly one placeholder takes
-    /// the value's own JSON type, so <c>{ "on": "{{heaterOn}}" }</c> sends a boolean. Property names
-    /// are left as written.
-    /// </summary>
-    public async Task<JsonElement?> JsonAsync(NodeContext ctx, string field, JsonElement? value, CancellationToken ct)
-    {
-        if (value is not { } element || !TemplatePlaceholders.Contains(element.GetRawText()))
+        if (!TemplatePlaceholders.Contains(value.GetRawText()))
         {
             return value;
         }
 
-        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        var buffer = new ArrayBufferWriter<byte>();
         await using (var writer = new Utf8JsonWriter(buffer))
         {
-            await WriteAsync(ctx, field, element, writer, ct);
+            await WriteAsync(ctx, path, value, writer, ct);
         }
 
         using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
@@ -96,7 +78,7 @@ internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJourna
                     JsonElement resolved = await ResolveAsync(reference, ctx, ct);
                     if (IsMissing(resolved))
                     {
-                        await WarnAsync(ctx, path, [reference], ct);
+                        Warn(ctx, path, [reference]);
                         writer.WriteStringValue(string.Empty);
                     }
                     else
@@ -142,12 +124,13 @@ internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJourna
             }
 
             string text = ExpressionEvaluator.ToStringValue(resolved);
+            // Line breaks a value brings into a header, URL or id become spaces, so it cannot start a header of its own.
             builder.Append(singleLine ? text.ReplaceLineEndings(" ") : text);
         }
 
         if (missing is not null)
         {
-            await WarnAsync(ctx, field, missing, ct);
+            Warn(ctx, field, missing);
         }
 
         return builder.ToString();
@@ -160,25 +143,8 @@ internal sealed class ActionTemplates(IExpressionEvaluator evaluator, IRunJourna
 
     private static bool IsMissing(JsonElement value) => value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined;
 
-    // Best effort: the warning is a note on the run, and failing to write it must not stop, or fail, the
-    // send it describes. Written per attempt, so a retried step carries the attempt to tell them apart.
-    private async Task WarnAsync(NodeContext ctx, string field, IReadOnlyList<string> placeholders, CancellationToken ct)
+    private static void Warn(NodeContext ctx, string field, IReadOnlyList<string> placeholders)
     {
-        try
-        {
-            await journal.AppendAsync(
-                new RunJournalEntry(checked((int)ctx.Branch.RunId), HistoryEventKind.TemplateValueMissing)
-                {
-                    BranchRefId = ctx.Branch.BranchRefId,
-                    NodeId = ctx.Node.NodeId,
-                    Payload = new { field, placeholders, attempt = ctx.Branch.Attempt }
-                },
-                ct);
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            logger?.LogWarning(ex, "Could not record the empty placeholders {Placeholders} in {Field} of node {NodeId} on run {RunId}",
-                placeholders, field, ctx.Node.NodeId, ctx.Branch.RunId);
-        }
+        ctx.Warnings.Add(new NodeWarning(HistoryEventKind.TemplateValueMissing, new { field, placeholders }));
     }
 }

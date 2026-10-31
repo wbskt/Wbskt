@@ -12,6 +12,13 @@ namespace Wbskt.Workflow.Abstraction.Runtime;
 [JsonDerivedType(typeof(Terminal), "Terminal")]
 public abstract record NodeExecutionResult
 {
+    /// <summary>
+    /// The step's <see cref="NodeContext.Warnings"/>, which the branch loop writes to history. Not part
+    /// of the recorded outcome: a replayed outcome was already journaled when it first ran.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<NodeWarning> Warnings { get; init; } = [];
+
     public static Continue JumpTo(Guid nodeId, IReadOnlyDictionary<string, JsonElement> localStatePatch)
     {
         return new Continue(nodeId.ToString(), localStatePatch);

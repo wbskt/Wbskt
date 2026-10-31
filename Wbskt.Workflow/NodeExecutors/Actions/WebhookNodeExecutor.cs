@@ -23,7 +23,9 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
     public async Task<NodeExecutionResult> ExecuteAsync(NodeContext ctx, CancellationToken ct)
     {
         WebhookNotificationNode node = (WebhookNotificationNode)ctx.Node;
-        WebhookNotificationConfig config = await RenderAsync(ctx, node.Config, ct);
+        // Filled in before the origin and address checks, so they judge where the call really goes. Failure
+        // messages quote the URL as written: filled in, it may carry a $shared secret into history.
+        WebhookNotificationConfig config = await templates.FillAsync(ctx, node.Config, ct);
 
         ResolvedIntegration? integration = null;
         Uri? targetUri;
@@ -160,25 +162,6 @@ internal sealed class WebhookNodeExecutor(IHttpClientFactory httpClientFactory, 
             string message = integration is null ? ex.Message : IntegrationErrors.Scrub(ex.Message, integration.Secrets);
             return new NodeExecutionResult.Fail("WEBHOOK_NETWORK_ERROR", message, true, ex);
         }
-    }
-
-    // The URL is filled in before the origin and address checks, so they judge where the call really goes.
-    // Failure messages quote the URL as written: filled in, it may carry a $shared secret into history.
-    private async Task<WebhookNotificationConfig> RenderAsync(NodeContext ctx, WebhookNotificationConfig config, CancellationToken ct)
-    {
-        Dictionary<string, string>? headers = null;
-        foreach (var (name, value) in config.Headers ?? new Dictionary<string, string>())
-        {
-            (headers ??= [])[name] =
-                await templates.LineAsync(ctx, $"headers.{name}", value, ct);
-        }
-
-        return config with
-        {
-            Url = await templates.LineAsync(ctx, "url", config.Url, ct),
-            Headers = headers,
-            Body = await templates.JsonAsync(ctx, "body", config.Body, ct)
-        };
     }
 
     /// <summary>

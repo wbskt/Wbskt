@@ -254,6 +254,10 @@ internal static class RetryExecutor
             try
             {
                 NodeExecutionResult result = await executor.ExecuteAsync(nodeContext, ct);
+                if (nodeContext.Warnings.Count > 0)
+                {
+                    result = result with { Warnings = nodeContext.Warnings.ToArray() };
+                }
 
                 if (result is NodeExecutionResult.Fail fail)
                 {
