@@ -189,6 +189,7 @@ public static class WorkflowServiceCollectionExtensions
         // For the branch terminator, whose finalizer leads back to it (see BranchTerminator).
         services.AddScoped(sp => new Lazy<IRunFinalizer>(sp.GetRequiredService<IRunFinalizer>));
         services.AddScoped<IRunCompletedPublisher, NullRunCompletedPublisher>();
+        services.TryAddSingleton<IRunRefusalReporter, NullRunRefusalReporter>();
         services.AddScoped<IRunStartedPublisher, NullRunStartedPublisher>();
         services.AddScoped<IRunStarter, RunStarter>();
         services.AddScoped<ITriggerDispatcher, TriggerDispatcher>();

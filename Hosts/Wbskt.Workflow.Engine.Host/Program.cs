@@ -91,6 +91,8 @@ public static class Program
         services.AddScoped<IVariableWritePublisher, VariableWritePublisher>();
         services.AddScoped<IRunStartedPublisher, EventBusRunStartedPublisher>();
         services.AddScoped<IRunCompletedPublisher, EventBusRunCompletedPublisher>();
+        services.AddSingleton<RunRefusalCoalescer>();
+        services.AddSingleton<IRunRefusalReporter>(sp => sp.GetRequiredService<RunRefusalCoalescer>());
         services.AddSingleton<RunRecoveryService>();
         services.AddSingleton<IEngineStartupTracker>(sp => sp.GetRequiredService<RunRecoveryService>());
         // LeaderElectionService is registered first so LeadershipState is meaningful before any
@@ -110,6 +112,7 @@ public static class Program
         services.AddHostedService<IdempotencyKeyGc>();
         services.AddHostedService<PendingTriggerEventBacklogReaper>();
         services.AddHostedService<MetricsExporter>();
+        services.AddHostedService<RunRefusalPublisher>();
 
         return services;
     }

@@ -123,6 +123,12 @@ executor stamps `trigger` and `triggeredAt` and continues.
 * **Workspace ceiling**: a workspace may have at most `MaxActiveRunsPerWorkspace` (200) active runs;
   `Run_Start` raises error 50026 and the outcome is `Refused`. Child runs, queue replays and
   `CancelExisting` replacements are exempt, because refusing them would strand work already accepted.
+  A refused event is thrown away for good, so the dispatcher tells `IRunRefusalReporter`. In the
+  engine host that is `RunRefusalCoalescer`: one `WorkflowTriggerRefusedEvent` (Warning, live to the
+  console) per workflow per minute from the first refusal, carrying the count, first and last time,
+  trigger kinds and the ceiling. `RunRefusalPublisher` sends each when its window ends, on every
+  replica, and flushes the rest on shutdown. A console banner reads it with
+  `GET event-logs?eventNames=WorkflowTriggerRefusedEvent&from=…&limit=1`.
 * `ParentRunRefId` is set only when the event says it starts a child run.
 * `RunStarted` is journaled without the trigger body.
 

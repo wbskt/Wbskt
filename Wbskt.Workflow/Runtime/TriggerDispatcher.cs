@@ -27,6 +27,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
     private readonly IIdempotencyKeyProvider _idempotencyKeyProvider;
     private readonly IExpressionEvaluator _expressionEvaluator;
     private readonly ILogger<TriggerDispatcher>? _logger;
+    private readonly IRunRefusalReporter? _refusalReporter;
 
     public TriggerDispatcher(
         ICorrelationKeyResolver correlationKeyResolver,
@@ -39,7 +40,8 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         IRunDispatcher runDispatcher,
         IIdempotencyKeyProvider idempotencyKeyProvider,
         IExpressionEvaluator expressionEvaluator,
-        ILogger<TriggerDispatcher>? logger = null)
+        ILogger<TriggerDispatcher>? logger = null,
+        IRunRefusalReporter? refusalReporter = null)
     {
         _correlationKeyResolver = correlationKeyResolver;
         _bookmarkResumer = bookmarkResumer;
@@ -52,6 +54,7 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
         _idempotencyKeyProvider = idempotencyKeyProvider;
         _expressionEvaluator = expressionEvaluator;
         _logger = logger;
+        _refusalReporter = refusalReporter;
     }
 
     public async Task<TriggerDispatchResult> DispatchAsync(InboundEvent evt, CancellationToken ct)
@@ -300,8 +303,10 @@ internal sealed class TriggerDispatcher : ITriggerDispatcher
                 started = await _runStarter.StartAsync(registration.WorkflowDefinitionId, registration.TriggerNodeId.ToString(), normalizedEvent, startKey, ct, exemptFromCeiling, activeRunGuard);
                 break;
             }
-            catch (WorkspaceRunCeilingException)
+            catch (WorkspaceRunCeilingException ex)
             {
+                // Thrown away for good, so the user is told: the event itself cannot say so to anyone.
+                _refusalReporter?.Report(new RunRefusal(ex.WorkspaceId, registration.WorkflowDefinitionId, registration.WorkflowRefId, normalizedEvent.ChannelKind, ex.Limit, normalizedEvent.ReceivedAt));
                 // Settled like a drop: the claim records it, so a redelivered event is not refused twice
                 // or, worse, started late once the workspace has room.
                 return (new TriggerRegistrationDispatch(registration.Id, registration.WorkflowRefId, TriggerDispatchOutcome.Refused, null, correlationValue), null);
