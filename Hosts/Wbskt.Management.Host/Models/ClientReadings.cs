@@ -5,7 +5,7 @@ public sealed class ReadingsOptions
     public const string SectionName = "Readings";
 
     /// <summary>How long a reading is kept before the retention sweep deletes it.</summary>
-    public int RetentionDays { get; set; } = 365;
+    public int RetentionDays { get; set; } = 30;
 
     /// <summary>How often the retention sweep runs.</summary>
     public TimeSpan RetentionInterval { get; set; } = TimeSpan.FromHours(1);
