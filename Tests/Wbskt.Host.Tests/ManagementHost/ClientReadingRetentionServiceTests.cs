@@ -23,7 +23,7 @@ public sealed class ClientReadingRetentionServiceTests
         var total = await CreateService(provider.Object, new ReadingsOptions()).SweepAsync(CancellationToken.None);
 
         Assert.Equal(ClientReadingRetentionService.BatchSize + 3L, total);
-        provider.Verify(p => p.DeleteBeforeAsync(Now.UtcDateTime.AddDays(-365), ClientReadingRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        provider.Verify(p => p.DeleteBeforeAsync(Now.UtcDateTime.AddDays(-30), ClientReadingRetentionService.BatchSize, It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -31,9 +31,9 @@ public sealed class ClientReadingRetentionServiceTests
     {
         var provider = new Mock<IClientReadingProvider>();
 
-        await CreateService(provider.Object, new ReadingsOptions { RetentionDays = 30 }).SweepAsync(CancellationToken.None);
+        await CreateService(provider.Object, new ReadingsOptions { RetentionDays = 7 }).SweepAsync(CancellationToken.None);
 
-        provider.Verify(p => p.DeleteBeforeAsync(Now.UtcDateTime.AddDays(-30), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(p => p.DeleteBeforeAsync(Now.UtcDateTime.AddDays(-7), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static ClientReadingRetentionService CreateService(IClientReadingProvider provider, ReadingsOptions options)
