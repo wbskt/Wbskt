@@ -6,7 +6,7 @@ namespace Wbskt.Events.Client;
 
 [DeviceTraffic]
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientMessageReceivedEvent")]
+[SignalRNotify("OnClientMessageReceivedEvent", Scope = NotifyScope.Client)]
 public sealed record ClientMessageReceivedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, string Payload) : BaseEvent, IClientContext
 {
     /// <summary>

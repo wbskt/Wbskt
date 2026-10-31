@@ -8,5 +8,5 @@ namespace Wbskt.Events.Client;
 // carrying a commandId. App-level acks (with status/result data) are ordinary client messages.
 [DeviceTraffic]
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientCommandAckedEvent")]
+[SignalRNotify("OnClientCommandAckedEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandAckedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, Guid CommandId) : BaseEvent, IClientContext;

@@ -6,7 +6,7 @@ namespace Wbskt.Events.Client;
 
 [DeviceTraffic]
 [EventCriticality(EventCriticality.Warning)]
-[SignalRNotify("OnClientCommandFailedEvent")]
+[SignalRNotify("OnClientCommandFailedEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandFailedEvent(Guid ClientRefId, int ClientId, int WorkspaceId, string Type, string Reason, Guid? CommandId = null) : BaseEvent, IClientContext
 {
     /// <summary>The reason given when no socket host holds the device's connection.</summary>

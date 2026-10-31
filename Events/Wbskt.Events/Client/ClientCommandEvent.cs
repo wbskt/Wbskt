@@ -5,7 +5,7 @@ using Wbskt.Models;
 namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientCommandEvent")]
+[SignalRNotify("OnClientCommandEvent", Scope = NotifyScope.Client)]
 public sealed record ClientCommandEvent(
     Guid ClientRefId,
     int ClientId,

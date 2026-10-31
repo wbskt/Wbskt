@@ -5,5 +5,5 @@ using Wbskt.Models;
 namespace Wbskt.Events.Client;
 
 [EventCriticality(EventCriticality.Info)]
-[SignalRNotify("OnClientPingEvent")]
+[SignalRNotify("OnClientPingEvent", Scope = NotifyScope.Client)]
 public sealed record ClientPingEvent(Guid ClientRefId, int ClientId, int WorkspaceId, DateTime PingTime) : ActorEvent, IClientContext;
