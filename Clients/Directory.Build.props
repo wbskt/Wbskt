@@ -1,0 +1,18 @@
+<Project>
+  <!-- Shared by the packages published from Clients/ (the device SDK and its protocol types). -->
+  <PropertyGroup>
+    <SdkPackageVersion>1.0.0-preview.1</SdkPackageVersion>
+    <Authors>wbskt</Authors>
+    <Company>wbskt</Company>
+    <Copyright>Copyright (c) 2026 wbskt</Copyright>
+    <PackageProjectUrl>https://wbskt.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/wbskt/Wbskt</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>wbskt;iot;websocket;devices;realtime;raspberry-pi</PackageTags>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+</Project>
