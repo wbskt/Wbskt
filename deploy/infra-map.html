@@ -499,7 +499,7 @@ const FLOWS = [
  { id:'integ', name:'Integration send', desc:'Integration credentials are sealed by the engine, never by management, and workflow steps send through them.', steps:[
    ['b_t','Someone saves a Telegram bot in the console'], ['t_mgmt','The request reaches management'], ['mgmt_t','management calls /internal/integrations on traefik:8081'], ['t_eng','The engine seals the secret with INTEGRATIONS_KEY_1'], ['eng_sql','Only the ciphertext is stored'], ['eng_integ','Later, a workflow step opens it and sends the message'] ] },
  { id:'release', name:'Release deploy', desc:'A push to master builds, tests and publishes images, then deploy.sh rolls them out on the VM.', steps:[
-   ['gha_ghcr','Tests and E2E pass; five images pushed as sha-<short>'], ['gha_sshd','deploy.yml SSHes in; the forced command runs deploy.sh'], ['sshd_ghcr','Checkout reset to the commit, unused images pruned, 3 GB free checked, images pulled'], ['sshd_mig','The migrator runs (incremental, default on)'], ['mig_sql','sqlpackage applies the schema delta'], ['dep_dev','devices restarts first and must turn healthy'], ['dep_mgmt','then management'], ['dep_auth','auth'], ['dep_sock','socket'], ['dep_eng','engine; deploy.sh waits up to 240s for health'] ] },
+   ['gha_ghcr','Tests, E2E and the upgrade rehearsal pass; five images pushed as sha-<short>'], ['gha_sshd','deploy.yml SSHes in; the forced command runs deploy.sh'], ['sshd_ghcr','Checkout reset to the commit, unused images pruned, 3 GB free checked, images pulled'], ['sshd_mig','The migrator runs (incremental, default on)'], ['mig_sql','sqlpackage applies the schema delta'], ['dep_dev','devices restarts first and must turn healthy'], ['dep_mgmt','then management'], ['dep_auth','auth'], ['dep_sock','socket'], ['dep_eng','engine; deploy.sh waits up to 240s for health'] ] },
  { id:'backup', name:'Nightly backup', desc:'At 02:00 cron runs backup.sh. A backup that does not verify, or never leaves the VM, counts as no backup.', steps:[
    ['cron_sql','BACKUP DATABASE with checksum (Express has no backup compression), then RESTORE VERIFYONLY'], ['cron_sql','The .bak is copied out to BACKUP_DIR on the host and gzipped there'], ['cron_off','BACKUP_UPLOAD_CMD pushes BACKUP_DIR off the box'], ['cron_push','Success timestamp pushed to the Pushgateway'], ['prom_push','Prometheus scrapes it; BackupMissing fires after 26h without one'], ['cron_am','On failure, alert.sh raises BackupFailed directly'], ['am_smtp','Alertmanager emails ALERT_EMAIL_TO'] ] },
  { id:'telemetry', name:'Telemetry and alerts', desc:'Every host exports OTLP to the collector. You read it all in Grafana over an SSH tunnel.', steps:[
@@ -967,8 +967,8 @@ function buildPipeline() {
   $('#pipeline').innerHTML = `
   <div class="lane"><div class="lane-head"><h3>Backend · wbskt/Wbskt</h3><span class="meta">build-images.yml → deploy.yml · GitHub-hosted ubuntu-latest (public repo) · environment <code>production</code></span></div>
     <div class="stages">
-      <div class="stage"><b>Push to master</b><span>PRs run tests and scan only</span></div>
-      <div class="stage"><b>Gate</b><span>unit, integration, package scan, E2E</span></div>
+      <div class="stage"><b>Push to master</b><span>PRs run the gate only; no images</span></div>
+      <div class="stage"><b>Gate</b><span>unit, integration, package scan, E2E, upgrade rehearsal</span></div>
       <div class="stage"><b>Publish 5 images</b><span>auth, management, socket, engine, migrator → GHCR as sha-&lt;short&gt; + latest</span></div>
       <div class="stage"><b>Deploy workflow</b><span>queued on deploy-production; approval if production has reviewers</span></div>
       <div class="stage vm"><b>deploy.sh on the VM</b><span>--tag sha-&lt;short&gt;, every host, migrations on</span></div>
