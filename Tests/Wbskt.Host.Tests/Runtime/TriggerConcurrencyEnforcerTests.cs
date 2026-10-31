@@ -261,23 +261,18 @@ public sealed class TriggerConcurrencyEnforcerTests
     {
         public List<(Guid WorkflowRefId, Guid TriggerNodeId, string CorrelationKey, string InboundEventJson)> EnqueueCalls { get; } = [];
 
-        /// <summary>Answers the guarded enqueue as Run_Start's key holder would once the run has ended.</summary>
+        /// <summary>Answers as PendingTriggerEvent_Enqueue does once the run it would wait for has ended.</summary>
         public bool RunFinishedBeforeEnqueue { get; init; }
 
-        public async Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
-        {
-            if (RunFinishedBeforeEnqueue)
-            {
-                return null;
-            }
-
-            return await EnqueueAsync(workflowRefId, triggerNodeId, correlationKey, inboundEventJson, ct);
-        }
-
-        public Task<PendingTriggerEventRow> EnqueueAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
+        public Task<PendingTriggerEventRow?> EnqueueBehindActiveRunAsync(Guid workflowRefId, Guid triggerNodeId, string correlationKey, string inboundEventJson, CancellationToken ct)
         {
             EnqueueCalls.Add((workflowRefId, triggerNodeId, correlationKey, inboundEventJson));
-            return Task.FromResult(new PendingTriggerEventRow
+            if (RunFinishedBeforeEnqueue)
+            {
+                return Task.FromResult<PendingTriggerEventRow?>(null);
+            }
+
+            return Task.FromResult<PendingTriggerEventRow?>(new PendingTriggerEventRow
             {
                 Id = 1,
                 WorkflowRefId = workflowRefId,

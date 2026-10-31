@@ -44,25 +44,26 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
-        var (workflowRefId, _) = await CreateWorkflowAsync();
+        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
         string correlationKey = $"order-test-{Guid.NewGuid():N}";
         Guid triggerNodeId = Guid.NewGuid();
+        await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, correlationKey);
 
         // Enqueue three events with deliberate timing gaps
-        PendingTriggerEventRow first = await provider.EnqueueAsync(
-            workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", CancellationToken.None);
+        PendingTriggerEventRow first = (await provider.EnqueueBehindActiveRunAsync(
+            workflowRefId, triggerNodeId, correlationKey, """{"n":1}""", CancellationToken.None))!;
 
         await Task.Delay(50); // ensure distinct EnqueuedAt timestamps
 
-        PendingTriggerEventRow second = await provider.EnqueueAsync(
-            workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", CancellationToken.None);
+        PendingTriggerEventRow second = (await provider.EnqueueBehindActiveRunAsync(
+            workflowRefId, triggerNodeId, correlationKey, """{"n":2}""", CancellationToken.None))!;
 
         await Task.Delay(50);
 
-        PendingTriggerEventRow third = await provider.EnqueueAsync(
-            workflowRefId, triggerNodeId, correlationKey, """{"n":3}""", CancellationToken.None);
+        PendingTriggerEventRow third = (await provider.EnqueueBehindActiveRunAsync(
+            workflowRefId, triggerNodeId, correlationKey, """{"n":3}""", CancellationToken.None))!;
 
         // Dequeue three times; should come out in enqueue order
         var d1 = await provider.DequeueNextAsync(workflowRefId, triggerNodeId, correlationKey, CancellationToken.None);
@@ -84,7 +85,7 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
-        var (workflowRefId, _) = await CreateWorkflowAsync();
+        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
         // Two triggers in the SAME workflow sharing a correlation key. Draining one must never
@@ -93,9 +94,11 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
         string correlationKey = $"shared-key-{Guid.NewGuid():N}";
         Guid triggerA = Guid.NewGuid();
         Guid triggerB = Guid.NewGuid();
+        await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerA, correlationKey);
+        await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerB, correlationKey);
 
-        await provider.EnqueueAsync(workflowRefId, triggerA, correlationKey, """{"trigger":"A"}""", CancellationToken.None);
-        await provider.EnqueueAsync(workflowRefId, triggerB, correlationKey, """{"trigger":"B"}""", CancellationToken.None);
+        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerA, correlationKey, """{"trigger":"A"}""", CancellationToken.None);
+        await provider.EnqueueBehindActiveRunAsync(workflowRefId, triggerB, correlationKey, """{"trigger":"B"}""", CancellationToken.None);
 
         var fromA = await provider.DequeueNextAsync(workflowRefId, triggerA, correlationKey, CancellationToken.None);
         fromA.Should().NotBeNull();
@@ -117,17 +120,18 @@ public sealed class PendingTriggerEventQueueIntegrationTests(SqlEdgeFixture fixt
     {
         Skip.IfNot(fixture.IsAvailable, "SQL Edge is not available - start it with sa/Welcome1234 on port 1433, or set WBSKT_INTEGRATION_CONNSTR.");
 
-        var (workflowRefId, _) = await CreateWorkflowAsync();
+        var (workflowRefId, workflowDefinitionId) = await CreateWorkflowAsync();
         var provider = ProviderFactory.PendingTriggerEvent(fixture.ConnectionString);
 
         const int rowCount = 20;
         const int callerCount = 10;
         string correlationKey = $"concurrent-{Guid.NewGuid():N}";
         Guid triggerNodeId = Guid.NewGuid();
+        await ActiveRunSeeder.StartAsync(fixture.ConnectionString, workflowDefinitionId, workflowRefId, triggerNodeId, correlationKey);
 
         for (int i = 0; i < rowCount; i++)
         {
-            await provider.EnqueueAsync(
+            await provider.EnqueueBehindActiveRunAsync(
                 workflowRefId, triggerNodeId, correlationKey, $"{{\"seq\":{i}}}", CancellationToken.None);
         }
 
