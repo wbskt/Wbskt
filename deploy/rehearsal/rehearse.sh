@@ -39,10 +39,11 @@ migrate() {
 docker cp "$here/seed-every-table.sql" "$SQL_CONTAINER:/tmp/seed-every-table.sql"
 docker cp "$here/row-counts.sql" "$SQL_CONTAINER:/tmp/row-counts.sql"
 
+# -y 0: no width cap, so a long constraint error in the seed log is not cut off.
 sql() {
   local db=$1 file=$2
   docker exec "$SQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
-    -S localhost -U sa -P "$SA_PASSWORD" -C -b -d "$db" -h -1 -W -i "$file"
+    -S localhost -U sa -P "$SA_PASSWORD" -C -b -d "$db" -h -1 -y 0 -i "$file" | sed 's/[[:space:]]*$//'
 }
 
 echo "::group::Previous release: $PREVIOUS_IMAGE"
@@ -63,17 +64,20 @@ done
 
 echo "::group::This commit: $CURRENT_IMAGE"
 if ! migrate "$CURRENT_IMAGE" false; then
-  echo "::error::This commit's migrator failed against the previous release's schema with data in it. If sqlpackage reported possible data loss, add a pre-deployment script that moves or clears that data first (see Databases/Migrations)."
+  echo "::error::This commit's migrator failed against the previous release's schema with data in it. deploy.sh runs it the same way, so the deploy would fail too. If sqlpackage reported possible data loss, see \"Upgrade rehearsal\" in deploy/README.md."
   exit 1
 fi
 echo "::endgroup::"
 
 for db in "$auth_db" "$core_db"; do
   sql "$db" /tmp/row-counts.sql | grep '|' > "$out/after-$db.txt"
-  # A table that lost rows. A table the upgrade dropped would have tripped BlockOnPossibleDataLoss.
+  # A table that lost rows. One that is gone is only a warning: a rename with a refactorlog entry
+  # looks the same, and sqlpackage leaves a table removed from the model in place.
   while IFS='|' read -r table before; do
     after=$(awk -F'|' -v t="$table" '$1 == t { print $2 }' "$out/after-$db.txt")
-    if [[ -n "$after" && "$after" -lt "$before" ]]; then
+    if [[ -z "$after" ]]; then
+      echo "::warning::$db $table had $before rows before the upgrade and is gone after it"
+    elif [[ "$after" -lt "$before" ]]; then
       echo "::error::$db $table had $before rows before the upgrade and $after after"
       status=1
     fi
